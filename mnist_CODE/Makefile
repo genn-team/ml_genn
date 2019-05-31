@@ -1,0 +1,22 @@
+CXXFLAGS := -c -fPIC -std=c++11 -MMD -MP 
+LINKFLAGS := -shared 
+
+OBJECTS := neuronUpdate.o synapseUpdate.o init.o runner.o 
+DEPS := $(OBJECTS:.o=.d)
+
+.PHONY: all clean
+
+all: librunner.so
+
+librunner.so: $(OBJECTS)
+	$(CXX) $(LINKFLAGS) -o $@ $(OBJECTS)
+
+-include $(DEPS)
+
+%.o: %.cc %.d
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+%.d: ;
+
+clean:
+	rm -f $(OBJECTS) $(DEPS) librunner.so
