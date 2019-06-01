@@ -6,6 +6,10 @@ extern "C" {
 // ------------------------------------------------------------------------
 unsigned long long iT;
 float t;
+std::mt19937 rng;
+std::uniform_real_distribution<float> standardUniformDistribution(0.000000f, 1.000000f);
+std::normal_distribution<float> standardNormalDistribution(0.000000f, 1.000000f);
+std::exponential_distribution<float> standardExponentialDistribution(1.000000f);
 
 // ------------------------------------------------------------------------
 // timers
@@ -35,12 +39,13 @@ unsigned int* glbSpkCntpoisson_pop;
 unsigned int* glbSpkpoisson_pop;
 scalar* timeStepToSpikepoisson_pop;
 scalar* isipoisson_pop;
+// current source variables
 
 // ------------------------------------------------------------------------
 // postsynaptic variables
 // ------------------------------------------------------------------------
 float* inSyninput_pop;
-float* inSynsyn21;
+float* inSynsyn12;
 
 // ------------------------------------------------------------------------
 // synapse connectivity
@@ -50,7 +55,7 @@ float* inSynsyn21;
 // synapse variables
 // ------------------------------------------------------------------------
 scalar* ginput_pop;
-scalar* gsyn21;
+scalar* gsyn12;
 
 }  // extern "C"
 // ------------------------------------------------------------------------
@@ -111,6 +116,9 @@ void pushpoisson_popStateToDevice(bool uninitialisedOnly) {
     pushisipoisson_popToDevice(uninitialisedOnly);
 }
 
+void pushcurrent_sourceStateToDevice(bool uninitialisedOnly) {
+}
+
 void pushginput_popToDevice(bool uninitialisedOnly) {
 }
 
@@ -122,15 +130,15 @@ void pushinput_popStateToDevice(bool uninitialisedOnly) {
     pushinSyninput_popToDevice(uninitialisedOnly);
 }
 
-void pushgsyn21ToDevice(bool uninitialisedOnly) {
+void pushgsyn12ToDevice(bool uninitialisedOnly) {
 }
 
-void pushinSynsyn21ToDevice(bool uninitialisedOnly) {
+void pushinSynsyn12ToDevice(bool uninitialisedOnly) {
 }
 
-void pushsyn21StateToDevice(bool uninitialisedOnly) {
-    pushgsyn21ToDevice(uninitialisedOnly);
-    pushinSynsyn21ToDevice(uninitialisedOnly);
+void pushsyn12StateToDevice(bool uninitialisedOnly) {
+    pushgsyn12ToDevice(uninitialisedOnly);
+    pushinSynsyn12ToDevice(uninitialisedOnly);
 }
 
 
@@ -188,6 +196,9 @@ void pullpoisson_popStateFromDevice() {
     pullisipoisson_popFromDevice();
 }
 
+void pullcurrent_sourceStateFromDevice() {
+}
+
 void pullginput_popFromDevice() {
 }
 
@@ -199,15 +210,15 @@ void pullinput_popStateFromDevice() {
     pullinSyninput_popFromDevice();
 }
 
-void pullgsyn21FromDevice() {
+void pullgsyn12FromDevice() {
 }
 
-void pullinSynsyn21FromDevice() {
+void pullinSynsyn12FromDevice() {
 }
 
-void pullsyn21StateFromDevice() {
-    pullgsyn21FromDevice();
-    pullinSynsyn21FromDevice();
+void pullsyn12StateFromDevice() {
+    pullgsyn12FromDevice();
+    pullinSynsyn12FromDevice();
 }
 
 
@@ -215,8 +226,9 @@ void copyStateToDevice(bool uninitialisedOnly) {
     pushif1StateToDevice(uninitialisedOnly);
     pushif2StateToDevice(uninitialisedOnly);
     pushpoisson_popStateToDevice(uninitialisedOnly);
+    pushcurrent_sourceStateToDevice(uninitialisedOnly);
     pushinput_popStateToDevice(uninitialisedOnly);
-    pushsyn21StateToDevice(uninitialisedOnly);
+    pushsyn12StateToDevice(uninitialisedOnly);
 }
 
 void copyConnectivityToDevice(bool uninitialisedOnly) {
@@ -226,8 +238,9 @@ void copyStateFromDevice() {
     pullif1StateFromDevice();
     pullif2StateFromDevice();
     pullpoisson_popStateFromDevice();
+    pullcurrent_sourceStateFromDevice();
     pullinput_popStateFromDevice();
-    pullsyn21StateFromDevice();
+    pullsyn12StateFromDevice();
 }
 
 void copyCurrentSpikesFromDevice() {
@@ -266,12 +279,13 @@ void allocateMem() {
     glbSpkpoisson_pop = new unsigned int[784];
     timeStepToSpikepoisson_pop = new scalar[784];
     isipoisson_pop = new scalar[784];
+    // current source variables
     
     // ------------------------------------------------------------------------
     // postsynaptic variables
     // ------------------------------------------------------------------------
     inSyninput_pop = new float[128];
-    inSynsyn21 = new float[10];
+    inSynsyn12 = new float[10];
     
     // ------------------------------------------------------------------------
     // synapse connectivity
@@ -281,7 +295,7 @@ void allocateMem() {
     // synapse variables
     // ------------------------------------------------------------------------
     ginput_pop = new scalar[100352];
-    gsyn21 = new scalar[1280];
+    gsyn12 = new scalar[1280];
     
 }
 
@@ -312,12 +326,13 @@ void freeMem() {
     delete[] glbSpkpoisson_pop;
     delete[] timeStepToSpikepoisson_pop;
     delete[] isipoisson_pop;
+    // current source variables
     
     // ------------------------------------------------------------------------
     // postsynaptic variables
     // ------------------------------------------------------------------------
     delete[] inSyninput_pop;
-    delete[] inSynsyn21;
+    delete[] inSynsyn12;
     
     // ------------------------------------------------------------------------
     // synapse connectivity
@@ -327,7 +342,7 @@ void freeMem() {
     // synapse variables
     // ------------------------------------------------------------------------
     delete[] ginput_pop;
-    delete[] gsyn21;
+    delete[] gsyn12;
     
 }
 

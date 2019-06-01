@@ -1,5 +1,16 @@
 #include "definitionsInternal.h"
 void initialize() {
+     {
+        uint32_t seedData[std::mt19937::state_size];
+        std::random_device seedSource;
+         {
+            for(int i = 0; i < std::mt19937::state_size; i++) {
+                seedData[i] = seedSource();
+            }
+        }
+        std::seed_seq seeds(std::begin(seedData), std::end(seedData));
+        rng.seed(seeds);
+    }
     
     // ------------------------------------------------------------------------
     // Remote neuron groups
@@ -14,7 +25,8 @@ void initialize() {
         }
          {
             for (unsigned i = 0; i < 128; i++) {
-                Vmemif1[i] = (-6.50000000000000000e+01f);
+                const scalar scale = (-5.00000000000000000e+01f) - (-6.00000000000000000e+01f);
+                Vmemif1[i] = (-6.00000000000000000e+01f) + (standardUniformDistribution(rng) * scale);
             }
         }
          {
@@ -35,7 +47,8 @@ void initialize() {
         }
          {
             for (unsigned i = 0; i < 10; i++) {
-                Vmemif2[i] = (-6.50000000000000000e+01f);
+                const scalar scale = (-5.00000000000000000e+01f) - (-6.00000000000000000e+01f);
+                Vmemif2[i] = (-6.00000000000000000e+01f) + (standardUniformDistribution(rng) * scale);
             }
         }
          {
@@ -44,7 +57,7 @@ void initialize() {
             }
         }
         for (unsigned i = 0; i < 10; i++) {
-            inSynsyn21[i] = 0.000000f;
+            inSynsyn12[i] = 0.000000f;
         }
         // current source variables
     }
@@ -56,7 +69,7 @@ void initialize() {
         }
          {
             for (unsigned i = 0; i < 784; i++) {
-                timeStepToSpikepoisson_pop[i] = (8.00000000000000044e-01f);
+                timeStepToSpikepoisson_pop[i] = (0.00000000000000000e+00f);
             }
         }
          {
@@ -73,7 +86,7 @@ void initialize() {
         for(unsigned int i = 0; i < 784; i++) {
         }
     }
-    // synapse group syn21
+    // synapse group syn12
      {
         for(unsigned int i = 0; i < 128; i++) {
         }

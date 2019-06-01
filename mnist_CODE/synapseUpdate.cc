@@ -14,14 +14,14 @@ void updateSynapses(float t) {
         }
         
     }
-    // synapse group syn21
+    // synapse group syn12
      {
         // process presynaptic events: True Spikes
         for (unsigned int i = 0; i < glbSpkCntif1[0]; i++) {
             const unsigned int ipre = glbSpkif1[i];
             for (unsigned int ipost = 0; ipost < 10; ipost++) {
                 const unsigned int synAddress = (ipre * 10) + ipost;
-                inSynsyn21[ipost] += gsyn21[synAddress];
+                inSynsyn12[ipost] += gsyn12[synAddress];
             }
         }
         

@@ -13,21 +13,20 @@ void updateNeurons(float t) {
             float Isyn = 0;
             // pull inSyn values in a coalesced access
             float linSyninput_pop = inSyninput_pop[i];
-            
-            Isyn += linSyninput_pop;
-            
+            Isyn += linSyninput_pop; linSyninput_pop = 0;
             // test whether spike condition was fulfilled previously
-            const bool oldSpike= (lVmem >= (-5.20000000000000000e+01f));
+            const bool oldSpike= (lVmem >= (-5.00000000000000000e+01f));
             // calculate membrane potential
             
-            lVmem += Isyn * (DT / (1.00000000000000002e-03f));
+            lVmem += Isyn*(DT / (1.00000000000000002e-02f));
+            printf("%f ",Isyn);
             
             // test for and register a true spike
-            if ((lVmem >= (-5.20000000000000000e+01f)) && !(oldSpike)) {
+            if ((lVmem >= (-5.00000000000000000e+01f)) && !(oldSpike)) {
                 glbSpkif1[glbSpkCntif1[0]++] = i;
                 // spike reset code
                 
-                lVmem = (-6.50000000000000000e+01f); 
+                lVmem = (-6.00000000000000000e+01f); 
                 lSpikeNumber += 1;
                 
             }
@@ -48,22 +47,21 @@ void updateNeurons(float t) {
             
             float Isyn = 0;
             // pull inSyn values in a coalesced access
-            float linSynsyn21 = inSynsyn21[i];
-            
-            Isyn += linSynsyn21;
-            
+            float linSynsyn12 = inSynsyn12[i];
+            Isyn += linSynsyn12; linSynsyn12 = 0;
             // test whether spike condition was fulfilled previously
-            const bool oldSpike= (lVmem >= (-5.20000000000000000e+01f));
+            const bool oldSpike= (lVmem >= (-5.00000000000000000e+01f));
             // calculate membrane potential
             
-            lVmem += Isyn * (DT / (1.00000000000000002e-03f));
+            lVmem += Isyn*(DT / (1.00000000000000002e-02f));
+            printf("%f ",Isyn);
             
             // test for and register a true spike
-            if ((lVmem >= (-5.20000000000000000e+01f)) && !(oldSpike)) {
+            if ((lVmem >= (-5.00000000000000000e+01f)) && !(oldSpike)) {
                 glbSpkif2[glbSpkCntif2[0]++] = i;
                 // spike reset code
                 
-                lVmem = (-6.50000000000000000e+01f); 
+                lVmem = (-6.00000000000000000e+01f); 
                 lSpikeNumber += 1;
                 
             }
@@ -71,7 +69,7 @@ void updateNeurons(float t) {
             SpikeNumberif2[i] = lSpikeNumber;
             // the post-synaptic dynamics
             
-            inSynsyn21[i] = linSynsyn21;
+            inSynsyn12[i] = linSynsyn12;
         }
     }
     // neuron group poisson_pop
@@ -82,10 +80,17 @@ void updateNeurons(float t) {
             scalar ltimeStepToSpike = timeStepToSpikepoisson_pop[i];
             scalar lisi = isipoisson_pop[i];
             
+            float Isyn = 0;
+            // current source current_source
+             {
+                Isyn += (1.00000000000000000e+01f);
+                
+            }
             // test whether spike condition was fulfilled previously
             const bool oldSpike= (ltimeStepToSpike <= 0.0f);
             // calculate membrane potential
             
+            Isyn;
             if(ltimeStepToSpike > 0){
                 ltimeStepToSpike -= 1.0f;
             }
@@ -95,7 +100,7 @@ void updateNeurons(float t) {
                 glbSpkpoisson_pop[glbSpkCntpoisson_pop[0]++] = i;
                 // spike reset code
                 
-                ltimeStepToSpike += 1.0f / lisi;
+                ltimeStepToSpike += lisi;
                 
             }
             timeStepToSpikepoisson_pop[i] = ltimeStepToSpike;
