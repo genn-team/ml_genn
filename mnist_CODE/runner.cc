@@ -27,6 +27,12 @@ double initSparseTime;
 // ------------------------------------------------------------------------
 // local neuron groups
 // ------------------------------------------------------------------------
+unsigned int* glbSpkCntif0;
+unsigned int* glbSpkif0;
+scalar* Vmemif0;
+unsigned int* SpikeNumberif0;
+// current source variables
+scalar* magnitudecs;
 unsigned int* glbSpkCntif1;
 unsigned int* glbSpkif1;
 scalar* Vmemif1;
@@ -35,16 +41,11 @@ unsigned int* glbSpkCntif2;
 unsigned int* glbSpkif2;
 scalar* Vmemif2;
 unsigned int* SpikeNumberif2;
-unsigned int* glbSpkCntpoisson_pop;
-unsigned int* glbSpkpoisson_pop;
-scalar* timeStepToSpikepoisson_pop;
-scalar* isipoisson_pop;
-// current source variables
 
 // ------------------------------------------------------------------------
 // postsynaptic variables
 // ------------------------------------------------------------------------
-float* inSyninput_pop;
+float* inSynsyn01;
 float* inSynsyn12;
 
 // ------------------------------------------------------------------------
@@ -54,7 +55,7 @@ float* inSynsyn12;
 // ------------------------------------------------------------------------
 // synapse variables
 // ------------------------------------------------------------------------
-scalar* ginput_pop;
+scalar* gsyn01;
 scalar* gsyn12;
 
 }  // extern "C"
@@ -65,6 +66,30 @@ scalar* gsyn12;
 // ------------------------------------------------------------------------
 // copying things to device
 // ------------------------------------------------------------------------
+void pushif0SpikesToDevice(bool uninitialisedOnly) {
+}
+
+void pushif0CurrentSpikesToDevice(bool uninitialisedOnly) {
+}
+
+void pushVmemif0ToDevice(bool uninitialisedOnly) {
+}
+
+void pushSpikeNumberif0ToDevice(bool uninitialisedOnly) {
+}
+
+void pushif0StateToDevice(bool uninitialisedOnly) {
+    pushVmemif0ToDevice(uninitialisedOnly);
+    pushSpikeNumberif0ToDevice(uninitialisedOnly);
+}
+
+void pushmagnitudecsToDevice(bool uninitialisedOnly) {
+}
+
+void pushcsStateToDevice(bool uninitialisedOnly) {
+    pushmagnitudecsToDevice(uninitialisedOnly);
+}
+
 void pushif1SpikesToDevice(bool uninitialisedOnly) {
 }
 
@@ -99,35 +124,15 @@ void pushif2StateToDevice(bool uninitialisedOnly) {
     pushSpikeNumberif2ToDevice(uninitialisedOnly);
 }
 
-void pushpoisson_popSpikesToDevice(bool uninitialisedOnly) {
+void pushgsyn01ToDevice(bool uninitialisedOnly) {
 }
 
-void pushpoisson_popCurrentSpikesToDevice(bool uninitialisedOnly) {
+void pushinSynsyn01ToDevice(bool uninitialisedOnly) {
 }
 
-void pushtimeStepToSpikepoisson_popToDevice(bool uninitialisedOnly) {
-}
-
-void pushisipoisson_popToDevice(bool uninitialisedOnly) {
-}
-
-void pushpoisson_popStateToDevice(bool uninitialisedOnly) {
-    pushtimeStepToSpikepoisson_popToDevice(uninitialisedOnly);
-    pushisipoisson_popToDevice(uninitialisedOnly);
-}
-
-void pushcurrent_sourceStateToDevice(bool uninitialisedOnly) {
-}
-
-void pushginput_popToDevice(bool uninitialisedOnly) {
-}
-
-void pushinSyninput_popToDevice(bool uninitialisedOnly) {
-}
-
-void pushinput_popStateToDevice(bool uninitialisedOnly) {
-    pushginput_popToDevice(uninitialisedOnly);
-    pushinSyninput_popToDevice(uninitialisedOnly);
+void pushsyn01StateToDevice(bool uninitialisedOnly) {
+    pushgsyn01ToDevice(uninitialisedOnly);
+    pushinSynsyn01ToDevice(uninitialisedOnly);
 }
 
 void pushgsyn12ToDevice(bool uninitialisedOnly) {
@@ -145,6 +150,30 @@ void pushsyn12StateToDevice(bool uninitialisedOnly) {
 // ------------------------------------------------------------------------
 // copying things from device
 // ------------------------------------------------------------------------
+void pullif0SpikesFromDevice() {
+}
+
+void pullif0CurrentSpikesFromDevice() {
+}
+
+void pullVmemif0FromDevice() {
+}
+
+void pullSpikeNumberif0FromDevice() {
+}
+
+void pullif0StateFromDevice() {
+    pullVmemif0FromDevice();
+    pullSpikeNumberif0FromDevice();
+}
+
+void pullmagnitudecsFromDevice() {
+}
+
+void pullcsStateFromDevice() {
+    pullmagnitudecsFromDevice();
+}
+
 void pullif1SpikesFromDevice() {
 }
 
@@ -179,35 +208,15 @@ void pullif2StateFromDevice() {
     pullSpikeNumberif2FromDevice();
 }
 
-void pullpoisson_popSpikesFromDevice() {
+void pullgsyn01FromDevice() {
 }
 
-void pullpoisson_popCurrentSpikesFromDevice() {
+void pullinSynsyn01FromDevice() {
 }
 
-void pulltimeStepToSpikepoisson_popFromDevice() {
-}
-
-void pullisipoisson_popFromDevice() {
-}
-
-void pullpoisson_popStateFromDevice() {
-    pulltimeStepToSpikepoisson_popFromDevice();
-    pullisipoisson_popFromDevice();
-}
-
-void pullcurrent_sourceStateFromDevice() {
-}
-
-void pullginput_popFromDevice() {
-}
-
-void pullinSyninput_popFromDevice() {
-}
-
-void pullinput_popStateFromDevice() {
-    pullginput_popFromDevice();
-    pullinSyninput_popFromDevice();
+void pullsyn01StateFromDevice() {
+    pullgsyn01FromDevice();
+    pullinSynsyn01FromDevice();
 }
 
 void pullgsyn12FromDevice() {
@@ -223,11 +232,11 @@ void pullsyn12StateFromDevice() {
 
 
 void copyStateToDevice(bool uninitialisedOnly) {
+    pushif0StateToDevice(uninitialisedOnly);
     pushif1StateToDevice(uninitialisedOnly);
     pushif2StateToDevice(uninitialisedOnly);
-    pushpoisson_popStateToDevice(uninitialisedOnly);
-    pushcurrent_sourceStateToDevice(uninitialisedOnly);
-    pushinput_popStateToDevice(uninitialisedOnly);
+    pushcsStateToDevice(uninitialisedOnly);
+    pushsyn01StateToDevice(uninitialisedOnly);
     pushsyn12StateToDevice(uninitialisedOnly);
 }
 
@@ -235,18 +244,18 @@ void copyConnectivityToDevice(bool uninitialisedOnly) {
 }
 
 void copyStateFromDevice() {
+    pullif0StateFromDevice();
     pullif1StateFromDevice();
     pullif2StateFromDevice();
-    pullpoisson_popStateFromDevice();
-    pullcurrent_sourceStateFromDevice();
-    pullinput_popStateFromDevice();
+    pullcsStateFromDevice();
+    pullsyn01StateFromDevice();
     pullsyn12StateFromDevice();
 }
 
 void copyCurrentSpikesFromDevice() {
+    pullif0CurrentSpikesFromDevice();
     pullif1CurrentSpikesFromDevice();
     pullif2CurrentSpikesFromDevice();
-    pullpoisson_popCurrentSpikesFromDevice();
 }
 
 void copyCurrentSpikeEventsFromDevice() {
@@ -267,6 +276,12 @@ void allocateMem() {
     // ------------------------------------------------------------------------
     // local neuron groups
     // ------------------------------------------------------------------------
+    glbSpkCntif0 = new unsigned int[1];
+    glbSpkif0 = new unsigned int[784];
+    Vmemif0 = new scalar[784];
+    SpikeNumberif0 = new unsigned int[784];
+    // current source variables
+    magnitudecs = new scalar[784];
     glbSpkCntif1 = new unsigned int[1];
     glbSpkif1 = new unsigned int[128];
     Vmemif1 = new scalar[128];
@@ -275,16 +290,11 @@ void allocateMem() {
     glbSpkif2 = new unsigned int[10];
     Vmemif2 = new scalar[10];
     SpikeNumberif2 = new unsigned int[10];
-    glbSpkCntpoisson_pop = new unsigned int[1];
-    glbSpkpoisson_pop = new unsigned int[784];
-    timeStepToSpikepoisson_pop = new scalar[784];
-    isipoisson_pop = new scalar[784];
-    // current source variables
     
     // ------------------------------------------------------------------------
     // postsynaptic variables
     // ------------------------------------------------------------------------
-    inSyninput_pop = new float[128];
+    inSynsyn01 = new float[128];
     inSynsyn12 = new float[10];
     
     // ------------------------------------------------------------------------
@@ -294,7 +304,7 @@ void allocateMem() {
     // ------------------------------------------------------------------------
     // synapse variables
     // ------------------------------------------------------------------------
-    ginput_pop = new scalar[100352];
+    gsyn01 = new scalar[100352];
     gsyn12 = new scalar[1280];
     
 }
@@ -314,6 +324,12 @@ void freeMem() {
     // ------------------------------------------------------------------------
     // local neuron groups
     // ------------------------------------------------------------------------
+    delete[] glbSpkCntif0;
+    delete[] glbSpkif0;
+    delete[] Vmemif0;
+    delete[] SpikeNumberif0;
+    // current source variables
+    delete[] magnitudecs;
     delete[] glbSpkCntif1;
     delete[] glbSpkif1;
     delete[] Vmemif1;
@@ -322,16 +338,11 @@ void freeMem() {
     delete[] glbSpkif2;
     delete[] Vmemif2;
     delete[] SpikeNumberif2;
-    delete[] glbSpkCntpoisson_pop;
-    delete[] glbSpkpoisson_pop;
-    delete[] timeStepToSpikepoisson_pop;
-    delete[] isipoisson_pop;
-    // current source variables
     
     // ------------------------------------------------------------------------
     // postsynaptic variables
     // ------------------------------------------------------------------------
-    delete[] inSyninput_pop;
+    delete[] inSynsyn01;
     delete[] inSynsyn12;
     
     // ------------------------------------------------------------------------
@@ -341,7 +352,7 @@ void freeMem() {
     // ------------------------------------------------------------------------
     // synapse variables
     // ------------------------------------------------------------------------
-    delete[] ginput_pop;
+    delete[] gsyn01;
     delete[] gsyn12;
     
 }

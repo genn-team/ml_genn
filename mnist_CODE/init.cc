@@ -17,6 +17,30 @@ void initialize() {
     
     // ------------------------------------------------------------------------
     // Local neuron groups
+    // neuron group if0
+     {
+        glbSpkCntif0[0] = 0;
+        for (unsigned i = 0; i < 784; i++) {
+            glbSpkif0[i] = 0;
+        }
+         {
+            for (unsigned i = 0; i < 784; i++) {
+                const scalar scale = (-5.50000000000000000e+01f) - (-6.00000000000000000e+01f);
+                Vmemif0[i] = (-6.00000000000000000e+01f) + (standardUniformDistribution(rng) * scale);
+            }
+        }
+         {
+            for (unsigned i = 0; i < 784; i++) {
+                SpikeNumberif0[i] = (0.00000000000000000e+00f);
+            }
+        }
+        // current source variables
+         {
+            for (unsigned i = 0; i < 784; i++) {
+                magnitudecs[i] = (1.00000000000000000e+01f);
+            }
+        }
+    }
     // neuron group if1
      {
         glbSpkCntif1[0] = 0;
@@ -25,7 +49,7 @@ void initialize() {
         }
          {
             for (unsigned i = 0; i < 128; i++) {
-                const scalar scale = (-5.00000000000000000e+01f) - (-6.00000000000000000e+01f);
+                const scalar scale = (-5.50000000000000000e+01f) - (-6.00000000000000000e+01f);
                 Vmemif1[i] = (-6.00000000000000000e+01f) + (standardUniformDistribution(rng) * scale);
             }
         }
@@ -35,7 +59,7 @@ void initialize() {
             }
         }
         for (unsigned i = 0; i < 128; i++) {
-            inSyninput_pop[i] = 0.000000f;
+            inSynsyn01[i] = 0.000000f;
         }
         // current source variables
     }
@@ -47,7 +71,7 @@ void initialize() {
         }
          {
             for (unsigned i = 0; i < 10; i++) {
-                const scalar scale = (-5.00000000000000000e+01f) - (-6.00000000000000000e+01f);
+                const scalar scale = (-5.50000000000000000e+01f) - (-6.00000000000000000e+01f);
                 Vmemif2[i] = (-6.00000000000000000e+01f) + (standardUniformDistribution(rng) * scale);
             }
         }
@@ -61,27 +85,9 @@ void initialize() {
         }
         // current source variables
     }
-    // neuron group poisson_pop
-     {
-        glbSpkCntpoisson_pop[0] = 0;
-        for (unsigned i = 0; i < 784; i++) {
-            glbSpkpoisson_pop[i] = 0;
-        }
-         {
-            for (unsigned i = 0; i < 784; i++) {
-                timeStepToSpikepoisson_pop[i] = (0.00000000000000000e+00f);
-            }
-        }
-         {
-            for (unsigned i = 0; i < 784; i++) {
-                isipoisson_pop[i] = (0.00000000000000000e+00f);
-            }
-        }
-        // current source variables
-    }
     // ------------------------------------------------------------------------
     // Synapse groups with dense connectivity
-    // synapse group input_pop
+    // synapse group syn01
      {
         for(unsigned int i = 0; i < 784; i++) {
         }

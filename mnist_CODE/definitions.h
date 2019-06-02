@@ -51,6 +51,16 @@ EXPORT_VAR double initSparseTime;
 // ------------------------------------------------------------------------
 // local neuron groups
 // ------------------------------------------------------------------------
+#define spikeCount_if0 glbSpkCntif0[0]
+#define spike_if0 glbSpkif0
+#define glbSpkShiftif0 0
+
+EXPORT_VAR unsigned int* glbSpkCntif0;
+EXPORT_VAR unsigned int* glbSpkif0;
+EXPORT_VAR scalar* Vmemif0;
+EXPORT_VAR unsigned int* SpikeNumberif0;
+// current source variables
+EXPORT_VAR scalar* magnitudecs;
 #define spikeCount_if1 glbSpkCntif1[0]
 #define spike_if1 glbSpkif1
 #define glbSpkShiftif1 0
@@ -67,20 +77,11 @@ EXPORT_VAR unsigned int* glbSpkCntif2;
 EXPORT_VAR unsigned int* glbSpkif2;
 EXPORT_VAR scalar* Vmemif2;
 EXPORT_VAR unsigned int* SpikeNumberif2;
-#define spikeCount_poisson_pop glbSpkCntpoisson_pop[0]
-#define spike_poisson_pop glbSpkpoisson_pop
-#define glbSpkShiftpoisson_pop 0
-
-EXPORT_VAR unsigned int* glbSpkCntpoisson_pop;
-EXPORT_VAR unsigned int* glbSpkpoisson_pop;
-EXPORT_VAR scalar* timeStepToSpikepoisson_pop;
-EXPORT_VAR scalar* isipoisson_pop;
-// current source variables
 
 // ------------------------------------------------------------------------
 // postsynaptic variables
 // ------------------------------------------------------------------------
-EXPORT_VAR float* inSyninput_pop;
+EXPORT_VAR float* inSynsyn01;
 EXPORT_VAR float* inSynsyn12;
 
 // ------------------------------------------------------------------------
@@ -90,9 +91,23 @@ EXPORT_VAR float* inSynsyn12;
 // ------------------------------------------------------------------------
 // synapse variables
 // ------------------------------------------------------------------------
-EXPORT_VAR scalar* ginput_pop;
+EXPORT_VAR scalar* gsyn01;
 EXPORT_VAR scalar* gsyn12;
 
+EXPORT_FUNC void pushif0SpikesToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullif0SpikesFromDevice();
+EXPORT_FUNC void pushif0CurrentSpikesToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullif0CurrentSpikesFromDevice();
+EXPORT_FUNC void pushVmemif0ToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullVmemif0FromDevice();
+EXPORT_FUNC void pushSpikeNumberif0ToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullSpikeNumberif0FromDevice();
+EXPORT_FUNC void pushif0StateToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullif0StateFromDevice();
+EXPORT_FUNC void pushmagnitudecsToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullmagnitudecsFromDevice();
+EXPORT_FUNC void pushcsStateToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullcsStateFromDevice();
 EXPORT_FUNC void pushif1SpikesToDevice(bool uninitialisedOnly = false);
 EXPORT_FUNC void pullif1SpikesFromDevice();
 EXPORT_FUNC void pushif1CurrentSpikesToDevice(bool uninitialisedOnly = false);
@@ -113,24 +128,12 @@ EXPORT_FUNC void pushSpikeNumberif2ToDevice(bool uninitialisedOnly = false);
 EXPORT_FUNC void pullSpikeNumberif2FromDevice();
 EXPORT_FUNC void pushif2StateToDevice(bool uninitialisedOnly = false);
 EXPORT_FUNC void pullif2StateFromDevice();
-EXPORT_FUNC void pushpoisson_popSpikesToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullpoisson_popSpikesFromDevice();
-EXPORT_FUNC void pushpoisson_popCurrentSpikesToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullpoisson_popCurrentSpikesFromDevice();
-EXPORT_FUNC void pushtimeStepToSpikepoisson_popToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pulltimeStepToSpikepoisson_popFromDevice();
-EXPORT_FUNC void pushisipoisson_popToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullisipoisson_popFromDevice();
-EXPORT_FUNC void pushpoisson_popStateToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullpoisson_popStateFromDevice();
-EXPORT_FUNC void pushcurrent_sourceStateToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullcurrent_sourceStateFromDevice();
-EXPORT_FUNC void pushginput_popToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullginput_popFromDevice();
-EXPORT_FUNC void pushinSyninput_popToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullinSyninput_popFromDevice();
-EXPORT_FUNC void pushinput_popStateToDevice(bool uninitialisedOnly = false);
-EXPORT_FUNC void pullinput_popStateFromDevice();
+EXPORT_FUNC void pushgsyn01ToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullgsyn01FromDevice();
+EXPORT_FUNC void pushinSynsyn01ToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullinSynsyn01FromDevice();
+EXPORT_FUNC void pushsyn01StateToDevice(bool uninitialisedOnly = false);
+EXPORT_FUNC void pullsyn01StateFromDevice();
 EXPORT_FUNC void pushgsyn12ToDevice(bool uninitialisedOnly = false);
 EXPORT_FUNC void pullgsyn12FromDevice();
 EXPORT_FUNC void pushinSynsyn12ToDevice(bool uninitialisedOnly = false);
