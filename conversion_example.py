@@ -2,6 +2,7 @@ import tensorflow as tf
 import json
 from pygenn import genn_model, genn_wrapper
 import numpy as np
+import random
 
 def train_mnist():
     mnist = tf.keras.datasets.mnist
@@ -135,12 +136,18 @@ n_correct = 0
 while g_model.t <= runtime:
     if g_model.t >= single_example_time*(i+1):
         # After example i -1,0,1,2,..
+        g_model.pull_var_from_device("if2",'SpikeNumber')
         SpikeNumber_view = neuron_pops["if2"].vars["SpikeNumber"].view
         print("Example {}, Time {}, True label {}, Pred label {}".format(i,g_model.t,y[i],np.argmax(SpikeNumber_view)))
         n_correct += (np.argmax(SpikeNumber_view)==y[i])
         i += 1
         # Before example i 0,1,2,3,..
-        g_model.reinitialise()
+        # g_model.reinitialise()
+        for j in range(len(neuron_pops)):
+            neuron_view = neuron_pops["if"+str(j)].vars["SpikeNumber"].view
+            neuron_view[:] = 0
+            neuron_view = neuron_pops["if"+str(j)].vars["Vmem"].view
+            neuron_view[:] = random.uniform(-60.,-55.)
         
         magnitude_view = current_source.vars['magnitude'].view 
         magnitude_view[:] = X[i] / 100.
