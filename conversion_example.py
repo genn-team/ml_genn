@@ -144,13 +144,11 @@ while g_model.t <= runtime:
         # Before example i 0,1,2,3,..
         # g_model.reinitialise()
         for j in range(len(neuron_pops)):
-            neuron_view = neuron_pops["if"+str(j)].vars["SpikeNumber"].view
-            neuron_view[:] = 0
-            neuron_view = neuron_pops["if"+str(j)].vars["Vmem"].view
-            neuron_view[:] = random.uniform(-60.,-55.)
+            neuron_pops["if"+str(j)].vars["SpikeNumber"].view[:] = 0
+            neuron_view = neuron_pops["if"+str(j)].vars["Vmem"].view[:] = random.uniform(-60.,-55.)
+            g_model.push_state_to_device("if"+str(j))
         
-        magnitude_view = current_source.vars['magnitude'].view 
-        magnitude_view[:] = X[i] / 100.
+        magnitude_view = current_source.vars['magnitude'].view[:] = X[i] / 100.
         g_model.push_var_to_device("cs",'magnitude')
 
     g_model.step_time()
