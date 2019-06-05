@@ -1,2 +1,3 @@
 .vscode
-mnist_CODE
+g_model_CODE
+__pycache__/
