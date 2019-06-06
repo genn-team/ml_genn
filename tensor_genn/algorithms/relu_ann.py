@@ -6,13 +6,24 @@ from pygenn import genn_model, genn_wrapper
 
 class ReLUANN():
     def __init__(self,neuron_resting_voltage=-60.0,neuron_threshold_voltage=-55.0,
-        membrane_capacitance=1.0, model_timestep=1.0,):
+        membrane_capacitance=1.0, model_timestep=1.0, single_example_time=350.):
         self.Vres = neuron_resting_voltage
         self.Vthr = neuron_threshold_voltage
         self.Cm = membrane_capacitance
         self.timestep = model_timestep
+        self.single_example_time = single_example_time
 
     def convert(self, tf_model):
+        # Check model compatibility
+        if not isinstance(tf_model,tf.keras.models.Sequential):
+            raise NotImplementedError('Implementation for type {} models not found'.format(type(tf_model)))
+        
+        for layer in tf_model.layers:
+            if not isinstance(layer,(tf.keras.layers.Dense,tf.keras.layers.Flatten)):
+                raise NotImplementedError('Only Dense layers are supported')
+        if len(tf_model.get_weights()) >= len(tf_model.layers):
+            raise NotImplementedError('Tensorflow model should be trained without biases')
+
         # create custom classes
         if_model = genn_model.create_custom_neuron_class(
             "if_model",
@@ -20,7 +31,6 @@ class ReLUANN():
             var_name_types=[("Vmem","scalar"),("SpikeNumber","unsigned int")],
             sim_code="""
             $(Vmem) += $(Isyn)*(DT / $(Cm));
-            //printf("Vmem: %f, Isyn: %f, SpikeNumber: %d", $(Vmem),$(Isyn),$(SpikeNumber));
             """,
             reset_code="""
             $(Vmem) = $(Vres); 
@@ -56,25 +66,24 @@ class ReLUANN():
 
         # Define model and populations
         self.g_model = genn_model.GeNNModel("float","g_model")
-        self.neuron_pops = {}
-        self.syn_pops = {}
+        self.neuron_pops = []
 
         for i in range(1,n_layers): # 1,2 - synapses
             if i == 1:
                 # Presynaptic neuron
-                self.neuron_pops["if"+str(i-1)] = self.g_model.add_neuron_population(
-                    "if"+str(i-1),tf_weights[i-1].shape[0],if_model,if_params,if_init
+                self.neuron_pops.append(self.g_model.add_neuron_population(
+                    "if"+str(i-1),tf_weights[i-1].shape[0],if_model,if_params,if_init)
                 )
 
             # Postsynaptic neuron
-            self.neuron_pops["if"+str(i)] = self.g_model.add_neuron_population(
-                "if"+str(i),tf_weights[i-1].shape[1],if_model,if_params,if_init
+            self.neuron_pops.append(self.g_model.add_neuron_population(
+                "if"+str(i),tf_weights[i-1].shape[1],if_model,if_params,if_init)
             )
 
             # Synapse
-            self.syn_pops["syn"+str(i-1)+str(i)] = self.g_model.add_synapse_population(
+            self.g_model.add_synapse_population(
                 "syn"+str(i-1)+str(i),"DENSE_INDIVIDUALG",genn_wrapper.NO_DELAY,
-                self.neuron_pops["if"+str(i-1)], self.neuron_pops["if"+str(i)],
+                self.neuron_pops[i-1], self.neuron_pops[i],
                 "StaticPulse",{},{'g':tf_weights[i-1].reshape(-1)},{},{},
                 "DeltaCurr",{},{}
             )
@@ -87,29 +96,30 @@ class ReLUANN():
 
         return self.g_model
 
-    def evaluate(self, X, y=None, single_example_time=350.):
+    def evaluate(self, X, y=None):
         n_examples = len(X)
         X = X.reshape(n_examples,-1)
         y = y.reshape(n_examples)
 
-        runtime = n_examples * single_example_time
+        runtime = n_examples * self.single_example_time
+        n = len(self.neuron_pops)
         i = -1
         n_correct = 0
 
         while self.g_model.t < runtime:
-            if self.g_model.t >= single_example_time*(i+1):
+            if self.g_model.t >= self.single_example_time*(i+1):
                 # After example i -1,0,1,2,..
-                self.g_model.pull_var_from_device("if2",'SpikeNumber')
-                SpikeNumber_view = self.neuron_pops["if2"].vars["SpikeNumber"].view
+                self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
+                SpikeNumber_view = self.neuron_pops[-1].vars["SpikeNumber"].view
                 n_correct += (np.argmax(SpikeNumber_view)==y[i])
                 i += 1
                 # Before example i 0,1,2,3,..
                 for j in range(len(self.neuron_pops)):
-                    self.neuron_pops["if"+str(j)].vars["SpikeNumber"].view[:] = 0
-                    neuron_view = self.neuron_pops["if"+str(j)].vars["Vmem"].view[:] = random.uniform(-60.,-55.)
+                    self.neuron_pops[j].vars["SpikeNumber"].view[:] = 0
+                    self.neuron_pops[j].vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
                     self.g_model.push_state_to_device("if"+str(j))
                 
-                magnitude_view = self.current_source.vars['magnitude'].view[:] = X[i] / 100.
+                self.current_source.vars['magnitude'].view[:] = X[i] / 100.
                 self.g_model.push_var_to_device("cs",'magnitude')
 
             self.g_model.step_time()

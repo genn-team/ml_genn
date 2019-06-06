@@ -3,8 +3,6 @@ import numpy as np
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
 
-from algorithms import ReLUANN
-
 def convert_model(tf_model, algorithm, X=None, y=None):
     g_model = algorithm.convert(tf_model)
     print("Model converted")
