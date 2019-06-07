@@ -18,11 +18,15 @@ class ReLUANN():
         if not isinstance(tf_model,tf.keras.models.Sequential):
             raise NotImplementedError('Implementation for type {} models not found'.format(type(tf_model)))
         
-        for layer in tf_model.layers:
+        for layer in tf_model.layers[:-1]:
             if not isinstance(layer,(tf.keras.layers.Dense,tf.keras.layers.Flatten)):
-                raise NotImplementedError('Only Dense layers are supported')
-        if len(tf_model.get_weights()) >= len(tf_model.layers):
-            raise NotImplementedError('Tensorflow model should be trained without biases')
+                raise NotImplementedError('Only Dense and Flatten layers are supported')
+            elif isinstance(layer, tf.keras.layers.Dense):
+                if layer.activation != tf.keras.activations.relu:
+                    print(layer.activation)
+                    raise NotImplementedError('Only ReLU activation function is supported')
+                if layer.use_bias == True:
+                    raise NotImplementedError('TensorFlow model should be trained without bias tensors')
 
         # create custom classes
         if_model = genn_model.create_custom_neuron_class(
@@ -103,26 +107,27 @@ class ReLUANN():
 
         runtime = n_examples * self.single_example_time
         n = len(self.neuron_pops)
-        i = -1
-        n_correct = 0
+        
+        n_correct = 0    
 
-        while self.g_model.t < runtime:
-            if self.g_model.t >= self.single_example_time*(i+1):
-                # After example i -1,0,1,2,..
-                self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
-                SpikeNumber_view = self.neuron_pops[-1].vars["SpikeNumber"].view
-                n_correct += (np.argmax(SpikeNumber_view)==y[i])
-                i += 1
-                # Before example i 0,1,2,3,..
-                for j in range(len(self.neuron_pops)):
-                    self.neuron_pops[j].vars["SpikeNumber"].view[:] = 0
-                    self.neuron_pops[j].vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
+        for i in range(n_examples):
+            # Before simulation
+            for j, npop in enumerate(self.neuron_pops):
+                    npop.vars["SpikeNumber"].view[:] = 0
+                    npop.vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
                     self.g_model.push_state_to_device("if"+str(j))
                 
-                self.current_source.vars['magnitude'].view[:] = X[i] / 100.
-                self.g_model.push_var_to_device("cs",'magnitude')
+            self.current_source.vars['magnitude'].view[:] = X[i] / 100.
+            self.g_model.push_var_to_device("cs",'magnitude')
 
-            self.g_model.step_time()
+            # Run simulation
+            while self.g_model.t < self.single_example_time * (i+1):
+                self.g_model.step_time()
+
+            # After simulation
+            self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
+            SpikeNumber_view = self.neuron_pops[-1].vars["SpikeNumber"].view
+            n_correct += (np.argmax(SpikeNumber_view)==y[i])
 
         accuracy = (n_correct / n_examples) * 100.
         
