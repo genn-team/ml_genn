@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import math
 
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
@@ -105,7 +106,6 @@ class ReLUANN():
         X = X.reshape(n_examples,-1)
         y = y.reshape(n_examples)
 
-        runtime = n_examples * self.single_example_time
         n = len(self.neuron_pops)
         
         n_correct = 0    
@@ -121,7 +121,7 @@ class ReLUANN():
             self.g_model.push_var_to_device("cs",'magnitude')
 
             # Run simulation
-            while self.g_model.t < self.single_example_time * (i+1):
+            for _ in range(math.ceil(self.single_example_time/self.timestep)):
                 self.g_model.step_time()
 
             # After simulation
