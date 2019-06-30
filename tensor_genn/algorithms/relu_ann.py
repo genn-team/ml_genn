@@ -10,9 +10,40 @@ class ReLUANN():
         membrane_capacitance=1.0, model_timestep=1.0, single_example_time=350.):
         self.Vres = neuron_resting_voltage
         self.Vthr = neuron_threshold_voltage
-        self.Cm = membrane_capacitance
+        self.Cm = membrane_capacitance # For DNN - 1.0, CNN - 0.4
         self.timestep = model_timestep
         self.single_example_time = single_example_time
+
+    def create_weight_matrices(self, tf_model):
+        tf_weights = tf_model.get_weights()
+        tf_layers = tf_model.layers
+
+        g_model_weights = []
+        n_units = [np.prod(tf_layers[0].input_shape[1:])]
+        j=1
+        for i, layer in enumerate(tf_layers):
+            if not isinstance(layer,tf.keras.layers.Flatten):
+                n_units.append(np.prod(layer.output_shape[1:]))
+                syn_weights = np.zeros((n_units[j-1],n_units[j]))
+
+                if isinstance(layer,tf.keras.layers.Conv2D):
+                    kw,kh = layer.kernel_size
+                    sw,sh = layer.strides
+                    ih,iw,ic = layer.input_shape[1:]
+                    oh,ow,oc = layer.output_shape[1:]
+        
+                    for n in range(int(n_units[j])):
+                        for k in range(kh):
+                            syn_weights[((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw:
+                                        ((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw + kw*ic,
+                                        n] = tf_weights[j-1][k,:,:,n%oc].reshape((-1))
+                            
+                elif isinstance(layer,tf.keras.layers.Dense):
+                    syn_weights = tf_weights[j-1]
+                g_model_weights.append(syn_weights)
+                j += 1
+        
+        return g_model_weights, n_units
 
     def convert(self, tf_model):
         # Check model compatibility
@@ -20,8 +51,8 @@ class ReLUANN():
             raise NotImplementedError('Implementation for type {} models not found'.format(type(tf_model)))
         
         for layer in tf_model.layers[:-1]:
-            if not isinstance(layer,(tf.keras.layers.Dense,tf.keras.layers.Flatten)):
-                raise NotImplementedError('Only Dense and Flatten layers are supported')
+            if not isinstance(layer,(tf.keras.layers.Dense,tf.keras.layers.Flatten, tf.keras.layers.Conv2D)):
+                raise NotImplementedError('{} layers are not supported'.format(layer))
             elif isinstance(layer, tf.keras.layers.Dense):
                 if layer.activation != tf.keras.activations.relu:
                     print(layer.activation)
@@ -54,7 +85,6 @@ class ReLUANN():
 
         # Fetch tf_model details
         n_layers = len(tf_model.layers)
-        tf_weights = tf_model.get_weights()
 
         # Params and init
         if_params = {
@@ -69,37 +99,46 @@ class ReLUANN():
         
         cs_init = {"magnitude":10.0}
 
+        # Fetch augmented weight matrices
+        g_weights, n_units = self.create_weight_matrices(tf_model)
+        gw_inds = [np.nonzero(gw) for gw in g_weights]
+        gw_vals = [g_weights[i][gw_inds[i]].reshape(-1) for i in range(len(g_weights))]
+
         # Define model and populations
         self.g_model = genn_model.GeNNModel("float","g_model")
         self.neuron_pops = []
+        self.syn_pops = []
 
-        for i in range(1,n_layers): # 1,2 - synapses
+        for i in range(1,n_layers):
             if i == 1:
                 # Presynaptic neuron
                 self.neuron_pops.append(self.g_model.add_neuron_population(
-                    "if"+str(i-1),tf_weights[i-1].shape[0],if_model,if_params,if_init)
+                    "if"+str(i-1),n_units[i-1],if_model,if_params,if_init)
                 )
-
+            
             # Postsynaptic neuron
             self.neuron_pops.append(self.g_model.add_neuron_population(
-                "if"+str(i),tf_weights[i-1].shape[1],if_model,if_params,if_init)
+                "if"+str(i),n_units[i],if_model,if_params,if_init)
             )
 
             # Synapse
-            self.g_model.add_synapse_population(
-                "syn"+str(i-1)+str(i),"DENSE_INDIVIDUALG",genn_wrapper.NO_DELAY,
-                self.neuron_pops[i-1], self.neuron_pops[i],
-                "StaticPulse",{},{'g':tf_weights[i-1].reshape(-1)},{},{},
-                "DeltaCurr",{},{}
+            self.syn_pops.append(self.g_model.add_synapse_population(
+                "syn"+str(i-1)+str(i),"SPARSE_INDIVIDUALG",genn_wrapper.NO_DELAY,
+                self.neuron_pops[i-1],self.neuron_pops[i],
+                "StaticPulse",{},{'g':gw_vals[i-1]},{},{},
+                "DeltaCurr",{},{})
             )
-        
+
+            self.syn_pops[-1].set_sparse_connections(gw_inds[i-1][0],gw_inds[i-1][1])
+
+
         self.current_source = self.g_model.add_current_source("cs",cs_model,"if0",{},cs_init)
 
         self.g_model.dT = self.timestep
         self.g_model.build()
         self.g_model.load()
 
-        return self.g_model
+        return self.g_model, self.neuron_pops, self.current_source
 
     def evaluate(self, X, y=None):
         n_examples = len(X)
