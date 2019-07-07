@@ -6,6 +6,8 @@ import sys
 
 from pygenn import genn_model, genn_wrapper, genn_groups
 
+# np.set_printoptions(threshold=sys.maxsize)
+
 Vres = -60.0
 Vthr = -55.0
 Cm = 0.4
@@ -23,6 +25,7 @@ def train_mnist():
 
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16,5,activation='relu',use_bias=False,input_shape=(28,28,1)),
+        tf.keras.layers.AveragePooling2D(2),
         tf.keras.layers.Conv2D(8,5,activation='relu',use_bias=False),
         tf.keras.layers.Flatten(input_shape=(28,28,1)),
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
@@ -34,7 +37,7 @@ def train_mnist():
                 loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
-    model.fit(x_train_normed[:10000], y_train[:10000], epochs=1)
+    model.fit(x_train_normed[:10000], y_train[:10000], epochs=3)
 
     model.evaluate(x_test_normed[:1000], y_test[:1000])
 
@@ -49,13 +52,18 @@ def create_conv_weight_matrices(tf_model):
 
     g_model_weights = []
     n_units = [n_inputs]
-    j=1
-    for i, layer in enumerate(tf_layers):
-        if not isinstance(layer,tf.keras.layers.Flatten):
+
+    i = j = 1
+    for layer in tf_layers:
+        if not isinstance(layer, tf.keras.layers.Flatten):
             n_units.append(np.prod(layer.output_shape[1:]))
             syn_weights = np.zeros((n_units[j-1],n_units[j]))
 
-            if isinstance(layer,tf.keras.layers.Conv2D):
+            if isinstance(layer,tf.keras.layers.Dense):
+                syn_weights = tf_weights[i-1]
+                i += 1
+
+            elif isinstance(layer,tf.keras.layers.Conv2D):
                 kw,kh = layer.kernel_size # 2,2
                 sw,sh = layer.strides # 1,1
                 ih,iw,ic = layer.input_shape[1:] # 3,3,2
@@ -65,16 +73,30 @@ def create_conv_weight_matrices(tf_model):
                     for k in range(kh): # kernel height
                         syn_weights[((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw:
                                     ((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw + kw*ic,
-                                    n] = tf_weights[j-1][k,:,:,n%oc].reshape((-1))
-                        
-            elif isinstance(layer,tf.keras.layers.Dense):
-                syn_weights = tf_weights[j-1]
-            g_model_weights.append(syn_weights)
+                                    n] = tf_weights[i-1][k,:,:,n%oc].reshape((-1))
+
+                i += 1
+
+            elif isinstance(layer,tf.keras.layers.AveragePooling2D):
+                pw, ph = layer.pool_size # 2,2
+                sw, sh = layer.strides # 2,2
+                ih, iw, ic = layer.input_shape[1:] # 4,4,3
+                oh, ow, oc = layer.output_shape[1:] # 2,2,3
+
+                for n in range(ow*oh): # output unit 0:4
+                    for k in range(ph): # kernel height 0:2
+                        for l in range(pw): # kernel width 0:2
+                            syn_weights[(n%ow)*ic*pw + (n//ow)*ic*iw*ph + k*ic*iw + l*ic:
+                                        (n%ow)*ic*pw + (n//ow)*ic*iw*ph + k*ic*iw + l*ic + ic,
+                                        n*oc:n*oc+oc] = np.diag([1.0/(ph*pw)]*oc)
+
             j += 1
-    
+            g_model_weights.append(syn_weights)
     return g_model_weights, n_units
 
-g_model_weights, n_units = create_conv_weight_matrices(tf_model)
+# g_model_weights, n_units = create_conv_weight_matrices(tf_model)
+# print(n_units)
+# print([wt.shape for wt in g_model_weights])
 
 def convert_model(tf_model):
     # tf_model parameters
@@ -191,4 +213,4 @@ def evaluate(X, y=None):
     
     return accuracy
 
-print(evaluate(x_test[:100],y_test[:100]))
+print(evaluate(x_test[:500],y_test[:500]))
