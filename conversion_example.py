@@ -13,6 +13,7 @@ def train_mnist():
 
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16,5,activation='relu',use_bias=False,input_shape=(28,28,1)),
+        tf.keras.layers.AveragePooling2D(2),
         tf.keras.layers.Conv2D(8,5,activation='relu',use_bias=False),
         tf.keras.layers.Flatten(input_shape=(28,28,1)),
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
@@ -24,7 +25,7 @@ def train_mnist():
                 loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
-    model.fit(x_train_normed[:10000], y_train[:10000], epochs=1)
+    model.fit(x_train_normed[:10000], y_train[:10000], epochs=5)
 
     model.evaluate(x_test_normed[:1000], y_test[:1000])
 
@@ -34,4 +35,4 @@ tf_model, x_train, y_train, x_test, y_test = train_mnist()
 
 # Create models
 relu_ann = ReLUANN(membrane_capacitance=0.4)
-g_model = tg.convert_model(tf_model,relu_ann)
+g_model = tg.convert_model(tf_model,relu_ann,x_test[:100],y_test[:100])

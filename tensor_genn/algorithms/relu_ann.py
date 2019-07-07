@@ -20,28 +20,46 @@ class ReLUANN():
 
         g_model_weights = []
         n_units = [np.prod(tf_layers[0].input_shape[1:])]
-        j=1
-        for i, layer in enumerate(tf_layers):
-            if not isinstance(layer,tf.keras.layers.Flatten):
+        i = j = 1
+
+        for layer in tf_layers:
+            if not isinstance(layer, tf.keras.layers.Flatten):
                 n_units.append(np.prod(layer.output_shape[1:]))
                 syn_weights = np.zeros((n_units[j-1],n_units[j]))
 
-                if isinstance(layer,tf.keras.layers.Conv2D):
-                    kw,kh = layer.kernel_size
-                    sw,sh = layer.strides
-                    ih,iw,ic = layer.input_shape[1:]
-                    oh,ow,oc = layer.output_shape[1:]
+                if isinstance(layer,tf.keras.layers.Dense):
+                    syn_weights = tf_weights[i-1]
+                    i += 1
+
+                elif isinstance(layer,tf.keras.layers.Conv2D):
+                    kw,kh = layer.kernel_size # 2,2
+                    sw,sh = layer.strides # 1,1
+                    ih,iw,ic = layer.input_shape[1:] # 3,3,2
+                    oh,ow,oc = layer.output_shape[1:] # 2,2,2
         
-                    for n in range(int(n_units[j])):
-                        for k in range(kh):
+                    for n in range(int(n_units[j])): # output unit/conv number
+                        for k in range(kh): # kernel height
                             syn_weights[((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw:
                                         ((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw + kw*ic,
-                                        n] = tf_weights[j-1][k,:,:,n%oc].reshape((-1))
-                            
-                elif isinstance(layer,tf.keras.layers.Dense):
-                    syn_weights = tf_weights[j-1]
-                g_model_weights.append(syn_weights)
+                                        n] = tf_weights[i-1][k,:,:,n%oc].reshape((-1))
+
+                    i += 1
+
+                elif isinstance(layer,tf.keras.layers.AveragePooling2D):
+                    pw, ph = layer.pool_size # 2,2
+                    sw, sh = layer.strides # 2,2
+                    ih, iw, ic = layer.input_shape[1:] # 4,4,3
+                    oh, ow, oc = layer.output_shape[1:] # 2,2,3
+
+                    for n in range(ow*oh): # output unit 0:4
+                        for k in range(ph): # kernel height 0:2
+                            for l in range(pw): # kernel width 0:2
+                                syn_weights[(n%ow)*ic*sw + (n//ow)*ic*iw*sh + k*ic*iw + l*ic:
+                                            (n%ow)*ic*sw + (n//ow)*ic*iw*sh + k*ic*iw + l*ic + ic,
+                                            n*oc:n*oc+oc] = np.diag([1.0/(ph*pw)]*oc)
+
                 j += 1
+                g_model_weights.append(syn_weights)
         
         return g_model_weights, n_units
 
@@ -51,7 +69,7 @@ class ReLUANN():
             raise NotImplementedError('Implementation for type {} models not found'.format(type(tf_model)))
         
         for layer in tf_model.layers[:-1]:
-            if not isinstance(layer,(tf.keras.layers.Dense,tf.keras.layers.Flatten, tf.keras.layers.Conv2D)):
+            if not isinstance(layer,(tf.keras.layers.Dense,tf.keras.layers.Flatten, tf.keras.layers.Conv2D, tf.keras.layers.AveragePooling2D)):
                 raise NotImplementedError('{} layers are not supported'.format(layer))
             elif isinstance(layer, tf.keras.layers.Dense):
                 if layer.activation != tf.keras.activations.relu:
