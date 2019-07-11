@@ -157,14 +157,14 @@ class ReLUANN():
         self.neuron_pops = []
         self.syn_pops = []
 
-        for i in range(1,len(relevant_layers)+1):
+        for i,(inds,vals,n) in enumerate(zip(gw_inds,gw_vals,n_units),start=1):
             if i == 1:
                 # Presynaptic neuron
                 self.neuron_pops.append(self.g_model.add_neuron_population(
                     "if"+str(i-1),n_units[i-1],if_model,sparse_if_params,if_init)
                 )
             
-            if isinstance(relevant_layers[i-1],tf.keras.layers.Dense):
+            if inds is None:
                 # Postsynaptic neuron
                 self.neuron_pops.append(self.g_model.add_neuron_population(
                     "if"+str(i),n_units[i],if_model,dense_if_params,if_init)
@@ -173,8 +173,8 @@ class ReLUANN():
                 # Synapse
                 self.syn_pops.append(self.g_model.add_synapse_population(
                     "syn"+str(i-1)+str(i),"DENSE_INDIVIDUALG",genn_wrapper.NO_DELAY,
-                    self.neuron_pops[i-1],self.neuron_pops[i],
-                    "StaticPulse",{},{'g':gw_vals[i-1]},{},{},
+                    self.neuron_pops[-2],self.neuron_pops[-1],
+                    "StaticPulse",{},{'g':vals},{},{},
                     "DeltaCurr",{},{})
                 )
                 
@@ -185,12 +185,12 @@ class ReLUANN():
 
                 self.syn_pops.append(self.g_model.add_synapse_population(
                     "syn"+str(i-1)+str(i),"SPARSE_INDIVIDUALG",genn_wrapper.NO_DELAY,
-                    self.neuron_pops[i-1],self.neuron_pops[i],
-                    "StaticPulse",{},{'g':gw_vals[i-1]},{},{},
+                    self.neuron_pops[-2],self.neuron_pops[-1],
+                    "StaticPulse",{},{'g':vals},{},{},
                     "DeltaCurr",{},{})
                 )
 
-                self.syn_pops[-1].set_sparse_connections(gw_inds[i-1][0],gw_inds[i-1][1])
+                self.syn_pops[-1].set_sparse_connections(inds[0],inds[1])
 
 
         self.current_source = self.g_model.add_current_source("cs",cs_model,"if0",{},cs_init)
