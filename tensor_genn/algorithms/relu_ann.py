@@ -29,13 +29,11 @@ class ReLUANN():
         gw_inds = []
         gw_vals = []
         n_units = [np.prod(tf_layers[0].input_shape[1:])] # flatten layer shapes to (None, total_size)
-        relevant_layers = []
         i = j = 1
 
         for layer in tf_layers:
             if not isinstance(layer, tf.keras.layers.Flatten):
                 n_units.append(np.prod(layer.output_shape[1:]))
-                relevant_layers.append(layer)
                 syn_weights = np.zeros((n_units[j-1],n_units[j]))
 
                 if isinstance(layer,tf.keras.layers.Dense):
@@ -86,7 +84,7 @@ class ReLUANN():
 
                 j += 1
         
-        return gw_inds, gw_vals, n_units, relevant_layers
+        return gw_inds, gw_vals, n_units
 
     def convert(self, tf_model):
         supported_layers = (tf.keras.layers.Dense,tf.keras.layers.Flatten,tf.keras.layers.Conv2D,
@@ -150,7 +148,7 @@ class ReLUANN():
         cs_init = {"magnitude":10.0}
 
         # Fetch augmented weight matrices
-        gw_inds, gw_vals, n_units, relevant_layers = self.create_weight_matrices(tf_model)
+        gw_inds, gw_vals, n_units = self.create_weight_matrices(tf_model)
 
         # Define model and populations
         self.g_model = genn_model.GeNNModel("float","g_model")
