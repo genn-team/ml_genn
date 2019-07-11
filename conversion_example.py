@@ -34,5 +34,5 @@ def train_mnist():
 tf_model, x_train, y_train, x_test, y_test = train_mnist()
 
 # Create models
-relu_ann = ReLUANN(membrane_capacitance=0.4)
+relu_ann = ReLUANN()
 g_model = tg.convert_model(tf_model,relu_ann,x_test[:100],y_test[:100])
