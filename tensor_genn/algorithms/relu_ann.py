@@ -55,7 +55,7 @@ class ReLUANN():
                     ih,iw,ic = layer.input_shape[1:]
                     oh,ow,oc = layer.output_shape[1:]
 
-                    if layer.padding == 'valid':
+                    if layer.padding == 'valid': # no padding in layer i.e. output_size < input_size
                         # Proceed with weight mapping for regular convolution
                         for n in range(int(n_units[j])): # output unit index/conv number
                             for k in range(kh): # over kernel height
@@ -63,7 +63,7 @@ class ReLUANN():
                                             ((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw + kw*ic,
                                             n] = tf_weights[i-1][k,:,:,n%oc].flatten()
 
-                    elif layer.padding == 'same':
+                    elif layer.padding == 'same': # zero padding such that output_size == input_size
                         # Calculate padding for each side of input map (As done by tf.keras)
                         if (ih % sh == 0):
                             pad_along_height = max(kh - sh, 0)
