@@ -7,8 +7,8 @@ from pygenn import genn_model, genn_wrapper
 
 '''
 References: 
-Peter U. Diehl, Daniel Neil, Jonathan Binas, Matthew Cook, Shih-Chii Liu, and Michael Pfeiffer. 2015. Fast-Classifying, High-Accuracy Spiking Deep
-Networks Through Weight and Threshold Balancing. IJCNN (2015)
+Peter U. Diehl, Daniel Neil, Jonathan Binas, Matthew Cook, Shih-Chii Liu, and Michael Pfeiffer. 2015. 
+Fast-Classifying, High-Accuracy Spiking Deep Networks Through Weight and Threshold Balancing. IJCNN (2015)
 '''
 
 class ReLUANN():
@@ -42,23 +42,63 @@ class ReLUANN():
                     gw_inds.append(None)
                     gw_vals.append(syn_weights.flatten())
 
-                # Prepare weight matrices for Conv2D
                 elif isinstance(layer,tf.keras.layers.Conv2D):
+                    # Prepare weight matrices for Conv2D
+                    '''
+                    Indexing of neurons is done in the order: channels -> width -> height
+                    Assign weights for every kw*ic block in the input and map to output neuron
+                    corresponding to that convolution operation.
+                    '''
+
                     kw,kh = layer.kernel_size
                     sw,sh = layer.strides 
                     ih,iw,ic = layer.input_shape[1:]
                     oh,ow,oc = layer.output_shape[1:]
-        
-                    for n in range(int(n_units[j])): # output unit index/conv number
-                        for k in range(kh): # over kernel height
-                            '''
-                            Indexing of neurons is done in the order: channels -> width -> height
-                            Assign weights for every kw*ic block in the input and map to output neuron
-                            corresponding to that convolution operation.
-                            '''
-                            syn_weights[((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw:
-                                        ((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw + kw*ic,
-                                        n] = tf_weights[i-1][k,:,:,n%oc].flatten()
+
+                    if layer.padding == 'valid': # no padding in layer i.e. output_size < input_size
+                        # Proceed with weight mapping for regular convolution
+                        for n in range(int(n_units[j])): # output unit index/conv number
+                            for k in range(kh): # over kernel height
+                                syn_weights[((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw:
+                                            ((n//oc)%ow)*ic*sw + ((n//oc)//ow)*ic*iw*sh + k*ic*iw + kw*ic,
+                                            n] = tf_weights[i-1][k,:,:,n%oc].flatten()
+
+                    elif layer.padding == 'same': # zero padding such that output_size == input_size
+                        # Calculate padding for each side of input map (As done by tf.keras)
+                        if (ih % sh == 0):
+                            pad_along_height = max(kh - sh, 0)
+                        else:
+                            pad_along_height = max(kh - (ih % sh), 0)
+                        if (iw % sw == 0):
+                            pad_along_width = max(kw - sw, 0)
+                        else:
+                            pad_along_width = max(kw - (iw % sw), 0)
+                        
+                        pad_top = pad_along_height // 2 
+                        pad_bottom = pad_along_height - pad_top
+                        pad_left = pad_along_width // 2
+                        pad_right = pad_along_width - pad_left
+
+                        for n in range(int(n_units[j])):
+                            # Calculate effective start and end indices on input matrix, along x and y dimensions
+                            startw = max((n//oc)%ow - pad_left,0)*ic*sw
+                            endw = min((n//oc)%ow + pad_right,iw-1)*ic*sw + ic
+                            starth = max((n//oc)//ow - pad_top,0)*ic*iw*sh
+                            endh = min((n//oc)//ow + pad_bottom,ih-1)*ic*iw*sh
+
+                            # Calculate start and end indices for weight matrix to be assigned at the synapse
+                            startkw = max(pad_left-((n*sw)//oc)%ow,0)
+                            endkw = startkw + (endw-ic-startw)//ic + 1
+                            startkh = max(pad_top-((n*sh)//oc)//ow,0)
+
+                            # Weight mapping
+                            for k in range(starth,endh+1,ic*iw):
+                                syn_weights[k+startw:k+endw,n] = tf_weights[i-1][
+                                    startkh + (k-starth)//(ic*iw),
+                                    startkw:endkw,
+                                    :,n%oc
+                                ].flatten()
+                    
                     i += 1
                     gw_inds.append(np.nonzero(syn_weights))
                     gw_vals.append(syn_weights[gw_inds[-1]].flatten())
