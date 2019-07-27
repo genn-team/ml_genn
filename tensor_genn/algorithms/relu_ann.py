@@ -22,8 +22,11 @@ class ReLUANN():
         self.timestep = model_timestep
         self.single_example_time = single_example_time
 
-    def create_weight_matrices(self, tf_model):
-        tf_weights = tf_model.get_weights()
+    def create_weight_matrices(self, tf_model, scaled_tf_weights=None):
+        if scaled_tf_weights is None:
+            tf_weights = tf_model.get_weights()
+        else:
+            tf_weights = scaled_tf_weights
         tf_layers = tf_model.layers
 
         gw_inds = []
@@ -126,7 +129,7 @@ class ReLUANN():
         
         return gw_inds, gw_vals, n_units
 
-    def convert(self, tf_model):
+    def convert(self, tf_model, scaled_tf_weights=None):
         supported_layers = (tf.keras.layers.Dense,tf.keras.layers.Flatten,tf.keras.layers.Conv2D,
                             tf.keras.layers.AveragePooling2D)
 
@@ -188,7 +191,7 @@ class ReLUANN():
         cs_init = {"magnitude":10.0}
 
         # Fetch augmented weight matrices
-        gw_inds, gw_vals, n_units = self.create_weight_matrices(tf_model)
+        gw_inds, gw_vals, n_units = self.create_weight_matrices(tf_model,scaled_tf_weights)
 
         # Define model and populations
         self.g_model = genn_model.GeNNModel("float","g_model")
@@ -255,7 +258,7 @@ class ReLUANN():
                     npop.vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
                     self.g_model.push_state_to_device("if"+str(j))
                 
-            self.current_source.vars['magnitude'].view[:] = X[i] / 100.
+            self.current_source.vars['magnitude'].view[:] = X[i]*1000.
             self.g_model.push_var_to_device("cs",'magnitude')
 
             # Run simulation
