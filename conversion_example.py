@@ -36,7 +36,7 @@ def train_mnist():
 
 tf_model, x_train, y_train, x_test, y_test = train_mnist()
 
-# Create models
+# Sample conversion
 relu_ann = ReLUANN(single_example_time=350.,dense_membrane_capacitance=1.0,sparse_membrane_capacitance=0.2,neuron_threshold_voltage=-57.0)
 data_based = DataBased(data=x_train.reshape((-1,28,28,1)))
 g_model = tg.convert_model(tf_model,relu_ann,x_test[:100],y_test[:100],data_based)
