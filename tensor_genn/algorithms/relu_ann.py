@@ -246,11 +246,9 @@ class ReLUANN():
         n_examples = len(X)
         X = X.reshape(n_examples,-1)
         y = y.reshape(n_examples)
-
         n = len(self.neuron_pops)
         
-        n_correct = 0    
-
+        n_correct = 0
         for i in range(n_examples):
             # Before simulation
             for j, npop in enumerate(self.neuron_pops):
@@ -258,7 +256,7 @@ class ReLUANN():
                     npop.vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
                     self.g_model.push_state_to_device("if"+str(j))
                 
-            self.current_source.vars['magnitude'].view[:] = X[i]*1000.
+            self.current_source.vars['magnitude'].view[:] = X[i]*(-self.Vthr * (self.dCm/self.timestep))
             self.g_model.push_var_to_device("cs",'magnitude')
 
             # Run simulation
@@ -269,7 +267,6 @@ class ReLUANN():
             self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
             SpikeNumber_view = self.neuron_pops[-1].vars["SpikeNumber"].view
             n_correct += (np.argmax(SpikeNumber_view)==y[i])
-
         accuracy = (n_correct / n_examples) * 100.
         
         return accuracy

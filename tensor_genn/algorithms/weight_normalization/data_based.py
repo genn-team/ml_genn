@@ -17,9 +17,19 @@ class DataBased():
         self.batch_size = batch_size # Adjust based on available system memory
 
     def normalize(self,tf_model):
+        """
+        The maximum activation encountered in the training data is a good estimate of the highest
+        activation possible in the model. This 'scale factor' is computed separately for each layer 
+        of the network.
+        The 'applied factor' is the scaled factor of each layer, divided by that of the previous layer. This
+        brings all the factors to a uniform range of values (with respect to the input layer).
+        Weights of each layer in the model are then divided by the corresponding applied factor to compute the
+        final normalized weights.
+        """
         # Get parameterized layer indices
-        wts_exist = [layer.get_weights() != [] for layer in tf_model.layers]
-        wts_exist_inds = [i for i, x in enumerate(wts_exist) if x == True]
+        wts_exist_inds = [i for i,layer in enumerate(tf_model.layers) if len(layer.get_weights()) > 0]
+
+        assert(len(tf_model.get_weights()) == len(wts_exist_inds))
 
         # Function to fetch ReLU outputs from intermediate layers
         get_output_from_layer = K.function([tf_model.layers[0].input],
@@ -38,10 +48,10 @@ class DataBased():
             # maximum output activations for each layer
             layer_outputs = get_output_from_layer([x])
             b_macts = [np.max(op) for op in layer_outputs]
-            max_acts = [max(b_macts[i],max_acts[i]) for i in range(len(b_macts))]
+            max_acts = [max(b, a) for b, a in zip(b_macts, max_acts)]
         
         # Compute scale factors and normalize weights
-        scale_factors = [max(max_acts[i],max_wts[i]) for i in range(len(max_acts))]  
+        scale_factors = [max(a, w) for a, w in zip(max_acts, max_wts)]
         applied_factors = [scale_factors[0]] + [scale_factors[i]/scale_factors[i-1] for i in range(1,len(scale_factors))]    
         scaled_weights = [tf_model.get_weights()[i]/applied_factors[i] for i in range(len(applied_factors))]
         
