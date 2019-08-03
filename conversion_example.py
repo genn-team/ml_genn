@@ -1,7 +1,9 @@
 import tensorflow as tf
+import tensorflow.keras.backend as K
 
 import tensor_genn as tg
 from tensor_genn.algorithms import ReLUANN
+from tensor_genn.algorithms.weight_normalization import DataBased
 
 def train_mnist():
     mnist = tf.keras.datasets.mnist
@@ -10,7 +12,6 @@ def train_mnist():
     x_train_normed, x_test_normed = x_train / 255.0, x_test / 255.0
 
     x_train_normed, x_test_normed = x_train_normed.reshape((-1,28,28,1)), x_test_normed.reshape((-1,28,28,1))
-
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16,5,padding='valid',activation='relu',use_bias=False,input_shape=(28,28,1)),
         tf.keras.layers.AveragePooling2D(2),
@@ -27,14 +28,15 @@ def train_mnist():
 
     model.fit(x_train_normed[:10000], y_train[:10000], epochs=1)
 
-    model.evaluate(x_test_normed[:1000], y_test[:1000])
+    model.evaluate(x_test_normed[:10000], y_test[:10000])
 
     print(model.summary())
 
-    return model, x_train, y_train, x_test, y_test
+    return model, x_train_normed, y_train, x_test_normed, y_test
 
 tf_model, x_train, y_train, x_test, y_test = train_mnist()
 
-# Create models
-relu_ann = ReLUANN(sparse_membrane_capacitance=0.4)
+# Sample conversion
+relu_ann = ReLUANN()
+# data_based = DataBased(data=x_train.reshape((-1,28,28,1)))
 g_model = tg.convert_model(tf_model,relu_ann,x_test[:100],y_test[:100])
