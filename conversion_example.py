@@ -4,6 +4,7 @@ import tensorflow.keras.backend as K
 import tensor_genn as tg
 from tensor_genn.algorithms import ReLUANN
 from tensor_genn.algorithms.weight_normalization import DataBased
+from tensor_genn.utils.plotting import raster_plot
 
 def train_mnist():
     mnist = tf.keras.datasets.mnist
@@ -64,13 +65,15 @@ def train_cifar10():
 
     return model, x_train_normed, y_train, x_test_normed, y_test
 
-tf_model, x_train, y_train, x_test, y_test = train_cifar10()
+tf_model, x_train, y_train, x_test, y_test = train_mnist()
 
-tf.keras.models.save_model(tf_model,'./cifar_model.h5')
-
-tf_model = tf.keras.models.load_model('./cifar_model.h5')
+tf.keras.models.save_model(tf_model,'./mnist.h5')
+tf_model = tf.keras.models.load_model('./mnist.h5')
 
 # Sample conversion
 relu_ann = ReLUANN(single_example_time=100.,dense_membrane_capacitance=0.1,sparse_membrane_capacitance=0.5,neuron_threshold_voltage=-56.0)
-data_based = DataBased(data=x_train.reshape((-1,32,32,3)))
-g_model = tg.convert_model(tf_model,relu_ann,x_test[:100],y_test[:100], raster_plot=True)
+data_based = DataBased(data=x_train.reshape((-1,28,28,1)))
+g_model, spike_ids, spike_times, neuron_pops, syn_pops = tg.convert_model(
+    tf_model,relu_ann,x_test[:100],y_test[:100], data_based, [20,21]
+)
+raster_plot(spike_ids, spike_times, neuron_pops)

@@ -2,12 +2,9 @@ import numpy as np
 import random
 import math
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
-
-sns.set()
 
 '''
 References: 
@@ -246,15 +243,15 @@ class ReLUANN():
 
         return self.g_model, self.neuron_pops, self.current_source
 
-    def evaluate(self, X, y=None, raster_plot=False):
+    def evaluate(self, X, y=None, save_example_spikes=[]):
         n_examples = len(X)
         X = X.reshape(n_examples,-1)
         y = y.reshape(n_examples)
         n = len(self.neuron_pops)
         
         n_correct = 0
-        spike_ids = [None]*len(self.neuron_pops)
-        spike_times = [None]*len(self.neuron_pops)
+        spike_ids = [[None]*len(self.neuron_pops)]*len(save_example_spikes)
+        spike_times = [[None]*len(self.neuron_pops)]*len(save_example_spikes)
         for i in range(n_examples):
             # Before simulation
             for j, npop in enumerate(self.neuron_pops):
@@ -269,19 +266,20 @@ class ReLUANN():
             for t in range(math.ceil(self.single_example_time/self.timestep)):
                 self.g_model.step_time()
 
-                if raster_plot and i == n_examples-1:
+                if i in save_example_spikes:
+                    k = save_example_spikes.index(i)
                     for j,npop in enumerate(self.neuron_pops):
                         self.g_model.pull_current_spikes_from_device(npop.name)
 
                         ids = npop.current_spikes # size of npop
                         ts = np.ones(ids.shape) * t # size of npop
                     
-                        if spike_ids[j] is None:
-                            spike_ids[j] = np.copy(ids)
-                            spike_times[j] = ts
+                        if spike_ids[k][j] is None:
+                            spike_ids[k][j] = np.copy(ids)
+                            spike_times[k][j] = ts      
                         else:
-                            spike_ids[j] = np.hstack((spike_ids[j],ids))
-                            spike_times[j] = np.hstack((spike_times[j], ts))
+                            spike_ids[k][j] = np.hstack((spike_ids[k][j],ids))
+                            spike_times[k][j] = np.hstack((spike_times[k][j], ts))
 
             # After simulation
             self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
@@ -289,19 +287,5 @@ class ReLUANN():
             n_correct += (np.argmax(SpikeNumber_view)==y[i])
 
         accuracy = (n_correct / n_examples) * 100.
-
-        if raster_plot:
-            fig, axs = plt.subplots(math.ceil(len(self.neuron_pops)/3.),3)
-            axs = self.trim_axs(axs,len(self.neuron_pops))
-            for ax,(j,npop) in zip(axs,enumerate(self.neuron_pops)):
-                ax.set_title(npop.name + ' ' + str(len(spike_times[j])))
-                ax.scatter(spike_times[j],spike_ids[j],s=0.3)
-            plt.show()
         
-        return accuracy
-
-    def trim_axs(self, axs, N):
-        axs = axs.flat
-        for ax in axs[N:]:
-            ax.remove()
-        return axs[:N]
+        return accuracy, spike_ids, spike_times, self.neuron_pops, self.syn_pops
