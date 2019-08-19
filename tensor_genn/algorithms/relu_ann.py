@@ -268,19 +268,22 @@ class ReLUANN():
                 self.g_model.step_time()
 
                 if i in save_example_spikes:
-                    k = save_example_spikes.index(i)
-                    for j,npop in enumerate(self.neuron_pops):
-                        self.g_model.pull_current_spikes_from_device(npop.name)
+                    try:
+                        k = save_example_spikes.index(i)
+                        for j,npop in enumerate(self.neuron_pops):
+                            self.g_model.pull_current_spikes_from_device(npop.name)
 
-                        ids = npop.current_spikes # size of npop
-                        ts = np.ones(ids.shape) * t # size of npop
-                    
-                        if spike_ids[k][j] is None:
-                            spike_ids[k][j] = np.copy(ids)
-                            spike_times[k][j] = ts      
-                        else:
-                            spike_ids[k][j] = np.hstack((spike_ids[k][j],ids))
-                            spike_times[k][j] = np.hstack((spike_times[k][j], ts))
+                            ids = npop.current_spikes # size of npop
+                            ts = np.ones(ids.shape) * t # size of npop
+                        
+                            if spike_ids[k][j] is None:
+                                spike_ids[k][j] = np.copy(ids)
+                                spike_times[k][j] = ts      
+                            else:
+                                spike_ids[k][j] = np.hstack((spike_ids[k][j],ids))
+                                spike_times[k][j] = np.hstack((spike_times[k][j], ts))
+                    except ValueError:
+                        pass
 
             # After simulation
             self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
