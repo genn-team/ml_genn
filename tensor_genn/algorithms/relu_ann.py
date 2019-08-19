@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import math
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
@@ -242,31 +243,53 @@ class ReLUANN():
 
         return self.g_model, self.neuron_pops, self.current_source
 
-    def evaluate(self, X, y=None):
+    def evaluate(self, X, y=None, save_example_spikes=[]):
         n_examples = len(X)
         X = X.reshape(n_examples,-1)
         y = y.reshape(n_examples)
         n = len(self.neuron_pops)
         
         n_correct = 0
+        spike_ids = [[None for _ in enumerate(self.neuron_pops)] for _ in enumerate(save_example_spikes)]     
+        spike_times = [[None for _ in enumerate(self.neuron_pops)] for _ in enumerate(save_example_spikes)]     
+
         for i in range(n_examples):
             # Before simulation
             for j, npop in enumerate(self.neuron_pops):
-                    npop.vars["SpikeNumber"].view[:] = 0
-                    npop.vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
-                    self.g_model.push_state_to_device("if"+str(j))
+                npop.vars["SpikeNumber"].view[:] = 0
+                npop.vars["Vmem"].view[:] = random.uniform(self.Vres,self.Vthr)
+                self.g_model.push_state_to_device("if"+str(j))
                 
             self.current_source.vars['magnitude'].view[:] = X[i]*(-self.Vthr * (self.dCm/self.timestep))
             self.g_model.push_var_to_device("cs",'magnitude')
 
             # Run simulation
-            for _ in range(math.ceil(self.single_example_time/self.timestep)):
+            for t in range(math.ceil(self.single_example_time/self.timestep)):
                 self.g_model.step_time()
+
+                if i in save_example_spikes:
+                    try:
+                        k = save_example_spikes.index(i)
+                        for j,npop in enumerate(self.neuron_pops):
+                            self.g_model.pull_current_spikes_from_device(npop.name)
+
+                            ids = npop.current_spikes # size of npop
+                            ts = np.ones(ids.shape) * t # size of npop
+                        
+                            if spike_ids[k][j] is None:
+                                spike_ids[k][j] = np.copy(ids)
+                                spike_times[k][j] = ts      
+                            else:
+                                spike_ids[k][j] = np.hstack((spike_ids[k][j],ids))
+                                spike_times[k][j] = np.hstack((spike_times[k][j], ts))
+                    except ValueError:
+                        pass
 
             # After simulation
             self.g_model.pull_var_from_device("if"+str(n-1),'SpikeNumber')
             SpikeNumber_view = self.neuron_pops[-1].vars["SpikeNumber"].view
             n_correct += (np.argmax(SpikeNumber_view)==y[i])
+
         accuracy = (n_correct / n_examples) * 100.
         
-        return accuracy
+        return accuracy, spike_ids, spike_times, self.neuron_pops, self.syn_pops

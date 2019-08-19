@@ -25,18 +25,17 @@ class DataBased():
         brings all the factors to a uniform range of values (with respect to the input layer).
         Weights of each layer in the model are then divided by the corresponding applied factor to compute the
         final normalized weights.
+        Only Convolution2D layer weights are normalized.
         """
         # Get parameterized layer indices
-        wts_exist_inds = [i for i,layer in enumerate(tf_model.layers) if len(layer.get_weights()) > 0]
-
-        assert(len(tf_model.get_weights()) == len(wts_exist_inds))
-
+        wts_exist_inds = [i for i,layer in enumerate(tf_model.layers) if len(layer.get_weights()) > 0 and isinstance(layer,tf.keras.layers.Conv2D)]
+        
         # Function to fetch ReLU outputs from intermediate layers
         get_output_from_layer = K.function([tf_model.layers[0].input],
                                            [tf_model.layers[i].output for i in wts_exist_inds])
 
         n_batches = math.ceil(len(self.x_train)/self.batch_size)
-        max_wts = [np.max(wt) for wt in tf_model.get_weights()] # maximum input weights for each layer
+        max_wts = [np.max(wt) for wt in [tf_model.layers[i].get_weights() for i in wts_exist_inds]]
         max_acts = [0]*len(wts_exist_inds)
         for bi in range(n_batches):
             # get training set batch
@@ -51,8 +50,10 @@ class DataBased():
             max_acts = [max(b, a) for b, a in zip(b_macts, max_acts)]
         
         # Compute scale factors and normalize weights
-        scale_factors = [max(a, w) for a, w in zip(max_acts, max_wts)]
-        applied_factors = [scale_factors[0]] + [scale_factors[i]/scale_factors[i-1] for i in range(1,len(scale_factors))]    
-        scaled_weights = [tf_model.get_weights()[i]/applied_factors[i] for i in range(len(applied_factors))]
+        scale_factors = [max(a, w) for a, w in zip(max_acts, max_wts)] # 2
+        applied_factors = [scale_factors[0]] + [scale_factors[i]/scale_factors[i-1] for i in range(1,len(scale_factors))]
+        scaled_weights = tf_model.get_weights()
+        for wei,i in zip(wts_exist_inds,range(len(wts_exist_inds))):
+            scaled_weights[wei] /= applied_factors[i]
         
         return scaled_weights
