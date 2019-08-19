@@ -250,8 +250,9 @@ class ReLUANN():
         n = len(self.neuron_pops)
         
         n_correct = 0
-        spike_ids = [[None]*len(self.neuron_pops)]*len(save_example_spikes)
-        spike_times = [[None]*len(self.neuron_pops)]*len(save_example_spikes)
+        spike_ids = [[None for _ in enumerate(self.neuron_pops)] for _ in enumerate(save_example_spikes)]     
+        spike_times = [[None for _ in enumerate(self.neuron_pops)] for _ in enumerate(save_example_spikes)]     
+
         for i in range(n_examples):
             # Before simulation
             for j, npop in enumerate(self.neuron_pops):
