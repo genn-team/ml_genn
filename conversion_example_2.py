@@ -9,24 +9,6 @@ from model import TGModel
 def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
-        tf.keras.layers.AveragePooling2D(2),
-        tf.keras.layers.Conv2D(8, 5, padding='same', strides=1, activation='relu', use_bias=False),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(128, activation='relu', use_bias=False),
-        tf.keras.layers.Dense(64, activation='relu', use_bias=False),
-        tf.keras.layers.Dense(10, activation='softmax', use_bias=False)
-    ])
-
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    model.fit(x_train, y_train, epochs=1)
-    model.evaluate(x_test, y_test)
-
-    return model
-
-
-def train_mnist_2(x_train, y_train, x_test, y_test):
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
         tf.keras.layers.Conv2D(8, 5, padding='valid', strides=1, activation='relu', use_bias=False),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
@@ -73,7 +55,6 @@ def main():
     # Create / save / load TF model
     model_name = './mnist.h5'
     #tf_model = train_mnist(x_train, y_train, x_test, y_test)
-    #tf_model = train_mnist_2(x_train, y_train, x_test, y_test)
     #tf.keras.models.save_model(tf_model, model_name)
     tf_model = tf.keras.models.load_model(model_name)
     tf_model.evaluate(x_test, y_test)
@@ -85,27 +66,25 @@ def main():
         if len(layer.get_weights()) > 0: print('w shape:   ' + str(layer.get_weights()[0].shape))
     #return
 
-
-    # ===== SPIKE NORM =====
     tg_model = TGModel(tf_model)
-    norm = SpikeNorm(x_norm, present_time=pres_t)
-    norm.normalize(tg_model)
-
-    # # # ===== DATA NORM =====
-    # tg_model = TGModel(tf_model)
-    # norm = DataNorm(x_norm, batch_size=100)
-    # norm.normalize(tg_model)
-
-    # OLD D-N
-    # norm = DataNorm(x_norm, batch_size=100)
-    # scaled_tf_weights = norm.normalize(tf_model)
-    # tf_model.set_weights(scaled_tf_weights)
-    # tg_model = TGModel(tf_model)
-
+    tg_model.create_genn_model(dt=1.0)
 
     accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], present_time=pres_t)
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
-    raster_plot(spike_ids, spike_times, tg_model.neuron_pops)
+
+    # # ===== SPIKE NORM =====
+    # norm = SpikeNorm(x_norm, present_time=pres_t)
+    # norm.normalize(tg_model)
+
+    # ===== DATA NORM =====
+    norm = DataNorm(x_norm, batch_size=100)
+    norm.normalize(tg_model)
+
+    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], present_time=pres_t)
+    print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
+    # names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
+    # neurons = [tg_model.genn_model.neuron_populations[name] for name in names]
+    # raster_plot(spike_ids, spike_times, neurons)
 
 
 if __name__ == '__main__':

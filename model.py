@@ -13,11 +13,18 @@ supported_layers = (
 )
 
 class TGModel():
-    def __init__(self, tf_model=None, genn_model=None, dt=1.0):
+    def __init__(self, tf_model=None, genn_model=None):
+        self.tf_model = tf_model
+        self.genn_model = genn_model
+        self.layer_names = None
+        self.weight_vals = None
+        self.weight_inds = None
+
+    def create_genn_model(self, dt=1.0):
         # Check model compatibility
-        if not isinstance(tf_model, tf.keras.Sequential):
-            raise NotImplementedError('{} models not supported'.format(type(tf_model)))
-        for layer in tf_model.layers[:-1]:
+        if not isinstance(self.tf_model, tf.keras.Sequential):
+            raise NotImplementedError('{} models not supported'.format(type(self.tf_model)))
+        for layer in self.tf_model.layers[:-1]:
             if not isinstance(layer, supported_layers):
                 raise NotImplementedError('{} layers are not supported'.format(layer))
             elif isinstance(layer, tf.keras.layers.Dense):
@@ -26,36 +33,22 @@ class TGModel():
                 if layer.use_bias == True:
                     raise NotImplementedError('bias tensors are not supported')
 
-        self.tf_model = tf_model
-        self.genn_model = genn_model
-        self.genn_n_neurons = None
-        self.genn_w_name = None
-        self.genn_w_inds = None
-        self.genn_w_vals = None
-        self.genn_w_norm = None
-
-        self.create_genn_model(dt=dt)
-
-    def create_genn_model(self, dt=1.0):
-        self.genn_n_neurons = [(np.prod(self.tf_model.input_shape[1:]))]
-        self.genn_w_name = []
-        self.genn_w_inds = []
-        self.genn_w_vals = []
+        self.layer_names = []
+        self.weight_vals = []
+        self.weight_inds = []
 
         for layer in self.tf_model.layers:
             if isinstance(layer, tf.keras.layers.Dense):
-                self.genn_n_neurons.append(np.prod(layer.output_shape[1:]))
                 tf_w = layer.get_weights()[0]
                 genn_w = tf_w.copy()
 
-                self.genn_w_name.append(layer.name)
-                self.genn_w_inds.append(None)
-                self.genn_w_vals.append(genn_w.flatten())
+                self.layer_names.append(layer.name)
+                self.weight_vals.append(genn_w)
+                self.weight_inds.append(None)
 
             elif isinstance(layer, tf.keras.layers.Conv2D):
-                self.genn_n_neurons.append(np.prod(layer.output_shape[1:]))
                 tf_w = layer.get_weights()[0]
-                genn_w = np.full((self.genn_n_neurons[-2], self.genn_n_neurons[-1]), np.nan)
+                genn_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
 
                 kh, kw = layer.kernel_size
                 sh, sw = layer.strides
@@ -68,7 +61,7 @@ class TGModel():
                     # ow = ceil((iw - kw + 1) / sw)
 
                     # For each post-synapse neuron (each column in genn_w):
-                    for i_post in range(self.genn_n_neurons[-1]):
+                    for i_post in range(genn_w.shape[1]):
 
                         # Find its output channel index and output pixel coordinates.
                         out_channel    = i_post % oc
@@ -114,7 +107,7 @@ class TGModel():
                     pad_right  = pad_along_width - pad_left
 
                     # For each post-synapse neuron (each column in genn_w):
-                    for i_post in range(self.genn_n_neurons[-1]):
+                    for i_post in range(genn_w.shape[1]):
 
                         # Find its output channel index and output pixel coordinates.
                         out_channel    = i_post % oc
@@ -138,19 +131,12 @@ class TGModel():
                             w = tf_w[startkh + (k-starth)//(ic*iw), startkw : endkw, :, out_channel]
                             genn_w[k+startw : k+endw, i_post] = w.flatten()
 
-                self.genn_w_name.append(layer.name)
-                self.genn_w_inds.append(np.nonzero(~np.isnan(genn_w)))
-                self.genn_w_vals.append(genn_w[self.genn_w_inds[-1]].flatten())
-
-
-                #import matplotlib.pyplot as plt
-                #plt.matshow(genn_w)
-                #plt.matshow(genn_w[0::ic, 0::oc])
-
+                self.layer_names.append(layer.name)
+                self.weight_vals.append(genn_w)
+                self.weight_inds.append(np.nonzero(~np.isnan(genn_w)))
 
             elif isinstance(layer, tf.keras.layers.AveragePooling2D):
-                self.genn_n_neurons.append(np.prod(layer.output_shape[1:]))
-                genn_w = np.full((self.genn_n_neurons[-2], self.genn_n_neurons[-1]), np.nan)
+                genn_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
 
                 ph, pw = layer.pool_size
                 sh, sw = layer.strides
@@ -165,81 +151,15 @@ class TGModel():
                                    (n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic + ic,
                                    n * oc : n * oc + oc] = np.diag([1.0 / (pw * ph)] * oc) # diag since we need a one-to-one mapping along channels
 
-                self.genn_w_name.append(layer.name)
-                self.genn_w_inds.append(np.nonzero(~np.isnan(genn_w)))
-                self.genn_w_vals.append(genn_w[self.genn_w_inds[-1]].flatten())
+                self.layer_names.append(layer.name)
+                self.weight_vals.append(genn_w)
+                self.weight_inds.append(np.nonzero(~np.isnan(genn_w)))
 
             elif isinstance(layer, tf.keras.layers.Flatten):
                 # Ignore Flatten layers
                 continue
 
 
-        # PARAM VTHR (ORIGINAL)
-        """
-        # Define IF neuron class
-        if_model = genn_model.create_custom_neuron_class(
-            'if_model',
-            param_names=['Vres', 'Vthr'],
-            var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int')],
-            sim_code='''
-            $(Vmem) += $(Isyn) * DT;
-            $(Vmem_peak) = $(Vmem);
-            ''',
-            reset_code='''
-            $(Vmem) = $(Vres);
-            $(nSpk) += 1;
-            ''',
-            threshold_condition_code='''
-            $(Vmem) >= $(Vthr)
-            '''
-        )
-
-        if_params = {
-            'Vres': 0.0,
-            'Vthr': 1.0,
-        }
-
-        if_init = {
-            'Vmem': 0.0,
-            'Vmem_peak': 0.0,
-            'nSpk': 0,
-        }
-        #"""
-
-        # THREAD-LOCAL VTHR
-        """
-        # Define IF neuron class
-        if_model = genn_model.create_custom_neuron_class(
-            'if_model',
-            param_names=['Vres'],
-            var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int'), ('Vthr', 'scalar')],
-            sim_code='''
-            $(Vmem) += $(Isyn) * DT;
-            $(Vmem_peak) = $(Vmem);
-            ''',
-            reset_code='''
-            $(Vmem) = $(Vres);
-            $(nSpk) += 1;
-            ''',
-            threshold_condition_code='''
-            $(Vmem) >= $(Vthr)
-            '''
-        )
-
-        if_params = {
-            'Vres': 0.0,
-        }
-
-        if_init = {
-            'Vmem': 0.0,
-            'Vmem_peak': 0.0,
-            'nSpk': 0,
-            'Vthr': 1.0,
-        }
-        #"""
-
-        # GLOBAL VTHR
-        #"""
         # Define IF neuron class
         if_model = genn_model.create_custom_neuron_class(
             'if_model',
@@ -268,8 +188,6 @@ class TGModel():
             'Vmem_peak': 0.0,
             'nSpk': 0,
         }
-        #"""
-
 
         # Define current source class
         cs_model = genn_model.create_custom_current_source_class(
@@ -348,116 +266,72 @@ public:
         self.genn_model = genn_model.GeNNModel('float', 'tg_model')
         self.genn_model.dT = dt
 
-        self.neuron_pops = []
-        self.synapse_pops = []
-
-
 
         # ========== INPUTS AS POISSON NEURONS
         # Add Poisson distributed spike inputs
-
         # ========== INPUTS WITH INJECTED CURRENT
-
         # Add input neurons
-        self.neuron_pops.append(self.genn_model.add_neuron_population(
-            'if0', self.genn_n_neurons[0], if_model, if_params, if_init)
+        n = np.prod(self.tf_model.input_shape[1:])
+        nrn_post = self.genn_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
+        nrn_post.set_extra_global_param('Vthr', 1.0)
+
+        # Add current source
+        self.genn_model.add_current_source(
+            'input_cs', cs_model, 'input_nrn', {}, cs_init
         )
+        # ========== INPUTS END
 
-        self.neuron_pops[-1].set_extra_global_param('Vthr', 1.0)
-
-        # Add current sources
-        self.current_source = self.genn_model.add_current_source('cs', cs_model, 'if0', {}, cs_init)
 
         # For each synapse population
-        for i, (w_inds, w_vals) in enumerate(zip(self.genn_w_inds, self.genn_w_vals)):
+        for name, w_vals, w_inds in zip(self.layer_names, self.weight_vals, self.weight_inds):
+            nrn_pre = nrn_post
 
             # Add next layer of neurons
-            self.neuron_pops.append(self.genn_model.add_neuron_population(
-                'if' + str(i+1), self.genn_n_neurons[i+1], if_model, if_params, if_init)
-            )
-
-            self.neuron_pops[-1].set_extra_global_param('Vthr', 1.0)
+            n = w_vals.shape[1]
+            nrn_post = self.genn_model.add_neuron_population(name + '_nrn', n, if_model, if_params, if_init)
+            nrn_post.set_extra_global_param('Vthr', 1.0)
 
             # Add synapses from last layer to this layer
             if w_inds is None: # Dense weight matrix
-                self.synapse_pops.append(self.genn_model.add_synapse_population(
-                    'syn' + str(i) + str(i+1), 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY,
-                    self.neuron_pops[-2], self.neuron_pops[-1],
-                    'StaticPulse', {}, {'g': w_vals.copy()}, {}, {},
-                    'DeltaCurr', {}, {})
+                syn = self.genn_model.add_synapse_population(
+                    name + '_syn', 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
+                    'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
                 )
-
             else: # Sparse weight matrix
-                self.synapse_pops.append(self.genn_model.add_synapse_population(
-                    'syn' + str(i) + str(i+1), 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY,
-                    self.neuron_pops[-2], self.neuron_pops[-1],
-                    'StaticPulse', {}, {'g': w_vals.copy()}, {}, {},
-                    'DeltaCurr', {}, {})
+                w_vals = w_vals[w_inds]
+                syn = self.genn_model.add_synapse_population(
+                    name + '_syn', 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
+                    'StaticPulse', {}, {'g': w_vals.copy()}, {}, {}, 'DeltaCurr', {}, {}
                 )
-
-                self.synapse_pops[-1].set_sparse_connections(w_inds[0].copy(), w_inds[1].copy())
+                syn.set_sparse_connections(w_inds[0].copy(), w_inds[1].copy())
 
         # Build and load model
         self.genn_model.build()
         self.genn_model.load()
 
 
-
-        # for i in range(len(self.synapse_pops)):
-        #     print('======= TG  ' + str(i))
-        #     print(self.genn_w_vals[i].shape)
-        #     if self.genn_w_inds[i] is not None:
-        #         print(self.genn_w_inds[i][0].shape)
-        #     print(self.genn_n_neurons[i])
-        #     print(self.genn_n_neurons[i+1])
-        # for i in range(len(self.synapse_pops)):
-        #     print('===== GeNN  ' + str(i))
-        #     self.genn_model.pull_var_from_device('syn' + str(i) + str(i+1), 'g')
-        #     print(self.synapse_pops[i].vars['g'].view.shape)
-
-
-        # import matplotlib.pyplot as plt
-        # syn_pop = 0
-        # plt.figure()
-        # plt.plot(self.genn_w_vals[syn_pop])
-        # plt.figure()
-        # self.genn_model.pull_var_from_device('syn' + str(syn_pop) + str(syn_pop+1), 'g')
-        # plt.plot(self.synapse_pops[syn_pop].vars['g'].view)
-        # plt.show()
-        # exit(1)
-
-
-
-
-    def update_genn_weights(self, genn_w):
-        # TODO ==========================================================
-        pass
-
-
     def evaluate_genn_model(self, x, y, present_time=100.0, save_samples=[]):
         n_correct = 0
         n_examples = len(x)
-        n_pops = len(self.neuron_pops)
 
-
-        spike_idx = [[None for _ in enumerate(self.neuron_pops)] for _ in enumerate(save_samples)]     
-        spike_times = [[None for _ in enumerate(self.neuron_pops)] for _ in enumerate(save_samples)]     
-
+        spike_idx = [[None] * len(self.genn_model.neuron_populations)] * len(save_samples)
+        spike_times = [[None] * len(self.genn_model.neuron_populations)] * len(save_samples)
 
         # For each sample presentation
         for i in range(n_examples):
+
             # Before simulation
-            for j, npop in enumerate(self.neuron_pops):
-                npop.vars['Vmem'].view[:] = 0.0
-                npop.vars['Vmem_peak'].view[:] = 0.0
-                npop.vars['nSpk'].view[:] = 0
-                self.genn_model.push_state_to_device('if' + str(j))
+            for nrn in self.genn_model.neuron_populations.values():
+                nrn.vars['Vmem'].view[:] = 0.0
+                nrn.vars['Vmem_peak'].view[:] = 0.0
+                nrn.vars['nSpk'].view[:] = 0
+                self.genn_model.push_state_to_device(nrn.name)
 
 
             # TODO: INPUT RATE ENCODING
             # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
-            self.current_source.vars['magnitude'].view[:] = x[i].flatten()
-            self.genn_model.push_var_to_device('cs', 'magnitude')
+            self.genn_model.current_sources['input_cs'].vars['magnitude'].view[:] = x[i].flatten()
+            self.genn_model.push_var_to_device('input_cs', 'magnitude')
 
 
             # Run simulation
@@ -466,26 +340,24 @@ public:
 
                 # Save spikes
                 if i in save_samples:
-                    try:
-                        k = save_samples.index(i)
-                        for j, npop in enumerate(self.neuron_pops):
-                            self.genn_model.pull_current_spikes_from_device(npop.name)
-
-                            idx = npop.current_spikes    # size of npop
-                            ts = np.ones(idx.shape) * t  # size of npop
-
-                            if spike_idx[k][j] is None:
-                                spike_idx[k][j] = np.copy(idx)
-                                spike_times[k][j] = ts      
-                            else:
-                                spike_idx[k][j] = np.hstack((spike_idx[k][j], idx))
-                                spike_times[k][j] = np.hstack((spike_times[k][j], ts))
-                    except ValueError:
-                        pass
+                    k = save_samples.index(i)
+                    names = ['input_nrn'] + [name + '_nrn' for name in self.layer_names]
+                    neurons = [self.genn_model.neuron_populations[name] for name in names]
+                    for j, npop in enumerate(neurons):
+                        self.genn_model.pull_current_spikes_from_device(npop.name)
+                        idx = npop.current_spikes    # size of npop
+                        ts = np.ones(idx.shape) * t  # size of npop
+                        if spike_idx[k][j] is None:
+                            spike_idx[k][j] = np.copy(idx)
+                            spike_times[k][j] = ts
+                        else:
+                            spike_idx[k][j] = np.hstack((spike_idx[k][j], idx))
+                            spike_times[k][j] = np.hstack((spike_times[k][j], ts))
 
             # After simulation
-            self.genn_model.pull_var_from_device('if' + str(n_pops - 1), 'nSpk')
-            nSpk_view = self.neuron_pops[n_pops - 1].vars['nSpk'].view
+            output_neurons = self.genn_model.neuron_populations[self.layer_names[-1] + '_nrn']
+            self.genn_model.pull_var_from_device(output_neurons.name, 'nSpk')
+            nSpk_view = output_neurons.vars['nSpk'].view
             n_correct += (np.argmax(nSpk_view) == y[i])
 
         accuracy = (n_correct / n_examples) * 100.
