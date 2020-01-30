@@ -13,9 +13,9 @@ supported_layers = (
 )
 
 class TGModel():
-    def __init__(self, tf_model=None, genn_model=None):
+    def __init__(self, tf_model=None, g_model=None):
         self.tf_model = tf_model
-        self.genn_model = genn_model
+        self.g_model = g_model
         self.layer_names = None
         self.weight_vals = None
         self.weight_inds = None
@@ -202,84 +202,43 @@ class TGModel():
             'magnitude': 0.0,
         }
 
-
-
-        ########### POISSON INPUT ############
-        '''
-//----------------------------------------------------------------------------
-// NeuronModels::Poisson
-//----------------------------------------------------------------------------
-//! Poisson neurons
-/*! Poisson neurons have constant membrane potential (\c Vrest) unless they are
-    activated randomly to the \c Vspike value if (t- \c SpikeTime ) > \c trefract.
-                                                                                                                      
-    It has 2 variables:
-                                                                                                                      
-    - \c V - Membrane potential (mV)
-    - \c SpikeTime - Time at which the neuron spiked for the last time (ms)
-                                                                                                                      
-    and 4 parameters:
-                                                                                                                      
-    - \c trefract - Refractory period (ms)
-    - \c tspike - duration of spike (ms)
-    - \c Vspike - Membrane potential at spike (mV)
-    - \c Vrest - Membrane potential at rest (mV)
-                                                                                                                      
-    \note The initial values array for the `Poisson` type needs two entries
-    for `V`, and `SpikeTime` and the parameter array needs four entries for
-    `therate`, `trefract`, `Vspike` and `Vrest`,  *in that order*.
-                                                                                                                      
-    \note This model uses a linear approximation for the probability
-    of firing a spike in a given time step of size `DT`, i.e. the
-    probability of firing is \f$\lambda\f$ times `DT`: \f$ p = \lambda \Delta t
-    \f$. This approximation is usually very good, especially for typical,
-    quite small time steps and moderate firing rates. However, it is worth
-    noting that the approximation becomes poor for very high firing rates
-    and large time steps.*/
-
-class Poisson : public Base
-{
-public:
-    DECLARE_MODEL(NeuronModels::Poisson, 4, 2);
-
-    SET_SIM_CODE(
-        "if(($(t) - $(spikeTime)) > $(tspike) && $(V) > $(Vrest)){\n"
-        "   $(V) = $(Vrest);\n"
-        "}"
-        "else if(($(t) - $(spikeTime)) > $(trefract)){\n"
-        "   if($(gennrand_uniform) < $(firingProb)[$(offset) + $(id)]){\n"
-        "       $(V) = $(Vspike);\n"
-        "       $(spikeTime) = $(t);\n"
-        "   }\n"
-        "}\n");
-    SET_THRESHOLD_CONDITION_CODE("$(V) >= $(Vspike)");
-
-    SET_PARAM_NAMES({"trefract", "tspike", "Vspike", "Vrest"});
-    SET_VARS({{"V", "scalar"}, {"spikeTime", "scalar"}});
-    SET_EXTRA_GLOBAL_PARAMS({{"firingProb", "scalar*"}, {"offset", "unsigned int"}});
-};
-        '''
-
+        # Define Poisson neuron class
+        poisson_model = genn_model.create_custom_neuron_class(
+            'poisson_model',
+            extra_global_params=[('rate', 'scalar')],
+            threshold_condition_code='''
+            $(gennrand_uniform) >= exp(-$(rate) * DT)
+            '''
+        )
 
 
         # Define GeNN model
-        self.genn_model = genn_model.GeNNModel('float', 'tg_model')
-        self.genn_model.dT = dt
+        self.g_model = genn_model.GeNNModel('float', 'tg_model')
+        self.g_model.dT = dt
+
 
 
         # ========== INPUTS AS POISSON NEURONS
-        # Add Poisson distributed spike inputs
-        # ========== INPUTS WITH INJECTED CURRENT
-        # Add input neurons
+        # Add Poisson distributed spiking inputs
         n = np.prod(self.tf_model.input_shape[1:])
-        nrn_post = self.genn_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
-        nrn_post.set_extra_global_param('Vthr', 1.0)
+        nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, {})
+        nrn_post.set_extra_global_param('rate', 0.0)
 
-        # Add current source
-        self.genn_model.add_current_source(
-            'input_cs', cs_model, 'input_nrn', {}, cs_init
-        )
-        # ========== INPUTS END
+
+
+
+
+
+        # # ========== INPUTS WITH INJECTED CURRENT
+        # # Add inputs with constant injected current
+        # n = np.prod(self.tf_model.input_shape[1:])
+        # nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
+        # nrn_post.set_extra_global_param('Vthr', 1.0)
+        # self.g_model.add_current_source(
+        #     'input_cs', cs_model, 'input_nrn', {}, cs_init
+        # )
+
+
 
 
         # For each synapse population
@@ -288,63 +247,76 @@ public:
 
             # Add next layer of neurons
             n = w_vals.shape[1]
-            nrn_post = self.genn_model.add_neuron_population(name + '_nrn', n, if_model, if_params, if_init)
+            nrn_post = self.g_model.add_neuron_population(name + '_nrn', n, if_model, if_params, if_init)
             nrn_post.set_extra_global_param('Vthr', 1.0)
 
             # Add synapses from last layer to this layer
             if w_inds is None: # Dense weight matrix
-                syn = self.genn_model.add_synapse_population(
+                syn = self.g_model.add_synapse_population(
                     name + '_syn', 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
                     'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
                 )
             else: # Sparse weight matrix
                 w_vals = w_vals[w_inds]
-                syn = self.genn_model.add_synapse_population(
+                syn = self.g_model.add_synapse_population(
                     name + '_syn', 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
                     'StaticPulse', {}, {'g': w_vals.copy()}, {}, {}, 'DeltaCurr', {}, {}
                 )
                 syn.set_sparse_connections(w_inds[0].copy(), w_inds[1].copy())
 
         # Build and load model
-        self.genn_model.build()
-        self.genn_model.load()
+        self.g_model.build()
+        self.g_model.load()
 
 
-    def evaluate_genn_model(self, x, y, present_time=100.0, save_samples=[]):
+    def evaluate_genn_model(self, x, y, present_time=100.0, rate_factor=1.0, save_samples=[]):
         n_correct = 0
         n_examples = len(x)
 
-        spike_idx = [[None] * len(self.genn_model.neuron_populations)] * len(save_samples)
-        spike_times = [[None] * len(self.genn_model.neuron_populations)] * len(save_samples)
+        spike_idx = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
+        spike_times = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
 
         # For each sample presentation
         for i in range(n_examples):
 
             # Before simulation
-            for nrn in self.genn_model.neuron_populations.values():
+            for name in self.layer_names:
+                nrn = self.g_model.neuron_populations[name + '_nrn']
                 nrn.vars['Vmem'].view[:] = 0.0
                 nrn.vars['Vmem_peak'].view[:] = 0.0
                 nrn.vars['nSpk'].view[:] = 0
-                self.genn_model.push_state_to_device(nrn.name)
+                self.g_model.push_state_to_device(nrn.name)
 
 
-            # TODO: INPUT RATE ENCODING
-            # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
-            self.genn_model.current_sources['input_cs'].vars['magnitude'].view[:] = x[i].flatten()
-            self.genn_model.push_var_to_device('input_cs', 'magnitude')
+
+            # ========== SET RATE AS INPUT * RATE_FACTOR
+
+
+
+            # # Before simulation
+            # for nrn in self.g_model.neuron_populations.values():
+            #     nrn.vars['Vmem'].view[:] = 0.0
+            #     nrn.vars['Vmem_peak'].view[:] = 0.0
+            #     nrn.vars['nSpk'].view[:] = 0
+            #     self.g_model.push_state_to_device(nrn.name)
+
+            # # TODO: INPUT RATE ENCODING
+            # # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
+            # self.g_model.current_sources['input_cs'].vars['magnitude'].view[:] = x[i].flatten()
+            # self.g_model.push_var_to_device('input_cs', 'magnitude')
 
 
             # Run simulation
-            for t in range(math.ceil(present_time / self.genn_model.dT)):
-                self.genn_model.step_time()
+            for t in range(math.ceil(present_time / self.g_model.dT)):
+                self.g_model.step_time()
 
                 # Save spikes
                 if i in save_samples:
                     k = save_samples.index(i)
                     names = ['input_nrn'] + [name + '_nrn' for name in self.layer_names]
-                    neurons = [self.genn_model.neuron_populations[name] for name in names]
+                    neurons = [self.g_model.neuron_populations[name] for name in names]
                     for j, npop in enumerate(neurons):
-                        self.genn_model.pull_current_spikes_from_device(npop.name)
+                        self.g_model.pull_current_spikes_from_device(npop.name)
                         idx = npop.current_spikes    # size of npop
                         ts = np.ones(idx.shape) * t  # size of npop
                         if spike_idx[k][j] is None:
@@ -355,8 +327,8 @@ public:
                             spike_times[k][j] = np.hstack((spike_times[k][j], ts))
 
             # After simulation
-            output_neurons = self.genn_model.neuron_populations[self.layer_names[-1] + '_nrn']
-            self.genn_model.pull_var_from_device(output_neurons.name, 'nSpk')
+            output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
+            self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
             nSpk_view = output_neurons.vars['nSpk'].view
             n_correct += (np.argmax(nSpk_view) == y[i])
 

@@ -32,7 +32,7 @@ class DataNorm():
     def normalize(self, tg_model):
         print('Data Norm')
         tf_model = tg_model.tf_model
-        genn_model = tg_model.genn_model
+        g_model = tg_model.g_model
 
         # Get output functions for weighted layers.
         idx = [i for i, l in enumerate(tf_model.layers) if l.get_weights() != []]
@@ -69,5 +69,5 @@ class DataNorm():
 
         # Update this neuron population's threshold
         for i, name in enumerate([tf_model.layers[i].name for i in idx]):
-            neurons = genn_model.neuron_populations[name + '_nrn']
+            neurons = g_model.neuron_populations[name + '_nrn']
             neurons.extra_global_params['Vthr'].view[:] = applied_factors[i]

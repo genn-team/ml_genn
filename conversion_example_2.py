@@ -69,8 +69,8 @@ def main():
     tg_model = TGModel(tf_model)
     tg_model.create_genn_model(dt=1.0)
 
-    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], present_time=pres_t)
-    print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
+    # accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
+    # print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
     # # ===== SPIKE NORM =====
     # norm = SpikeNorm(x_norm, present_time=pres_t)
@@ -80,11 +80,12 @@ def main():
     norm = DataNorm(x_norm, batch_size=100)
     norm.normalize(tg_model)
 
-    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], present_time=pres_t)
+    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
-    # names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
-    # neurons = [tg_model.genn_model.neuron_populations[name] for name in names]
-    # raster_plot(spike_ids, spike_times, neurons)
+
+    names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
+    neurons = [tg_model.g_model.neuron_populations[name] for name in names]
+    raster_plot(spike_ids, spike_times, neurons)
 
 
 if __name__ == '__main__':

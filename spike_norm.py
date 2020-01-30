@@ -39,39 +39,47 @@ class SpikeNorm():
 
     def normalize(self, tg_model):
         print('Spike Norm')
-        genn_model = tg_model.genn_model
+        g_model = tg_model.g_model
         scale_factors = np.zeros(len(tg_model.layer_names))
 
         # For each synapse population
         for i, name in enumerate(tg_model.layer_names):
-            neurons = genn_model.neuron_populations[name + '_nrn']
+            neurons = g_model.neuron_populations[name + '_nrn']
 
             # CONV2D LAYERS ONLY
-            #if isinstance(genn_model.neuron_populations[neurons.name], Conv2D):
+            #if isinstance(g_model.neuron_populations[neurons.name], Conv2D):
             #    continue
 
             # For each sample
             for x in self.data:
 
                 # Before simulation
-                for nrn in genn_model.neuron_populations.values():
+                for name in tg_model.layer_names:
+                    nrn = g_model.neuron_populations[name + '_nrn']
                     nrn.vars['Vmem'].view[:] = 0.0
                     nrn.vars['Vmem_peak'].view[:] = 0.0
                     nrn.vars['nSpk'].view[:] = 0
-                    genn_model.push_state_to_device(nrn.name)
+                    g_model.push_state_to_device(nrn.name)
 
 
-                # TODO: INPUT RATE ENCODING
-                # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
-                genn_model.current_sources['input_cs'].vars['magnitude'].view[:] = x.flatten()
-                genn_model.push_var_to_device('input_cs', 'magnitude')
+                # # Before simulation
+                # for nrn in g_model.neuron_populations.values():
+                #     nrn.vars['Vmem'].view[:] = 0.0
+                #     nrn.vars['Vmem_peak'].view[:] = 0.0
+                #     nrn.vars['nSpk'].view[:] = 0
+                #     g_model.push_state_to_device(nrn.name)
+
+                # # TODO: INPUT RATE ENCODING
+                # # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
+                # g_model.current_sources['input_cs'].vars['magnitude'].view[:] = x.flatten()
+                # g_model.push_var_to_device('input_cs', 'magnitude')
 
 
                 # Run simulation
-                for t in range(math.ceil(self.present_time / genn_model.dT)):
-                    genn_model.step_time()
+                for t in range(math.ceil(self.present_time / g_model.dT)):
+                    g_model.step_time()
 
-                    genn_model.pull_var_from_device(neurons.name, 'Vmem_peak')
+                    g_model.pull_var_from_device(neurons.name, 'Vmem_peak')
                     Vmem_peak = neurons.vars['Vmem_peak'].view
                     scale_factors[i] = np.max([scale_factors[i], Vmem_peak.max()])
 
@@ -79,9 +87,9 @@ class SpikeNorm():
             neurons.extra_global_params['Vthr'].view[:] = scale_factors[i]
 
             # # Update this synapse population's weights
-            # synapses = genn_model.synapse_populations[name + '_syn']
+            # synapses = g_model.synapse_populations[name + '_syn']
             # synapses.vars['g'].view[:] /= scale_factors[i]
-            # genn_model.push_var_to_device(synapses.name, 'g')
+            # g_model.push_var_to_device(synapses.name, 'g')
 
             print('layer: ' + name)
             print(scale_factors)
