@@ -20,7 +20,7 @@ class TGModel():
         self.weight_vals = None
         self.weight_inds = None
 
-    def create_genn_model(self, dt=1.0, rate_factor=1.0):
+    def create_genn_model(self, dt=1.0, rng_seed=0, rate_factor=1.0):
         # Check model compatibility
         if not isinstance(self.tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(self.tf_model)))
@@ -220,6 +220,7 @@ class TGModel():
         # Define GeNN model
         self.g_model = genn_model.GeNNModel('float', 'tg_model')
         self.g_model.dT = dt
+        self.g_model._model.set_seed(rng_seed)
 
         # Add Poisson distributed spiking inputs
         n = np.prod(self.tf_model.input_shape[1:])

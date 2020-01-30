@@ -39,16 +39,17 @@ def main():
     #x_norm = x_train
     x_norm = x_train[:256]
 
-    n_test = 1000
+    #n_test = 1000
+    n_test = 5000
     x_test = x_test[:n_test]
     y_test = y_test[:n_test]
 
     #pres_t = 50.0
-    pres_t = 100.0
+    #pres_t = 100.0
     #pres_t = 150.0
     #pres_t = 200.0
     #pres_t = 250.0
-    #pres_t = 300.0
+    pres_t = 300.0
     #pres_t = 1000.0
     #pres_t = 2500.0
 
@@ -67,9 +68,10 @@ def main():
     #return
 
     tg_model = TGModel(tf_model)
-    tg_model.create_genn_model(dt=1.0, rate_factor=1.0)
-    # accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
-    # print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
+    tg_model.create_genn_model(dt=1.0, rng_seed=0, rate_factor=1.0)
+
+    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
+    print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
     # ===== SPIKE NORM =====
     norm = SpikeNorm(x_norm, present_time=pres_t)
