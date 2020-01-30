@@ -16,16 +16,6 @@ class SpikeNorm():
         self.present_time = present_time
 
     '''
-    The maximum activation encountered in the training data is a good estimate of the highest
-    activation possible in the model. This 'scale factor' is computed separately for each layer 
-    of the network.
-    The 'applied factor' is the scaled factor of each layer, divided by that of the previous layer. This
-    brings all the factors to a uniform range of values (with respect to the input layer).
-    Weights of each layer in the model are then divided by the corresponding applied factor to compute the
-    final normalized weights.
-    '''
-
-    '''
     v_th_norm[0 : n_layers] = 0
     layer[0].input = spikes
     for i in range( n_layers ):
@@ -43,37 +33,40 @@ class SpikeNorm():
         scale_factors = np.zeros(len(tg_model.layer_names))
 
         # For each synapse population
-        for i, name in enumerate(tg_model.layer_names):
-            neurons = g_model.neuron_populations[name + '_nrn']
+        for i, layer_name in enumerate(tg_model.layer_names):
+            neurons = g_model.neuron_populations[layer_name + '_nrn']
 
-            # CONV2D LAYERS ONLY
-            #if isinstance(g_model.neuron_populations[neurons.name], Conv2D):
-            #    continue
+            # # === CONV2D LAYERS ONLY
+            # if isinstance(tg_model.tf_model.get_layer(layer_name), Conv2D):
+            #     scale_factors[i] = 1.0
+            #     neurons.extra_global_params['Vthr'].view[:] = scale_factors[i]
+            #     continue
 
             # For each sample
             for x in self.data:
 
                 # Before simulation
-                for name in tg_model.layer_names:
-                    nrn = g_model.neuron_populations[name + '_nrn']
+                for ln in tg_model.layer_names:
+                    nrn = g_model.neuron_populations[ln + '_nrn']
                     nrn.vars['Vmem'].view[:] = 0.0
                     nrn.vars['Vmem_peak'].view[:] = 0.0
                     nrn.vars['nSpk'].view[:] = 0
-                    g_model.push_state_to_device(nrn.name)
+                    g_model.push_state_to_device(ln + '_nrn')
 
+                # === Poisson inputs
+                nrn = g_model.neuron_populations['input_nrn']
+                nrn.vars['rate'].view[:] = x.flatten()
+                g_model.push_state_to_device('input_nrn')
 
-                # # Before simulation
-                # for nrn in g_model.neuron_populations.values():
-                #     nrn.vars['Vmem'].view[:] = 0.0
-                #     nrn.vars['Vmem_peak'].view[:] = 0.0
-                #     nrn.vars['nSpk'].view[:] = 0
-                #     g_model.push_state_to_device(nrn.name)
-
-                # # TODO: INPUT RATE ENCODING
-                # # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
-                # g_model.current_sources['input_cs'].vars['magnitude'].view[:] = x.flatten()
-                # g_model.push_var_to_device('input_cs', 'magnitude')
-
+                # # === IF inputs with constant current
+                # nrn = g_model.neuron_populations['input_nrn']
+                # nrn.vars['Vmem'].view[:] = 0.0
+                # nrn.vars['Vmem_peak'].view[:] = 0.0
+                # nrn.vars['nSpk'].view[:] = 0
+                # g_model.push_state_to_device('input_nrn')
+                # cs = g_model.current_sources['input_cs']
+                # cs.vars['magnitude'].view[:] = x.flatten()
+                # g_model.push_state_to_device('input_cs')
 
                 # Run simulation
                 for t in range(math.ceil(self.present_time / g_model.dT)):
@@ -87,9 +80,9 @@ class SpikeNorm():
             neurons.extra_global_params['Vthr'].view[:] = scale_factors[i]
 
             # # Update this synapse population's weights
-            # synapses = g_model.synapse_populations[name + '_syn']
+            # synapses = g_model.synapse_populations[layer_name + '_syn']
             # synapses.vars['g'].view[:] /= scale_factors[i]
             # g_model.push_var_to_device(synapses.name, 'g')
 
-            print('layer: ' + name)
+            print('layer: ' + layer_name)
             print(scale_factors)

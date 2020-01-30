@@ -20,7 +20,7 @@ class TGModel():
         self.weight_vals = None
         self.weight_inds = None
 
-    def create_genn_model(self, dt=1.0):
+    def create_genn_model(self, dt=1.0, rate_factor=1.0):
         # Check model compatibility
         if not isinstance(self.tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(self.tf_model)))
@@ -160,7 +160,7 @@ class TGModel():
                 continue
 
 
-        # Define IF neuron class
+        # === Define IF neuron class ===
         if_model = genn_model.create_custom_neuron_class(
             'if_model',
             param_names=['Vres'],
@@ -189,7 +189,21 @@ class TGModel():
             'nSpk': 0,
         }
 
-        # Define current source class
+        # === Define Poisson neuron class ===
+        poisson_model = genn_model.create_custom_neuron_class(
+            'poisson_model',
+            extra_global_params=[('factor', 'scalar')],
+            var_name_types=[('rate', 'scalar')],
+            threshold_condition_code='''
+            $(gennrand_uniform) >= exp(-$(rate) * $(factor) * DT)
+            '''
+        )
+
+        poisson_init = {
+            'rate': 0.0,
+        }
+
+        # === Define current source class ===
         cs_model = genn_model.create_custom_current_source_class(
             'cs_model',
             var_name_types=[('magnitude', 'scalar')],
@@ -202,44 +216,21 @@ class TGModel():
             'magnitude': 0.0,
         }
 
-        # Define Poisson neuron class
-        poisson_model = genn_model.create_custom_neuron_class(
-            'poisson_model',
-            extra_global_params=[('rate', 'scalar')],
-            threshold_condition_code='''
-            $(gennrand_uniform) >= exp(-$(rate) * DT)
-            '''
-        )
-
 
         # Define GeNN model
         self.g_model = genn_model.GeNNModel('float', 'tg_model')
         self.g_model.dT = dt
 
-
-
-        # ========== INPUTS AS POISSON NEURONS
         # Add Poisson distributed spiking inputs
         n = np.prod(self.tf_model.input_shape[1:])
-        nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, {})
-        nrn_post.set_extra_global_param('rate', 0.0)
+        nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, poisson_init)
+        nrn_post.set_extra_global_param('factor', rate_factor)
 
-
-
-
-
-
-        # # ========== INPUTS WITH INJECTED CURRENT
         # # Add inputs with constant injected current
         # n = np.prod(self.tf_model.input_shape[1:])
         # nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
         # nrn_post.set_extra_global_param('Vthr', 1.0)
-        # self.g_model.add_current_source(
-        #     'input_cs', cs_model, 'input_nrn', {}, cs_init
-        # )
-
-
-
+        # self.g_model.add_current_source('input_cs', cs_model, 'input_nrn', {}, cs_init)
 
         # For each synapse population
         for name, w_vals, w_inds in zip(self.layer_names, self.weight_vals, self.weight_inds):
@@ -269,7 +260,7 @@ class TGModel():
         self.g_model.load()
 
 
-    def evaluate_genn_model(self, x, y, present_time=100.0, rate_factor=1.0, save_samples=[]):
+    def evaluate_genn_model(self, x, y, present_time=100.0, save_samples=[]):
         n_correct = 0
         n_examples = len(x)
 
@@ -280,31 +271,27 @@ class TGModel():
         for i in range(n_examples):
 
             # Before simulation
-            for name in self.layer_names:
-                nrn = self.g_model.neuron_populations[name + '_nrn']
+            for ln in self.layer_names:
+                nrn = self.g_model.neuron_populations[ln + '_nrn']
                 nrn.vars['Vmem'].view[:] = 0.0
                 nrn.vars['Vmem_peak'].view[:] = 0.0
                 nrn.vars['nSpk'].view[:] = 0
-                self.g_model.push_state_to_device(nrn.name)
+                self.g_model.push_state_to_device(ln + '_nrn')
 
+            # === Poisson inputs
+            nrn = self.g_model.neuron_populations['input_nrn']
+            nrn.vars['rate'].view[:] = x[i].flatten()
+            self.g_model.push_state_to_device('input_nrn')
 
-
-            # ========== SET RATE AS INPUT * RATE_FACTOR
-
-
-
-            # # Before simulation
-            # for nrn in self.g_model.neuron_populations.values():
-            #     nrn.vars['Vmem'].view[:] = 0.0
-            #     nrn.vars['Vmem_peak'].view[:] = 0.0
-            #     nrn.vars['nSpk'].view[:] = 0
-            #     self.g_model.push_state_to_device(nrn.name)
-
-            # # TODO: INPUT RATE ENCODING
-            # # FOR NOW, USE CONSTANT CURRENT INJECTION EQUAL TO INPUT MAGNITUDE
-            # self.g_model.current_sources['input_cs'].vars['magnitude'].view[:] = x[i].flatten()
-            # self.g_model.push_var_to_device('input_cs', 'magnitude')
-
+            # # === IF inputs with constant current
+            # nrn = self.g_model.neuron_populations['input_nrn']
+            # nrn.vars['Vmem'].view[:] = 0.0
+            # nrn.vars['Vmem_peak'].view[:] = 0.0
+            # nrn.vars['nSpk'].view[:] = 0
+            # self.g_model.push_state_to_device('input_nrn')
+            # cs = self.g_model.current_sources['input_cs']
+            # cs.vars['magnitude'].view[:] = x[i].flatten()
+            # self.g_model.push_state_to_device('input_cs')
 
             # Run simulation
             for t in range(math.ceil(present_time / self.g_model.dT)):

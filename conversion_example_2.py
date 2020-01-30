@@ -43,8 +43,8 @@ def main():
     x_test = x_test[:n_test]
     y_test = y_test[:n_test]
 
-    pres_t = 50.0
-    #pres_t = 100.0
+    #pres_t = 50.0
+    pres_t = 100.0
     #pres_t = 150.0
     #pres_t = 200.0
     #pres_t = 250.0
@@ -67,18 +67,17 @@ def main():
     #return
 
     tg_model = TGModel(tf_model)
-    tg_model.create_genn_model(dt=1.0)
-
+    tg_model.create_genn_model(dt=1.0, rate_factor=1.0)
     # accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
     # print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
-    # # ===== SPIKE NORM =====
-    # norm = SpikeNorm(x_norm, present_time=pres_t)
-    # norm.normalize(tg_model)
-
-    # ===== DATA NORM =====
-    norm = DataNorm(x_norm, batch_size=100)
+    # ===== SPIKE NORM =====
+    norm = SpikeNorm(x_norm, present_time=pres_t)
     norm.normalize(tg_model)
+
+    # # ===== DATA NORM =====
+    # norm = DataNorm(x_norm, batch_size=100)
+    # norm.normalize(tg_model)
 
     accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))

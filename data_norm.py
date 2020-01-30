@@ -57,10 +57,10 @@ class DataNorm():
         # Compute scale factors and normalize weights.
         scale_factors = np.max([max_activation, max_weights], 0)
 
-        # CONV2D LAYERS ONLY
-        #for i, j in enumerate(idx):
-        #    if not isinstance(tf_model.layers[j], Conv2D):
-        #        scale_factors[i] = 1.0
+        # # === CONV2D LAYERS ONLY
+        # for i, j in enumerate(idx):
+        #     if not isinstance(tf_model.layers[j], Conv2D):
+        #         scale_factors[i] = 1.0
 
         applied_factors = np.empty(len(idx))
         applied_factors[0] = scale_factors[0]
