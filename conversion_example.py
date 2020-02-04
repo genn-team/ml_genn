@@ -36,11 +36,9 @@ def train_cifar10():
 
 def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
-        #tf.keras.layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=(28, 28, 1)),
-        tf.keras.layers.Conv2D(16, 5, strides=1, padding='valid', activation='relu', use_bias=False, input_shape=(28, 28, 1)),
+        tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
         tf.keras.layers.AveragePooling2D(2),
-        #tf.keras.layers.Conv2D(8, 5, padding='same', activation='relu', use_bias=False),
-        tf.keras.layers.Conv2D(8, 5, strides=1, padding='same', activation='relu', use_bias=False),
+        tf.keras.layers.Conv2D(8, 5, padding='same', strides=1, activation='relu', use_bias=False),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
         tf.keras.layers.Dense(64, activation='relu', use_bias=False),

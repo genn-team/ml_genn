@@ -40,103 +40,64 @@ class TGModel():
         for layer in self.tf_model.layers:
             if isinstance(layer, tf.keras.layers.Dense):
                 tf_w = layer.get_weights()[0]
-                genn_w = tf_w.copy()
+                g_w = tf_w.copy()
 
                 self.layer_names.append(layer.name)
-                self.weight_vals.append(genn_w)
+                self.weight_vals.append(g_w)
                 self.weight_inds.append(None)
 
             elif isinstance(layer, tf.keras.layers.Conv2D):
                 tf_w = layer.get_weights()[0]
-                genn_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
+                g_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
 
                 kh, kw = layer.kernel_size
                 sh, sw = layer.strides
                 ih, iw, ic = layer.input_shape[1:]
                 oh, ow, oc = layer.output_shape[1:]
 
-                # No padding, such that output.shape < input.shape.
+                # Stride centre point iterators.
                 if layer.padding == 'valid':
-                    # oh = ceil((ih - kh + 1) / sh)
-                    # ow = ceil((iw - kw + 1) / sw)
-
-                    # For each post-synapse neuron (each column in genn_w):
-                    for i_post in range(genn_w.shape[1]):
-
-                        # Find its output channel index and output pixel coordinates.
-                        out_channel    = i_post % oc
-                        out_pixel_flat = i_post // oc
-                        out_pixel_row  = out_pixel_flat // ow
-                        out_pixel_col  = out_pixel_flat % ow
-
-                        # Find the row (pre-synapse neuron) offset of genn_w corresponding to the input pixel
-                        # at the first row and first column of the convolution kernel's current stride.
-                        in_row_offset = out_pixel_row * sh * ic * iw    # input row offset
-                        in_col_offset = out_pixel_col * sw * ic         # input col offset
-                        pre_offset    = in_row_offset + in_col_offset
-
-                        # For each row of the kernels that filter each input channel into this output channel,
-                        # place that row (all input channels) into genn_w at each kernel row block offset.
-                        for k_row in range(kh):
-                            k_row_start = pre_offset + k_row * ic * iw  # kernel row start in genn_w
-                            k_row_end   = k_row_start + ic * kw         # kernel row end in genn_w
-                            k_row_wt    = tf_w[k_row, :, :, out_channel]
-                            genn_w[k_row_start : k_row_end, i_post] = k_row_wt.flatten()
-
-                # Zero padding, such that output.shape == input.shape.
+                    stride_rows = range(0, ih - kh + 1, sh)
+                    stride_cols = range(0, iw - kw + 1, sw)
                 elif layer.padding == 'same':
-                    # oh = ceil(ih / sh)
-                    # ow = ceil(iw / sw)
+                    stride_rows = range(0 - kh // 2, ih - kh // 2, sh)
+                    stride_cols = range(0 - kw // 2, iw - kw // 2, sw)
 
-                    # TODO: strides are NOT handled correctly yet
+                # For each input channel -> output channel kernel:
+                for in_channel in range(ic):
+                    for out_channel in range(oc):
+                        # Get tf_w and g_w views for this kernel.
+                        tf_k = tf_w[:, :, in_channel, out_channel]
+                        g_k = g_w[in_channel::ic, out_channel::oc]
 
-                    # Calculate padding for each side of input map, as done by tf and keras.
-                    # https://www.tensorflow.org/versions/r1.12/api_guides/python/nn
-                    if (ih % sh == 0):
-                        pad_along_height = max(kh - sh,        0)
-                    else:
-                        pad_along_height = max(kh - (ih % sh), 0)
-                    if (iw % sw == 0):
-                        pad_along_width  = max(kw - sw,        0)
-                    else:
-                        pad_along_width  = max(kw - (iw % sw), 0)
+                        # For each kernel stride:
+                        for out_row, stride_row in enumerate(stride_rows):
+                            for out_col, stride_col in enumerate(stride_cols):
 
-                    pad_top    = pad_along_height // 2
-                    pad_bottom = pad_along_height - pad_top
-                    pad_left   = pad_along_width // 2
-                    pad_right  = pad_along_width - pad_left
+                                # Get kernel boundaries for this stride in tf_w.
+                                tf_k_row_T = 0 - min(stride_row, 0)
+                                tf_k_row_B = kh - max(stride_row + kh - ih, 0)
+                                tf_k_col_L = 0 - min(stride_col, 0)
+                                tf_k_col_R = kw - max(stride_col + kw - iw, 0)
 
-                    # For each post-synapse neuron (each column in genn_w):
-                    for i_post in range(genn_w.shape[1]):
+                                # Get kernel boundaries for this stride in g_w.
+                                g_k_row_T = max(stride_row, 0)
+                                g_k_row_B = min(stride_row + kh, ih)
+                                g_k_col_L = max(stride_col, 0)
+                                g_k_col_R = min(stride_col + kw, iw)
 
-                        # Find its output channel index and output pixel coordinates.
-                        out_channel    = i_post % oc
-                        out_pixel_flat = i_post // oc
-                        out_pixel_row  = out_pixel_flat // ow
-                        out_pixel_col  = out_pixel_flat % ow
-
-                        # Calculate effective start and end indices on input matrix, along x and y dimensions
-                        starth = max(out_pixel_row - pad_top,    0)      * sh * ic * iw
-                        endh   = min(out_pixel_row + pad_bottom, ih - 1) * sh * ic * iw
-                        startw = max(out_pixel_col - pad_left,   0)      * sw * ic
-                        endw   = min(out_pixel_col + pad_right,  iw - 1) * sw * ic + ic
-
-                        # Calculate start and end indices for weight matrix to be assigned at the synapse
-                        startkw = max(pad_left - ((i_post * sw) // oc) % ow, 0)
-                        endkw   = startkw + (endw - ic - startw) // ic + 1
-                        startkh = max(pad_top - ((i_post * sh) // oc) // ow, 0)
-
-                        # Weight mapping
-                        for k in range(starth, endh+1, ic*iw):
-                            w = tf_w[startkh + (k-starth)//(ic*iw), startkw : endkw, :, out_channel]
-                            genn_w[k+startw : k+endw, i_post] = w.flatten()
+                                # Set weights for this stride.
+                                tf_stride = tf_k[tf_k_row_T:tf_k_row_B, tf_k_col_L:tf_k_col_R]
+                                g_stride = g_k[:, out_row * ow + out_col]
+                                g_stride.shape = (ih, iw)
+                                g_stride[g_k_row_T:g_k_row_B, g_k_col_L:g_k_col_R] = tf_stride
 
                 self.layer_names.append(layer.name)
-                self.weight_vals.append(genn_w)
-                self.weight_inds.append(np.nonzero(~np.isnan(genn_w)))
+                self.weight_vals.append(g_w)
+                self.weight_inds.append(np.nonzero(~np.isnan(g_w)))
 
             elif isinstance(layer, tf.keras.layers.AveragePooling2D):
-                genn_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
+                g_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
 
                 ph, pw = layer.pool_size
                 sh, sw = layer.strides
@@ -147,13 +108,13 @@ class TGModel():
                     for k in range(pw): # over kernel width
                         for l in range(ph): # over kernel height
                             # 1.0 / (kernel size) is the weight from input neurons to corresponding output neurons
-                            genn_w[(n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic:
-                                   (n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic + ic,
-                                   n * oc : n * oc + oc] = np.diag([1.0 / (pw * ph)] * oc) # diag since we need a one-to-one mapping along channels
+                            g_w[(n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic:
+                                (n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic + ic,
+                                n * oc : n * oc + oc] = np.diag([1.0 / (pw * ph)] * oc) # diag since we need a one-to-one mapping along channels
 
                 self.layer_names.append(layer.name)
-                self.weight_vals.append(genn_w)
-                self.weight_inds.append(np.nonzero(~np.isnan(genn_w)))
+                self.weight_vals.append(g_w)
+                self.weight_inds.append(np.nonzero(~np.isnan(g_w)))
 
             elif isinstance(layer, tf.keras.layers.Flatten):
                 # Ignore Flatten layers

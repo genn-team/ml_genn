@@ -9,7 +9,9 @@ from model import TGModel
 def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
-        tf.keras.layers.Conv2D(8, 5, padding='valid', strides=1, activation='relu', use_bias=False),
+        #tf.keras.layers.Conv2D(16, 5, padding='valid', strides=2, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
+        tf.keras.layers.Conv2D(8, 5, padding='same', strides=1, activation='relu', use_bias=False),
+        #tf.keras.layers.Conv2D(8, 5, padding='same', strides=2, activation='relu', use_bias=False),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
         tf.keras.layers.Dense(64, activation='relu', use_bias=False),
@@ -39,8 +41,8 @@ def main():
     #x_norm = x_train
     x_norm = x_train[:256]
 
-    #n_test = 1000
-    n_test = 5000
+    n_test = 1000
+    #n_test = 5000
     x_test = x_test[:n_test]
     y_test = y_test[:n_test]
 
@@ -55,9 +57,9 @@ def main():
 
     # Create / save / load TF model
     model_name = './mnist.h5'
-    #tf_model = train_mnist(x_train, y_train, x_test, y_test)
-    #tf.keras.models.save_model(tf_model, model_name)
-    tf_model = tf.keras.models.load_model(model_name)
+    tf_model = train_mnist(x_train, y_train, x_test, y_test)
+    tf.keras.models.save_model(tf_model, model_name)
+    #tf_model = tf.keras.models.load_model(model_name)
     tf_model.evaluate(x_test, y_test)
     #print(tf_model.summary())
     for layer in tf_model.layers:
@@ -84,9 +86,9 @@ def main():
     accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, present_time=pres_t, save_samples=[0])
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
-    names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
-    neurons = [tg_model.g_model.neuron_populations[name] for name in names]
-    raster_plot(spike_ids, spike_times, neurons)
+    # names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
+    # neurons = [tg_model.g_model.neuron_populations[name] for name in names]
+    # raster_plot(spike_ids, spike_times, neurons)
 
 
 if __name__ == '__main__':
