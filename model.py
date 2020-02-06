@@ -17,8 +17,8 @@ class TGModel():
         self.tf_model = tf_model
         self.g_model = g_model
         self.layer_names = None
-        self.weight_vals = None
         self.weight_inds = None
+        self.weight_vals = None
 
     def create_genn_model(self, dt=1.0, rng_seed=0, rate_factor=1.0):
         # Check model compatibility
@@ -34,18 +34,27 @@ class TGModel():
                     raise NotImplementedError('bias tensors are not supported')
 
         self.layer_names = []
-        self.weight_vals = []
         self.weight_inds = []
+        self.weight_vals = []
 
+        # For each TensorFlow model layer:
         for layer in self.tf_model.layers:
-            if isinstance(layer, tf.keras.layers.Dense):
+
+            # === Flatten layers ===
+            if isinstance(layer, tf.keras.layers.Flatten):
+                continue
+
+            # === Dense layers ===
+            elif isinstance(layer, tf.keras.layers.Dense):
                 tf_w = layer.get_weights()[0]
                 g_w = tf_w.copy()
 
                 self.layer_names.append(layer.name)
-                self.weight_vals.append(g_w)
                 self.weight_inds.append(None)
+                self.weight_vals.append(g_w)
+                g_w[np.isnan(g_w)] = 0.0
 
+            # === Conv2D layers ===
             elif isinstance(layer, tf.keras.layers.Conv2D):
                 tf_w = layer.get_weights()[0]
                 g_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
@@ -66,59 +75,78 @@ class TGModel():
                 # For each input channel -> output channel kernel:
                 for in_channel in range(ic):
                     for out_channel in range(oc):
-                        # Get tf_w and g_w views for this kernel.
-                        tf_k = tf_w[:, :, in_channel, out_channel]
-                        g_k = g_w[in_channel::ic, out_channel::oc]
+                        tf_kernel = tf_w[:, :, in_channel, out_channel]
+                        g_kernel = g_w[in_channel::ic, out_channel::oc]
 
-                        # For each kernel stride:
+                        # For each output neuron:
                         for out_row, stride_row in enumerate(stride_rows):
                             for out_col, stride_col in enumerate(stride_cols):
+                                g_out = g_kernel[:, out_row * ow + out_col]
+                                g_out.shape = (ih, iw)
 
-                                # Get kernel boundaries for this stride in tf_w.
-                                tf_k_row_T = 0 - min(stride_row, 0)
-                                tf_k_row_B = kh - max(stride_row + kh - ih, 0)
-                                tf_k_col_L = 0 - min(stride_col, 0)
-                                tf_k_col_R = kw - max(stride_col + kw - iw, 0)
+                                # Get a kernel stride view in tf_w.
+                                tf_kernel_T = 0 - min(stride_row, 0)
+                                tf_kernel_B = kh - max(stride_row + kh - ih, 0)
+                                tf_kernel_L = 0 - min(stride_col, 0)
+                                tf_kernel_R = kw - max(stride_col + kw - iw, 0)
+                                tf_stride = tf_kernel[tf_kernel_T:tf_kernel_B, tf_kernel_L:tf_kernel_R]
 
-                                # Get kernel boundaries for this stride in g_w.
-                                g_k_row_T = max(stride_row, 0)
-                                g_k_row_B = min(stride_row + kh, ih)
-                                g_k_col_L = max(stride_col, 0)
-                                g_k_col_R = min(stride_col + kw, iw)
+                                # Get a kernel stride view in g_w.
+                                g_kernel_T = max(stride_row, 0)
+                                g_kernel_B = min(stride_row + kh, ih)
+                                g_kernel_L = max(stride_col, 0)
+                                g_kernel_R = min(stride_col + kw, iw)
+                                g_stride = g_out[g_kernel_T:g_kernel_B, g_kernel_L:g_kernel_R]
 
                                 # Set weights for this stride.
-                                tf_stride = tf_k[tf_k_row_T:tf_k_row_B, tf_k_col_L:tf_k_col_R]
-                                g_stride = g_k[:, out_row * ow + out_col]
-                                g_stride.shape = (ih, iw)
-                                g_stride[g_k_row_T:g_k_row_B, g_k_col_L:g_k_col_R] = tf_stride
+                                g_stride[:] = tf_stride
 
                 self.layer_names.append(layer.name)
-                self.weight_vals.append(g_w)
                 self.weight_inds.append(np.nonzero(~np.isnan(g_w)))
+                self.weight_vals.append(g_w)
+                g_w[np.isnan(g_w)] = 0.0
 
+            # === AveragePooling2D layers ===
             elif isinstance(layer, tf.keras.layers.AveragePooling2D):
-                g_w = np.full((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])), np.nan)
+                g_w = np.zeros((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])))
 
                 ph, pw = layer.pool_size
                 sh, sw = layer.strides
                 ih, iw, ic = layer.input_shape[1:]
                 oh, ow, oc = layer.output_shape[1:]
 
-                for n in range(ow * oh): # output unit index
-                    for k in range(pw): # over kernel width
-                        for l in range(ph): # over kernel height
-                            # 1.0 / (kernel size) is the weight from input neurons to corresponding output neurons
-                            g_w[(n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic:
-                                (n % ow) * ic * sh + (n // ow) * ic * iw * sw + k * ic * iw + l * ic + ic,
-                                n * oc : n * oc + oc] = np.diag([1.0 / (pw * ph)] * oc) # diag since we need a one-to-one mapping along channels
+                # Stride centre point iterators.
+                if layer.padding == 'valid':
+                    stride_rows = range(0, ih - ph + 1, sh)
+                    stride_cols = range(0, iw - pw + 1, sw)
+                elif layer.padding == 'same':
+                    stride_rows = range(0 - ph // 2, ih - ph // 2, sh)
+                    stride_cols = range(0 - pw // 2, iw - pw // 2, sw)
+
+                # For each channel pool:
+                for channel in range(ic):
+                    g_pool = g_w[channel::ic, channel::ic]
+
+                    # For each output neuron:
+                    for out_row, stride_row in enumerate(stride_rows):
+                        for out_col, stride_col in enumerate(stride_cols):
+                            g_out = g_pool[:, out_row * ow + out_col]
+                            g_out.shape = (ih, iw)
+
+                            # Get a pool stride view in g_w.
+                            g_pool_T = max(stride_row, 0)
+                            g_pool_B = min(stride_row + ph, ih)
+                            g_pool_L = max(stride_col, 0)
+                            g_pool_R = min(stride_col + pw, iw)
+                            g_stride = g_out[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
+
+                            # Set weights for this stride.
+                            g_stride[:] = 1.0 / (ph * pw)
 
                 self.layer_names.append(layer.name)
-                self.weight_vals.append(g_w)
                 self.weight_inds.append(np.nonzero(~np.isnan(g_w)))
-
-            elif isinstance(layer, tf.keras.layers.Flatten):
-                # Ignore Flatten layers
-                continue
+                self.weight_vals.append(g_w)
+                g_w[np.isnan(g_w)] = 0.0
 
 
         # === Define IF neuron class ===
@@ -195,7 +223,7 @@ class TGModel():
         # self.g_model.add_current_source('input_cs', cs_model, 'input_nrn', {}, cs_init)
 
         # For each synapse population
-        for name, w_vals, w_inds in zip(self.layer_names, self.weight_vals, self.weight_inds):
+        for name, w_inds, w_vals in zip(self.layer_names, self.weight_inds, self.weight_vals):
             nrn_pre = nrn_post
 
             # Add next layer of neurons
@@ -210,12 +238,11 @@ class TGModel():
                     'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
                 )
             else: # Sparse weight matrix
-                w_vals = w_vals[w_inds]
                 syn = self.g_model.add_synapse_population(
                     name + '_syn', 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
-                    'StaticPulse', {}, {'g': w_vals.copy()}, {}, {}, 'DeltaCurr', {}, {}
+                    'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
                 )
-                syn.set_sparse_connections(w_inds[0].copy(), w_inds[1].copy())
+                syn.set_sparse_connections(w_inds[0], w_inds[1])
 
         # Build and load model
         self.g_model.build()

@@ -10,6 +10,7 @@ def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
         #tf.keras.layers.Conv2D(16, 5, padding='valid', strides=2, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
+        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=1),
         tf.keras.layers.Conv2D(8, 5, padding='same', strides=1, activation='relu', use_bias=False),
         #tf.keras.layers.Conv2D(8, 5, padding='same', strides=2, activation='relu', use_bias=False),
         tf.keras.layers.Flatten(),
