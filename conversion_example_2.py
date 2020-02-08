@@ -10,7 +10,8 @@ def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
         #tf.keras.layers.Conv2D(16, 5, padding='valid', strides=2, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
-        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=1),
+        tf.keras.layers.AveragePooling2D(2, padding='valid'),
+        #tf.keras.layers.AveragePooling2D(2, padding='valid', strides=1),
         tf.keras.layers.Conv2D(8, 5, padding='same', strides=1, activation='relu', use_bias=False),
         #tf.keras.layers.Conv2D(8, 5, padding='same', strides=2, activation='relu', use_bias=False),
         tf.keras.layers.Flatten(),
@@ -48,11 +49,11 @@ def main():
     y_test = y_test[:n_test]
 
     #pres_t = 50.0
-    #pres_t = 100.0
+    pres_t = 100.0
     #pres_t = 150.0
     #pres_t = 200.0
     #pres_t = 250.0
-    pres_t = 300.0
+    #pres_t = 300.0
     #pres_t = 1000.0
     #pres_t = 2500.0
 
@@ -61,7 +62,7 @@ def main():
     tf_model = train_mnist(x_train, y_train, x_test, y_test)
     tf.keras.models.save_model(tf_model, model_name)
     #tf_model = tf.keras.models.load_model(model_name)
-    tf_model.evaluate(x_test, y_test)
+    #tf_model.evaluate(x_test, y_test)
     #print(tf_model.summary())
     for layer in tf_model.layers:
         print(layer)
