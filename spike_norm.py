@@ -2,7 +2,6 @@ import numpy as np
 import math
 
 import tensorflow.keras.backend as K
-from tensorflow.keras.layers import Conv2D
 
 '''
 References: 
@@ -35,12 +34,6 @@ class SpikeNorm():
         # For each synapse population
         for i, layer_name in enumerate(tg_model.layer_names):
             neurons = g_model.neuron_populations[layer_name + '_nrn']
-
-            # # === CONV2D LAYERS ONLY
-            # if isinstance(tg_model.tf_model.get_layer(layer_name), Conv2D):
-            #     scale_factors[i] = 1.0
-            #     neurons.extra_global_params['Vthr'].view[:] = scale_factors[i]
-            #     continue
 
             # For each sample
             for x in self.data:

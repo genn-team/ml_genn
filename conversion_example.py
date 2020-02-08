@@ -48,12 +48,10 @@ def main():
     x_test = x_test[:n_test]
     y_test = y_test[:n_test]
 
-    #pres_t = 50.0
-    pres_t = 100.0
-    #pres_t = 150.0
+    #pres_t = 100.0
     #pres_t = 200.0
-    #pres_t = 250.0
     #pres_t = 300.0
+    pres_t = 500.0
     #pres_t = 1000.0
     #pres_t = 2500.0
 

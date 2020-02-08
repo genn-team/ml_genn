@@ -2,7 +2,6 @@ import numpy as np
 import math
 
 import tensorflow.keras.backend as K
-from tensorflow.keras.layers import Conv2D
 
 '''
 References: 
@@ -26,7 +25,6 @@ class DataNorm():
     brings all the factors to a uniform range of values (with respect to the input layer).
     Weights of each layer in the model are then divided by the corresponding applied factor to compute the
     final normalized weights.
-    Only Convolution2D layer weights are normalized.
     '''
 
     def normalize(self, tg_model):
@@ -56,12 +54,6 @@ class DataNorm():
 
         # Compute scale factors and normalize weights.
         scale_factors = np.max([max_activation, max_weights], 0)
-
-        # # === CONV2D LAYERS ONLY
-        # for i, j in enumerate(idx):
-        #     if not isinstance(tf_model.layers[j], Conv2D):
-        #         scale_factors[i] = 1.0
-
         applied_factors = np.empty(len(idx))
         applied_factors[0] = scale_factors[0]
         for i in range(1, len(idx)):
