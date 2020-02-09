@@ -1,6 +1,4 @@
-
-import math
-
+from math import ceil
 import numpy as np
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
@@ -226,10 +224,10 @@ class TGModel():
         # === Define Poisson neuron class ===
         poisson_model = genn_model.create_custom_neuron_class(
             'poisson_model',
-            extra_global_params=[('factor', 'scalar')],
+            extra_global_params=[('rate_factor', 'scalar')],
             var_name_types=[('rate', 'scalar')],
             threshold_condition_code='''
-            $(gennrand_uniform) >= exp(-$(rate) * $(factor) * DT)
+            $(gennrand_uniform) >= exp(-$(rate) * $(rate_factor) * DT)
             '''
         )
 
@@ -259,7 +257,7 @@ class TGModel():
         # Add Poisson distributed spiking inputs
         n = np.prod(self.tf_model.input_shape[1:])
         nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, poisson_init)
-        nrn_post.set_extra_global_param('factor', rate_factor)
+        nrn_post.set_extra_global_param('rate_factor', rate_factor)
 
         # # Add inputs with constant injected current
         # n = np.prod(self.tf_model.input_shape[1:])
@@ -294,15 +292,15 @@ class TGModel():
         self.g_model.load()
 
 
-    def evaluate_genn_model(self, x, y, present_time=100.0, save_samples=[]):
+    def evaluate_genn_model(self, x, y, save_samples=[], classify_time=500.0, classify_spikes=None):
         n_correct = 0
-        n_examples = len(x)
+        n_samples = len(x)
 
         spike_idx = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
         spike_times = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
 
         # For each sample presentation
-        for i in range(n_examples):
+        for i in range(n_samples):
 
             # Before simulation
             for ln in self.layer_names:
@@ -328,7 +326,7 @@ class TGModel():
             # self.g_model.push_state_to_device('input_cs')
 
             # Run simulation
-            for t in range(math.ceil(present_time / self.g_model.dT)):
+            for t in range(ceil(classify_time / self.g_model.dT)):
                 self.g_model.step_time()
 
                 # Save spikes
@@ -347,12 +345,18 @@ class TGModel():
                             spike_idx[k][j] = np.hstack((spike_idx[k][j], idx))
                             spike_times[k][j] = np.hstack((spike_times[k][j], ts))
 
+                # Break simulation if we have enough output spikes.
+                if classify_spikes is not None:
+                    output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
+                    self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
+                    if output_neurons.vars['nSpk'].view.sum() >= classify_spikes:
+                        break
+
             # After simulation
             output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
             self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-            nSpk_view = output_neurons.vars['nSpk'].view
-            n_correct += (np.argmax(nSpk_view) == y[i])
+            n_correct += output_neurons.vars['nSpk'].view.argmax() == y[i]
 
-        accuracy = (n_correct / n_examples) * 100.
+        accuracy = (n_correct / n_samples) * 100.
 
         return accuracy, spike_idx, spike_times

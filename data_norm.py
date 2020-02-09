@@ -1,6 +1,5 @@
+from math import ceil
 import numpy as np 
-import math
-
 import tensorflow.keras.backend as K
 
 '''
@@ -29,7 +28,7 @@ class DataNorm():
         # Find the maximum activation in each layer, given data.
         activation = np.empty(len(idx), dtype=np.float64)
         max_activation = np.zeros(len(idx), dtype=np.float64)
-        n_batches = math.ceil(len(self.data) / self.batch_size)
+        n_batches = ceil(len(self.data) / self.batch_size)
         for i in range(n_batches):
             if i < n_batches - 1:
                 x = self.data[i*self.batch_size : (i+1)*self.batch_size]
