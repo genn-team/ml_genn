@@ -312,12 +312,12 @@ class TGModel():
                 nrn.vars['nSpk'].view[:] = 0
                 self.g_model.push_state_to_device(ln + '_nrn')
 
-            # === Poisson inputs
+            # === Poisson inputs ===
             nrn = self.g_model.neuron_populations['input_nrn']
             nrn.vars['rate'].view[:] = x[i].flatten()
             self.g_model.push_state_to_device('input_nrn')
 
-            # # === IF inputs with constant current
+            # # === IF inputs with constant current ===
             # nrn = self.g_model.neuron_populations['input_nrn']
             # nrn.vars['Vmem'].view[:] = 0.0
             # nrn.vars['Vmem_peak'].view[:] = 0.0

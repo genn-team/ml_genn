@@ -17,16 +17,6 @@ class DataNorm():
         else:
             self.batch_size = batch_size
 
-    '''
-    The maximum activation encountered in the training data is a good estimate of the highest
-    activation possible in the model. This 'scale factor' is computed separately for each layer 
-    of the network.
-    The 'applied factor' is the scaled factor of each layer, divided by that of the previous layer. This
-    brings all the factors to a uniform range of values (with respect to the input layer).
-    Weights of each layer in the model are then divided by the corresponding applied factor to compute the
-    final normalized weights.
-    '''
-
     def normalize(self, tg_model):
         print('Data Norm')
         tf_model = tg_model.tf_model
@@ -60,6 +50,6 @@ class DataNorm():
             applied_factors[i] = scale_factors[i] / scale_factors[i-1]
 
         # Update this neuron population's threshold
-        for i, name in enumerate([tf_model.layers[i].name for i in idx]):
-            neurons = g_model.neuron_populations[name + '_nrn']
+        for i, layer_name in enumerate([tf_model.layers[i].name for i in idx]):
+            neurons = g_model.neuron_populations[layer_name + '_nrn']
             neurons.extra_global_params['Vthr'].view[:] = applied_factors[i]
