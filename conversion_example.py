@@ -1,10 +1,9 @@
 import numpy as np
 import tensorflow as tf
-from data_norm import DataNorm
-from spike_norm import SpikeNorm
-from tensor_genn.utils.plotting import raster_plot
 
-from model import TGModel
+from tensorgenn import TGModel
+from tensorgenn.norm import DataNorm, SpikeNorm
+from tensorgenn.utils.plotting import raster_plot
 
 def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
