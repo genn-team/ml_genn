@@ -33,20 +33,21 @@ class SpikeNorm():
                     nrn.vars['nSpk'].view[:] = 0
                     g_model.push_state_to_device(ln + '_nrn')
 
-                # === Poisson inputs ===
-                nrn = g_model.neuron_populations['input_nrn']
-                nrn.vars['rate'].view[:] = x.flatten()
-                g_model.push_state_to_device('input_nrn')
-
-                # # === IF inputs with constant current ===
-                # nrn = g_model.neuron_populations['input_nrn']
-                # nrn.vars['Vmem'].view[:] = 0.0
-                # nrn.vars['Vmem_peak'].view[:] = 0.0
-                # nrn.vars['nSpk'].view[:] = 0
-                # g_model.push_state_to_device('input_nrn')
-                # cs = g_model.current_sources['input_cs']
-                # cs.vars['magnitude'].view[:] = x.flatten()
-                # g_model.push_state_to_device('input_cs')
+                if g_model.current_sources.get('input_cs') is not None:
+                    # IF inputs with constant current
+                    nrn = g_model.neuron_populations['input_nrn']
+                    nrn.vars['Vmem'].view[:] = 0.0
+                    nrn.vars['Vmem_peak'].view[:] = 0.0
+                    nrn.vars['nSpk'].view[:] = 0
+                    g_model.push_state_to_device('input_nrn')
+                    cs = g_model.current_sources['input_cs']
+                    cs.vars['magnitude'].view[:] = x.flatten()
+                    g_model.push_state_to_device('input_cs')
+                else:
+                    # Poisson inputs
+                    nrn = g_model.neuron_populations['input_nrn']
+                    nrn.vars['rate'].view[:] = x.flatten()
+                    g_model.push_state_to_device('input_nrn')
 
                 # Run simulation
                 for t in range(ceil(self.classify_time / g_model.dT)):

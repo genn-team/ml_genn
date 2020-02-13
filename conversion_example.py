@@ -40,7 +40,8 @@ def main():
     #y_train = y_train[:n_train]
 
     #x_norm = x_train
-    x_norm = x_train[:256]
+    n_norm = 256
+    x_norm = x_train[:n_norm]
 
     n_test = 1000
     #n_test = 5000
@@ -59,10 +60,10 @@ def main():
 
     # Create / save / load TF model
     model_name = './mnist.h5'
-    tf_model = train_mnist(x_train, y_train, x_test, y_test)
-    tf.keras.models.save_model(tf_model, model_name)
-    #tf_model = tf.keras.models.load_model(model_name)
-    #tf_model.evaluate(x_test, y_test)
+    #tf_model = train_mnist(x_train, y_train, x_test, y_test)
+    #tf.keras.models.save_model(tf_model, model_name)
+    tf_model = tf.keras.models.load_model(model_name)
+    tf_model.evaluate(x_test, y_test)
     #print(tf_model.summary())
     for layer in tf_model.layers:
         print(layer)
@@ -72,7 +73,8 @@ def main():
     #return
 
     tg_model = TGModel(tf_model)
-    tg_model.create_genn_model(dt=1.0, rng_seed=0, rate_factor=1.0)
+    #tg_model.create_genn_model(dt=1.0, rng_seed=1, rate_factor=1.0)
+    tg_model.create_genn_model(dt=1.0, rng_seed=1, rate_factor=1.0, input_type='if_cs')
 
     accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))

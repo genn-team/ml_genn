@@ -18,7 +18,7 @@ class TGModel():
         self.weight_vals = None
         self.weight_inds = None
 
-    def create_genn_model(self, dt=1.0, rng_seed=0, rate_factor=1.0):
+    def create_genn_model(self, dt=1.0, rng_seed=0, rate_factor=1.0, input_type='poisson'):
         # Check model compatibility
         if not isinstance(self.tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(self.tf_model)))
@@ -254,16 +254,17 @@ class TGModel():
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
 
-        # Add Poisson distributed spiking inputs
-        n = np.prod(self.tf_model.input_shape[1:])
-        nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, poisson_init)
-        nrn_post.set_extra_global_param('rate_factor', rate_factor)
-
-        # # Add inputs with constant injected current
-        # n = np.prod(self.tf_model.input_shape[1:])
-        # nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
-        # nrn_post.set_extra_global_param('Vthr', 1.0)
-        # self.g_model.add_current_source('input_cs', cs_model, 'input_nrn', {}, cs_init)
+        if input_type == 'if_cs':
+            # Add inputs with constant injected current
+            n = np.prod(self.tf_model.input_shape[1:])
+            nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
+            nrn_post.set_extra_global_param('Vthr', 1.0)
+            self.g_model.add_current_source('input_cs', cs_model, 'input_nrn', {}, cs_init)
+        elif input_type == 'poisson':
+            # Add Poisson distributed spiking inputs
+            n = np.prod(self.tf_model.input_shape[1:])
+            nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, poisson_init)
+            nrn_post.set_extra_global_param('rate_factor', rate_factor)
 
         # For each synapse population
         for name, w_vals, w_inds in zip(self.layer_names, self.weight_vals, self.weight_inds):
@@ -310,20 +311,21 @@ class TGModel():
                 nrn.vars['nSpk'].view[:] = 0
                 self.g_model.push_state_to_device(ln + '_nrn')
 
-            # === Poisson inputs ===
-            nrn = self.g_model.neuron_populations['input_nrn']
-            nrn.vars['rate'].view[:] = x[i].flatten()
-            self.g_model.push_state_to_device('input_nrn')
-
-            # # === IF inputs with constant current ===
-            # nrn = self.g_model.neuron_populations['input_nrn']
-            # nrn.vars['Vmem'].view[:] = 0.0
-            # nrn.vars['Vmem_peak'].view[:] = 0.0
-            # nrn.vars['nSpk'].view[:] = 0
-            # self.g_model.push_state_to_device('input_nrn')
-            # cs = self.g_model.current_sources['input_cs']
-            # cs.vars['magnitude'].view[:] = x[i].flatten()
-            # self.g_model.push_state_to_device('input_cs')
+            if self.g_model.current_sources.get('input_cs') is not None:
+                # IF inputs with constant current
+                nrn = self.g_model.neuron_populations['input_nrn']
+                nrn.vars['Vmem'].view[:] = 0.0
+                nrn.vars['Vmem_peak'].view[:] = 0.0
+                nrn.vars['nSpk'].view[:] = 0
+                self.g_model.push_state_to_device('input_nrn')
+                cs = self.g_model.current_sources['input_cs']
+                cs.vars['magnitude'].view[:] = x[i].flatten()
+                self.g_model.push_state_to_device('input_cs')
+            else:
+                # Poisson inputs
+                nrn = self.g_model.neuron_populations['input_nrn']
+                nrn.vars['rate'].view[:] = x[i].flatten()
+                self.g_model.push_state_to_device('input_nrn')
 
             # Run simulation
             for t in range(ceil(classify_time / self.g_model.dT)):
@@ -334,10 +336,10 @@ class TGModel():
                     k = save_samples.index(i)
                     names = ['input_nrn'] + [name + '_nrn' for name in self.layer_names]
                     neurons = [self.g_model.neuron_populations[name] for name in names]
-                    for j, npop in enumerate(neurons):
-                        self.g_model.pull_current_spikes_from_device(npop.name)
-                        idx = npop.current_spikes    # size of npop
-                        ts = np.ones(idx.shape) * t  # size of npop
+                    for j, nrn in enumerate(neurons):
+                        self.g_model.pull_current_spikes_from_device(nrn.name)
+                        idx = nrn.current_spikes
+                        ts = np.ones(idx.shape) * t
                         if spike_idx[k][j] is None:
                             spike_idx[k][j] = np.copy(idx)
                             spike_times[k][j] = ts
