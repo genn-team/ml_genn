@@ -303,21 +303,11 @@ class TGModel():
         # For each sample presentation
         for i in range(n_samples):
 
-            # Before simulation
-            for ln in self.layer_names:
-                nrn = self.g_model.neuron_populations[ln + '_nrn']
-                nrn.vars['Vmem'].view[:] = 0.0
-                nrn.vars['Vmem_peak'].view[:] = 0.0
-                nrn.vars['nSpk'].view[:] = 0
-                self.g_model.push_state_to_device(ln + '_nrn')
+            # Reset simulation state
+            self.g_model._slm.initialize()
 
             if self.g_model.current_sources.get('input_cs') is not None:
                 # IF inputs with constant current
-                nrn = self.g_model.neuron_populations['input_nrn']
-                nrn.vars['Vmem'].view[:] = 0.0
-                nrn.vars['Vmem_peak'].view[:] = 0.0
-                nrn.vars['nSpk'].view[:] = 0
-                self.g_model.push_state_to_device('input_nrn')
                 cs = self.g_model.current_sources['input_cs']
                 cs.vars['magnitude'].view[:] = x[i].flatten()
                 self.g_model.push_state_to_device('input_cs')
