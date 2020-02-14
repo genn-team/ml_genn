@@ -292,6 +292,17 @@ class TGModel():
         self.g_model.build()
         self.g_model.load()
 
+    def set_genn_inputs(self, x):
+        if self.g_model.current_sources.get('input_cs') is not None:
+            # IF inputs with constant current
+            cs = self.g_model.current_sources['input_cs']
+            cs.vars['magnitude'].view[:] = x.flatten()
+            self.g_model.push_state_to_device('input_cs')
+        else:
+            # Poisson inputs
+            nrn = self.g_model.neuron_populations['input_nrn']
+            nrn.vars['rate'].view[:] = x.flatten()
+            self.g_model.push_state_to_device('input_nrn')
 
     def evaluate_genn_model(self, x, y, save_samples=[], classify_time=500.0, classify_spikes=None):
         n_correct = 0
@@ -306,16 +317,8 @@ class TGModel():
             # Reset simulation state
             self.g_model._slm.initialize()
 
-            if self.g_model.current_sources.get('input_cs') is not None:
-                # IF inputs with constant current
-                cs = self.g_model.current_sources['input_cs']
-                cs.vars['magnitude'].view[:] = x[i].flatten()
-                self.g_model.push_state_to_device('input_cs')
-            else:
-                # Poisson inputs
-                nrn = self.g_model.neuron_populations['input_nrn']
-                nrn.vars['rate'].view[:] = x[i].flatten()
-                self.g_model.push_state_to_device('input_nrn')
+            # Set imulation inputs
+            self.set_genn_inputs(x[i])
 
             # Run simulation
             for t in range(ceil(classify_time / self.g_model.dT)):

@@ -28,16 +28,8 @@ class SpikeNorm():
                 # Reset simulation state
                 g_model._slm.initialize()
 
-                if g_model.current_sources.get('input_cs') is not None:
-                    # IF inputs with constant current
-                    cs = g_model.current_sources['input_cs']
-                    cs.vars['magnitude'].view[:] = x.flatten()
-                    g_model.push_state_to_device('input_cs')
-                else:
-                    # Poisson inputs
-                    nrn = g_model.neuron_populations['input_nrn']
-                    nrn.vars['rate'].view[:] = x.flatten()
-                    g_model.push_state_to_device('input_nrn')
+                # Set imulation inputs
+                tg_model.set_genn_inputs(x)
 
                 # Run simulation
                 for t in range(ceil(self.classify_time / g_model.dT)):
