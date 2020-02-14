@@ -1,9 +1,9 @@
 import numpy as np
 import tensorflow as tf
 
-from tensorgenn import TGModel
-from tensorgenn.norm import DataNorm, SpikeNorm
-from tensorgenn.utils.plotting import raster_plot
+from tensor_genn import TGModel
+from tensor_genn.norm import DataNorm, SpikeNorm
+from tensor_genn.utils.plotting import raster_plot
 
 def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
@@ -60,10 +60,10 @@ def main():
 
     # Create / save / load TF model
     model_name = './mnist.h5'
-    #tf_model = train_mnist(x_train, y_train, x_test, y_test)
-    #tf.keras.models.save_model(tf_model, model_name)
-    tf_model = tf.keras.models.load_model(model_name)
-    tf_model.evaluate(x_test, y_test)
+    tf_model = train_mnist(x_train, y_train, x_test, y_test)
+    tf.keras.models.save_model(tf_model, model_name)
+    #tf_model = tf.keras.models.load_model(model_name)
+    #tf_model.evaluate(x_test, y_test)
     #print(tf_model.summary())
     for layer in tf_model.layers:
         print(layer)
