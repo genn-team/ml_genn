@@ -250,7 +250,7 @@ class TGModel():
 
 
         # Define GeNN model
-        self.g_model = genn_model.GeNNModel('float', 'tg_model')
+        self.g_model = genn_model.GeNNModel('float', self.tf_model.name)
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
 

@@ -17,7 +17,7 @@ def train_mnist(x_train, y_train, x_test, y_test):
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
         tf.keras.layers.Dense(64, activation='relu', use_bias=False),
         tf.keras.layers.Dense(10, activation='softmax', use_bias=False)
-    ])
+    ], name='conversion_example')
 
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     model.fit(x_train, y_train, epochs=1)

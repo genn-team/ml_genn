@@ -36,7 +36,7 @@ def test_conv2d_1_in_chan_1_out_chan_1_stride_valid():
 
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(1, 3, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(20, 20, 1)),
-    ])
+    ], name='test_conv2d_1_in_chan_1_out_chan_1_stride_valid')
 
 
     kernel = np.array([
@@ -49,11 +49,10 @@ def test_conv2d_1_in_chan_1_out_chan_1_stride_valid():
     tf_model.set_weights([kernel])
     #print(kernel[:, :, 0, 0])
 
-
     print(tf_model(x)[0, :, :, 0])
 
-    #tg_model = tg.TGModel(tf_model)
-    #tg_model.create_genn_model(input_type='if_cs')
+    tg_model = tg.TGModel(tf_model)
+    tg_model.create_genn_model(input_type='if_cs')
 
 
 if __name__ == '__main__':
