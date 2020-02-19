@@ -304,24 +304,29 @@ class TGModel():
             nrn.vars['rate'].view[:] = x.flatten()
             self.g_model.push_state_to_device('input_nrn')
 
-    def evaluate_genn_model(self, x, y, save_samples=[], classify_time=500.0, classify_spikes=None):
+    def evaluate_genn_model(self, x_data, y_data, save_samples=[], classify_time=500.0, classify_spikes=None):
+        assert x_data.shape[0] == y_data.shape[0]
         n_correct = 0
-        n_samples = len(x)
 
         spike_idx = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
         spike_times = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
 
         # For each sample presentation
-        for i in range(n_samples):
+        for i, (x, y) in enumerate(zip(x_data, y_data)):
 
-            # Reset simulation state
+            # Reset state
             self.g_model._slm.initialize()
+            self.g_model._slm.set_timestep(0)
+            self.g_model._slm.set_time(0.0)
 
-            # Set imulation inputs
-            self.set_genn_inputs(x[i])
+            # Set inputs
+            self.set_genn_inputs(x)
 
-            # Run simulation
-            for t in range(ceil(classify_time / self.g_model.dT)):
+            # Main simulation loop
+            while self.g_model.t < classify_time:
+                t = self.g_model.t
+
+                # Step time
                 self.g_model.step_time()
 
                 # Save spikes
@@ -350,8 +355,8 @@ class TGModel():
             # After simulation
             output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
             self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-            n_correct += output_neurons.vars['nSpk'].view.argmax() == y[i]
+            n_correct += output_neurons.vars['nSpk'].view.argmax() == y
 
-        accuracy = (n_correct / n_samples) * 100.
+        accuracy = (n_correct / len(x_data)) * 100.
 
         return accuracy, spike_idx, spike_times
