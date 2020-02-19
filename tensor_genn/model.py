@@ -17,8 +17,9 @@ class TGModel():
         self.layer_names = None
         self.weight_vals = None
         self.weight_inds = None
+        self.input_type = None
 
-    def create_genn_model(self, dt=1.0, rng_seed=0, rate_factor=1.0, input_type='poisson'):
+    def create_genn_model(self, dt=1.0, input_type='if', rng_seed=0, rate_factor=1.0):
         # Check model compatibility
         if not isinstance(self.tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(self.tf_model)))
@@ -34,6 +35,7 @@ class TGModel():
         self.layer_names = []
         self.weight_vals = []
         self.weight_inds = []
+        self.input_type = input_type
         deferred_w = None
         deferred_conn = None
 
@@ -195,8 +197,7 @@ class TGModel():
         # === Define IF neuron class ===
         if_model = genn_model.create_custom_neuron_class(
             'if_model',
-            param_names=['Vres'],
-            extra_global_params=[('Vthr', 'scalar')],
+            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
             var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int')],
             sim_code='''
             $(Vmem) += $(Isyn) * DT;
@@ -211,19 +212,36 @@ class TGModel():
             '''
         )
 
-        if_params = {
-            'Vres': 0.0,
-        }
-
         if_init = {
             'Vmem': 0.0,
             'Vmem_peak': 0.0,
             'nSpk': 0,
         }
 
+        # === Define IF input neuron class ===
+        if_input_model = genn_model.create_custom_neuron_class(
+            'if_input_model',
+            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
+            var_name_types=[('Vmem', 'scalar'), ('Iin', 'scalar')],
+            sim_code='''
+            $(Vmem) += $(Iin) * DT;
+            ''',
+            reset_code='''
+            $(Vmem) = $(Vres);
+            ''',
+            threshold_condition_code='''
+            $(Vmem) >= $(Vthr)
+            '''
+        )
+
+        if_input_init = {
+            'Vmem': 0.0,
+            'Iin': 0.0,
+        }
+
         # === Define Poisson neuron class ===
-        poisson_model = genn_model.create_custom_neuron_class(
-            'poisson_model',
+        poisson_input_model = genn_model.create_custom_neuron_class(
+            'poisson_input_model',
             extra_global_params=[('rate_factor', 'scalar')],
             var_name_types=[('rate', 'scalar')],
             threshold_condition_code='''
@@ -231,21 +249,8 @@ class TGModel():
             '''
         )
 
-        poisson_init = {
+        poisson_input_init = {
             'rate': 0.0,
-        }
-
-        # === Define current source class ===
-        cs_model = genn_model.create_custom_current_source_class(
-            'cs_model',
-            var_name_types=[('magnitude', 'scalar')],
-            injection_code='''
-            $(injectCurrent, $(magnitude));
-            '''
-        )
-
-        cs_init = {
-            'magnitude': 0.0,
         }
 
 
@@ -254,16 +259,14 @@ class TGModel():
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
 
-        if input_type == 'if_cs':
-            # Add inputs with constant injected current
-            n = np.prod(self.tf_model.input_shape[1:])
-            nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_model, if_params, if_init)
+        # Add input neurons
+        n = np.prod(self.tf_model.input_shape[1:])
+        if self.input_type == 'if':
+            nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_input_model, {}, if_input_init)
             nrn_post.set_extra_global_param('Vthr', 1.0)
-            self.g_model.add_current_source('input_cs', cs_model, 'input_nrn', {}, cs_init)
-        elif input_type == 'poisson':
-            # Add Poisson distributed spiking inputs
-            n = np.prod(self.tf_model.input_shape[1:])
-            nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_model, {}, poisson_init)
+            nrn_post.set_extra_global_param('Vres', 0.0)
+        elif self.input_type == 'poisson':
+            nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_input_model, {}, poisson_input_init)
             nrn_post.set_extra_global_param('rate_factor', rate_factor)
 
         # For each synapse population
@@ -272,8 +275,9 @@ class TGModel():
 
             # Add next layer of neurons
             n = w_vals.shape[1]
-            nrn_post = self.g_model.add_neuron_population(name + '_nrn', n, if_model, if_params, if_init)
+            nrn_post = self.g_model.add_neuron_population(name + '_nrn', n, if_model, {}, if_init)
             nrn_post.set_extra_global_param('Vthr', 1.0)
+            nrn_post.set_extra_global_param('Vres', 0.0)
 
             # Add synapses from last layer to this layer
             if w_inds is None: # Dense weight matrix
@@ -298,16 +302,12 @@ class TGModel():
         self.g_model._slm.set_time(0.0)
 
     def set_inputs(self, x):
-        if self.g_model.current_sources.get('input_cs') is not None:
-            # IF inputs with constant current
-            cs = self.g_model.current_sources['input_cs']
-            cs.vars['magnitude'].view[:] = x.flatten()
-            self.g_model.push_state_to_device('input_cs')
-        else:
-            # Poisson inputs
-            nrn = self.g_model.neuron_populations['input_nrn']
+        nrn = self.g_model.neuron_populations['input_nrn']
+        if self.input_type == 'if':
+            nrn.vars['Iin'].view[:] = x.flatten()
+        elif self.input_type == 'poisson':
             nrn.vars['rate'].view[:] = x.flatten()
-            self.g_model.push_state_to_device('input_nrn')
+        self.g_model.push_state_to_device('input_nrn')
 
     def step_time(self, iterations=1):
         for i in range(iterations):
