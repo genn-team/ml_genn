@@ -26,9 +26,7 @@ class SpikeNorm():
             for x in self.x_data:
 
                 # Reset state
-                g_model._slm.initialize()
-                g_model._slm.set_timestep(0)
-                g_model._slm.set_time(0.0)
+                tg_model.reset_genn_state()
 
                 # Set inputs
                 tg_model.set_genn_inputs(x)

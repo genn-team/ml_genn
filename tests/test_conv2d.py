@@ -63,11 +63,13 @@ def test_conv2d_1_in_chan_1_out_chan_1_stride_valid():
     neurons.extra_global_params['Vthr'].view[:] = y.max()
 
 
-    accuracy, _, _ = tg_model.evaluate_genn_model([x], [y], classify_time=y.max())
+    for i in range(y.max()):
 
-    # DONE USE EVALUATE_GENN_MODEL - DO OUR OWN LOOP
+        pass
 
-    # OR FIX EVALUATE_GENN_MODEL TO HANLDE MULTIDIMENSIONAL LABELS IN Y
+
+    #accuracy, _, _ = tg_model.evaluate_genn_model([x], [y], classify_time=y.max())
+
 
     print(tf_model.summary())
 

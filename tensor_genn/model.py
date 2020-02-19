@@ -292,6 +292,11 @@ class TGModel():
         self.g_model.build()
         self.g_model.load()
 
+    def reset_genn_state(self):
+        self.g_model._slm.initialize()
+        self.g_model._slm.set_timestep(0)
+        self.g_model._slm.set_time(0.0)
+
     def set_genn_inputs(self, x):
         if self.g_model.current_sources.get('input_cs') is not None:
             # IF inputs with constant current
@@ -315,9 +320,7 @@ class TGModel():
         for i, (x, y) in enumerate(zip(x_data, y_data)):
 
             # Reset state
-            self.g_model._slm.initialize()
-            self.g_model._slm.set_timestep(0)
-            self.g_model._slm.set_time(0.0)
+            self.reset_genn_state()
 
             # Set inputs
             self.set_genn_inputs(x)
