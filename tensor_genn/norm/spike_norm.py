@@ -26,14 +26,14 @@ class SpikeNorm():
             for x in self.x_data:
 
                 # Reset state
-                tg_model.reset_genn_state()
+                tg_model.reset_state()
 
                 # Set inputs
-                tg_model.set_genn_inputs(x)
+                tg_model.set_inputs(x)
 
                 # Main simulation loop
                 while g_model.t < self.classify_time:
-                    g_model.step_time()
+                    tg_model.step_time()
 
                     g_model.pull_var_from_device(neurons.name, 'Vmem_peak')
                     Vmem_peak = neurons.vars['Vmem_peak'].view

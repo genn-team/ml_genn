@@ -292,12 +292,12 @@ class TGModel():
         self.g_model.build()
         self.g_model.load()
 
-    def reset_genn_state(self):
+    def reset_state(self):
         self.g_model._slm.initialize()
         self.g_model._slm.set_timestep(0)
         self.g_model._slm.set_time(0.0)
 
-    def set_genn_inputs(self, x):
+    def set_inputs(self, x):
         if self.g_model.current_sources.get('input_cs') is not None:
             # IF inputs with constant current
             cs = self.g_model.current_sources['input_cs']
@@ -308,6 +308,10 @@ class TGModel():
             nrn = self.g_model.neuron_populations['input_nrn']
             nrn.vars['rate'].view[:] = x.flatten()
             self.g_model.push_state_to_device('input_nrn')
+
+    def step_time(self, iterations=1):
+        for i in range(iterations):
+            self.g_model.step_time()
 
     def evaluate_genn_model(self, x_data, y_data, save_samples=[], classify_time=500.0, classify_spikes=None):
         assert x_data.shape[0] == y_data.shape[0]
@@ -320,17 +324,17 @@ class TGModel():
         for i, (x, y) in enumerate(zip(x_data, y_data)):
 
             # Reset state
-            self.reset_genn_state()
+            self.reset_state()
 
             # Set inputs
-            self.set_genn_inputs(x)
+            self.set_inputs(x)
 
             # Main simulation loop
             while self.g_model.t < classify_time:
                 t = self.g_model.t
 
                 # Step time
-                self.g_model.step_time()
+                self.step_time()
 
                 # Save spikes
                 if i in save_samples:

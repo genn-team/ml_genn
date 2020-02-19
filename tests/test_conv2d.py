@@ -61,22 +61,8 @@ def test_conv2d_1_in_chan_1_out_chan_1_stride_valid():
     # Assert Tensor GeNN model is correct
     neurons = tg_model.g_model.neuron_populations['conv2d_nrn']
     neurons.extra_global_params['Vthr'].view[:] = y.max()
-
-
-    for i in range(y.max()):
-
-        pass
-
-
-    #accuracy, _, _ = tg_model.evaluate_genn_model([x], [y], classify_time=y.max())
-
-
-    print(tf_model.summary())
-
-
-    print(accuracy)
-
-    assert accuracy == 100.0
+    tg_model.set_inputs(x)
+    tg_model.step_time(iterations=y.max().astype(np.uint))
 
 
 if __name__ == '__main__':
