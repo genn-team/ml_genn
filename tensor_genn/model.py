@@ -243,13 +243,20 @@ class TGModel():
         poisson_input_model = genn_model.create_custom_neuron_class(
             'poisson_input_model',
             extra_global_params=[('rate_factor', 'scalar')],
-            var_name_types=[('rate', 'scalar')],
+            var_name_types=[('rand', 'scalar'), ('rate', 'scalar')],
+            sim_code='''
+            $(rand) = $(gennrand_uniform);
+            ''',
+            reset_code='''
+            $(rand) = 0.0;
+            ''',
             threshold_condition_code='''
-            $(gennrand_uniform) >= exp(-$(rate) * $(rate_factor) * DT)
+            $(rand) >= exp(-$(rate) * $(rate_factor) * DT)
             '''
         )
 
         poisson_input_init = {
+            'rand': 0.0,
             'rate': 0.0,
         }
 
