@@ -49,71 +49,27 @@ def test_conv2d_1_in_chan_1_out_chan_1_stride_valid():
     tf_k = k[:, :, np.newaxis, np.newaxis]
     tf_model.set_weights([tf_k])
 
-    # Assert TensorFlow model is correct
+    # Run TensorFlow model
     tf_x = x[np.newaxis, :, :, np.newaxis]
     tf_y = tf_model(tf_x).numpy()
+
+    # Assert TensorFlow model is correct
     assert (tf_y[0, :, :, 0] == y).all()
 
     # Create Tensor GeNN model
     tg_model = tg.TGModel(tf_model)
-    tg_model.create_genn_model(dt=1.0, input_type='if')
+    tg_model.create_genn_model(dt=1.0, input_type='spike')
 
-    # Assert Tensor GeNN model is correct
+    # Run Tensor GeNN model
     neurons = tg_model.g_model.neuron_populations['conv2d_nrn']
     neurons.extra_global_params['Vthr'].view[:] = y.max()
     tg_model.set_inputs(x)
-
-
-    #############
-
-    tg_model.step_time()
-
+    tg_model.step_time(2)
     tg_model.g_model.pull_var_from_device('conv2d_nrn', 'Vmem_peak')
-    Vmem_peak = neurons.vars['Vmem_peak'].view.reshape(y.shape)
-    print(Vmem_peak)
+    tg_y = neurons.vars['Vmem_peak'].view.reshape(y.shape)
 
-
-    tg_model.step_time()
-
-    tg_model.g_model.pull_var_from_device('conv2d_nrn', 'Vmem_peak')
-    Vmem_peak = neurons.vars['Vmem_peak'].view.reshape(y.shape)
-    print(Vmem_peak)
-
-
-
-
-    print(Vmem_peak == y)
-    print((Vmem_peak == y).all())
-    return
-
-
-
-    print('###########################')
-
-
-    # IF_INPUT, POISSON_INPUT, SPIKE_INPUT
-
-    # IF_INPUT IS SEPARATE MERGED IF AND CS MODEL
-    # POISSON_INPUT ALREADY DONE
-    # SPIKE_INPUT IS SIMPLE 1 BOOLEAN VARIABLE MODEL - IF VAR==TRUE IN THRESHOLD CODE
-
-
-
-    #############
-
-
-    #tg_model.step_time(iterations=y.max().astype(np.uint32))
-
-
-    tg_model.g_model.pull_var_from_device(neurons.name, 'nSpk')
-    tg_y = neurons.vars['nSpk'].view.reshape(y.shape).astype(dtype=np.float32)
-
-    #print(tg_y)
-    print(y)
-
-    print(tg_y == y)
-    print((tg_y == y).all())
-
+    # Assert Tensor GeNN model is correct
+    assert (tg_y == y).all()
 
 
 if __name__ == '__main__':

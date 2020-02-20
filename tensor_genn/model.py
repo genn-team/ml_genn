@@ -201,13 +201,13 @@ class TGModel():
             $(Vmem) += $(Isyn) * DT;
             $(Vmem_peak) = $(Vmem);
             ''',
+            threshold_condition_code='''
+            $(Vmem) >= $(Vthr)
+            ''',
             reset_code='''
             $(Vmem) = $(Vres);
             $(nSpk) += 1;
             ''',
-            threshold_condition_code='''
-            $(Vmem) >= $(Vthr)
-            '''
         )
 
         if_init = {
@@ -224,12 +224,12 @@ class TGModel():
             sim_code='''
             $(Vmem) += $(input) * DT;
             ''',
+            threshold_condition_code='''
+            $(Vmem) >= $(Vthr)
+            ''',
             reset_code='''
             $(Vmem) = $(Vres);
             ''',
-            threshold_condition_code='''
-            $(Vmem) >= $(Vthr)
-            '''
         )
 
         if_input_init = {
@@ -245,17 +245,37 @@ class TGModel():
             sim_code='''
             $(rand) = $(gennrand_uniform);
             ''',
+            threshold_condition_code='''
+            $(rand) >= exp(-$(input) * $(rate_factor) * DT)
+            ''',
             reset_code='''
             $(rand) = 0.0;
             ''',
-            threshold_condition_code='''
-            $(rand) >= exp(-$(input) * $(rate_factor) * DT)
-            '''
         )
 
         poisson_input_init = {
             'input': 0.0,
             'rand': 0.0,
+        }
+
+        # === Define Spike input neuron class ===
+        spike_input_model = genn_model.create_custom_neuron_class(
+            'spike_input_model',
+            var_name_types=[('input', 'scalar'), ('spike', 'scalar')],
+            sim_code='''
+            $(spike) = $(input);
+            ''',
+            threshold_condition_code='''
+            $(spike)
+            ''',
+            reset_code='''
+            $(spike) = 0.0;
+            ''',
+        )
+
+        spike_input_init = {
+            'input': 0.0,
+            'spike': 0.0,
         }
 
 
@@ -273,6 +293,8 @@ class TGModel():
         elif input_type == 'poisson':
             nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_input_model, {}, poisson_input_init)
             nrn_post.set_extra_global_param('rate_factor', rate_factor)
+        elif input_type == 'spike':
+            nrn_post = self.g_model.add_neuron_population('input_nrn', n, spike_input_model, {}, spike_input_init)
 
         # For each synapse population
         for name, w_vals, w_inds in zip(self.layer_names, self.weight_vals, self.weight_inds):
