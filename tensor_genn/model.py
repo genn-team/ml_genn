@@ -195,8 +195,8 @@ class TGModel():
         # === Define IF neuron class ===
         if_model = genn_model.create_custom_neuron_class(
             'if_model',
-            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
             var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int')],
+            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
             sim_code='''
             $(Vmem) += $(Isyn) * DT;
             $(Vmem_peak) = $(Vmem);
@@ -219,8 +219,8 @@ class TGModel():
         # === Define IF input neuron class ===
         if_input_model = genn_model.create_custom_neuron_class(
             'if_input_model',
-            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
             var_name_types=[('input', 'scalar'), ('Vmem', 'scalar')],
+            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
             sim_code='''
             $(Vmem) += $(input) * DT;
             ''',
@@ -240,8 +240,8 @@ class TGModel():
         # === Define Poisson input neuron class ===
         poisson_input_model = genn_model.create_custom_neuron_class(
             'poisson_input_model',
-            extra_global_params=[('rate_factor', 'scalar')],
             var_name_types=[('input', 'scalar'), ('rand', 'scalar')],
+            extra_global_params=[('rate_factor', 'scalar')],
             sim_code='''
             $(rand) = $(gennrand_uniform);
             ''',
