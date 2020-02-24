@@ -146,7 +146,7 @@ class TGModel():
                             g_stride_conn = g_out_conn[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
 
                             # Set weights for this stride.
-                            g_stride_w[:] = 1.0 / (ph * pw)
+                            g_stride_w[:] = 1.0 / g_stride_w.size
                             g_stride_conn[:] = True
 
             # === Combine Deferred Weights ===

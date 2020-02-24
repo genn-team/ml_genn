@@ -3,10 +3,9 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_test_helper(x, y, tf_model):
+def model_test_helper(tf_model, x):
     # Assert TensorFlow model is correct
     tf_y = tf_model(x).numpy()
-    assert (tf_y == y).all()
 
     # Assert Tensor GeNN model is correct
     tg_model = tg.TGModel(tf_model)
@@ -15,34 +14,8 @@ def model_test_helper(x, y, tf_model):
     tg_model.step_time(2)
     neurons = tg_model.g_model.neuron_populations['conv2d_nrn']
     tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem_peak')
-    tg_y = neurons.vars['Vmem_peak'].view.reshape(y.shape)
-    assert (tg_y == y).all()
-
-
-def model_kernels():
-    # Format: [row, col, in_channel, out_channel]
-    k = np.empty((3, 3, 2, 2), dtype=np.float32)
-    k[:, :, 0, 0] = [
-        [0, 0, 1],
-        [0, 1, 0],
-        [1, 0, 0],
-    ]
-    k[:, :, 1, 0] = [
-        [1, 1, 0],
-        [0, 0, 1],
-        [1, 1, 0],
-    ]
-    k[:, :, 0, 1] = [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-    ]
-    k[:, :, 1, 1] = [
-        [0, 1, 0],
-        [1, 0, 1],
-        [0, 1, 0],
-    ]
-    return k
+    tg_y = neurons.vars['Vmem_peak'].view.reshape(tf_y.shape)
+    assert (tg_y == tf_y).all()
 
 
 def model_inputs():
@@ -79,32 +52,110 @@ def model_inputs():
     return x
 
 
+def model_kernels():
+    # Format: [row, col, in_channel, out_channel]
+    k = np.empty((3, 3, 2, 2), dtype=np.float32)
+    k[:, :, 0, 0] = [
+        [0, 0, 1],
+        [0, 1, 0],
+        [1, 0, 0],
+    ]
+    k[:, :, 1, 0] = [
+        [1, 1, 0],
+        [0, 0, 1],
+        [1, 1, 0],
+    ]
+    k[:, :, 0, 1] = [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+    ]
+    k[:, :, 1, 1] = [
+        [0, 1, 0],
+        [1, 0, 1],
+        [0, 1, 0],
+    ]
+    return k
+
+
+def model_input_0():
+    return np.array([
+        [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+        [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+        [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+    ], dtype=np.float32)
+
+def model_input_1():
+    return np.array([
+        [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
+        [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+        [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ], dtype=np.float32)
+
+
+def model_kernel_0_0():
+    return np.array([
+        [0, 0, 1],
+        [0, 1, 0],
+        [1, 0, 0],
+    ], dtype=np.float32)
+
+
+def model_kernel_1_0():
+    return np.array([
+        [1, 1, 0],
+        [0, 0, 1],
+        [1, 1, 0],
+    ], dtype=np.float32)
+
+
+def model_kernel_0_1():
+    return np.array([
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+    ], dtype=np.float32)
+
+
+def model_kernel_1_1():
+    return np.array([
+        [0, 1, 0],
+        [1, 0, 1],
+        [0, 1, 0],
+    ], dtype=np.float32)
+
+
 def test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid():
     '''
     Test Conv2D with 1 input channel, 1 output channel,
     a stride of (1, 1) and valid padding.
     '''
 
-    # Kernels
-    k = model_kernels()[:, :, 0:1, 0:1]
-
     # Inputs
-    x = model_inputs()[0:1, :, :, 0:1]
+    x = np.empty((1, 12, 12, 1), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
 
-    # Target Outputs
-    y = np.empty((1, 10, 10, 1), dtype=np.float32)
-    y[0, :, :, 0] = [
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
-        [2, 1, 1, 2, 1, 1, 2, 1, 1, 2],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 2, 1, 1, 2, 1, 1, 2, 1],
-        [0, 2, 0, 0, 2, 0, 0, 2, 0, 0],
-        [3, 0, 0, 3, 0, 0, 3, 0, 0, 3],
-        [0, 1, 2, 1, 0, 3, 0, 1, 2, 1],
-        [1, 2, 1, 1, 2, 1, 1, 2, 1, 1],
-        [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-    ]
+    # Kernels
+    k = np.empty((3, 3, 1, 1), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -114,7 +165,7 @@ def test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid():
     tf_model.set_weights([k])
 
     # Test model
-    model_test_helper(x, y, tf_model)
+    model_test_helper(tf_model, x)
 
 
 def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
@@ -123,26 +174,15 @@ def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
     a stride of (1, 1) and valid padding.
     '''
 
-    # Kernels
-    k = model_kernels()[:, :, 0:2, 0:1]
-
     # Inputs
-    x = model_inputs()[0:1, :, :, 0:2]
+    x = np.empty((1, 12, 12, 2), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
+    x[0, :, :, 1] = model_input_1()
 
-    # Target Outputs
-    y = np.empty((1, 10, 10, 1), dtype=np.float32)
-    y[0, :, :, 0] = [
-        [6, 4, 1, 3, 6, 4, 1, 3, 6, 4],
-        [0, 2, 4, 2, 1, 2, 3, 3, 1, 1],
-        [4, 2, 1, 3, 3, 2, 2, 2, 3, 3],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [2, 2, 3, 2, 2, 3, 2, 2, 3, 2],
-        [1, 4, 1, 2, 3, 2, 1, 4, 1, 2],
-        [6, 2, 3, 5, 3, 2, 6, 2, 3, 5],
-        [1, 3, 3, 3, 1, 5, 1, 3, 3, 3],
-        [2, 3, 2, 2, 3, 2, 2, 3, 2, 2],
-        [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-    ]
+    # Kernels
+    k = np.empty((3, 3, 2, 1), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+    k[:, :, 1, 0] = model_kernel_1_0()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -152,7 +192,7 @@ def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
     tf_model.set_weights([k])
 
     # Test model
-    model_test_helper(x, y, tf_model)
+    model_test_helper(tf_model, x)
 
 
 def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
@@ -161,38 +201,14 @@ def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
     a stride of (1, 1) and valid padding.
     '''
 
-    # Kernels
-    k = model_kernels()[:, :, 0:1, 0:2]
-
     # Inputs
-    x = model_inputs()[0:1, :, :, 0:1]
+    x = np.empty((1, 12, 12, 1), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
 
-    # Target Outputs
-    y = np.empty((1, 10, 10, 2), dtype=np.float32)
-    y[0, :, :, 0] = [
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
-        [2, 1, 1, 2, 1, 1, 2, 1, 1, 2],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 2, 1, 1, 2, 1, 1, 2, 1],
-        [0, 2, 0, 0, 2, 0, 0, 2, 0, 0],
-        [3, 0, 0, 3, 0, 0, 3, 0, 0, 3],
-        [0, 1, 2, 1, 0, 3, 0, 1, 2, 1],
-        [1, 2, 1, 1, 2, 1, 1, 2, 1, 1],
-        [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-    ]
-    y[0, :, :, 1] = [
-        [3, 0, 0, 3, 0, 0, 3, 0, 0, 3],
-        [0, 2, 0, 0, 2, 0, 0, 2, 0, 0],
-        [1, 1, 2, 1, 1, 2, 1, 1, 2, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [2, 1, 1, 2, 1, 1, 2, 1, 1, 2],
-        [0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 2, 1, 1, 1, 2, 0, 2, 1, 1],
-        [2, 1, 1, 2, 1, 1, 2, 1, 1, 2],
-        [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-    ]
+    # Kernels
+    k = np.empty((3, 3, 1, 2), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+    k[:, :, 0, 1] = model_kernel_0_1()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -202,7 +218,7 @@ def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
     tf_model.set_weights([k])
 
     # Test model
-    model_test_helper(x, y, tf_model)
+    model_test_helper(tf_model, x)
 
 
 def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
@@ -211,38 +227,17 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
     a stride of (1, 1) and valid padding.
     '''
 
-    # Kernels
-    k = model_kernels()[:, :, 0:2, 0:2]
-
     # Inputs
-    x = model_inputs()[0:1, :, :, 0:2]
+    x = np.empty((1, 12, 12, 2), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
+    x[0, :, :, 1] = model_input_1()
 
-    # Target Outputs
-    y = np.empty((1, 10, 10, 2), dtype=np.float32)
-    y[0, :, :, 0] = [
-        [6, 4, 1, 3, 6, 4, 1, 3, 6, 4],
-        [0, 2, 4, 2, 1, 2, 3, 3, 1, 1],
-        [4, 2, 1, 3, 3, 2, 2, 2, 3, 3],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [2, 2, 3, 2, 2, 3, 2, 2, 3, 2],
-        [1, 4, 1, 2, 3, 2, 1, 4, 1, 2],
-        [6, 2, 3, 5, 3, 2, 6, 2, 3, 5],
-        [1, 3, 3, 3, 1, 5, 1, 3, 3, 3],
-        [2, 3, 2, 2, 3, 2, 2, 3, 2, 2],
-        [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-    ]
-    y[0, :, :, 1] = [
-        [6, 1, 1, 6, 3, 1, 4, 3, 3, 4],
-        [1, 4, 2, 1, 3, 2, 2, 3, 1, 2],
-        [2, 1, 2, 2, 2, 2, 1, 2, 3, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [3, 1, 2, 2, 2, 1, 3, 1, 2, 2],
-        [0, 4, 1, 3, 1, 4, 0, 4, 1, 3],
-        [5, 1, 5, 1, 5, 1, 5, 1, 5, 1],
-        [0, 5, 1, 4, 1, 5, 0, 5, 1, 4],
-        [3, 1, 2, 2, 2, 1, 3, 1, 2, 2],
-        [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-    ]
+    # Kernels
+    k = np.empty((3, 3, 2, 2), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+    k[:, :, 1, 0] = model_kernel_1_0()
+    k[:, :, 0, 1] = model_kernel_0_1()
+    k[:, :, 1, 1] = model_kernel_1_1()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -252,7 +247,7 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
     tf_model.set_weights([k])
 
     # Test model
-    model_test_helper(x, y, tf_model)
+    model_test_helper(tf_model, x)
 
 
 def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
@@ -261,42 +256,17 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     a stride of (1, 1) and same padding.
     '''
 
-    # Kernels
-    k = model_kernels()[:, :, 0:2, 0:2]
-
     # Inputs
-    x = model_inputs()[0:1, :, :, 0:2]
+    x = np.empty((1, 12, 12, 2), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
+    x[0, :, :, 1] = model_input_1()
 
-    # Target Outputs
-    y = np.empty((1, 12, 12, 2), dtype=np.float32)
-    y[0, :, :, 0] = [
-        [2, 0, 2, 4, 2, 1, 2, 3, 3, 1, 1, 3],
-        [2, 6, 4, 1, 3, 6, 4, 1, 3, 6, 4, 0],
-        [2, 0, 2, 4, 2, 1, 2, 3, 3, 1, 1, 3],
-        [1, 4, 2, 1, 3, 3, 2, 2, 2, 3, 3, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 2, 2, 3, 2, 2, 3, 2, 2, 3, 2, 1],
-        [2, 1, 4, 1, 2, 3, 2, 1, 4, 1, 2, 3],
-        [0, 6, 2, 3, 5, 3, 2, 6, 2, 3, 5, 2],
-        [4, 1, 3, 3, 3, 1, 5, 1, 3, 3, 3, 1],
-        [0, 2, 3, 2, 2, 3, 2, 2, 3, 2, 2, 2],
-        [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    ]
-    y[0, :, :, 1] = [
-        [3, 1, 2, 4, 1, 1, 4, 2, 1, 3, 2, 1],
-        [2, 6, 1, 1, 6, 3, 1, 4, 3, 3, 4, 1],
-        [1, 1, 4, 2, 1, 3, 2, 2, 3, 1, 2, 3],
-        [2, 2, 1, 2, 2, 2, 2, 1, 2, 3, 1, 0],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 3, 1, 2, 2, 2, 1, 3, 1, 2, 2, 2],
-        [3, 0, 4, 1, 3, 1, 4, 0, 4, 1, 3, 1],
-        [0, 5, 1, 5, 1, 5, 1, 5, 1, 5, 1, 3],
-        [4, 0, 5, 1, 4, 1, 5, 0, 5, 1, 4, 1],
-        [1, 3, 1, 2, 2, 2, 1, 3, 1, 2, 2, 2],
-        [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1],
-        [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    ]
+    # Kernels
+    k = np.empty((3, 3, 2, 2), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+    k[:, :, 1, 0] = model_kernel_1_0()
+    k[:, :, 0, 1] = model_kernel_0_1()
+    k[:, :, 1, 1] = model_kernel_1_1()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -306,7 +276,7 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     tf_model.set_weights([k])
 
     # Test model
-    model_test_helper(x, y, tf_model)
+    model_test_helper(tf_model, x)
 
 
 if __name__ == '__main__':
