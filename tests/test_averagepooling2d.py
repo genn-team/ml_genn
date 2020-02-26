@@ -15,16 +15,6 @@ def model_test_helper(tf_model, x):
     neurons = tg_model.g_model.neuron_populations['dense_nrn']
     tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem_peak')
     tg_y = neurons.vars['Vmem_peak'].view.reshape(tf_y.shape)
-
-
-    # print('INPUT')
-    # print(x[0, :, :, 0])
-    # print('Tensor GeNN')
-    # print(tg_y[0, 0::2].reshape((4, 4)))
-    # print('TensorFlow')
-    # print(tf_y[0, 0::2].reshape((4, 4)))
-
-
     assert (tg_y == tf_y).all()
 
 
@@ -72,7 +62,7 @@ def test_averagepooling2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, name='averagepooling2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 1)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(9, name='dense', activation='relu', use_bias=False),
+        tf.keras.layers.Dense(9, name='dense', use_bias=False),
     ], name='test_averagepooling2d_in_chan_1_out_chan_1_stride_3_3_padding_valid')
     tf_model.set_weights([np.identity(9)])
 
@@ -95,7 +85,7 @@ def test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, name='averagepooling2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(18, name='dense', activation='relu', use_bias=False),
+        tf.keras.layers.Dense(18, name='dense', use_bias=False),
     ], name='test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_valid')
     tf_model.set_weights([np.identity(18)])
 
@@ -118,7 +108,7 @@ def test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, name='averagepooling2d', padding='same', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, name='dense', activation='relu', use_bias=False),
+        tf.keras.layers.Dense(32, name='dense', use_bias=False),
     ], name='test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_same')
     tf_model.set_weights([np.identity(32)])
 

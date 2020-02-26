@@ -160,7 +160,7 @@ def test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(1, 3, name='conv2d', padding='valid', strides=(1, 1),
-                               activation='relu', use_bias=False, input_shape=(12, 12, 1)),
+                               use_bias=False, input_shape=(12, 12, 1)),
     ], name='test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
@@ -187,7 +187,7 @@ def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(1, 3, name='conv2d', padding='valid', strides=(1, 1),
-                               activation='relu', use_bias=False, input_shape=(12, 12, 2)),
+                               use_bias=False, input_shape=(12, 12, 2)),
     ], name='test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
@@ -213,7 +213,7 @@ def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='valid', strides=(1, 1),
-                               activation='relu', use_bias=False, input_shape=(12, 12, 1)),
+                               use_bias=False, input_shape=(12, 12, 1)),
     ], name='test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
@@ -242,7 +242,7 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='valid', strides=(1, 1),
-                               activation='relu', use_bias=False, input_shape=(12, 12, 2)),
+                               use_bias=False, input_shape=(12, 12, 2)),
     ], name='test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
@@ -271,7 +271,7 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='same', strides=(1, 1),
-                               activation='relu', use_bias=False, input_shape=(12, 12, 2)),
+                               use_bias=False, input_shape=(12, 12, 2)),
     ], name='test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same')
     tf_model.set_weights([k])
 

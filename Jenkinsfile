@@ -99,7 +99,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		checkout scm
             }
 
-	    stage("Setup virtualenv (${NODE_NAME})") {
+	    buildStage("Setup virtualenv (${NODE_NAME})") {
 		// Set up new virtualenv
 		echo "Creating virtualenv";
 		sh """
@@ -112,7 +112,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 """
 	    }
 
-            stage("Building PyGeNN (${NODE_NAME})") {
+            buildStage("Installing PyGeNN (${NODE_NAME})") {
 		// Checkout GeNN
 		echo "Checking out GeNN";
 		sh "rm -rf genn";
@@ -133,7 +133,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		    archive messages_libGeNN;
 
 		    // Build PyGeNN module
-		    echo "Building PyGeNN";
+		    echo "Building and installing PyGeNN";
 		    def messages_PyGeNN = "pygenn_build_${NODE_NAME}";
 		    def commands_PyGeNN = """
                         source ${WORKSPACE}/venv/bin/activate
@@ -151,48 +151,31 @@ for (b = 0; b < builderNodes.size(); b++) {
             }
 
             buildStage("Running tests (${NODE_NAME})") {
-                dir("tensor_genn/test/system") {
-                    // Generate unique name for message
-                    def messages_tests = "test_output_${NODE_NAME}";
-
-                    // Run test suite
-                    def commands_tests = """
-                        source ${WORKSPACE}/venv/bin/activate
-                        rm -f ${messages_tests}
-                        rm -f .coverage
-                        nosetests -s --with-xunit --with-coverage --cover-package=pygenn --cover-package=tensor_genn test_genn.py 1>\"${messages_tests}\" 2>&1
-                    """;
-                    def status_tests = sh script:commands_tests, returnStatus:true;
-                    if (status_tests != 0) {
-                        setBuildStatus("Running tests (${NODE_NAME})", "UNSTABLE");
-                    }
-                    archive messages_tests;
-
-                    // Activate virtualenv and convert coverage to XML
-                    def commands_coverage = """
-                        source ${WORKSPACE}/venv/bin/activate
-                        coverage xml
-                    """;
-                    def status_coverage = sh script:commands_coverage, returnStatus:true;
-                    if (status_coverage != 0) {
-                        setBuildStatus("Running tests (${NODE_NAME})", "UNSTABLE");
-                    }
-                }
-
-                // Switch to Tensor GeNN repository root so codecov uploader works correctly
                 dir("tensor_genn") {
-                    // Activate virtualenv and upload coverage
-                    sh """
+		    // Set up new virtualenv
+		    echo "Installing Tensor GeNN";
+		    sh """
                         source ${WORKSPACE}/venv/bin/activate
-                        codecov --token 1460b8f4-e4af-4acd-877e-353c9449111c --file test/system/coverage.xml
-                    """;
-                }
-            }
+                        pip install .
+                    """
 
-            buildStage("Gathering test results (${NODE_NAME})") {
-                // Process JUnit test output
-                junit "tensor_genn/test/**/nosetests.xml";
-            }
+		    dir("tests") {
+			// Generate unique name for message
+			def messages_tests = "test_output_${NODE_NAME}";
+
+			// Run test suite
+			def commands_tests = """
+                            source ${WORKSPACE}/venv/bin/activate
+                            pytest -v 1>\"${messages_tests}\" 2>&1
+                        """;
+			def status_tests = sh script:commands_tests, returnStatus:true;
+			if (status_tests != 0) {
+			    setBuildStatus("Running tests (${NODE_NAME})", "UNSTABLE");
+			}
+			archive messages_tests;
+		    }
+		}
+	    }
         }
     }
 }
