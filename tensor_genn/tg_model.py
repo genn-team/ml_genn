@@ -10,19 +10,25 @@ supported_layers = (
     tf.keras.layers.Flatten,
 )
 
+supported_input_types = (
+    'if',
+    'poisson',
+    'spike',
+)
+
 class TGModel():
-    def __init__(self, tf_model=None, g_model=None):
-        self.tf_model = tf_model
-        self.g_model = g_model
+    def __init__(self):
+        self.g_model = None
+        self.tf_model = None
         self.layer_names = None
         self.weight_vals = None
         self.weight_inds = None
 
-    def create_genn_model(self, dt=1.0, input_type='if', rng_seed=0, rate_factor=1.0):
+    def convert_tf_model(self, tf_model, dt=1.0, input_type='if', rng_seed=0, rate_factor=1.0):
         # Check model compatibility
-        if not isinstance(self.tf_model, tf.keras.Sequential):
-            raise NotImplementedError('{} models not supported'.format(type(self.tf_model)))
-        for layer in self.tf_model.layers[:-1]:
+        if not isinstance(tf_model, tf.keras.Sequential):
+            raise NotImplementedError('{} models not supported'.format(type(tf_model)))
+        for layer in tf_model.layers[:-1]:
             if not isinstance(layer, supported_layers):
                 raise NotImplementedError('{} layers are not supported'.format(layer))
             elif isinstance(layer, tf.keras.layers.Dense):
@@ -30,7 +36,10 @@ class TGModel():
                     raise NotImplementedError('{} activation is not supported'.format(layer.activation))
                 if layer.use_bias == True:
                     raise NotImplementedError('bias tensors are not supported')
+        if input_type not in supported_input_types:
+            raise ValueError('{} is not a valid input type'.format(input_type))
 
+        self.tf_model = tf_model
         self.layer_names = []
         self.weight_vals = []
         self.weight_inds = []
@@ -337,7 +346,7 @@ class TGModel():
         for i in range(iterations):
             self.g_model.step_time()
 
-    def evaluate_genn_model(self, x_data, y_data, save_samples=[], classify_time=500.0, classify_spikes=None):
+    def evaluate(self, x_data, y_data, save_samples=[], classify_time=500.0, classify_spikes=None):
         assert x_data.shape[0] == y_data.shape[0]
         n_correct = 0
 

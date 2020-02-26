@@ -72,10 +72,10 @@ def main():
         if len(layer.get_weights()) > 0: print('w shape:   ' + str(layer.get_weights()[0].shape))
     #return
 
-    tg_model = TGModel(tf_model)
-    tg_model.create_genn_model(dt=1.0, input_type='poisson', rng_seed=1, rate_factor=1.0)
+    tg_model = TGModel()
+    tg_model.convert_tf_model(tf_model, dt=1.0, input_type='poisson', rng_seed=1, rate_factor=1.0)
 
-    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
+    accuracy, spike_ids, spike_times = tg_model.evaluate(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
     # ===== SPIKE NORM =====
@@ -86,7 +86,7 @@ def main():
     # norm = DataNorm(x_norm, batch_size=100)
     # norm.normalize(tg_model)
 
-    accuracy, spike_ids, spike_times = tg_model.evaluate_genn_model(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
+    accuracy, spike_ids, spike_times = tg_model.evaluate(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
     # names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
