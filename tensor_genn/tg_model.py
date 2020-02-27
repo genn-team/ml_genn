@@ -24,7 +24,7 @@ class TGModel():
         self.weight_vals = None
         self.weight_inds = None
 
-    def convert_tf_model(self, tf_model, dt=1.0, input_type='if', rng_seed=0, rate_factor=1.0):
+    def convert_tf_model(self, tf_model, dt=1.0, input_type='if', rate_factor=1.0, rng_seed=0):
         # Check model compatibility
         if not isinstance(tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(tf_model)))
@@ -346,7 +346,7 @@ class TGModel():
         for i in range(iterations):
             self.g_model.step_time()
 
-    def evaluate(self, x_data, y_data, save_samples=[], classify_time=500.0, classify_spikes=None):
+    def evaluate(self, x_data, y_data, classify_time=500.0, classify_spikes=100, save_samples=[]):
         assert x_data.shape[0] == y_data.shape[0]
         n_correct = 0
 
@@ -386,11 +386,10 @@ class TGModel():
                             spike_times[k][j] = np.hstack((spike_times[k][j], ts))
 
                 # Break simulation if we have enough output spikes.
-                if classify_spikes is not None:
-                    output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
-                    self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-                    if output_neurons.vars['nSpk'].view.sum() >= classify_spikes:
-                        break
+                output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
+                self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
+                if output_neurons.vars['nSpk'].view.sum() >= classify_spikes:
+                    break
 
             # After simulation
             output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']

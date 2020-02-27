@@ -152,13 +152,6 @@ for (b = 0; b < builderNodes.size(); b++) {
 
             buildStage("Running tests (${NODE_NAME})") {
                 dir("tensor_genn") {
-		    // Set up new virtualenv
-		    echo "Installing Tensor GeNN";
-		    sh """
-                        source ${WORKSPACE}/venv/bin/activate
-                        pip install .
-                    """
-
 		    dir("tests") {
 			// Generate unique name for message
 			def messages_tests = "test_output_${NODE_NAME}";

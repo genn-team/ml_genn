@@ -1,18 +1,14 @@
 import numpy as np
 import tensorflow as tf
-
 from tensor_genn import TGModel
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils.plotting import raster_plot
 
 def train_mnist(x_train, y_train, x_test, y_test):
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Conv2D(16, 5, padding='valid', strides=1, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
-        #tf.keras.layers.Conv2D(16, 5, padding='valid', strides=2, activation='relu', use_bias=False, input_shape=(28, 28, 1)),
+        tf.keras.layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=(28, 28, 1)),
         tf.keras.layers.AveragePooling2D(2, padding='valid'),
-        #tf.keras.layers.AveragePooling2D(2, padding='valid', strides=1),
-        tf.keras.layers.Conv2D(8, 5, padding='same', strides=1, activation='relu', use_bias=False),
-        #tf.keras.layers.Conv2D(8, 5, padding='same', strides=2, activation='relu', use_bias=False),
+        tf.keras.layers.Conv2D(8, 5, padding='same', activation='relu', use_bias=False),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu', use_bias=False),
         tf.keras.layers.Dense(64, activation='relu', use_bias=False),
@@ -55,6 +51,7 @@ def main():
     #time = 1000.0
     #time = 2500.0
 
+    #spikes = None
     #spikes = 30
     spikes = 50
 
@@ -73,9 +70,9 @@ def main():
     #return
 
     tg_model = TGModel()
-    tg_model.convert_tf_model(tf_model, dt=1.0, input_type='poisson', rng_seed=1, rate_factor=1.0)
+    tg_model.convert_tf_model(tf_model, dt=1.0, input_type='poisson', rate_factor=1.0, rng_seed=0)
 
-    accuracy, spike_ids, spike_times = tg_model.evaluate(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
+    accuracy, spike_ids, spike_times = tg_model.evaluate(x_test, y_test, classify_time=time, classify_spikes=spikes, save_samples=[0])
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
     # ===== SPIKE NORM =====
@@ -86,7 +83,7 @@ def main():
     # norm = DataNorm(x_norm, batch_size=100)
     # norm.normalize(tg_model)
 
-    accuracy, spike_ids, spike_times = tg_model.evaluate(x_test, y_test, save_samples=[0], classify_time=time, classify_spikes=spikes)
+    accuracy, spike_ids, spike_times = tg_model.evaluate(x_test, y_test, classify_time=time, classify_spikes=spikes, save_samples=[0])
     print('Accuracy achieved by GeNN model: {}%'.format(accuracy))
 
     # names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]

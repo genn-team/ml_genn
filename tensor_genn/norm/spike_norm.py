@@ -8,7 +8,7 @@ VGG and Residual Architectures. Frontiers in Neuroscience, 2019 (vol 13).
 '''
 
 class SpikeNorm():
-    def __init__(self, x_data, classify_time=500.0, classify_spikes=None):
+    def __init__(self, x_data, classify_time=500.0, classify_spikes=100):
         self.x_data = x_data
         self.classify_time = classify_time
         self.classify_spikes = classify_spikes
