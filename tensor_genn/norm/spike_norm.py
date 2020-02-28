@@ -8,8 +8,8 @@ VGG and Residual Architectures. Frontiers in Neuroscience, 2019 (vol 13).
 '''
 
 class SpikeNorm():
-    def __init__(self, x_data, classify_time=500.0, classify_spikes=100):
-        self.x_data = x_data
+    def __init__(self, data, classify_time=500.0, classify_spikes=100):
+        self.data = data
         self.classify_time = classify_time
         self.classify_spikes = classify_spikes
 
@@ -23,7 +23,7 @@ class SpikeNorm():
             neurons = g_model.neuron_populations[layer_name + '_nrn']
 
             # For each sample
-            for x in self.x_data:
+            for x in self.data:
 
                 # Reset state
                 tg_model.reset_state()

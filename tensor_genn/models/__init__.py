@@ -1,1 +1,1 @@
-from .simple_mnist import SimpleMNIST
+from .simple_cnn import SimpleCNN
