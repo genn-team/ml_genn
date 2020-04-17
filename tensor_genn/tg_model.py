@@ -1,3 +1,26 @@
+"""TensorGeNN model definition
+
+This module provides TGModel class to convert TensorFlow models into GeNN
+models, and provides helper functions for operating the resulting GeNN model.
+
+A ``TGModel`` object requires a pre-trained TensorFlow model to function.
+Such a model can be provided by calling the ``convert_tf_model`` method
+with the TensorFlow model and optional parameters.
+
+Example:
+    The following is a minimal example which demonstrates the process of
+    converting a TensorFlow model into a GeNN model and evaluating it::
+
+        from tensor_genn import TGModel
+
+        # load data and train TensorFlow model
+        ...
+
+        tensorgenn_model = TGmodel()
+        tensorgenn_model.convert_tf_model(tensorflow_model
+        tensorgenn_model.evaluate(test_data, test_labels)
+"""
+
 from enum import Enum
 from math import ceil
 import numpy as np
@@ -20,14 +43,35 @@ supported_layers = (
 )
 
 class TGModel(object):
+    """TensorGeNN model class
+
+    This class converts fully trained TensorFlow models into GeNN models,
+    and provides an interface for manipulating converted models.
+    """
+
     def __init__(self):
+        """Initialise a TensorGeNN model"""
+
         self.g_model = None
         self.tf_model = None
         self.layer_names = None
         self.weight_vals = None
         self.weight_inds = None
 
-    def convert_tf_model(self, tf_model, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
+
+    def convert_tf_model(self, tf_model, dt=1.0, input_type=InputType.POISSON, rate_factor=1.0, rng_seed=0):
+        """Convert a TensorFlow model into a GeNN model
+
+        Args:
+        tf_model     --  TensorFlow model to be converted
+
+        Keyword args:
+        dt           --  model integration time step (default: 1.0)
+        input_type   --  type of input neurons (default: 'poisson')
+        rate_factor  --  scale firing rate if input_type is 'poisson' (default: 1.0)
+        rng_seed     --  GeNN RNG seed (default: 0, meaning choose a random seed)
+        """
+
         # Check model compatibility
         input_type = InputType(input_type)
         if not isinstance(tf_model, tf.keras.Sequential):
@@ -207,7 +251,7 @@ class TGModel(object):
         if_model = genn_model.create_custom_neuron_class(
             'if_model',
             var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int')],
-            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
+            extra_global_params=[('Vthr', 'scalar')],
             sim_code='''
             $(Vmem) += $(Isyn) * DT;
             $(Vmem_peak) = $(Vmem);
@@ -216,7 +260,7 @@ class TGModel(object):
             $(Vmem) >= $(Vthr)
             ''',
             reset_code='''
-            $(Vmem) = $(Vres);
+            $(Vmem) = 0.0;
             $(nSpk) += 1;
             ''',
             is_auto_refractory_required=False,
@@ -232,15 +276,14 @@ class TGModel(object):
         if_input_model = genn_model.create_custom_neuron_class(
             'if_input_model',
             var_name_types=[('input', 'scalar'), ('Vmem', 'scalar')],
-            extra_global_params=[('Vthr', 'scalar'), ('Vres', 'scalar')],
             sim_code='''
             $(Vmem) += $(input) * DT;
             ''',
             threshold_condition_code='''
-            $(Vmem) >= $(Vthr)
+            $(Vmem) >= 1.0
             ''',
             reset_code='''
-            $(Vmem) = $(Vres);
+            $(Vmem) = 0.0;
             ''',
             is_auto_refractory_required=False,
         )
@@ -253,44 +296,30 @@ class TGModel(object):
         # === Define Poisson input neuron class ===
         poisson_input_model = genn_model.create_custom_neuron_class(
             'poisson_input_model',
-            var_name_types=[('input', 'scalar'), ('rand', 'scalar')],
-            extra_global_params=[('rate_factor', 'scalar')],
-            sim_code='''
-            $(rand) = $(gennrand_uniform);
-            ''',
+            var_name_types=[('input', 'scalar')],
+            param_names=['rate_factor'],
             threshold_condition_code='''
-            $(rand) >= exp(-$(input) * $(rate_factor) * DT)
-            ''',
-            reset_code='''
-            $(rand) = 0.0;
+            $(gennrand_uniform) >= exp(-$(input) * $(rate_factor) * DT)
             ''',
             is_auto_refractory_required=False,
         )
 
         poisson_input_init = {
             'input': 0.0,
-            'rand': 0.0,
         }
 
         # === Define Spike input neuron class ===
         spike_input_model = genn_model.create_custom_neuron_class(
             'spike_input_model',
-            var_name_types=[('input', 'scalar'), ('spike', 'scalar')],
-            sim_code='''
-            $(spike) = $(input);
-            ''',
+            var_name_types=[('input', 'scalar')],
             threshold_condition_code='''
-            $(spike)
-            ''',
-            reset_code='''
-            $(spike) = 0.0;
+            $(input)
             ''',
             is_auto_refractory_required=False,
         )
 
         spike_input_init = {
             'input': 0.0,
-            'spike': 0.0,
         }
 
 
@@ -302,14 +331,14 @@ class TGModel(object):
         # Add input neurons
         n = np.prod(self.tf_model.input_shape[1:])
         if input_type == InputType.IF:
-            nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_input_model, {}, if_input_init)
-            nrn_post.set_extra_global_param('Vthr', 1.0)
-            nrn_post.set_extra_global_param('Vres', 0.0)
+            nrn_post = self.g_model.add_neuron_population(
+                'input_nrn', n, if_input_model, {}, if_input_init)
         elif input_type == InputType.POISSON:
-            nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_input_model, {}, poisson_input_init)
-            nrn_post.set_extra_global_param('rate_factor', rate_factor)
+            nrn_post = self.g_model.add_neuron_population(
+                'input_nrn', n, poisson_input_model, {'rate_factor': rate_factor}, poisson_input_init)
         elif input_type == InputType.SPIKE:
-            nrn_post = self.g_model.add_neuron_population('input_nrn', n, spike_input_model, {}, spike_input_init)
+            nrn_post = self.g_model.add_neuron_population(
+                'input_nrn', n, spike_input_model, {}, spike_input_init)
 
         # For each synapse population
         for name, w_vals, w_inds in zip(self.layer_names, self.weight_vals, self.weight_inds):
@@ -319,7 +348,6 @@ class TGModel(object):
             n = w_vals.shape[1]
             nrn_post = self.g_model.add_neuron_population(name + '_nrn', n, if_model, {}, if_init)
             nrn_post.set_extra_global_param('Vthr', 1.0)
-            nrn_post.set_extra_global_param('Vres', 0.0)
 
             # Add synapses from last layer to this layer
             if w_inds is None: # Dense weight matrix
@@ -338,21 +366,56 @@ class TGModel(object):
         self.g_model.build()
         self.g_model.load()
 
+
     def reset_state(self):
+        """Reset the GeNN model's state to initial values"""
+
         self.g_model._slm.initialize()
         self.g_model.timestep = 0
         self.g_model.t = 0.0
 
+
     def set_inputs(self, x):
+        """Set the GeNN model's input neurons
+
+        Args:
+        x  --  data used to set model inputs with
+        """
+
         nrn = self.g_model.neuron_populations['input_nrn']
         nrn.vars['input'].view[:] = x.flatten()
         self.g_model.push_state_to_device('input_nrn')
 
+
     def step_time(self, iterations=1):
+        """Iterate the GeNN model a given number of steps
+
+        Keyword args:
+        iterations  --  number of iterations (default: 1)
+        """
+
         for i in range(iterations):
             self.g_model.step_time()
 
+
     def evaluate(self, x_data, y_data, classify_time=500.0, classify_spikes=100, save_samples=[]):
+        """Evaluate the accuracy of a GeNN model
+
+        Args:
+        x_data           --  test data
+        y_data           --  test labels
+
+        Keyword args:
+        classify_time    --  maximum time (msec) per sample (default: 500.0)
+        classify_spikes  --  maximum output spikes per sample (default: 100)
+        save_samples     --  list of sample indices to save spikes for (default: [])
+
+        Returns:
+        accuracy         --  percentage of correctly classified results
+        spike_i          --  list of spike indices for each sample index in save_samples
+        spike_t          --  list of spike times for each sample index in save_samples
+        """
+
         assert x_data.shape[0] == y_data.shape[0]
 
         n_correct = 0
