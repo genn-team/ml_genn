@@ -1,10 +1,10 @@
 import tensorflow as tf
-from tensor_genn import TGModel
+from tensor_genn import TGModel, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
 
 class SimpleCNN(TGModel):
-    def __init__(self, x_train, y_train, dt=1.0, input_type='poisson', rate_factor=1.0, rng_seed=0):
+    def __init__(self, x_train, y_train, dt=1.0, input_type=InputType.POISSON, rate_factor=1.0, rng_seed=0):
         super(SimpleCNN, self).__init__()
 
         # Define TensorFlow model
@@ -20,11 +20,12 @@ class SimpleCNN(TGModel):
 
         # Train and convert model
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, epochs=5)
+        tf_model.fit(x_train, y_train, epochs=3)
         self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
 
 if __name__ == '__main__':
     args = parse_arguments('Simple CNN classifier model')
+    print('arguments: ' + str(vars(args)))
 
     # Retrieve, reshape and normalise MNIST dataset
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -39,8 +40,8 @@ if __name__ == '__main__':
                          rate_factor=args.rate_factor, rng_seed=args.rng_seed)
     tg_model.tf_model.evaluate(x_test, y_test)
     if args.norm_method == 'data-norm':
-        norm.normalize(tg_model)
         norm = DataNorm(x_norm, batch_size=None)
+        norm.normalize(tg_model)
     elif args.norm_method == 'spike-norm':
         norm = SpikeNorm(x_norm, classify_time=args.classify_time, classify_spikes=args.classify_spikes)
         norm.normalize(tg_model)

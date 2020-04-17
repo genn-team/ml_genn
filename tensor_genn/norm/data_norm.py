@@ -8,11 +8,11 @@ Peter U. Diehl, Daniel Neil, Jonathan Binas, Matthew Cook, Shih-Chii Liu, and Mi
 Fast-Classifying, High-Accuracy Spiking Deep Networks Through Weight and Threshold Balancing. IJCNN (2015)
 '''
 
-class DataNorm():
-    def __init__(self, data, batch_size=None):
-        self.data = data
+class DataNorm(object):
+    def __init__(self, norm_samples, batch_size=None):
+        self.norm_samples = norm_samples
         if batch_size == None:
-            self.batch_size = len(data)
+            self.batch_size = len(norm_samples)
         else:
             self.batch_size = batch_size
 
@@ -25,15 +25,15 @@ class DataNorm():
         idx = [i for i, l in enumerate(tf_model.layers) if l.get_weights() != []]
         get_outputs = K.function([tf_model.input], [tf_model.layers[i].output for i in idx])
 
-        # Find the maximum activation in each layer, given data.
+        # Find the maximum activation in each layer, given input data.
         activation = np.empty(len(idx), dtype=np.float64)
         max_activation = np.zeros(len(idx), dtype=np.float64)
-        n_batches = ceil(len(self.data) / self.batch_size)
+        n_batches = ceil(len(self.norm_samples) / self.batch_size)
         for i in range(n_batches):
             if i < n_batches - 1:
-                x = self.data[i*self.batch_size : (i+1)*self.batch_size]
+                x = self.norm_samples[i*self.batch_size : (i+1)*self.batch_size]
             else:
-                x = self.data[i*self.batch_size : ]
+                x = self.norm_samples[i*self.batch_size : ]
             activation[:] = [np.max(out) for out in get_outputs(x)]
             max_activation[:] = np.max([max_activation, activation], 0)
 
@@ -45,8 +45,7 @@ class DataNorm():
         scale_factors = np.max([max_activation, max_weights], 0)
         applied_factors = np.empty(len(idx))
         applied_factors[0] = scale_factors[0]
-        for i in range(1, len(idx)):
-            applied_factors[i] = scale_factors[i] / scale_factors[i-1]
+        applied_factors[1:] = scale_factors[1:] / scale_factors[:-1]
 
         # Update this neuron population's threshold
         for i, layer_name in enumerate([tf_model.layers[i].name for i in idx]):

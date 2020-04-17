@@ -93,7 +93,7 @@ for (b = 0; b < builderNodes.size(); b++) {
     builders[nodeName] = {
         node(nodeName) {
             stage("Checkout (${NODE_NAME})") {
-		// Checkout Tensor GeNN
+                // Checkout Tensor GeNN
                 echo "Checking out Tensor GeNN";
                 sh "rm -rf tensor_genn";
 		checkout scm
@@ -108,7 +108,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     virtualenv ${WORKSPACE}/venv
                     source ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
-                    pip install tensorflow>2.0 pytest pytest-cov
+                    pip install pytest pytest-cov
                 """
 	    }
 
@@ -152,6 +152,11 @@ for (b = 0; b < builderNodes.size(); b++) {
 
             buildStage("Running tests (${NODE_NAME})") {
                 dir("tensor_genn") {
+                    sh """
+                        source ${WORKSPACE}/venv/bin/activate
+                        pip install .
+                    """
+
 		    dir("tests") {
 			// Generate unique name for message
 			def messages_tests = "test_output_${NODE_NAME}";

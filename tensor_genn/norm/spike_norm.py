@@ -7,9 +7,9 @@ A. Sengupta, Y. Ye, R. Wang, C, Liu, and K. Roy. 2019. Going Deeper in Spiking N
 VGG and Residual Architectures. Frontiers in Neuroscience, 2019 (vol 13).
 '''
 
-class SpikeNorm():
-    def __init__(self, data, classify_time=500.0, classify_spikes=100):
-        self.data = data
+class SpikeNorm(object):
+    def __init__(self, norm_samples, classify_time=500.0, classify_spikes=100):
+        self.norm_samples = norm_samples
         self.classify_time = classify_time
         self.classify_spikes = classify_spikes
 
@@ -23,7 +23,7 @@ class SpikeNorm():
             neurons = g_model.neuron_populations[layer_name + '_nrn']
 
             # For each sample
-            for x in self.data:
+            for x in self.norm_samples:
 
                 # Reset state
                 tg_model.reset_state()

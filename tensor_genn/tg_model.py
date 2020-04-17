@@ -1,7 +1,16 @@
+from enum import Enum
 from math import ceil
 import numpy as np
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
+
+class InputType(Enum):
+    IF = 'if'
+    POISSON = 'poisson'
+    SPIKE = 'spike'
+
+    def __str__(self):
+        return self.value
 
 supported_layers = (
     tf.keras.layers.Dense,
@@ -10,13 +19,7 @@ supported_layers = (
     tf.keras.layers.Flatten,
 )
 
-supported_input_types = (
-    'if',
-    'poisson',
-    'spike',
-)
-
-class TGModel():
+class TGModel(object):
     def __init__(self):
         self.g_model = None
         self.tf_model = None
@@ -24,8 +27,9 @@ class TGModel():
         self.weight_vals = None
         self.weight_inds = None
 
-    def convert_tf_model(self, tf_model, dt=1.0, input_type='if', rate_factor=1.0, rng_seed=0):
+    def convert_tf_model(self, tf_model, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
         # Check model compatibility
+        input_type = InputType(input_type)
         if not isinstance(tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(tf_model)))
         for layer in tf_model.layers[:-1]:
@@ -36,8 +40,6 @@ class TGModel():
                     raise NotImplementedError('{} activation is not supported'.format(layer.activation))
                 if layer.use_bias == True:
                     raise NotImplementedError('bias tensors are not supported')
-        if input_type not in supported_input_types:
-            raise ValueError('{} is not a valid input type'.format(input_type))
 
         self.tf_model = tf_model
         self.layer_names = []
@@ -217,6 +219,7 @@ class TGModel():
             $(Vmem) = $(Vres);
             $(nSpk) += 1;
             ''',
+            is_auto_refractory_required=False,
         )
 
         if_init = {
@@ -239,6 +242,7 @@ class TGModel():
             reset_code='''
             $(Vmem) = $(Vres);
             ''',
+            is_auto_refractory_required=False,
         )
 
         if_input_init = {
@@ -260,6 +264,7 @@ class TGModel():
             reset_code='''
             $(rand) = 0.0;
             ''',
+            is_auto_refractory_required=False,
         )
 
         poisson_input_init = {
@@ -280,6 +285,7 @@ class TGModel():
             reset_code='''
             $(spike) = 0.0;
             ''',
+            is_auto_refractory_required=False,
         )
 
         spike_input_init = {
@@ -295,14 +301,14 @@ class TGModel():
 
         # Add input neurons
         n = np.prod(self.tf_model.input_shape[1:])
-        if input_type == 'if':
+        if input_type == InputType.IF:
             nrn_post = self.g_model.add_neuron_population('input_nrn', n, if_input_model, {}, if_input_init)
             nrn_post.set_extra_global_param('Vthr', 1.0)
             nrn_post.set_extra_global_param('Vres', 0.0)
-        elif input_type == 'poisson':
+        elif input_type == InputType.POISSON:
             nrn_post = self.g_model.add_neuron_population('input_nrn', n, poisson_input_model, {}, poisson_input_init)
             nrn_post.set_extra_global_param('rate_factor', rate_factor)
-        elif input_type == 'spike':
+        elif input_type == InputType.SPIKE:
             nrn_post = self.g_model.add_neuron_population('input_nrn', n, spike_input_model, {}, spike_input_init)
 
         # For each synapse population
@@ -334,8 +340,8 @@ class TGModel():
 
     def reset_state(self):
         self.g_model._slm.initialize()
-        self.g_model._slm.set_timestep(0)
-        self.g_model._slm.set_time(0.0)
+        self.g_model.timestep = 0
+        self.g_model.t = 0.0
 
     def set_inputs(self, x):
         nrn = self.g_model.neuron_populations['input_nrn']
@@ -348,10 +354,10 @@ class TGModel():
 
     def evaluate(self, x_data, y_data, classify_time=500.0, classify_spikes=100, save_samples=[]):
         assert x_data.shape[0] == y_data.shape[0]
-        n_correct = 0
 
-        spike_idx = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
-        spike_times = [[None] * len(self.g_model.neuron_populations)] * len(save_samples)
+        n_correct = 0
+        spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
+        spike_t = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
 
         # For each sample presentation
         for i, (x, y) in enumerate(zip(x_data, y_data)):
@@ -364,7 +370,6 @@ class TGModel():
 
             # Main simulation loop
             while self.g_model.t < classify_time:
-                t = self.g_model.t
 
                 # Step time
                 self.step_time()
@@ -376,14 +381,10 @@ class TGModel():
                     neurons = [self.g_model.neuron_populations[name] for name in names]
                     for j, nrn in enumerate(neurons):
                         self.g_model.pull_current_spikes_from_device(nrn.name)
-                        idx = nrn.current_spikes
-                        ts = np.ones(idx.shape) * t
-                        if spike_idx[k][j] is None:
-                            spike_idx[k][j] = np.copy(idx)
-                            spike_times[k][j] = ts
-                        else:
-                            spike_idx[k][j] = np.hstack((spike_idx[k][j], idx))
-                            spike_times[k][j] = np.hstack((spike_times[k][j], ts))
+                        indices = nrn.current_spikes
+                        times = np.ones(indices.shape) * self.g_model.t
+                        spike_i[k][j] = np.hstack((spike_i[k][j], indices))
+                        spike_t[k][j] = np.hstack((spike_t[k][j], times))
 
                 # Break simulation if we have enough output spikes.
                 output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
@@ -398,4 +399,4 @@ class TGModel():
 
         accuracy = (n_correct / len(x_data)) * 100.
 
-        return accuracy, spike_idx, spike_times
+        return accuracy, spike_i, spike_t
