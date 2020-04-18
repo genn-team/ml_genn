@@ -102,14 +102,14 @@ for (b = 0; b < builderNodes.size(); b++) {
 	    buildStage("Setup virtualenv (${NODE_NAME})") {
 		// Set up new virtualenv
 		echo "Creating virtualenv";
+                sh "rm -rf ${WORKSPACE}/venv";
+                sh "pip install virtualenv";
+                sh "virtualenv ${WORKSPACE}/venv";
 		sh """
-                    pip install virtualenv
-                    rm -rf ${WORKSPACE}/venv
-                    virtualenv ${WORKSPACE}/venv
                     source ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
                     pip install pytest pytest-cov
-                """
+                """;
 	    }
 
             buildStage("Installing PyGeNN (${NODE_NAME})") {
@@ -121,10 +121,10 @@ for (b = 0; b < builderNodes.size(); b++) {
 		dir("genn") {
 		    // Build dynamic LibGeNN
 		    echo "Building LibGeNN";
-		    def messages_libGeNN = "libgenn_build_${NODE_NAME}";
+		    def messages_libGeNN = "libgenn_${NODE_NAME}";
+                    sh "rm -f ${messages_libGeNN}";
 		    def commands_libGeNN = """
-                        rm -f ${messages_libGeNN}
-                        make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/ 1>\"${messages_libGeNN}\" 2>&1
+                        make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messages_libGeNN}\" 2>&1
                     """;
 		    def status_libGeNN = sh script:commands_libGeNN, returnStatus:true;
 		    if (status_libGeNN != 0) {
@@ -134,13 +134,12 @@ for (b = 0; b < builderNodes.size(); b++) {
 
 		    // Build PyGeNN module
 		    echo "Building and installing PyGeNN";
-		    def messages_PyGeNN = "pygenn_build_${NODE_NAME}";
+		    def messages_PyGeNN = "pygenn_${NODE_NAME}";
+                    sh "rm -f ${messages_PyGeNN}";
 		    def commands_PyGeNN = """
                         source ${WORKSPACE}/venv/bin/activate
-                        rm -f ${messages_PyGeNN}
-                        python setup.py clean --all
-                        python setup.py install 1>\"${messages_PyGeNN}\" 2>&1
-                        python setup.py install 1>\"${messages_PyGeNN}\" 2>&1
+                        python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
+                        python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
                     """;
 		    def status_PyGeNN = sh script:commands_PyGeNN, returnStatus:true;
 		    if (status_PyGeNN != 0) {
@@ -152,25 +151,26 @@ for (b = 0; b < builderNodes.size(); b++) {
 
             buildStage("Running tests (${NODE_NAME})") {
                 dir("tensor_genn") {
+                    // Install TensorGeNN
+                    echo "Installing TensorGeNN";
                     sh """
                         source ${WORKSPACE}/venv/bin/activate
                         pip install .
-                    """
+                    """;
 
 		    dir("tests") {
-			// Generate unique name for message
-			def messages_tests = "test_output_${NODE_NAME}";
-
-			// Run test suite
-			def commands_tests = """
+                        // Run TensorGeNN test suite
+			def messages_TensorGeNN = "tensorgenn_${NODE_NAME}";
+                        sh "rm -f ${messages_TensorGeNN}";
+			def commands_TensorGeNN = """
                             source ${WORKSPACE}/venv/bin/activate
-                            pytest -v 1>\"${messages_tests}\" 2>&1
+                            pytest -v  1>>\"${messages_TensorGeNN}\" 2>&1
                         """;
-			def status_tests = sh script:commands_tests, returnStatus:true;
-			if (status_tests != 0) {
+			def status_TensorGeNN = sh script:commands_TensorGeNN, returnStatus:true;
+			if (status_TensorGeNN != 0) {
 			    setBuildStatus("Running tests (${NODE_NAME})", "UNSTABLE");
 			}
-			archive messages_tests;
+			archive messages_TensorGeNN;
 		    }
 		}
 	    }
