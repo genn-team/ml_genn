@@ -154,8 +154,6 @@ for (b = 0; b < builderNodes.size(); b++) {
                 echo "Installing TensorGeNN";
                 sh """
                     . ${WORKSPACE}/venv/bin/activate
-                    pwd
-                    ls
                     pip install .
                 """;
 
@@ -165,7 +163,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     sh "rm -f ${messages_TensorGeNN}";
                     def commands_TensorGeNN = """
                         . ${WORKSPACE}/venv/bin/activate
-                        pytest -v  1>>\"${messages_TensorGeNN}\" 2>&1
+                        python -m pytest -v  1>>\"${messages_TensorGeNN}\" 2>&1
                     """;
                     def status_TensorGeNN = sh script:commands_TensorGeNN, returnStatus:true;
                     archive messages_TensorGeNN;
