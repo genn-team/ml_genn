@@ -155,6 +155,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     echo "Installing TensorGeNN";
                     sh """
                         . ${WORKSPACE}/venv/bin/activate
+                        pwd
                         pip install .
                     """;
 
