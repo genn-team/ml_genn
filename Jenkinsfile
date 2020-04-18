@@ -106,7 +106,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 sh "pip install virtualenv";
                 sh "virtualenv ${WORKSPACE}/venv";
 		sh """
-                    source ${WORKSPACE}/venv/bin/activate
+                    . ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
                     pip install numpy pytest pytest-cov
                 """;
@@ -137,7 +137,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		    def messages_PyGeNN = "pygenn_${NODE_NAME}";
                     sh "rm -f ${messages_PyGeNN}";
 		    def commands_PyGeNN = """
-                        source ${WORKSPACE}/venv/bin/activate
+                        . ${WORKSPACE}/venv/bin/activate
                         python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
                         python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
                     """;
@@ -154,7 +154,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     // Install TensorGeNN
                     echo "Installing TensorGeNN";
                     sh """
-                        source ${WORKSPACE}/venv/bin/activate
+                        . ${WORKSPACE}/venv/bin/activate
                         pip install .
                     """;
 
@@ -163,7 +163,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 			def messages_TensorGeNN = "tensorgenn_${NODE_NAME}";
                         sh "rm -f ${messages_TensorGeNN}";
 			def commands_TensorGeNN = """
-                            source ${WORKSPACE}/venv/bin/activate
+                            . ${WORKSPACE}/venv/bin/activate
                             pytest -v  1>>\"${messages_TensorGeNN}\" 2>&1
                         """;
 			def status_TensorGeNN = sh script:commands_TensorGeNN, returnStatus:true;
