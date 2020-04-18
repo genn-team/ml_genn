@@ -156,6 +156,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     sh """
                         . ${WORKSPACE}/venv/bin/activate
                         pwd
+                        ls
                         pip install .
                     """;
 
