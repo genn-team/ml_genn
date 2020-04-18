@@ -127,10 +127,10 @@ for (b = 0; b < builderNodes.size(); b++) {
                         make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messages_libGeNN}\" 2>&1
                     """;
 		    def status_libGeNN = sh script:commands_libGeNN, returnStatus:true;
+		    archive messages_libGeNN;
 		    if (status_libGeNN != 0) {
 			setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
 		    }
-		    archive messages_libGeNN;
 
 		    // Build PyGeNN module
 		    echo "Building and installing PyGeNN";
@@ -142,10 +142,10 @@ for (b = 0; b < builderNodes.size(); b++) {
                         python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
                     """;
 		    def status_PyGeNN = sh script:commands_PyGeNN, returnStatus:true;
+		    archive messages_PyGeNN;
 		    if (status_PyGeNN != 0) {
 			setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
 		    }
-		    archive messages_PyGeNN;
 		}
             }
 
@@ -167,10 +167,10 @@ for (b = 0; b < builderNodes.size(); b++) {
                             pytest -v  1>>\"${messages_TensorGeNN}\" 2>&1
                         """;
 			def status_TensorGeNN = sh script:commands_TensorGeNN, returnStatus:true;
+			archive messages_TensorGeNN;
 			if (status_TensorGeNN != 0) {
 			    setBuildStatus("Running tests (${NODE_NAME})", "UNSTABLE");
 			}
-			archive messages_TensorGeNN;
 		    }
 		}
 	    }
