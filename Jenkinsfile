@@ -52,10 +52,10 @@ for (node in jenkins.model.Jenkins.instance.nodes) {
     }
 }
 
-// Add master if it has any idle executors
-if (jenkins.model.Jenkins.instance.toComputer().countIdle() > 0) {
-    availableNodes["master"] = jenkins.model.Jenkins.instance.getLabelString().split() as Set
-}
+// // Add master if it has any idle executors
+// if (jenkins.model.Jenkins.instance.toComputer().countIdle() > 0) {
+//     availableNodes["master"] = jenkins.model.Jenkins.instance.getLabelString().split() as Set
+// }
 
 // Loop through the desired builds
 def builderNodes = []
@@ -108,7 +108,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		sh """
                     source ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
-                    pip install pytest pytest-cov
+                    pip install numpy pytest pytest-cov
                 """;
 	    }
 
