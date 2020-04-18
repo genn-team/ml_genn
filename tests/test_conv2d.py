@@ -4,10 +4,10 @@ import tensor_genn as tg
 
 
 def model_test_helper(tf_model, x):
-    # Assert TensorFlow model is correct
+    # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
-    # Assert Tensor GeNN model is correct
+    # Run Tensor GeNN model
     tg_model = tg.TGModel()
     tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
     tg_model.set_inputs(x[0, :, :, :])
@@ -15,67 +15,8 @@ def model_test_helper(tf_model, x):
     neurons = tg_model.g_model.neuron_populations['conv2d_nrn']
     tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem_peak')
     tg_y = neurons.vars['Vmem_peak'].view.reshape(tf_y.shape)
-    assert (tg_y == tf_y).all()
 
-
-def model_inputs():
-    # Format: [sample, row, col, channel]
-    x = np.empty((1, 12, 12, 2), dtype=np.float32)
-    x[0, :, :, 0] = [
-        [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-        [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
-        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-        [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-    ]
-    x[0, :, :, 1] = [
-        [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
-        [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
-        [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    ]
-    return x
-
-
-def model_kernels():
-    # Format: [row, col, in_channel, out_channel]
-    k = np.empty((3, 3, 2, 2), dtype=np.float32)
-    k[:, :, 0, 0] = [
-        [0, 0, 1],
-        [0, 1, 0],
-        [1, 0, 0],
-    ]
-    k[:, :, 1, 0] = [
-        [1, 1, 0],
-        [0, 0, 1],
-        [1, 1, 0],
-    ]
-    k[:, :, 0, 1] = [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-    ]
-    k[:, :, 1, 1] = [
-        [0, 1, 0],
-        [1, 0, 1],
-        [0, 1, 0],
-    ]
-    return k
+    assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
 
 
 def model_input_0():
@@ -93,6 +34,7 @@ def model_input_0():
         [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
         [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
     ], dtype=np.float32)
+
 
 def model_input_1():
     return np.array([
