@@ -103,8 +103,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		// Set up new virtualenv
 		echo "Creating virtualenv";
                 sh "rm -rf ${WORKSPACE}/venv";
-                sh "pip install virtualenv";
-                sh "virtualenv ${WORKSPACE}/venv";
+                sh "virtualenv -p /usr/bin/python3 ${WORKSPACE}/venv";
 		sh """
                     . ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
@@ -154,7 +153,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 echo "Installing TensorGeNN";
                 sh """
                     . ${WORKSPACE}/venv/bin/activate
-                    pip install -e .
+                    pip install .
                 """;
 
 		dir("tests") {

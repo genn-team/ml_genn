@@ -40,6 +40,7 @@ supported_layers = (
     tf.keras.layers.Conv2D,
     tf.keras.layers.AveragePooling2D,
     tf.keras.layers.Flatten,
+    tf.keras.layers.Dropout,
 )
 
 class TGModel(object):
@@ -59,7 +60,7 @@ class TGModel(object):
         self.weight_inds = None
 
 
-    def convert_tf_model(self, tf_model, dt=1.0, input_type=InputType.POISSON, rate_factor=1.0, rng_seed=0):
+    def convert_tf_model(self, tf_model, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
         """Convert a TensorFlow model into a GeNN model
 
         Args:
@@ -67,7 +68,7 @@ class TGModel(object):
 
         Keyword args:
         dt           --  model integration time step (default: 1.0)
-        input_type   --  type of input neurons (default: 'poisson')
+        input_type   --  type of input neurons (default: 'if')
         rate_factor  --  scale firing rate if input_type is 'poisson' (default: 1.0)
         rng_seed     --  GeNN RNG seed (default: 0, meaning choose a random seed)
         """
@@ -78,12 +79,12 @@ class TGModel(object):
             raise NotImplementedError('{} models not supported'.format(type(tf_model)))
         for layer in tf_model.layers[:-1]:
             if not isinstance(layer, supported_layers):
-                raise NotImplementedError('{} layers are not supported'.format(layer))
+                raise NotImplementedError('{} layers not supported'.format(layer))
             elif isinstance(layer, tf.keras.layers.Dense):
                 if layer.activation != tf.keras.activations.relu:
-                    raise NotImplementedError('{} activation is not supported'.format(layer.activation))
+                    raise NotImplementedError('{} activation not supported'.format(layer.activation))
                 if layer.use_bias == True:
-                    raise NotImplementedError('bias tensors are not supported')
+                    raise NotImplementedError('bias tensors not supported')
 
         self.tf_model = tf_model
         self.layer_names = []
@@ -97,10 +98,17 @@ class TGModel(object):
 
             # === Flatten Layers ===
             if isinstance(layer, tf.keras.layers.Flatten):
+                print('ignoring layer <{}>'.format(layer.name))
+                continue
+
+            # === Dropout Layers ===
+            if isinstance(layer, tf.keras.layers.Dropout):
+                print('ignoring layer <{}>'.format(layer.name))
                 continue
 
             # === Dense Layers ===
             elif isinstance(layer, tf.keras.layers.Dense):
+                print('creating GeNN weights for layer <{}>'.format(layer.name))
                 tf_w = layer.get_weights()[0]
                 g_w = tf_w.copy()
                 g_conn = np.ones(g_w.shape, dtype=np.bool)
@@ -108,6 +116,7 @@ class TGModel(object):
 
             # === Conv2D Layers ===
             elif isinstance(layer, tf.keras.layers.Conv2D):
+                print('creating GeNN weights for layer <{}>'.format(layer.name))
                 tf_w = layer.get_weights()[0]
                 g_w = np.zeros((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])))
                 g_conn = np.zeros(g_w.shape, dtype=np.bool)
@@ -162,6 +171,7 @@ class TGModel(object):
 
             # === AveragePooling2D Layers ===
             elif isinstance(layer, tf.keras.layers.AveragePooling2D):
+                print('defer weights for layer <{}>'.format(layer.name))
                 g_w = np.zeros((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])))
                 g_conn = np.zeros(g_w.shape, dtype=np.bool)
                 defer_weights = True
@@ -179,7 +189,7 @@ class TGModel(object):
                     stride_rows = range(0 - ph // 2, ih - ph // 2, sh)
                     stride_cols = range(0 - pw // 2, iw - pw // 2, sw)
 
-                # For each input -> output pool:
+                # For each channel (one-to-one input -> output channel):
                 for channel in range(ic):
                     g_pool_w = g_w[channel::ic, channel::ic]
                     g_pool_conn = g_conn[channel::ic, channel::ic]
@@ -206,10 +216,11 @@ class TGModel(object):
 
             # === Combine Deferred Weights ===
             if deferred_w is not None:
+                print('combining deferred weights with GeNN weights for layer <{}>'.format(layer.name))
                 new_w = np.empty((deferred_w.shape[0], g_w.shape[1]))
                 new_conn = np.empty(new_w.shape, dtype=np.bool)
 
-                # For each input -> output weight matrix:
+                # For each input -> output channel:
                 for in_channel in range(ic):
                     # Note to future devs: deferred_* indexing below assumes that the deferred
                     # weight matrix has an equal number of input and output channels, and maps

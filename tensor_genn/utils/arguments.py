@@ -7,7 +7,7 @@ def parse_arguments(model_description='Tensor GeNN model'):
     '''
     parser = argparse.ArgumentParser(description=model_description)
     parser.add_argument('--dt', type=float, default=1.0)
-    parser.add_argument('--input-type', type=InputType, default=InputType.POISSON, choices=list(InputType))
+    parser.add_argument('--input-type', type=InputType, default=InputType.IF, choices=list(InputType))
     parser.add_argument('--rate-factor', type=float, default=1.0)
     parser.add_argument('--rng-seed', type=int, default=0)
     parser.add_argument('--norm-method', type=str, default=None, choices=['data-norm', 'spike-norm'])
