@@ -119,13 +119,84 @@ def test_averagepooling2d_chan_2_stride_3_3_padding_same():
     model_compare_tf_and_tg(tf_model, x)
 
 
+def test_averagepooling2d_weights_chan_1_stride_2_2_padding_valid():
+    '''
+    Test AveragePooling2D weight matrix with 1 input channel,
+    a stride of (2, 2) and valid padding.
+    '''
 
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.AveragePooling2D(2, name='averagepooling2d', padding='valid', strides=(2, 2), input_shape=(5, 5, 1)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(4, name='dense', use_bias=False),
+    ], name='test_averagepooling2d_weights_chan_1_stride_2_2_padding_valid')
+    tf_model.set_weights([np.identity(4)])
+
+    # Convert model
+    tg_model = tg.TGModel()
+    tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
+
+    # Check weight matrix
+    assert len(tg_model.weight_vals) == 1
+    w_vals = tg_model.weight_vals[0]
+    assert w_vals.shape == (25, 4)
+
+    assert len(tg_model.weight_conn) == 1
+    w_conn = tg_model.weight_conn[0]
+    assert w_conn.shape == (25, 4)
+
+    target_w_vals = np.array([
+        # input row 0
+        [0.25, 0.00, 0.00, 0.00],
+        [0.25, 0.00, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 1
+        [0.25, 0.00, 0.00, 0.00],
+        [0.25, 0.00, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 2
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 3
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 4
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+    ], dtype=w_vals.dtype)
+
+    assert (w_vals == target_w_vals).all()
+
+
+    target_w_conn = target_w_vals != 0
+    print('w_conn')
+    print(w_conn)
+    print('target_w_conn')
+    print(target_w_conn)
+
+
+    #target_w_conn = target_w_vals != 0
+    assert (w_conn == target_w_conn).all()
 
 
 def test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid():
     '''
     Test AveragePooling2D weight matrix with 2 input channels,
-    a stride of (3, 3) and valid padding.
+    a stride of (2, 2) and valid padding.
     '''
 
     # Create TensorFlow model
@@ -142,13 +213,12 @@ def test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid():
 
     # Check weight matrix
     assert len(tg_model.weight_vals) == 1
-    assert len(tg_model.weight_inds) == 1
-
     w_vals = tg_model.weight_vals[0]
     assert w_vals.shape == (50, 8)
 
-    w_inds = tg_model.weight_inds[0]
-    assert w_inds == None # dense weight matrix
+    assert len(tg_model.weight_conn) == 1
+    w_conn = tg_model.weight_conn[0]
+    assert w_conn.shape == (50, 8)
 
     target_channel_w_vals = np.array([
         # input row 0
@@ -189,8 +259,20 @@ def test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid():
     assert (w_vals == target_w_vals).all()
 
 
+    target_w_conn = target_w_vals != 0
+    print('w_conn')
+    print(w_conn)
+    print('target_w_conn')
+    print(target_w_conn)
+
+
+    #target_w_conn = target_w_vals != 0
+    assert (w_conn == target_w_conn).all()
+
+
 if __name__ == '__main__':
-    test_averagepooling2d_chan_1_stride_3_3_padding_valid()
-    test_averagepooling2d_chan_2_stride_3_3_padding_valid()
-    test_averagepooling2d_chan_2_stride_3_3_padding_same()
-    test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid()
+    #test_averagepooling2d_chan_1_stride_3_3_padding_valid()
+    #test_averagepooling2d_chan_2_stride_3_3_padding_valid()
+    #test_averagepooling2d_chan_2_stride_3_3_padding_same()
+    test_averagepooling2d_weights_chan_1_stride_2_2_padding_valid()
+    #test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid()
