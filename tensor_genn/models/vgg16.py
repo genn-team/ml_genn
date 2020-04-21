@@ -15,33 +15,33 @@ class VGG16(TGModel):
         # Define TensorFlow model
         tf_model = models.Sequential([
             layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:]),
-            layers.Dropout(0.5),
+            layers.Dropout(0.3),
             layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False),
             layers.AveragePooling2D(2),
 
             layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False),
             layers.AveragePooling2D(2),
 
             layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False),
             layers.AveragePooling2D(2),
 
             layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
             layers.AveragePooling2D(2),
 
             layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
-            layers.Dropout(0.5),
+            layers.Dropout(0.4),
             layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
             layers.AveragePooling2D(2),
 
@@ -55,8 +55,16 @@ class VGG16(TGModel):
 
         # Train and convert model
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, epochs=3)
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
         self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
+
+        # import pickle
+        # tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        # with open('vgg16_weights.dat', 'rb') as weights_file:
+        #     tf_model.set_weights(pickle.load(weights_file))
+        # tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
+        # with open('vgg16_weights.dat', 'wb') as weights_file:
+        #     pickle.dump(tf_model.get_weights(), weights_file)
 
 
 if __name__ == '__main__':
@@ -77,9 +85,9 @@ if __name__ == '__main__':
     # Retrieve and normalise CIFAR-10 dataset
     (x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()
     x_train = x_train[:args.n_train_samples] / 255.0
-    y_train = y_train[:args.n_train_samples]
+    y_train = y_train[:args.n_train_samples, 0]
     x_test = x_test[:args.n_test_samples] / 255.0
-    y_test = y_test[:args.n_test_samples]
+    y_test = y_test[:args.n_test_samples, 0]
     x_norm = x_train[:args.n_norm_samples]
 
     # Create, normalise and evaluate TensorGeNN model
