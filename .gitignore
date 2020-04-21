@@ -1,4 +1,2 @@
-.vscode
-.idea
-g_model_CODE
-__pycache__/
+*_CODE
+__pycache__

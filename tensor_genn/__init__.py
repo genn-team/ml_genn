@@ -1,1 +1,2 @@
-from .base import convert_model
+from .tg_model import TGModel
+from .tg_model import InputType
