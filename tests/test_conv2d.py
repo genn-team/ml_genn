@@ -3,11 +3,11 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_test_helper(tf_model, x):
+def model_compare_tf_and_tg(tf_model, x):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
-    # Run Tensor GeNN model
+    # Run TensorGeNN model
     tg_model = tg.TGModel()
     tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
     tg_model.set_inputs(x[0, :, :, :])
@@ -17,6 +17,8 @@ def model_test_helper(tf_model, x):
     tg_y = neurons.vars['Vmem_peak'].view.reshape(tf_y.shape)
 
     assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
+
+    return tg_model
 
 
 def model_input_0():
@@ -106,8 +108,8 @@ def test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid():
     ], name='test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
@@ -133,8 +135,8 @@ def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
     ], name='test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
@@ -159,8 +161,8 @@ def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
     ], name='test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
@@ -188,8 +190,8 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
     ], name='test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid')
     tf_model.set_weights([k])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
@@ -217,8 +219,8 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     ], name='test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same')
     tf_model.set_weights([k])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 if __name__ == '__main__':

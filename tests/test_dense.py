@@ -3,11 +3,11 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_test_helper(tf_model, x):
+def model_compare_tf_and_tg(tf_model, x):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
-    # Run Tensor GeNN model
+    # Run TensorGeNN model
     tg_model = tg.TGModel()
     tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
     tg_model.set_inputs(x[0, :])
@@ -17,6 +17,8 @@ def model_test_helper(tf_model, x):
     tg_y = neurons.vars['Vmem_peak'].view.reshape(tf_y.shape)
 
     assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
+
+    return tg_model
 
 
 def model_input_all_on():
@@ -62,8 +64,8 @@ def test_dense_all_on():
     ], name='test_dense_all_on')
     tf_model.set_weights([model_weights_0()])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 def test_dense_some_on():
@@ -81,8 +83,8 @@ def test_dense_some_on():
     ], name='test_dense_some_on')
     tf_model.set_weights([model_weights_0()])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 def test_dense_all_off():
@@ -100,8 +102,8 @@ def test_dense_all_off():
     ], name='test_dense_all_off')
     tf_model.set_weights([model_weights_0()])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
 if __name__ == '__main__':

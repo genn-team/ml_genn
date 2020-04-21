@@ -3,11 +3,11 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_test_helper(tf_model, x):
+def model_compare_tf_and_tg(tf_model, x):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
-    # Run Tensor GeNN model
+    # Run TensorGeNN model
     tg_model = tg.TGModel()
     tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
     tg_model.set_inputs(x[0, :, :, :])
@@ -17,6 +17,8 @@ def model_test_helper(tf_model, x):
     tg_y = neurons.vars['Vmem_peak'].view.reshape(tf_y.shape)
 
     assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
+
+    return tg_model
 
 
 def model_input_0():
@@ -49,7 +51,7 @@ def model_input_1():
     ], dtype=np.float32)
 
 
-def test_averagepooling2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
+def test_averagepooling2d_chan_1_stride_3_3_padding_valid():
     '''
     Test AveragePooling2D with 1 input channel, 1 output channel,
     a stride of (3, 3) and valid padding.
@@ -64,14 +66,14 @@ def test_averagepooling2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
         tf.keras.layers.AveragePooling2D(3, name='averagepooling2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 1)),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(9, name='dense', use_bias=False),
-    ], name='test_averagepooling2d_in_chan_1_out_chan_1_stride_3_3_padding_valid')
+    ], name='test_averagepooling2d_chan_1_stride_3_3_padding_valid')
     tf_model.set_weights([np.identity(9)])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
-def test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
+def test_averagepooling2d_chan_2_stride_3_3_padding_valid():
     '''
     Test AveragePooling2D with 2 input channels, 2 output channels,
     a stride of (3, 3) and valid padding.
@@ -87,14 +89,14 @@ def test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
         tf.keras.layers.AveragePooling2D(3, name='averagepooling2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(18, name='dense', use_bias=False),
-    ], name='test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_valid')
+    ], name='test_averagepooling2d_chan_2_stride_3_3_padding_valid')
     tf_model.set_weights([np.identity(18)])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
 
 
-def test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
+def test_averagepooling2d_chan_2_stride_3_3_padding_same():
     '''
     Test AveragePooling2D with 2 input channels, 2 output channels,
     a stride of (3, 3) and same padding.
@@ -110,14 +112,85 @@ def test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
         tf.keras.layers.AveragePooling2D(3, name='averagepooling2d', padding='same', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(32, name='dense', use_bias=False),
-    ], name='test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_same')
+    ], name='test_averagepooling2d_chan_2_stride_3_3_padding_same')
     tf_model.set_weights([np.identity(32)])
 
-    # Test model
-    model_test_helper(tf_model, x)
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
+
+
+
+
+
+def test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid():
+    '''
+    Test AveragePooling2D weight matrix with 2 input channels,
+    a stride of (3, 3) and valid padding.
+    '''
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.AveragePooling2D(2, name='averagepooling2d', padding='valid', strides=(2, 2), input_shape=(5, 5, 2)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(8, name='dense', use_bias=False),
+    ], name='test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid')
+    tf_model.set_weights([np.identity(8)])
+
+    # Convert model
+    tg_model = tg.TGModel()
+    tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
+
+    # Check weight matrix
+    assert len(tg_model.weight_vals) == 1
+    assert len(tg_model.weight_inds) == 1
+
+    w_vals = tg_model.weight_vals[0]
+    assert w_vals.shape == (50, 8)
+
+    w_inds = tg_model.weight_inds[0]
+    assert w_inds == None # dense weight matrix
+
+    target_channel_w_vals = np.array([
+        # input row 0
+        [0.25, 0.00, 0.00, 0.00],
+        [0.25, 0.00, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 1
+        [0.25, 0.00, 0.00, 0.00],
+        [0.25, 0.00, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.25, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 2
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 3
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.25, 0.00],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.25],
+        [0.00, 0.00, 0.00, 0.00],
+        # input row 4
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+        [0.00, 0.00, 0.00, 0.00],
+    ], dtype=w_vals.dtype)
+
+    target_w_vals = np.zeros((50, 8), dtype=w_vals.dtype)
+    target_w_vals[0::2, 0::2] = target_channel_w_vals # one-to-one in/out channel 0
+    target_w_vals[1::2, 1::2] = target_channel_w_vals # one-to-one in/out channel 1
+    assert (w_vals == target_w_vals).all()
 
 
 if __name__ == '__main__':
-    test_averagepooling2d_in_chan_1_out_chan_1_stride_3_3_padding_valid()
-    test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_valid()
-    test_averagepooling2d_in_chan_2_out_chan_2_stride_3_3_padding_same()
+    test_averagepooling2d_chan_1_stride_3_3_padding_valid()
+    test_averagepooling2d_chan_2_stride_3_3_padding_valid()
+    test_averagepooling2d_chan_2_stride_3_3_padding_same()
+    test_averagepooling2d_weights_chan_2_stride_2_2_padding_valid()

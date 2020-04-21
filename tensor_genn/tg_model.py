@@ -91,7 +91,6 @@ class TGModel(object):
         self.weight_vals = []
         self.weight_inds = []
         deferred_w = None
-        deferred_conn = None
 
         # For each TensorFlow model layer:
         for layer in self.tf_model.layers:
@@ -217,39 +216,34 @@ class TGModel(object):
             # === Combine Deferred Weights ===
             if deferred_w is not None:
                 print('combining deferred weights with GeNN weights for layer <{}>'.format(layer.name))
-                new_w = np.empty((deferred_w.shape[0], g_w.shape[1]))
-                new_conn = np.empty(new_w.shape, dtype=np.bool)
+                new_w = np.zeros((deferred_w.shape[0], g_w.shape[1]))
 
-                # For each input -> output channel:
+                # For each input channel:
                 for in_channel in range(ic):
-                    # Note to future devs: deferred_* indexing below assumes that the deferred
-                    # weight matrix has an equal number of input and output channels, and maps
-                    # input channel i one-to-one to output channel i, for all i in [0, ic).
+                    # Note: deferred_w indexing below assumes that the deferred weight
+                    # matrix maps input channel i one-to-one to output channel i, for all
+                    # i in [0, ic). This should always be true.
                     deferred_channel_w = deferred_w[in_channel::ic, in_channel::ic]
-                    deferred_channel_conn = deferred_conn[in_channel::ic, in_channel::ic]
+
+                    # For each output channel:
                     for out_channel in range(oc):
+                        # Get an input -> output channel view in g_w and new_w.
                         g_channel_w = g_w[in_channel::ic, out_channel::oc]
-                        g_channel_conn = g_conn[in_channel::ic, out_channel::oc]
                         new_channel_w = new_w[in_channel::ic, out_channel::oc]
-                        new_channel_conn = new_conn[in_channel::ic, out_channel::oc]
 
                         # Set weights to dot product of deferred and new weights.
                         new_channel_w[:] = np.dot(deferred_channel_w, g_channel_w)
-                        new_channel_conn[:] = np.dot(deferred_channel_conn, g_channel_conn)
 
                 # Update weights.
                 g_w = new_w
-                g_conn = new_conn
 
             # === Append Weights to Model ===
             if defer_weights:
                 # Defer weights to next layer.
                 deferred_w = g_w
-                deferred_conn = g_conn
             else:
                 # Append weights for this layer.
                 deferred_w = None
-                deferred_conn = None
                 self.layer_names.append(layer.name)
                 self.weight_vals.append(g_w)
                 if g_conn.all():
