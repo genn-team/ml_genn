@@ -21,11 +21,12 @@ Example:
         tensorgenn_model.evaluate(test_data, test_labels)
 """
 
-from enum import Enum
-from math import ceil
 import numpy as np
 import tensorflow as tf
 from pygenn import genn_model, genn_wrapper
+from math import ceil
+from enum import Enum
+from tqdm import trange
 
 class InputType(Enum):
     IF = 'if'
@@ -430,18 +431,20 @@ class TGModel(object):
 
         assert x_data.shape[0] == y_data.shape[0]
 
-        n_correct = 0
         spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
         spike_t = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
+        n_samples = x_data.shape[0]
+        n_correct = 0
 
         # For each sample presentation
-        for i, (x, y) in enumerate(zip(x_data, y_data)):
+        progress = trange(n_samples)
+        for i in progress:
 
             # Reset state
             self.reset_state()
 
             # Set inputs
-            self.set_inputs(x)
+            self.set_inputs(x_data[i])
 
             # Main simulation loop
             while self.g_model.t < classify_time:
@@ -470,8 +473,8 @@ class TGModel(object):
             # After simulation
             output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
             self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-            n_correct += output_neurons.vars['nSpk'].view.argmax() == y
-
-        accuracy = (n_correct / len(x_data)) * 100.
+            n_correct += output_neurons.vars['nSpk'].view.argmax() == y_data[i]
+            accuracy = (n_correct / (i + 1)) * 100
+            progress.set_postfix_str('accuracy: {:2.2f}'.format(accuracy))
 
         return accuracy, spike_i, spike_t

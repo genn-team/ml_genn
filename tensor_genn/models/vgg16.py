@@ -53,18 +53,19 @@ class VGG16(TGModel):
             layers.Dense(y_train.shape[0], activation="softmax", use_bias=False),
         ], name='vgg16')
 
-        # Train and convert model
-        tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
-        self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
-
-        # import pickle
+        # # Train and convert model
         # tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        # tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
+        # self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
+
+        import pickle
+        tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         # with open('vgg16_weights.dat', 'rb') as weights_file:
         #     tf_model.set_weights(pickle.load(weights_file))
-        # tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
-        # with open('vgg16_weights.dat', 'wb') as weights_file:
-        #     pickle.dump(tf_model.get_weights(), weights_file)
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
+        with open('vgg16_weights.dat', 'wb') as weights_file:
+            pickle.dump(tf_model.get_weights(), weights_file)
+        self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
 
 
 if __name__ == '__main__':
