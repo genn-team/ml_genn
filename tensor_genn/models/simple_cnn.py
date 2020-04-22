@@ -57,7 +57,7 @@ if __name__ == '__main__':
         norm = DataNorm(x_norm, batch_size=None)
         norm.normalize(tg_model)
     elif args.norm_method == 'spike-norm':
-        norm = SpikeNorm(x_norm, classify_time=args.classify_time, classify_spikes=args.classify_spikes)
+        norm = SpikeNorm(x_norm, classify_time=args.classify_time)
         norm.normalize(tg_model)
     acc, spk_i, spk_t = tg_model.evaluate(x_test, y_test,
                                           classify_time=args.classify_time,

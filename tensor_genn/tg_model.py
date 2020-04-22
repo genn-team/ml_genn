@@ -21,8 +21,8 @@ Example:
         tensorgenn_model.evaluate(test_data, test_labels)
 """
 
-import numpy as np
 import tensorflow as tf
+import numpy as np
 from pygenn import genn_model, genn_wrapper
 from math import ceil
 from enum import Enum
