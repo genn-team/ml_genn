@@ -440,10 +440,8 @@ class TGModel(object):
         progress = trange(n_samples)
         for i in progress:
 
-            # Reset state
+            # Set new input
             self.reset_state()
-
-            # Set inputs
             self.set_inputs(x_data[i])
 
             # Main simulation loop
@@ -465,10 +463,11 @@ class TGModel(object):
                         spike_t[k][j] = np.hstack((spike_t[k][j], times))
 
                 # Break simulation if we have enough output spikes.
-                output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
-                self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-                if output_neurons.vars['nSpk'].view.sum() >= classify_spikes:
-                    break
+                if classify_spikes is not None:
+                    output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
+                    self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
+                    if output_neurons.vars['nSpk'].view.sum() >= classify_spikes:
+                        break
 
             # After simulation
             output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']

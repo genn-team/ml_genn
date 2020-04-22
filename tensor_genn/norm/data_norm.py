@@ -1,4 +1,3 @@
-from math import ceil
 import numpy as np 
 import tensorflow.keras.backend as K
 
@@ -17,7 +16,7 @@ class DataNorm(object):
             self.batch_size = batch_size
 
     def normalize(self, tg_model):
-        print('Data Norm')
+        print('Data-Norm')
         tf_model = tg_model.tf_model
         g_model = tg_model.g_model
 
