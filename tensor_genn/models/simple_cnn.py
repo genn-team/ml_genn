@@ -3,6 +3,7 @@ from tensorflow.keras import models, layers, datasets
 from tensor_genn import TGModel, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
+import numpy as np
 
 class SimpleCNN(TGModel):
     def __init__(self, x_train, y_train, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     y_train = y_train[:args.n_train_samples]
     x_test = x_test[:args.n_test_samples].reshape((-1, 28, 28, 1)) / 255.0
     y_test = y_test[:args.n_test_samples]
-    x_norm = x_train[:args.n_norm_samples]
+    x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
     # # Retrieve and normalise CIFAR-10 dataset
     # (x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()
@@ -47,7 +48,7 @@ if __name__ == '__main__':
     # y_train = y_train[:args.n_train_samples]
     # x_test = x_test[:args.n_test_samples] / 255.0
     # y_test = y_test[:args.n_test_samples]
-    # x_norm = x_train[:args.n_norm_samples]
+    # x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
     # Create, normalise and evaluate TensorGeNN model
     tg_model = SimpleCNN(x_train, y_train, dt=args.dt, input_type=args.input_type,
