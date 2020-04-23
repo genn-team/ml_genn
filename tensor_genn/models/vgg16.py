@@ -4,6 +4,7 @@ from tensor_genn import TGModel, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
 import numpy as np
+import pickle
 
 class VGG16(TGModel):
     def __init__(self, x_train, y_train, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
@@ -54,19 +55,15 @@ class VGG16(TGModel):
             layers.Dense(y_train.shape[0], activation="softmax", use_bias=False),
         ], name='vgg16')
 
-        # Train and convert model
+        # # Train and convert model
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
-        self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
-
-        # import pickle
-        # tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         # with open('vgg16_weights.pickle', 'rb') as weights_file:
         #     tf_model.set_weights(pickle.load(weights_file))
-        # tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
         # with open('vgg16_weights.pickle', 'wb') as weights_file:
         #     pickle.dump(tf_model.get_weights(), weights_file)
-        # self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
+        self.convert_tf_model(tf_model)
+        self.compile(dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
 
 
 if __name__ == '__main__':
@@ -96,7 +93,6 @@ if __name__ == '__main__':
     tg_model = VGG16(x_train, y_train, dt=args.dt, input_type=args.input_type,
                      rate_factor=args.rate_factor, rng_seed=args.rng_seed)
     tg_model.tf_model.evaluate(x_test, y_test)
-
     if args.norm_method == 'data-norm':
         norm = DataNorm(x_norm, batch_size=None)
         norm.normalize(tg_model)

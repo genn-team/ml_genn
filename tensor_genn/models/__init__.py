@@ -1,2 +1,2 @@
-from .simple_cnn import SimpleCNN
-from .vgg16 import VGG16
+from tensor_genn.models.simple_cnn import SimpleCNN
+from tensor_genn.models.vgg16 import VGG16

@@ -24,7 +24,8 @@ class SimpleCNN(TGModel):
         # Train and convert model
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         tf_model.fit(x_train, y_train, epochs=10)
-        self.convert_tf_model(tf_model, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
+        self.convert_tf_model(tf_model)
+        self.compile(dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@
 This module provides TGModel class to convert TensorFlow models into GeNN
 models, and provides helper functions for operating the resulting GeNN model.
 
-A ``TGModel`` object requires a pre-trained TensorFlow model to function.
+A ``TGModel`` object can use a pre-trained TensorFlow model to function.
 Such a model can be provided by calling the ``convert_tf_model`` method
 with the TensorFlow model and optional parameters.
 
@@ -13,20 +13,23 @@ Example:
 
         from tensor_genn import TGModel
 
-        # load data and train TensorFlow model
-        ...
-
         tensorgenn_model = TGmodel()
-        tensorgenn_model.convert_tf_model(tensorflow_model
+        tensorgenn_model.convert_tf_model(tensorflow_model)
+        tensorgenn_model.compile()
         tensorgenn_model.evaluate(test_data, test_labels)
 """
 
-import tensorflow as tf
 import numpy as np
-from pygenn import genn_model, genn_wrapper
+import tensorflow as tf
 from math import ceil
 from enum import Enum
 from tqdm import trange
+from pygenn import genn_model, genn_wrapper
+
+from tensor_genn.genn_models import if_model, if_init
+from tensor_genn.genn_models import if_input_model, if_input_init
+from tensor_genn.genn_models import poisson_input_model, poisson_input_init
+from tensor_genn.genn_models import spike_input_model, spike_input_init
 
 class InputType(Enum):
     IF = 'if'
@@ -51,31 +54,25 @@ class TGModel(object):
     and provides an interface for manipulating converted models.
     """
 
-    def __init__(self):
+    def __init__(self, name='tg_model'):
         """Initialise a TensorGeNN model"""
 
-        self.g_model = None
         self.tf_model = None
+        self.name = name
+        self.g_model = None
         self.layer_names = None
         self.weight_vals = None
         self.weight_conn = None
 
 
-    def convert_tf_model(self, tf_model, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
-        """Convert a TensorFlow model into a GeNN model
+    def convert_tf_model(self, tf_model):
+        """Convert from a TensorFlow model
 
         Args:
-        tf_model     --  TensorFlow model to be converted
-
-        Keyword args:
-        dt           --  model integration time step (default: 1.0)
-        input_type   --  type of input neurons (default: 'if')
-        rate_factor  --  scale firing rate if input_type is 'poisson' (default: 1.0)
-        rng_seed     --  GeNN RNG seed (default: 0, meaning choose a random seed)
+        tf_model  --  TensorFlow model to be converted
         """
 
         # Check model compatibility
-        input_type = InputType(input_type)
         if not isinstance(tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(tf_model)))
         for layer in tf_model.layers[:-1]:
@@ -88,6 +85,7 @@ class TGModel(object):
                     raise NotImplementedError('bias tensors not supported')
 
         self.tf_model = tf_model
+        self.name = tf_model.name
         self.layer_names = []
         self.weight_vals = []
         self.weight_conn = []
@@ -95,7 +93,7 @@ class TGModel(object):
         deferred_conn = None
 
         # For each TensorFlow model layer:
-        for layer in self.tf_model.layers:
+        for layer in tf_model.layers:
 
             # === Flatten Layers ===
             if isinstance(layer, tf.keras.layers.Flatten):
@@ -240,7 +238,7 @@ class TGModel(object):
                 g_vals = new_vals
                 g_conn = new_conn
 
-            # === Append Weights to Model ===
+            # === Append Weights ===
             if defer_weights:
                 # Defer weights to next layer.
                 deferred_vals = g_vals
@@ -254,89 +252,24 @@ class TGModel(object):
                 deferred_conn = None
 
 
-        # === Define IF neuron class ===
-        if_model = genn_model.create_custom_neuron_class(
-            'if_model',
-            var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int')],
-            extra_global_params=[('Vthr', 'scalar')],
-            sim_code='''
-            $(Vmem) += $(Isyn) * DT;
-            $(Vmem_peak) = $(Vmem);
-            ''',
-            threshold_condition_code='''
-            $(Vmem) >= $(Vthr)
-            ''',
-            reset_code='''
-            $(Vmem) = 0.0;
-            $(nSpk) += 1;
-            ''',
-            is_auto_refractory_required=False,
-        )
+    def compile(self, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
+        """Compile this TensorGeNN model into a GeNN model
 
-        if_init = {
-            'Vmem': 0.0,
-            'Vmem_peak': 0.0,
-            'nSpk': 0,
-        }
-
-        # === Define IF input neuron class ===
-        if_input_model = genn_model.create_custom_neuron_class(
-            'if_input_model',
-            var_name_types=[('input', 'scalar'), ('Vmem', 'scalar')],
-            sim_code='''
-            $(Vmem) += $(input) * DT;
-            ''',
-            threshold_condition_code='''
-            $(Vmem) >= 1.0
-            ''',
-            reset_code='''
-            $(Vmem) = 0.0;
-            ''',
-            is_auto_refractory_required=False,
-        )
-
-        if_input_init = {
-            'input': 0.0,
-            'Vmem': 0.0,
-        }
-
-        # === Define Poisson input neuron class ===
-        poisson_input_model = genn_model.create_custom_neuron_class(
-            'poisson_input_model',
-            var_name_types=[('input', 'scalar')],
-            param_names=['rate_factor'],
-            threshold_condition_code='''
-            $(gennrand_uniform) >= exp(-$(input) * $(rate_factor) * DT)
-            ''',
-            is_auto_refractory_required=False,
-        )
-
-        poisson_input_init = {
-            'input': 0.0,
-        }
-
-        # === Define Spike input neuron class ===
-        spike_input_model = genn_model.create_custom_neuron_class(
-            'spike_input_model',
-            var_name_types=[('input', 'scalar')],
-            threshold_condition_code='''
-            $(input)
-            ''',
-            is_auto_refractory_required=False,
-        )
-
-        spike_input_init = {
-            'input': 0.0,
-        }
-
+        Keyword args:
+        dt           --  model integration time step (default: 1.0)
+        input_type   --  type of input neurons (default: 'if')
+        rate_factor  --  scale firing rate if input_type is 'poisson' (default: 1.0)
+        rng_seed     --  GeNN RNG seed (default: 0, meaning choose a random seed)
+        """
 
         # Define GeNN model
-        self.g_model = genn_model.GeNNModel('float', self.tf_model.name)
+        self.g_model = genn_model.GeNNModel('float', self.name)
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
 
         # Add input neurons
-        n = np.prod(self.tf_model.input_shape[1:])
+        input_type = InputType(input_type)
+        n = np.prod(self.weight_vals[0].shape[0])
         if input_type == InputType.IF:
             nrn_post = self.g_model.add_neuron_population(
                 'input_nrn', n, if_input_model, {}, if_input_init)

@@ -1,2 +1,1 @@
-from .tg_model import TGModel
-from .tg_model import InputType
+from tensor_genn.tg_model import TGModel, InputType

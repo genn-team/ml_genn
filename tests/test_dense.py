@@ -9,7 +9,8 @@ def model_compare_tf_and_tg(tf_model, x):
 
     # Run TensorGeNN model
     tg_model = tg.TGModel()
-    tg_model.convert_tf_model(tf_model, dt=1.0, input_type=tg.InputType.SPIKE)
+    tg_model.convert_tf_model(tf_model)
+    tg_model.compile(dt=1.0, input_type=tg.InputType.SPIKE)
     tg_model.set_inputs(x[0, :])
     tg_model.step_time(2)
     neurons = tg_model.g_model.neuron_populations['dense_nrn']
