@@ -133,8 +133,9 @@ def test_averagepooling2d_merge_dense_chan_1_stride_2_2_padding_valid():
     ], name='test_averagepooling2d_merge_dense_chan_1_stride_2_2_padding_valid')
 
     # Prepare downstream layer
-    dense_w_vals = np.identity(4)
-    dense_w_conn = np.ones((4, 4))
+    #dense_w_vals = np.identity(4)
+    dense_w_vals = np.random.randn(4, 4)
+    dense_w_conn = np.ones((4, 4), dtype=np.bool)
     tf_model.set_weights([dense_w_vals])
 
     # Convert model
@@ -150,7 +151,7 @@ def test_averagepooling2d_merge_dense_chan_1_stride_2_2_padding_valid():
     w_conn = tg_model.weight_conn[0]
     assert w_conn.shape == (25, 4)
 
-    target_w_vals = np.array([
+    deferred_w_vals = np.array([
         # input row 0
         [0.25, 0.00, 0.00, 0.00],
         [0.25, 0.00, 0.00, 0.00],
@@ -183,18 +184,19 @@ def test_averagepooling2d_merge_dense_chan_1_stride_2_2_padding_valid():
         [0.00, 0.00, 0.00, 0.00],
     ], dtype=w_vals.dtype)
 
-    #print('w_vals')
-    #print(w_vals)
-    #print('target_w_vals')
-    #print(target_w_vals)
-    assert (w_vals == target_w_vals).all()
+    target_w_vals = np.dot(deferred_w_vals, dense_w_vals)
+    # print('w_vals')
+    # print(w_vals)
+    # print('target_w_vals')
+    # print(target_w_vals)
+    assert np.allclose(w_vals, target_w_vals, rtol=0.0, atol=1.0e-5)
 
-    target_w_conn = target_w_vals != 0
-    target_w_conn = np.dot(target_w_conn, dense_w_conn)
-    #print('w_conn')
-    #print(w_conn)
-    #print('target_w_conn')
-    #print(target_w_conn)
+    deferred_w_conn = np.array(deferred_w_vals != 0)
+    target_w_conn = np.dot(deferred_w_conn, dense_w_conn)
+    # print('w_conn')
+    # print(w_conn)
+    # print('target_w_conn')
+    # print(target_w_conn)
     assert (w_conn == target_w_conn).all()
 
 
@@ -212,8 +214,9 @@ def test_averagepooling2d_merge_dense_chan_2_stride_2_2_padding_valid():
     ], name='test_averagepooling2d_merge_dense_chan_2_stride_2_2_padding_valid')
 
     # Prepare downstream layer
-    dense_w_vals = np.identity(8)
-    dense_w_conn = np.ones((8, 8))
+    #dense_w_vals = np.identity(8)
+    dense_w_vals = np.random.randn(8, 8)
+    dense_w_conn = np.ones((8, 8), dtype=np.bool)
     tf_model.set_weights([dense_w_vals])
 
     # Convert model
@@ -229,7 +232,7 @@ def test_averagepooling2d_merge_dense_chan_2_stride_2_2_padding_valid():
     w_conn = tg_model.weight_conn[0]
     assert w_conn.shape == (50, 8)
 
-    target_channel_w_vals = np.array([
+    deferred_channel_w_vals = np.array([
         # input row 0
         [0.25, 0.00, 0.00, 0.00],
         [0.25, 0.00, 0.00, 0.00],
@@ -262,21 +265,22 @@ def test_averagepooling2d_merge_dense_chan_2_stride_2_2_padding_valid():
         [0.00, 0.00, 0.00, 0.00],
     ], dtype=w_vals.dtype)
 
-    target_w_vals = np.zeros((50, 8), dtype=w_vals.dtype)
-    target_w_vals[0::2, 0::2] = target_channel_w_vals # one-to-one in/out channel 0
-    target_w_vals[1::2, 1::2] = target_channel_w_vals # one-to-one in/out channel 1
-    #print('w_vals')
-    #print(w_vals)
-    #print('target_w_vals')
-    #print(target_w_vals)
-    assert (w_vals == target_w_vals).all()
+    deferred_w_vals = np.zeros((50, 8), dtype=w_vals.dtype)
+    deferred_w_vals[0::2, 0::2] = deferred_channel_w_vals # one-to-one in/out channel 0
+    deferred_w_vals[1::2, 1::2] = deferred_channel_w_vals # one-to-one in/out channel 1
+    target_w_vals = np.dot(deferred_w_vals, dense_w_vals)
+    # print('w_vals')
+    # print(w_vals)
+    # print('target_w_vals')
+    # print(target_w_vals)
+    assert np.allclose(w_vals, target_w_vals, rtol=0.0, atol=1.0e-5)
 
-    target_w_conn = target_w_vals != 0
-    target_w_conn = np.dot(target_w_conn, dense_w_conn)
-    #print('w_conn')
-    #print(w_conn)
-    #print('target_w_conn')
-    #print(target_w_conn)
+    deferred_w_conn = np.array(deferred_w_vals != 0)
+    target_w_conn = np.dot(deferred_w_conn, dense_w_conn)
+    # print('w_conn')
+    # print(w_conn)
+    # print('target_w_conn')
+    # print(target_w_conn)
     assert (w_conn == target_w_conn).all()
 
 

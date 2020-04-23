@@ -136,7 +136,7 @@ class TGModel(object):
                     stride_rows = range(0 - kh // 2, ih - kh // 2, sh)
                     stride_cols = range(0 - kw // 2, iw - kw // 2, sw)
 
-                # For each input -> output kernel:
+                # For each kernel (all-to-all input -> output channels):
                 for in_channel in range(ic):
                     for out_channel in range(oc):
                         tf_channel_vals = tf_vals[:, :, in_channel, out_channel]
@@ -190,7 +190,7 @@ class TGModel(object):
                     stride_rows = range(0 - ph // 2, ih - ph // 2, sh)
                     stride_cols = range(0 - pw // 2, iw - pw // 2, sw)
 
-                # For each channel (one-to-one input -> output channel):
+                # For each pool (one-to-one input -> output channels):
                 for channel in range(ic):
                     g_pool_vals = g_vals[channel::ic, channel::ic]
                     g_pool_conn = g_conn[channel::ic, channel::ic]
@@ -223,23 +223,18 @@ class TGModel(object):
 
                 # For each input channel:
                 for in_channel in range(ic):
-                    # Note: deferred_vals indexing below assumes that the deferred weight
-                    # matrix maps input channel i one-to-one to output channel i, for all
-                    # i in [0, ic). This should always be true.
-                    deferred_channel_vals = deferred_vals[in_channel::ic, in_channel::ic]
-                    deferred_channel_conn = deferred_conn[in_channel::ic, in_channel::ic]
+                    # Note: it is assumed that the deferred weight matrix maps input
+                    # channel i one-to-one to output channel i, for all i in [0, ic).
+                    new_in_channel_vals = new_vals[in_channel::ic, :]
+                    new_in_channel_conn = new_conn[in_channel::ic, :]
+                    deferred_in_channel_vals = deferred_vals[in_channel::ic, in_channel::ic]
+                    deferred_in_channel_conn = deferred_conn[in_channel::ic, in_channel::ic]
+                    g_in_channel_vals = g_vals[in_channel::ic, :]
+                    g_in_channel_conn = g_conn[in_channel::ic, :]
 
-                    # For each output channel:
-                    for out_channel in range(oc):
-                        # Get an input -> output channel view in g_vals and new_vals.
-                        g_channel_vals = g_vals[in_channel::ic, out_channel::oc]
-                        g_channel_conn = g_conn[in_channel::ic, out_channel::oc]
-                        new_channel_vals = new_vals[in_channel::ic, out_channel::oc]
-                        new_channel_conn = new_conn[in_channel::ic, out_channel::oc]
-
-                        # Set weights to dot product of deferred and new weights.
-                        new_channel_vals[:] = np.dot(deferred_channel_vals, g_channel_vals)
-                        new_channel_conn[:] = np.dot(deferred_channel_conn, g_channel_conn)
+                    # Set weights to dot product of deferred and new weights.
+                    new_in_channel_vals[:] = np.dot(deferred_in_channel_vals, g_in_channel_vals)
+                    new_in_channel_conn[:] = np.dot(deferred_in_channel_conn, g_in_channel_conn)
 
                 # Update weights.
                 g_vals = new_vals
