@@ -56,12 +56,10 @@ class VGG16(TGModel):
         ], name='vgg16')
 
         # # Train and convert model
+        #tf_model = models.load_model('vgg16_tf_model')
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        # with open('vgg16_weights.pickle', 'rb') as weights_file:
-        #     tf_model.set_weights(pickle.load(weights_file))
         tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
-        # with open('vgg16_weights.pickle', 'wb') as weights_file:
-        #     pickle.dump(tf_model.get_weights(), weights_file)
+        #models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
         self.convert_tf_model(tf_model)
         self.compile(dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
 
@@ -72,14 +70,6 @@ if __name__ == '__main__':
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
-
-    # # Retrieve and normalise MNIST dataset
-    # (x_train, y_train), (x_test, y_test) = datasets.mnist.load_data()
-    # x_train = x_train[:args.n_train_samples].reshape((-1, 28, 28, 1)) / 255.0
-    # y_train = y_train[:args.n_train_samples]
-    # x_test = x_test[:args.n_test_samples].reshape((-1, 28, 28, 1)) / 255.0
-    # y_test = y_test[:args.n_test_samples]
-    # x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
     # Retrieve and normalise CIFAR-10 dataset
     (x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()

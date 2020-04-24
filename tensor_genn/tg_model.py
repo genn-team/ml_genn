@@ -39,14 +39,6 @@ class InputType(Enum):
     def __str__(self):
         return self.value
 
-supported_layers = (
-    tf.keras.layers.Dense,
-    tf.keras.layers.Conv2D,
-    tf.keras.layers.AveragePooling2D,
-    tf.keras.layers.Flatten,
-    tf.keras.layers.Dropout,
-)
-
 class TGModel(object):
     """TensorGeNN model class
 
@@ -72,15 +64,23 @@ class TGModel(object):
         tf_model  --  TensorFlow model to be converted
         """
 
+        supported_layers = (
+            tf.keras.layers.Dense,
+            tf.keras.layers.Conv2D,
+            tf.keras.layers.AveragePooling2D,
+            tf.keras.layers.Flatten,
+            tf.keras.layers.Dropout,
+        )
+
         # Check model compatibility
         if not isinstance(tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(tf_model)))
         for layer in tf_model.layers[:-1]:
             if not isinstance(layer, supported_layers):
-                raise NotImplementedError('{} layers not supported'.format(layer))
+                raise NotImplementedError('{} layers not supported'.format(type(layer)))
             elif isinstance(layer, tf.keras.layers.Dense):
                 if layer.activation != tf.keras.activations.relu:
-                    raise NotImplementedError('{} activation not supported'.format(layer.activation))
+                    raise NotImplementedError('{} activation not supported'.format(type(layer.activation)))
                 if layer.use_bias == True:
                     raise NotImplementedError('bias tensors not supported')
 
@@ -264,6 +264,7 @@ class TGModel(object):
 
         # Define GeNN model
         self.g_model = genn_model.GeNNModel('float', self.name)
+        self.g_model.timing_enabled = True
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
 
@@ -405,3 +406,16 @@ class TGModel(object):
             progress.set_postfix_str('accuracy: {:2.2f}'.format(accuracy))
 
         return accuracy, spike_i, spike_t
+
+
+    def get_kernel_times(self):
+        """Get total kernel run times"""
+
+        return {
+            'init_time': self.g_model.init_time,
+            'init_sparse_time': self.g_model.init_sparse_time,
+            'neuron_update_time': self.g_model.neuron_update_time,
+            'presynaptic_update_time': self.g_model.presynaptic_update_time,
+            'postsynaptic_update_time': self.g_model.postsynaptic_update_time,
+            'synapse_dynamics_time': self.g_model.synapse_dynamics_time,
+        }
