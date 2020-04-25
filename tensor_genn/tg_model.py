@@ -31,6 +31,7 @@ from tensor_genn.genn_models import if_input_model, if_input_init
 from tensor_genn.genn_models import poisson_input_model, poisson_input_init
 from tensor_genn.genn_models import spike_input_model, spike_input_init
 
+
 class InputType(Enum):
     IF = 'if'
     POISSON = 'poisson'
@@ -38,6 +39,7 @@ class InputType(Enum):
 
     def __str__(self):
         return self.value
+
 
 class TGModel(object):
     """TensorGeNN model class
@@ -56,6 +58,7 @@ class TGModel(object):
         self.layer_names = None
         self.weight_vals = None
         self.weight_conn = None
+        self.thresholds = None
 
 
     def convert_tf_model(self, tf_model):
@@ -90,6 +93,7 @@ class TGModel(object):
         self.layer_names = []
         self.weight_vals = []
         self.weight_conn = []
+        self.thresholds = []
         deferred_vals = None
         deferred_conn = None
 
@@ -249,6 +253,7 @@ class TGModel(object):
                 self.layer_names.append(layer.name)
                 self.weight_vals.append(g_vals)
                 self.weight_conn.append(g_conn)
+                self.thresholds.append(1.0)
                 deferred_vals = None
                 deferred_conn = None
 
@@ -288,27 +293,27 @@ class TGModel(object):
             ) for batch_i in range(batch_size)]
 
         # For each synapse population
-        for l_name, w_vals, w_conn in zip(self.layer_names, self.weight_vals, self.weight_conn):
+        for name, w_vals, w_conn, thr in zip(self.layer_names, self.weight_vals, self.weight_conn, self.thresholds):
             nrn_pre = nrn_post
 
             # Add next layer of neurons
             n = w_vals.shape[1]
             nrn_post = [g_model.add_neuron_population(
-                l_name + '_nrn_' + str(batch_i), n, if_model, {}, if_init
+                name + '_nrn_' + str(batch_i), n, if_model, {}, if_init
             ) for batch_i in range(batch_size)]
             for nrn_post_i in nrn_post:
-                nrn_post_i.set_extra_global_param('Vthr', 1.0)
+                nrn_post_i.set_extra_global_param('Vthr', thr)
 
             # Add synapses from last layer to this layer
             if w_conn.all(): # Dense weight matrix
                 syn = [g_model.add_synapse_population(
-                    l_name + '_syn_' + str(batch_i), 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
+                    name + '_syn_' + str(batch_i), 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
                     nrn_post[batch_i], 'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
                 ) for batch_i in range(batch_size)]
             else: # Sparse weight matrix
                 w_inds = np.nonzero(w_conn)
                 syn = [g_model.add_synapse_population(
-                    l_name + '_syn_' + str(batch_i), 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
+                    name + '_syn_' + str(batch_i), 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
                     nrn_post[batch_i], 'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
                 ) for batch_i in range(batch_size)]
                 for syn_i in syn:
