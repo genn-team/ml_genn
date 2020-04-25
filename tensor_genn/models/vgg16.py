@@ -55,7 +55,7 @@ class VGG16(TGModel):
             layers.Dense(y_train.shape[0], activation="softmax", use_bias=False),
         ], name='vgg16')
 
-        # # Train and convert model
+        # Train and convert model
         #tf_model = models.load_model('vgg16_tf_model')
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
@@ -87,11 +87,9 @@ if __name__ == '__main__':
         norm = DataNorm(x_norm, batch_size=None)
         norm.normalize(tg_model)
     elif args.norm_method == 'spike-norm':
-        norm = SpikeNorm(x_norm, classify_time=args.classify_time)
-        norm.normalize(tg_model)
-    acc, spk_i, spk_t = tg_model.evaluate(x_test, y_test,
-                                          classify_time=args.classify_time,
-                                          classify_spikes=args.classify_spikes,
+        norm = SpikeNorm(x_norm)
+        norm.normalize(tg_model, args.classify_time)
+    acc, spk_i, spk_t = tg_model.evaluate(x_test, y_test, args.classify_time,
                                           save_samples=args.save_samples)
 
     # Report TensorGeNN model results

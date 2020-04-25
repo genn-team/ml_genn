@@ -23,7 +23,7 @@ import numpy as np
 import tensorflow as tf
 from math import ceil
 from enum import Enum
-from tqdm import trange
+from tqdm import tqdm
 from pygenn import genn_model, genn_wrapper
 
 from tensor_genn.genn_models import if_model, if_init
@@ -49,6 +49,7 @@ class TGModel(object):
     def __init__(self, name='tg_model'):
         """Initialise a TensorGeNN model"""
 
+        self.batch_size = None
         self.tf_model = None
         self.name = name
         self.g_model = None
@@ -252,10 +253,11 @@ class TGModel(object):
                 deferred_conn = None
 
 
-    def compile(self, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
+    def compile(self, batch_size=1, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
         """Compile this TensorGeNN model into a GeNN model
 
         Keyword args:
+        batch_size   --  number of models to run concurrently (default: 1)
         dt           --  model integration time step (default: 1.0)
         input_type   --  type of input neurons (default: 'if')
         rate_factor  --  scale firing rate if input_type is 'poisson' (default: 1.0)
@@ -263,70 +265,92 @@ class TGModel(object):
         """
 
         # Define GeNN model
-        self.g_model = genn_model.GeNNModel('float', self.name)
-        self.g_model.timing_enabled = True
-        self.g_model.dT = dt
-        self.g_model._model.set_seed(rng_seed)
+
+
+
+        batch_size = 10
+
+
+        self.batch_size = batch_size
+        g_model = genn_model.GeNNModel('float', self.name)
+        g_model.timing_enabled = True
+        g_model.dT = dt
+        g_model._model.set_seed(rng_seed)
 
         # Add input neurons
+        n = self.weight_vals[0].shape[0]
         input_type = InputType(input_type)
-        n = np.prod(self.weight_vals[0].shape[0])
         if input_type == InputType.IF:
-            nrn_post = self.g_model.add_neuron_population(
-                'input_nrn', n, if_input_model, {}, if_input_init)
+            nrn_post = [g_model.add_neuron_population(
+                'input_nrn_' + str(batch_i), n, if_input_model, {}, if_input_init
+            ) for batch_i in range(batch_size)]
         elif input_type == InputType.POISSON:
-            nrn_post = self.g_model.add_neuron_population(
-                'input_nrn', n, poisson_input_model, {'rate_factor': rate_factor}, poisson_input_init)
+            nrn_post = [g_model.add_neuron_population(
+                'input_nrn_' + str(batch_i), n, poisson_input_model, {'rate_factor': rate_factor}, poisson_input_init
+            ) for batch_i in range(batch_size)]
         elif input_type == InputType.SPIKE:
-            nrn_post = self.g_model.add_neuron_population(
-                'input_nrn', n, spike_input_model, {}, spike_input_init)
+            nrn_post = [g_model.add_neuron_population(
+                'input_nrn_' + str(batch_i), n, spike_input_model, {}, spike_input_init
+            ) for batch_i in range(batch_size)]
 
         # For each synapse population
-        for name, w_vals, w_conn in zip(self.layer_names, self.weight_vals, self.weight_conn):
+        for l_name, w_vals, w_conn in zip(self.layer_names, self.weight_vals, self.weight_conn):
             nrn_pre = nrn_post
 
             # Add next layer of neurons
             n = w_vals.shape[1]
-            nrn_post = self.g_model.add_neuron_population(name + '_nrn', n, if_model, {}, if_init)
-            nrn_post.set_extra_global_param('Vthr', 1.0)
+            nrn_post = [g_model.add_neuron_population(
+                l_name + '_nrn_' + str(batch_i), n, if_model, {}, if_init
+            ) for batch_i in range(batch_size)]
+            for nrn_post_i in nrn_post:
+                nrn_post_i.set_extra_global_param('Vthr', 1.0)
 
             # Add synapses from last layer to this layer
             if w_conn.all(): # Dense weight matrix
-                syn = self.g_model.add_synapse_population(
-                    name + '_syn', 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
-                    'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
-                )
+                syn = [g_model.add_synapse_population(
+                    l_name + '_syn_' + str(batch_i), 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
+                    nrn_post[batch_i], 'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
+                ) for batch_i in range(batch_size)]
             else: # Sparse weight matrix
                 w_inds = np.nonzero(w_conn)
-                syn = self.g_model.add_synapse_population(
-                    name + '_syn', 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre, nrn_post,
-                    'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
-                )
-                syn.set_sparse_connections(w_inds[0], w_inds[1])
+                syn = [g_model.add_synapse_population(
+                    l_name + '_syn_' + str(batch_i), 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
+                    nrn_post[batch_i], 'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
+                ) for batch_i in range(batch_size)]
+                for syn_i in syn:
+                    syn_i.set_sparse_connections(w_inds[0], w_inds[1])
 
         # Build and load model
+        self.g_model = g_model
         self.g_model.build()
         self.g_model.load()
 
 
-    def reset_state(self):
-        """Reset the GeNN model's state to initial values"""
-
-        self.g_model._slm.initialize()
-        self.g_model.timestep = 0
-        self.g_model.t = 0.0
-
-
-    def set_inputs(self, x):
-        """Set the GeNN model's input neurons
+    def set_input_batch(self, x_data):
+        """Set model input with a new batch of samples
 
         Args:
-        x  --  data used to set model inputs with
+        x_data  --  data used to set model inputs with
         """
 
-        nrn = self.g_model.neuron_populations['input_nrn']
-        nrn.vars['input'].view[:] = x.flatten()
-        self.g_model.push_state_to_device('input_nrn')
+        # Input sanity check
+        n_samples = x_data.shape[0]
+        sample_size = np.prod(x_data.shape[1:])
+        input_size = self.weight_vals[0].shape[0]
+        if x_data.shape[0] > self.batch_size:
+            raise ValueError('sample count {} > batch size {}'.format(n_samples, self.batch_size))
+        if sample_size != self.weight_vals[0].shape[0]:
+            raise ValueError('sample size {} != input size {}'.format(sample_size, input_size))
+
+        # Set model inputs
+        for i in range(self.batch_size):
+            input_name = 'input_nrn_' + str(i)
+            input_nrn = self.g_model.neuron_populations[input_name]
+            if i < n_samples:
+                input_nrn.vars['input'].view[:] = x_data[i].flatten()
+            else:
+                input_nrn.vars['input'].view[:] = np.zeros(input_size)
+            self.g_model.push_state_to_device(input_name)
 
 
     def step_time(self, iterations=1):
@@ -340,70 +364,84 @@ class TGModel(object):
             self.g_model.step_time()
 
 
-    def evaluate(self, x_data, y_data, classify_time=500.0, classify_spikes=100, save_samples=[]):
+    def reset_state(self):
+        """Reset the GeNN model's state to initial values"""
+
+        self.g_model._slm.initialize()
+        self.g_model.timestep = 0
+        self.g_model.t = 0.0
+
+
+    def evaluate(self, x_data, y_data, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
         Args:
-        x_data           --  test data
-        y_data           --  test labels
+        x_data        --  test samples
+        y_data        --  test labels
+        time          --  sample present time (msec)
 
         Keyword args:
-        classify_time    --  maximum time (msec) per sample (default: 500.0)
-        classify_spikes  --  maximum output spikes per sample (default: 100)
-        save_samples     --  list of sample indices to save spikes for (default: [])
+        save_samples  --  list of sample indices to save spikes for (default: [])
 
         Returns:
-        accuracy         --  percentage of correctly classified results
-        spike_i          --  list of spike indices for each sample index in save_samples
-        spike_t          --  list of spike times for each sample index in save_samples
+        accuracy      --  percentage of correctly classified results
+        spike_i       --  list of spike indices for each sample index in save_samples
+        spike_t       --  list of spike times for each sample index in save_samples
         """
 
-        assert x_data.shape[0] == y_data.shape[0]
+        # Input sanity check
+        n_samples = x_data.shape[0]
+        n_labels = y_data.shape[0]
+        if n_samples != n_labels:
+            raise ValueError('sample count {} != label count {}'.format(n_samples, n_labels))
 
+        n_correct = 0
         spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
         spike_t = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
-        n_samples = x_data.shape[0]
-        n_correct = 0
 
-        # For each sample presentation
-        progress = trange(n_samples)
-        for i in progress:
+        # For each sample batch
+        progress = tqdm(total=n_samples)
+        for batch_start in range(0, n_samples, self.batch_size):
+            batch_end = min(batch_start + self.batch_size, n_samples)
+            batch_x_data = x_data[batch_start:batch_end]
+            batch_y_data = y_data[batch_start:batch_end]
 
             # Set new input
             self.reset_state()
-            self.set_inputs(x_data[i])
+            self.set_input_batch(batch_x_data)
 
             # Main simulation loop
-            while self.g_model.t < classify_time:
+            while self.g_model.t < time:
 
                 # Step time
                 self.step_time()
 
                 # Save spikes
-                if i in save_samples:
-                    k = save_samples.index(i)
-                    names = ['input_nrn'] + [name + '_nrn' for name in self.layer_names]
-                    neurons = [self.g_model.neuron_populations[name] for name in names]
-                    for j, nrn in enumerate(neurons):
-                        self.g_model.pull_current_spikes_from_device(nrn.name)
+                for sample_i in [i for i in save_samples if batch_start <= i < batch_end]:
+                    k = save_samples.index(sample_i)
+                    batch_i = sample_i - batch_start
+                    names = ['input_nrn_' + str(batch_i)]
+                    names += [name + '_nrn_' + str(batch_i) for name in self.layer_names]
+                    for l, name in enumerate(names):
+                        nrn = self.g_model.neuron_populations[name]
+                        self.g_model.pull_current_spikes_from_device(name)
                         indices = nrn.current_spikes
                         times = np.ones(indices.shape) * self.g_model.t
-                        spike_i[k][j] = np.hstack((spike_i[k][j], indices))
-                        spike_t[k][j] = np.hstack((spike_t[k][j], times))
-
-                # Break simulation if we have enough output spikes.
-                if classify_spikes is not None:
-                    output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
-                    self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-                    if output_neurons.vars['nSpk'].view.sum() >= classify_spikes:
-                        break
+                        spike_i[k][l] = np.hstack((spike_i[k][l], indices))
+                        spike_t[k][l] = np.hstack((spike_t[k][l], times))
 
             # After simulation
-            output_neurons = self.g_model.neuron_populations[self.layer_names[-1] + '_nrn']
-            self.g_model.pull_var_from_device(output_neurons.name, 'nSpk')
-            n_correct += output_neurons.vars['nSpk'].view.argmax() == y_data[i]
-            accuracy = (n_correct / (i + 1)) * 100
+            for batch_i in range(batch_end - batch_start):
+                output_name = self.layer_names[-1] + '_nrn_' + str(batch_i)
+                output_nrn = self.g_model.neuron_populations[output_name]
+                self.g_model.pull_var_from_device(output_name, 'nSpk')
+                n_correct += output_nrn.vars['nSpk'].view.argmax() == batch_y_data[batch_i]
+
+            accuracy = (n_correct / batch_end) * 100
             progress.set_postfix_str('accuracy: {:2.2f}'.format(accuracy))
+            progress.update(batch_end - batch_start)
+
+        progress.close()
 
         return accuracy, spike_i, spike_t
 

@@ -47,7 +47,9 @@ class DataNorm(object):
         applied_factors[0] = scale_factors[0]
         applied_factors[1:] = scale_factors[1:] / scale_factors[:-1]
 
-        # Update this neuron population's threshold
-        for i, layer_name in enumerate([tf_model.layers[i].name for i in idx]):
-            neurons = g_model.neuron_populations[layer_name + '_nrn']
-            neurons.extra_global_params['Vthr'].view[:] = applied_factors[i]
+        # Update layer thresholds
+        for l in range(len(tg_model.layer_names)):
+            for batch_i in range(tg_model.batch_size):
+                name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
+                nrn = g_model.neuron_populations[name]
+                nrn.extra_global_params['Vthr'].view[:] = applied_factors[l]
