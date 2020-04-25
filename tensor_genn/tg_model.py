@@ -265,12 +265,6 @@ class TGModel(object):
         """
 
         # Define GeNN model
-
-
-
-        batch_size = 10
-
-
         self.batch_size = batch_size
         g_model = genn_model.GeNNModel('float', self.name)
         g_model.timing_enabled = True
