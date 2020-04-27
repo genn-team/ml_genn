@@ -49,6 +49,8 @@ class DataNorm(object):
 
         # Update layer thresholds
         for l in range(len(tg_model.layer_names)):
+            print('layer <{}> threshold: {}'.format(tg_model.layer_names[l], applied_factors[l]))
+            tg_model.thresholds[l] = applied_factors[l]
             for batch_i in range(tg_model.batch_size):
                 name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
                 nrn = g_model.neuron_populations[name]

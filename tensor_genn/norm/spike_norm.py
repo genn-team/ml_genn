@@ -27,12 +27,6 @@ class SpikeNorm(object):
         for l in range(len(tg_model.layer_names)):
             threshold = np.float64(0.0)
 
-            # Set the current layer's threshold to one
-            for batch_i in range(tg_model.batch_size):
-                name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
-                nrn = g_model.neuron_populations[name]
-                nrn.extra_global_params['Vthr'].view[:] = np.float64(1.0)
-
             # For each sample presentation
             progress = tqdm(total=n_samples)
             for batch_start in range(0, n_samples, tg_model.batch_size):
@@ -53,16 +47,18 @@ class SpikeNorm(object):
                     for batch_i in range(batch_end - batch_start):
                         name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
                         nrn = g_model.neuron_populations[name]
-                        g_model.pull_var_from_device(name, 'Vmem_peak')
-                        Vmem_peak = nrn.vars['Vmem_peak'].view
-                        threshold = np.max([threshold, Vmem_peak.max()])
+                        g_model.pull_var_from_device(name, 'Vmem')
+                        threshold = np.max([threshold, nrn.vars['Vmem'].view.max()])
+                        nrn.vars['Vmem'].view[:] = np.float64(0.0)
+                        g_model.push_var_to_device(name, 'Vmem')
 
                 progress.update(batch_end - batch_start)
 
             progress.close()
-            print('layer <{}> threshold: {}'.format(tg_model.layer_names[l], threshold))
 
             # Update this layer's threshold
+            print('layer <{}> threshold: {}'.format(tg_model.layer_names[l], threshold))
+            tg_model.thresholds[l] = threshold
             for batch_i in range(tg_model.batch_size):
                 name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
                 nrn = g_model.neuron_populations[name]

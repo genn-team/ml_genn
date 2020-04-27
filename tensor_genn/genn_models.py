@@ -3,11 +3,10 @@ from pygenn.genn_model import create_custom_neuron_class
 # === IF neuron class ===
 if_model = create_custom_neuron_class(
     'if_model',
-    var_name_types=[('Vmem', 'scalar'), ('Vmem_peak', 'scalar'), ('nSpk', 'unsigned int')],
+    var_name_types=[('Vmem', 'scalar'), ('nSpk', 'unsigned int')],
     extra_global_params=[('Vthr', 'scalar')],
     sim_code='''
     $(Vmem) += $(Isyn) * DT;
-    $(Vmem_peak) = $(Vmem);
     ''',
     threshold_condition_code='''
     $(Vmem) >= $(Vthr)
@@ -21,7 +20,6 @@ if_model = create_custom_neuron_class(
 
 if_init = {
     'Vmem': 0.0,
-    'Vmem_peak': 0.0,
     'nSpk': 0,
 }
 

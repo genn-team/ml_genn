@@ -253,7 +253,7 @@ class TGModel(object):
                 self.layer_names.append(layer.name)
                 self.weight_vals.append(g_vals)
                 self.weight_conn.append(g_conn)
-                self.thresholds.append(1.0)
+                self.thresholds.append(np.float64(1.0))
                 deferred_vals = None
                 deferred_conn = None
 
@@ -391,8 +391,11 @@ class TGModel(object):
         # Input sanity check
         n_samples = x_data.shape[0]
         n_labels = y_data.shape[0]
+        save_samples = list(set(save_samples))
         if n_samples != n_labels:
             raise ValueError('sample count {} != label count {}'.format(n_samples, n_labels))
+        if any(i < 0 or i >= n_samples for i in save_samples):
+            raise ValueError('one or more invalid save_samples value')
 
         n_correct = 0
         spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
