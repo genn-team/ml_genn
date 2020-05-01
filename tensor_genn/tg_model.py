@@ -9,7 +9,7 @@ with the TensorFlow model and optional parameters.
 
 Example:
     The following is a minimal example which demonstrates the process of
-    converting a TensorFlow model into a GeNN model and evaluating it::
+    converting a TensorFlow model into a GeNN model and evaluating it:
 
         from tensor_genn import TGModel
 
@@ -17,7 +17,7 @@ Example:
         ...
 
         tensorgenn_model = TGmodel()
-        tensorgenn_model.convert_tf_model(tensorflow_model
+        tensorgenn_model.convert_tf_model(tensorflow_model)
         tensorgenn_model.evaluate(test_data, test_labels)
 """
 
