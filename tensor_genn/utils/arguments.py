@@ -6,6 +6,7 @@ def parse_arguments(model_description='Tensor GeNN model'):
     Parses command line arguments for common Tensor GeNN options, and returns them in namespace form.
     '''
     parser = argparse.ArgumentParser(description=model_description)
+    parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--dt', type=float, default=1.0)
     parser.add_argument('--input-type', type=InputType, default=InputType.IF, choices=list(InputType))
     parser.add_argument('--rate-factor', type=float, default=1.0)

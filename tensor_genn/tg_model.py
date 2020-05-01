@@ -51,14 +51,13 @@ class TGModel(object):
     def __init__(self, name='tg_model'):
         """Initialise a TensorGeNN model"""
 
-        self.batch_size = None
-        self.tf_model = None
         self.name = name
-        self.g_model = None
         self.layer_names = None
         self.weight_vals = None
         self.weight_conn = None
         self.thresholds = None
+        self.g_model = None
+        self.batch_size = None
 
 
     def convert_tf_model(self, tf_model):
@@ -88,7 +87,6 @@ class TGModel(object):
                 if layer.use_bias == True:
                     raise NotImplementedError('bias tensors not supported')
 
-        self.tf_model = tf_model
         self.name = tf_model.name
         self.layer_names = []
         self.weight_vals = []
@@ -270,11 +268,11 @@ class TGModel(object):
         """
 
         # Define GeNN model
-        self.batch_size = batch_size
         g_model = genn_model.GeNNModel('float', self.name)
         g_model.timing_enabled = True
         g_model.dT = dt
         g_model._model.set_seed(rng_seed)
+        self.batch_size = batch_size
 
         # Add input neurons
         n = self.weight_vals[0].shape[0]
