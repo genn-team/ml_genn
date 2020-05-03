@@ -47,10 +47,10 @@ class SpikeNorm(object):
                     for batch_i in range(batch_end - batch_start):
                         name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
                         nrn = g_model.neuron_populations[name]
-                        g_model.pull_var_from_device(name, 'Vmem')
+                        nrn.pull_var_from_device('Vmem')
                         threshold = np.max([threshold, nrn.vars['Vmem'].view.max()])
                         nrn.vars['Vmem'].view[:] = np.float64(0.0)
-                        g_model.push_var_to_device(name, 'Vmem')
+                        nrn.push_var_to_device('Vmem')
 
                 progress.update(batch_end - batch_start)
 

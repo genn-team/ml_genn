@@ -9,7 +9,7 @@ with the TensorFlow model and optional parameters.
 
 Example:
     The following is a minimal example which demonstrates the process of
-    converting a TensorFlow model into a GeNN model and evaluating it::
+    converting a TensorFlow model into a GeNN model and evaluating it:
 
         from tensor_genn import TGModel
 
@@ -275,47 +275,59 @@ class TGModel(object):
         self.batch_size = batch_size
 
         # Add input neurons
-        n = self.weight_vals[0].shape[0]
         input_type = InputType(input_type)
-        if input_type == InputType.IF:
-            nrn_post = [g_model.add_neuron_population(
-                'input_nrn_' + str(batch_i), n, if_input_model, {}, if_input_init
-            ) for batch_i in range(batch_size)]
-        elif input_type == InputType.POISSON:
-            nrn_post = [g_model.add_neuron_population(
-                'input_nrn_' + str(batch_i), n, poisson_input_model, {'rate_factor': rate_factor}, poisson_input_init
-            ) for batch_i in range(batch_size)]
-        elif input_type == InputType.SPIKE:
-            nrn_post = [g_model.add_neuron_population(
-                'input_nrn_' + str(batch_i), n, spike_input_model, {}, spike_input_init
-            ) for batch_i in range(batch_size)]
+        post_nrn = [None] * batch_size
+        post_nrn_n = self.weight_vals[0].shape[0]
+        for batch_i in range(batch_size):
+            post_nrn_name = 'input_nrn_' + str(batch_i)
+            if input_type == InputType.IF:
+                post_nrn[batch_i] = g_model.add_neuron_population(
+                    post_nrn_name, post_nrn_n, if_input_model, {}, if_input_init
+                )
+            elif input_type == InputType.POISSON:
+                post_nrn[batch_i] = g_model.add_neuron_population(
+                    post_nrn_name, post_nrn_n, poisson_input_model, {'rate_factor': rate_factor}, poisson_input_init
+                )
+            elif input_type == InputType.SPIKE:
+                post_nrn[batch_i] = g_model.add_neuron_population(
+                    post_nrn_name, post_nrn_n, spike_input_model, {}, spike_input_init
+                )
 
         # For each synapse population
-        for name, w_vals, w_conn, thr in zip(self.layer_names, self.weight_vals, self.weight_conn, self.thresholds):
-            nrn_pre = nrn_post
+        for layer_name, w_vals, w_conn, thr in zip(self.layer_names, self.weight_vals,
+                                                   self.weight_conn, self.thresholds):
+
+            # Set presynaptic neurons
+            pre_nrn = post_nrn
 
             # Add next layer of neurons
-            n = w_vals.shape[1]
-            nrn_post = [g_model.add_neuron_population(
-                name + '_nrn_' + str(batch_i), n, if_model, {}, if_init
-            ) for batch_i in range(batch_size)]
-            for nrn_post_i in nrn_post:
-                nrn_post_i.set_extra_global_param('Vthr', thr)
+            post_nrn = [None] * batch_size
+            post_nrn_n = w_vals.shape[1]
+            for batch_i in range(batch_size):
+                post_nrn_name = layer_name + '_nrn_' + str(batch_i)
+                post_nrn[batch_i] = g_model.add_neuron_population(
+                    post_nrn_name, post_nrn_n, if_model, {}, if_init
+                )
+                post_nrn[batch_i].set_extra_global_param('Vthr', thr)
 
-            # Add synapses from last layer to this layer
-            if w_conn.all(): # Dense weight matrix
-                syn = [g_model.add_synapse_population(
-                    name + '_syn_' + str(batch_i), 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
-                    nrn_post[batch_i], 'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
-                ) for batch_i in range(batch_size)]
-            else: # Sparse weight matrix
-                w_inds = np.nonzero(w_conn)
-                syn = [g_model.add_synapse_population(
-                    name + '_syn_' + str(batch_i), 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, nrn_pre[batch_i],
-                    nrn_post[batch_i], 'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
-                ) for batch_i in range(batch_size)]
-                for syn_i in syn:
-                    syn_i.set_sparse_connections(w_inds[0], w_inds[1])
+            # Add synapses from pre_nrn to post_nrn
+            syn = [None] * batch_size
+            for batch_i in range(batch_size):
+                syn_name = layer_name + '_syn_' + str(batch_i)
+
+                if w_conn.all(): # Dense weight matrix
+                    syn[batch_i] = g_model.add_synapse_population(
+                        syn_name, 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
+                        'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
+                    )
+
+                else: # Sparse weight matrix
+                    w_inds = np.nonzero(w_conn)
+                    syn[batch_i] = g_model.add_synapse_population(
+                        syn_name, 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
+                        'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
+                    )
+                    syn[batch_i].set_sparse_connections(w_inds[0], w_inds[1])
 
         # Build and load model
         self.g_model = g_model
@@ -347,7 +359,7 @@ class TGModel(object):
                 input_nrn.vars['input'].view[:] = x_data[i].flatten()
             else:
                 input_nrn.vars['input'].view[:] = np.zeros(input_size)
-            self.g_model.push_state_to_device(input_name)
+            input_nrn.push_state_to_device()
 
 
     def step_time(self, iterations=1):
@@ -424,7 +436,7 @@ class TGModel(object):
                     names += [name + '_nrn_' + str(batch_i) for name in self.layer_names]
                     for l, name in enumerate(names):
                         nrn = self.g_model.neuron_populations[name]
-                        self.g_model.pull_current_spikes_from_device(name)
+                        nrn.pull_current_spikes_from_device()
                         indices = nrn.current_spikes
                         times = np.ones(indices.shape) * self.g_model.t
                         spike_i[k][l] = np.hstack((spike_i[k][l], indices))
@@ -434,7 +446,7 @@ class TGModel(object):
             for batch_i in range(batch_end - batch_start):
                 output_name = self.layer_names[-1] + '_nrn_' + str(batch_i)
                 output_nrn = self.g_model.neuron_populations[output_name]
-                self.g_model.pull_var_from_device(output_name, 'nSpk')
+                output_nrn.pull_var_from_device('nSpk')
                 n_correct += output_nrn.vars['nSpk'].view.argmax() == batch_y_data[batch_i]
 
             accuracy = (n_correct / batch_end) * 100
