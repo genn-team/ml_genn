@@ -6,7 +6,7 @@ from tensor_genn.utils import parse_arguments, raster_plot
 import numpy as np
 
 class SimpleCNN(TGModel):
-    def __init__(self, x_train, y_train, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
+    def __init__(self, x_train, y_train, batch_size=1, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
         super(SimpleCNN, self).__init__()
 
         # Define TensorFlow model
@@ -18,7 +18,7 @@ class SimpleCNN(TGModel):
             layers.Flatten(),
             layers.Dense(128, activation='relu', use_bias=False),
             layers.Dense(64, activation='relu', use_bias=False),
-            layers.Dense(y_train.shape[0], activation='softmax', use_bias=False),
+            layers.Dense(y_train.max() + 1, activation='softmax', use_bias=False),
         ], name='simple_cnn')
 
         # Train and convert model
@@ -27,7 +27,8 @@ class SimpleCNN(TGModel):
         tf_model.fit(x_train, y_train, epochs=10)
         #models.save_model(tf_model, 'simple_cnn_tf_model', save_format='h5')
         self.convert_tf_model(tf_model)
-        self.compile(dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
+        self.compile(batch_size=batch_size, dt=dt, input_type=input_type, rate_factor=rate_factor, rng_seed=rng_seed)
+        self.tf_model = tf_model
 
 
 if __name__ == '__main__':
@@ -46,7 +47,8 @@ if __name__ == '__main__':
     x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
     # Create, normalise and evaluate TensorGeNN model
-    tg_model = SimpleCNN(x_train, y_train, dt=args.dt, input_type=args.input_type,
+    tg_model = SimpleCNN(x_train, y_train,
+                         batch_size=args.batch_size, dt=args.dt, input_type=args.input_type,
                          rate_factor=args.rate_factor, rng_seed=args.rng_seed)
     tg_model.tf_model.evaluate(x_test, y_test)
     if args.norm_method == 'data-norm':
