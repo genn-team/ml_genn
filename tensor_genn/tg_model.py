@@ -24,7 +24,8 @@ import tensorflow as tf
 from math import ceil
 from enum import Enum
 from tqdm import tqdm
-from pygenn import genn_model, genn_wrapper
+from pygenn import genn_model
+from pygenn.genn_wrapper import NO_DELAY
 
 from tensor_genn.genn_models import if_model, if_init
 from tensor_genn.genn_models import if_input_model, if_input_init
@@ -318,25 +319,27 @@ class TGModel(object):
                 syn_name = layer_name + '_syn_' + str(batch_i)
 
                 # Batch master synapses
-                if batch_i == 0 or not share_weights:
-                    if w_conn.all(): # Dense weight matrix
-                        syn[0] = g_model.add_synapse_population(
-                            syn_name, 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[0], post_nrn[0],
+                if not share_weights or batch_i == 0:
+                    if w_conn.all():
+                        # Dense weight matrix
+                        syn[batch_i] = g_model.add_synapse_population(
+                            syn_name, 'DENSE_INDIVIDUALG', NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
                             'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
                         )
 
-                    else: # Sparse weight matrix
+                    else:
+                        # Sparse weight matrix
                         w_inds = np.nonzero(w_conn)
-                        syn[0] = g_model.add_synapse_population(
-                            syn_name, 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[0], post_nrn[0],
+                        syn[batch_i] = g_model.add_synapse_population(
+                            syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
                             'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
                         )
-                        syn[0].set_sparse_connections(w_inds[0], w_inds[1])
+                        syn[batch_i].set_sparse_connections(w_inds[0], w_inds[1])
 
                 # Batch slave synapses
                 else:
                     syn[batch_i] = g_model.add_slave_synapse_population(
-                        syn_name, syn[0], genn_wrapper.NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
+                        syn_name, syn[0], NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
                         'DeltaCurr', {}, {}
                     )
 
