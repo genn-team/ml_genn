@@ -58,6 +58,7 @@ class TGModel(object):
         self.thresholds = None
         self.g_model = None
         self.batch_size = None
+        self.share_weights = None
 
 
     def convert_tf_model(self, tf_model):
@@ -256,15 +257,17 @@ class TGModel(object):
                 deferred_conn = None
 
 
-    def compile(self, batch_size=1, dt=1.0, input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
+    def compile(self, batch_size=1, share_weights=False, dt=1.0,
+                input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
         """Compile this TensorGeNN model into a GeNN model
 
         Keyword args:
-        batch_size   --  number of models to run concurrently (default: 1)
-        dt           --  model integration time step (default: 1.0)
-        input_type   --  type of input neurons (default: 'if')
-        rate_factor  --  scale firing rate if input_type is 'poisson' (default: 1.0)
-        rng_seed     --  GeNN RNG seed (default: 0, meaning choose a random seed)
+        batch_size     --  number of models to run concurrently (default: 1)
+        share_weights  --  share weights within model batch (default: False)
+        dt             --  model integration time step (default: 1.0)
+        input_type     --  type of input neurons (default: 'if')
+        rate_factor    --  scale firing rate if input_type is 'poisson' (default: 1.0)
+        rng_seed       --  GeNN RNG seed (default: 0, meaning choose a random seed)
         """
 
         # Define GeNN model
@@ -272,7 +275,6 @@ class TGModel(object):
         g_model.timing_enabled = True
         g_model.dT = dt
         g_model._model.set_seed(rng_seed)
-        self.batch_size = batch_size
 
         # Add input neurons
         input_type = InputType(input_type)
@@ -310,27 +312,38 @@ class TGModel(object):
                 )
                 post_nrn[batch_i].set_extra_global_param('Vthr', thr)
 
-            # Add synapses from pre_nrn to post_nrn
+            # Add pre_nrn to post_nrn synapses
             syn = [None] * batch_size
             for batch_i in range(batch_size):
                 syn_name = layer_name + '_syn_' + str(batch_i)
 
-                if w_conn.all(): # Dense weight matrix
-                    syn[batch_i] = g_model.add_synapse_population(
-                        syn_name, 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
-                        'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
-                    )
+                # Batch master synapses
+                if batch_i == 0 or not share_weights:
+                    if w_conn.all(): # Dense weight matrix
+                        syn[0] = g_model.add_synapse_population(
+                            syn_name, 'DENSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[0], post_nrn[0],
+                            'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
+                        )
 
-                else: # Sparse weight matrix
-                    w_inds = np.nonzero(w_conn)
-                    syn[batch_i] = g_model.add_synapse_population(
-                        syn_name, 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
-                        'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
+                    else: # Sparse weight matrix
+                        w_inds = np.nonzero(w_conn)
+                        syn[0] = g_model.add_synapse_population(
+                            syn_name, 'SPARSE_INDIVIDUALG', genn_wrapper.NO_DELAY, pre_nrn[0], post_nrn[0],
+                            'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
+                        )
+                        syn[0].set_sparse_connections(w_inds[0], w_inds[1])
+
+                # Batch slave synapses
+                else:
+                    syn[batch_i] = g_model.add_slave_synapse_population(
+                        syn_name, syn[0], genn_wrapper.NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
+                        'DeltaCurr', {}, {}
                     )
-                    syn[batch_i].set_sparse_connections(w_inds[0], w_inds[1])
 
         # Build and load model
         self.g_model = g_model
+        self.batch_size = batch_size
+        self.share_weights = share_weights
         self.g_model.build()
         self.g_model.load()
 
