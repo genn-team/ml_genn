@@ -6,6 +6,12 @@ if_model = create_custom_neuron_class(
     var_name_types=[('Vmem', 'scalar'), ('nSpk', 'unsigned int')],
     extra_global_params=[('Vthr', 'scalar')],
     sim_code='''
+    if ($(t) == 0.0) {
+        // Reset state at t = 0
+        $(Isyn) = 0.0;
+        $(Vmem) = 0.0;
+        $(nSpk) = 0;
+    }
     $(Vmem) += $(Isyn) * DT;
     ''',
     threshold_condition_code='''
@@ -28,6 +34,10 @@ if_input_model = create_custom_neuron_class(
     'if_input_model',
     var_name_types=[('input', 'scalar'), ('Vmem', 'scalar')],
     sim_code='''
+    if ($(t) == 0.0) {
+        // Reset state at t = 0
+        $(Vmem) = 0.0;
+    }
     $(Vmem) += $(input) * DT;
     ''',
     threshold_condition_code='''

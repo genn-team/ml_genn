@@ -389,10 +389,9 @@ class TGModel(object):
             self.g_model.step_time()
 
 
-    def reset_state(self):
-        """Reset the GeNN model's state to initial values"""
+    def reset(self):
+        """Reset the GeNN model"""
 
-        self.g_model._slm.initialize()
         self.g_model.timestep = 0
         self.g_model.t = 0.0
 
@@ -435,7 +434,7 @@ class TGModel(object):
             batch_y_data = y_data[batch_start:batch_end]
 
             # Set new input
-            self.reset_state()
+            self.reset()
             self.set_input_batch(batch_x_data)
 
             # Main simulation loop
