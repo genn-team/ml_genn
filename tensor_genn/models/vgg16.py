@@ -84,7 +84,7 @@ if __name__ == '__main__':
     tg_model.compile(batch_size=args.batch_size, share_weights=args.share_weights, dt=args.dt,
                      input_type=args.input_type, rate_factor=args.rate_factor, rng_seed=args.rng_seed)
     if args.norm_method == 'data-norm':
-        norm = DataNorm(x_norm, batch_size=None)
+        norm = DataNorm(x_norm, tg_model.tf_model)
         norm.normalize(tg_model)
     elif args.norm_method == 'spike-norm':
         norm = SpikeNorm(x_norm)

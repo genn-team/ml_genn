@@ -1,6 +1,5 @@
 import tensorflow.keras.backend as K
 import numpy as np
-from math import ceil
 
 '''
 References: 
@@ -9,37 +8,23 @@ Fast-Classifying, High-Accuracy Spiking Deep Networks Through Weight and Thresho
 '''
 
 class DataNorm(object):
-    def __init__(self, norm_samples, batch_size=None):
+    def __init__(self, norm_samples, tf_model):
         self.norm_samples = norm_samples
-        if batch_size == None:
-            self.batch_size = len(norm_samples)
-        else:
-            self.batch_size = batch_size
+        self.tf_model = tf_model
 
     def normalize(self, tg_model):
         print('Data-Norm')
-        tf_model = tg_model.tf_model
         g_model = tg_model.g_model
 
         # Get output functions for weighted layers.
-        idx = [i for i, l in enumerate(tf_model.layers) if l.get_weights() != []]
-        get_outputs = K.function([tf_model.input], [tf_model.layers[i].output for i in idx])
+        idx = [i for i, l in enumerate(self.tf_model.layers) if l.get_weights() != []]
+        get_outputs = K.function([self.tf_model.input], [self.tf_model.layers[i].output for i in idx])
 
         # Find the maximum activation in each layer, given input data.
-        activation = np.empty(len(idx), dtype=np.float64)
-        max_activation = np.zeros(len(idx), dtype=np.float64)
-        n_batches = ceil(len(self.norm_samples) / self.batch_size)
-        for i in range(n_batches):
-            if i < n_batches - 1:
-                x = self.norm_samples[i*self.batch_size : (i+1)*self.batch_size]
-            else:
-                x = self.norm_samples[i*self.batch_size : ]
-            activation[:] = [np.max(out) for out in get_outputs(x)]
-            max_activation[:] = np.max([max_activation, activation], 0)
+        max_activation = np.array([np.max(out) for out in get_outputs(self.norm_samples)], dtype=np.float64)
 
         # Find the maximum weight in each layer.
-        weights = tf_model.get_weights()
-        max_weights = np.array([np.max(w) for w in weights], dtype=np.float64)
+        max_weights = np.array([np.max(w) for w in self.tf_model.get_weights()], dtype=np.float64)
 
         # Compute scale factors and normalize weights.
         scale_factors = np.max([max_activation, max_weights], 0)
