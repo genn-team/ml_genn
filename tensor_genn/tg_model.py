@@ -136,8 +136,8 @@ class TGModel(object):
                     stride_rows = range(0, ih - kh + 1, sh)
                     stride_cols = range(0, iw - kw + 1, sw)
                 elif layer.padding == 'same':
-                    stride_rows = range(0 - kh // 2, ih - kh // 2, sh)
-                    stride_cols = range(0 - kw // 2, iw - kw // 2, sw)
+                    stride_rows = range(0 - (kh - 1) // 2, ih - (kh - 1) // 2, sh)
+                    stride_cols = range(0 - (kw - 1) // 2, iw - (kw - 1) // 2, sw)
 
                 # For each kernel (all-to-all input -> output channels):
                 for in_channel in range(ic):
