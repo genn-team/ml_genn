@@ -48,8 +48,8 @@ if __name__ == '__main__':
     # Create, normalise and evaluate TensorGeNN model
     tg_model = SimpleCNN(x_train, y_train)
     tg_model.tf_model.evaluate(x_test, y_test)
-    tg_model.compile(batch_size=args.batch_size, share_weights=args.share_weights, dt=args.dt,
-                     input_type=args.input_type, rate_factor=args.rate_factor, rng_seed=args.rng_seed)
+    tg_model.compile(dt=args.dt, rng_seed=args.rng_seed,
+                     batch_size=args.batch_size, share_weights=args.share_weights, input_type=args.input_type)
     if args.norm_method == 'data-norm':
         norm = DataNorm(x_norm, tg_model.tf_model)
         norm.normalize(tg_model)

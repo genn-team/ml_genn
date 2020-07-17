@@ -19,27 +19,14 @@ Example:
         tensorgenn_model.evaluate(test_data, test_labels)
 """
 
+from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
-from math import ceil
-from enum import Enum
-from tqdm import tqdm
-from pygenn import genn_model
-from pygenn.genn_wrapper import NO_DELAY
+from pygenn.genn_model import GeNNModel
 
-from tensor_genn.genn_models import if_model, if_init
-from tensor_genn.genn_models import if_input_model, if_input_init
-from tensor_genn.genn_models import poisson_input_model, poisson_input_init
-from tensor_genn.genn_models import spike_input_model, spike_input_init
-
-
-class InputType(Enum):
-    IF = 'if'
-    POISSON = 'poisson'
-    SPIKE = 'spike'
-
-    def __str__(self):
-        return self.value
+from tensor_genn.layers import InputType, Input, SpikeInput, PoissonInput, IFInput
+from tensor_genn.layers import Dense, IFDense
+from tensor_genn.layers import Conv2D, IFConv2D
 
 
 class TGModel(object):
@@ -53,23 +40,26 @@ class TGModel(object):
         """Initialise a TensorGeNN model"""
 
         self.name = name
-        self.layer_names = None
-        self.weight_vals = None
-        self.weight_conn = None
-        self.thresholds = None
+        self.layers = []
+        self.input_layers = []
+        self.output_layers = []
+
         self.g_model = None
         self.batch_size = None
         self.share_weights = None
 
 
-    def convert_tf_model(self, tf_model):
+    def convert_tf_model(self, tf_model, input_type='poisson'):
         """Convert from a TensorFlow model
 
         Args:
         tf_model  --  TensorFlow model to be converted
+
+        Keyword args:
+        input_type     --  type of input neurons (default: 'poisson')
         """
 
-        supported_layers = (
+        supported_tf_layers = (
             tf.keras.layers.Dense,
             tf.keras.layers.Conv2D,
             tf.keras.layers.AveragePooling2D,
@@ -80,302 +70,239 @@ class TGModel(object):
         # Check model compatibility
         if not isinstance(tf_model, tf.keras.Sequential):
             raise NotImplementedError('{} models not supported'.format(type(tf_model)))
-        for layer in tf_model.layers[:-1]:
-            if not isinstance(layer, supported_layers):
-                raise NotImplementedError('{} layers not supported'.format(type(layer)))
-            elif isinstance(layer, tf.keras.layers.Dense):
-                if layer.activation != tf.keras.activations.relu:
-                    raise NotImplementedError('{} activation not supported'.format(type(layer.activation)))
-                if layer.use_bias == True:
+        for tf_layer in tf_model.layers[:-1]:
+            if not isinstance(tf_layer, supported_tf_layers):
+                raise NotImplementedError('{} layers not supported'.format(type(tf_layer)))
+            elif isinstance(tf_layer, tf.keras.layers.Dense):
+                if tf_layer.activation != tf.keras.activations.relu:
+                    raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
+                if tf_layer.use_bias == True:
                     raise NotImplementedError('bias tensors not supported')
 
+
         self.name = tf_model.name
-        self.layer_names = []
-        self.weight_vals = []
-        self.weight_conn = []
-        self.thresholds = []
-        deferred_vals = None
-        deferred_conn = None
+        self.input_layers = []
+        self.output_layers = []
+        self.layers = []
+
+
+        # Add input layer
+        input_type = InputType(input_type)
+        if input_type == InputType.SPIKE:
+            layer = SpikeInput('input', tf_model.input_shape[1:])
+        elif input_type == InputType.POISSON:
+            layer = PoissonInput('input', tf_model.input_shape[1:])
+        elif input_type == InputType.IF:
+            layer = IFInput('input', tf_model.input_shape[1:])
+
+        self.input_layers.append(layer)
+        self.layers.append(layer)
+        previous_layer = layer
+
 
         # For each TensorFlow model layer:
-        for layer in tf_model.layers:
+        for tf_layer in tf_model.layers:
 
             # === Flatten Layers ===
-            if isinstance(layer, tf.keras.layers.Flatten):
-                print('ignoring layer <{}>'.format(layer.name))
+            if isinstance(tf_layer, tf.keras.layers.Flatten):
+                print('ignoring Flatten layer <{}>'.format(tf_layer.name))
                 continue
 
             # === Dropout Layers ===
-            if isinstance(layer, tf.keras.layers.Dropout):
-                print('ignoring layer <{}>'.format(layer.name))
+            elif isinstance(tf_layer, tf.keras.layers.Dropout):
+                print('ignoring Dropout layer <{}>'.format(tf_layer.name))
                 continue
 
             # === Dense Layers ===
-            elif isinstance(layer, tf.keras.layers.Dense):
-                print('creating GeNN weights for layer <{}>'.format(layer.name))
-                tf_vals = layer.get_weights()[0]
-                g_vals = tf_vals.copy()
-                g_conn = np.ones(g_vals.shape, dtype=np.bool)
-                defer_weights = False
+            elif isinstance(tf_layer, tf.keras.layers.Dense):
+                print('converting Dense layer <{}>'.format(tf_layer.name))
+
+                layer = IFDense(tf_layer.name, tf_layer.units)
+                layer.connect(previous_layer)
+                layer.set_weights(tf_layer.get_weights()[0])
+
+                self.layers.append(layer)
+                previous_layer = layer
+
 
             # === Conv2D Layers ===
-            elif isinstance(layer, tf.keras.layers.Conv2D):
-                print('creating GeNN weights for layer <{}>'.format(layer.name))
-                tf_vals = layer.get_weights()[0]
-                g_vals = np.zeros((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])))
-                g_conn = np.zeros(g_vals.shape, dtype=np.bool)
-                defer_weights = False
+            elif isinstance(tf_layer, tf.keras.layers.Conv2D):
+                print('converting Conv2D layer <{}>'.format(tf_layer.name))
 
-                kh, kw = layer.kernel_size
-                sh, sw = layer.strides
-                ih, iw, ic = layer.input_shape[1:]
-                oh, ow, oc = layer.output_shape[1:]
+                layer = IFConv2D(tf_layer.name, tf_layer.filters, tf_layer.kernel_size, tf_layer.strides, tf_layer.padding)
+                layer.connect(previous_layer)
+                layer.set_weights(tf_layer.get_weights()[0])
 
-                # Stride start index iterators.
-                if layer.padding == 'valid':
-                    stride_rows = range(0, ih - kh + 1, sh)
-                    stride_cols = range(0, iw - kw + 1, sw)
-                elif layer.padding == 'same':
-                    stride_rows = range(0 - (kh - 1) // 2, ih - (kh - 1) // 2, sh)
-                    stride_cols = range(0 - (kw - 1) // 2, iw - (kw - 1) // 2, sw)
-
-                # For each kernel (all-to-all input -> output channels):
-                for in_channel in range(ic):
-                    for out_channel in range(oc):
-                        tf_channel_vals = tf_vals[:, :, in_channel, out_channel]
-                        g_channel_vals = g_vals[in_channel::ic, out_channel::oc]
-                        g_channel_conn = g_conn[in_channel::ic, out_channel::oc]
-
-                        # For each output neuron:
-                        for out_row, stride_row in enumerate(stride_rows):
-                            for out_col, stride_col in enumerate(stride_cols):
-                                g_out_vals = g_channel_vals[:, out_row * ow + out_col]
-                                g_out_vals.shape = (ih, iw)
-                                g_out_conn = g_channel_conn[:, out_row * ow + out_col]
-                                g_out_conn.shape = (ih, iw)
-
-                                # Get a kernel stride view in tf_channel_vals.
-                                tf_kern_T = 0 - min(stride_row, 0)
-                                tf_kern_B = kh - max(stride_row + kh - ih, 0)
-                                tf_kern_L = 0 - min(stride_col, 0)
-                                tf_kern_R = kw - max(stride_col + kw - iw, 0)
-                                tf_stride_vals = tf_channel_vals[tf_kern_T:tf_kern_B, tf_kern_L:tf_kern_R]
-
-                                # Get a kernel stride view in g_out_vals.
-                                g_kern_T = max(stride_row, 0)
-                                g_kern_B = min(stride_row + kh, ih)
-                                g_kern_L = max(stride_col, 0)
-                                g_kern_R = min(stride_col + kw, iw)
-                                g_stride_vals = g_out_vals[g_kern_T:g_kern_B, g_kern_L:g_kern_R]
-                                g_stride_conn = g_out_conn[g_kern_T:g_kern_B, g_kern_L:g_kern_R]
-
-                                # Set weights for this stride.
-                                g_stride_vals[:] = tf_stride_vals
-                                g_stride_conn[:] = True
-
-            # === AveragePooling2D Layers ===
-            elif isinstance(layer, tf.keras.layers.AveragePooling2D):
-                print('defer weights for layer <{}>'.format(layer.name))
-                g_vals = np.zeros((np.prod(layer.input_shape[1:]), np.prod(layer.output_shape[1:])))
-                g_conn = np.zeros(g_vals.shape, dtype=np.bool)
-                defer_weights = True
-
-                ph, pw = layer.pool_size
-                sh, sw = layer.strides
-                ih, iw, ic = layer.input_shape[1:]
-                oh, ow, oc = layer.output_shape[1:]
-
-                # Stride start index iterators.
-                if layer.padding == 'valid':
-                    stride_rows = range(0, ih - ph + 1, sh)
-                    stride_cols = range(0, iw - pw + 1, sw)
-                elif layer.padding == 'same':
-                    stride_rows = range(0 - ph // 2, ih - ph // 2, sh)
-                    stride_cols = range(0 - pw // 2, iw - pw // 2, sw)
-
-                # For each pool (one-to-one input -> output channels):
-                for channel in range(ic):
-                    g_pool_vals = g_vals[channel::ic, channel::ic]
-                    g_pool_conn = g_conn[channel::ic, channel::ic]
-
-                    # For each output neuron:
-                    for out_row, stride_row in enumerate(stride_rows):
-                        for out_col, stride_col in enumerate(stride_cols):
-                            g_out_vals = g_pool_vals[:, out_row * ow + out_col]
-                            g_out_vals.shape = (ih, iw)
-                            g_out_conn = g_pool_conn[:, out_row * ow + out_col]
-                            g_out_conn.shape = (ih, iw)
-
-                            # Get a pool stride view in g_out_vals.
-                            g_pool_T = max(stride_row, 0)
-                            g_pool_B = min(stride_row + ph, ih)
-                            g_pool_L = max(stride_col, 0)
-                            g_pool_R = min(stride_col + pw, iw)
-                            g_stride_vals = g_out_vals[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
-                            g_stride_conn = g_out_conn[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
-
-                            # Set weights for this stride.
-                            g_stride_vals[:] = 1.0 / g_stride_vals.size
-                            g_stride_conn[:] = True
-
-            # === Combine Deferred Weights ===
-            if deferred_vals is not None:
-                print('combining deferred weights with GeNN weights for layer <{}>'.format(layer.name))
-                new_vals = np.zeros((deferred_vals.shape[0], g_vals.shape[1]))
-                new_conn = np.zeros(new_vals.shape, dtype=np.bool)
-
-                # For each input channel:
-                for in_channel in range(ic):
-                    # Note: it is assumed that the deferred weight matrix maps input
-                    # channel i one-to-one to output channel i, for all i in [0, ic).
-                    new_in_channel_vals = new_vals[in_channel::ic, :]
-                    new_in_channel_conn = new_conn[in_channel::ic, :]
-                    deferred_in_channel_vals = deferred_vals[in_channel::ic, in_channel::ic]
-                    deferred_in_channel_conn = deferred_conn[in_channel::ic, in_channel::ic]
-                    g_in_channel_vals = g_vals[in_channel::ic, :]
-                    g_in_channel_conn = g_conn[in_channel::ic, :]
-
-                    # Set weights to dot product of deferred and new weights.
-                    new_in_channel_vals[:] = np.dot(deferred_in_channel_vals, g_in_channel_vals)
-                    new_in_channel_conn[:] = np.dot(deferred_in_channel_conn, g_in_channel_conn)
-
-                # Update weights.
-                g_vals = new_vals
-                g_conn = new_conn
-
-            # === Append Weights ===
-            if defer_weights:
-                # Defer weights to next layer.
-                deferred_vals = g_vals
-                deferred_conn = g_conn
-            else:
-                # Append weights for this layer.
-                self.layer_names.append(layer.name)
-                self.weight_vals.append(g_vals)
-                self.weight_conn.append(g_conn)
-                self.thresholds.append(np.float64(1.0))
-                deferred_vals = None
-                deferred_conn = None
+                self.layers.append(layer)
+                previous_layer = layer
 
 
-    def compile(self, batch_size=1, share_weights=False, dt=1.0,
-                input_type=InputType.IF, rate_factor=1.0, rng_seed=0):
+            # # === AveragePooling2D Layers ===
+            # elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
+            #     print('defer weights for layer <{}>'.format(tf_layer.name))
+            #     g_vals = np.zeros((np.prod(tf_layer.input_shape[1:]), np.prod(tf_layer.output_shape[1:])))
+            #     g_conn = np.zeros(g_vals.shape, dtype=np.bool)
+            #     defer_weights = True
+
+            #     ph, pw = tf_layer.pool_size
+            #     sh, sw = tf_layer.strides
+            #     ih, iw, ic = tf_layer.input_shape[1:]
+            #     oh, ow, oc = tf_layer.output_shape[1:]
+
+            #     # Stride start index iterators.
+            #     if tf_layer.padding == 'valid':
+            #         stride_rows = range(0, ih - ph + 1, sh)
+            #         stride_cols = range(0, iw - pw + 1, sw)
+            #     elif tf_layer.padding == 'same':
+            #         stride_rows = range(0 - ph // 2, ih - ph // 2, sh)
+            #         stride_cols = range(0 - pw // 2, iw - pw // 2, sw)
+
+            #     # For each pool (one-to-one input -> output channels):
+            #     for channel in range(ic):
+            #         g_pool_vals = g_vals[channel::ic, channel::ic]
+            #         g_pool_conn = g_conn[channel::ic, channel::ic]
+
+            #         # For each output neuron:
+            #         for out_row, stride_row in enumerate(stride_rows):
+            #             for out_col, stride_col in enumerate(stride_cols):
+            #                 g_out_vals = g_pool_vals[:, out_row * ow + out_col]
+            #                 g_out_vals.shape = (ih, iw)
+            #                 g_out_conn = g_pool_conn[:, out_row * ow + out_col]
+            #                 g_out_conn.shape = (ih, iw)
+
+            #                 # Get a pool stride view in g_out_vals.
+            #                 g_pool_T = max(stride_row, 0)
+            #                 g_pool_B = min(stride_row + ph, ih)
+            #                 g_pool_L = max(stride_col, 0)
+            #                 g_pool_R = min(stride_col + pw, iw)
+            #                 g_stride_vals = g_out_vals[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
+            #                 g_stride_conn = g_out_conn[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
+
+            #                 # Set weights for this stride.
+            #                 g_stride_vals[:] = 1.0 / g_stride_vals.size
+            #                 g_stride_conn[:] = True
+
+            # # === Combine Deferred Weights ===
+            # if deferred_vals is not None:
+            #     print('combining deferred weights with GeNN weights for layer <{}>'.format(tf_layer.name))
+            #     new_vals = np.zeros((deferred_vals.shape[0], g_vals.shape[1]))
+            #     new_conn = np.zeros(new_vals.shape, dtype=np.bool)
+
+            #     # For each input channel:
+            #     for in_channel in range(ic):
+            #         # Note: it is assumed that the deferred weight matrix maps input
+            #         # channel i one-to-one to output channel i, for all i in [0, ic).
+            #         new_in_channel_vals = new_vals[in_channel::ic, :]
+            #         new_in_channel_conn = new_conn[in_channel::ic, :]
+            #         deferred_in_channel_vals = deferred_vals[in_channel::ic, in_channel::ic]
+            #         deferred_in_channel_conn = deferred_conn[in_channel::ic, in_channel::ic]
+            #         g_in_channel_vals = g_vals[in_channel::ic, :]
+            #         g_in_channel_conn = g_conn[in_channel::ic, :]
+
+            #         # Set weights to dot product of deferred and new weights.
+            #         new_in_channel_vals[:] = np.dot(deferred_in_channel_vals, g_in_channel_vals)
+            #         new_in_channel_conn[:] = np.dot(deferred_in_channel_conn, g_in_channel_conn)
+
+            #     # Update weights.
+            #     g_vals = new_vals
+            #     g_conn = new_conn
+
+            # # === Append Weights ===
+            # if defer_weights:
+            #     # Defer weights to next layer.
+            #     deferred_vals = g_vals
+            #     deferred_conn = g_conn
+            # else:
+            #     # Append weights for this layer.
+            #     self.layer_names.append(tf_layer.name)
+            #     self.weight_vals.append(g_vals)
+            #     self.weight_conn.append(g_conn)
+            #     self.thresholds.append(np.float64(1.0))
+            #     deferred_vals = None
+            #     deferred_conn = None
+
+        self.output_layers.append(previous_layer)
+
+
+    def set_network(self, input_layers, output_layers):
+        self.input_layers = input_layers
+        self.output_layers = output_layers
+        self.layers = []
+
+        # Construct topologically sorted list of layers
+        new_layers = set(input_layers)
+        seen_layers = set()
+
+        while new_layers:
+            layer = new_layers.pop()
+            self.layers.append(layer)
+            seen_layers.add(layer)
+
+            # Explore downstream layers whose upstream layers have all been visited
+            for downstream_layer in layer.downstream_layers:
+                if downstream_layer not in seen_layers and seen_layers.issuperset(downstream_layer.upstream_layers):
+                    new_layers.add(downstream_layer)
+
+        # Check that output layers are reachable from input layers
+        if not seen_layers.issuperset(self.output_layers):
+            raise ValueError('output layers unreachable from input layers')
+
+
+    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False):
         """Compile this TensorGeNN model into a GeNN model
 
         Keyword args:
+        dt             --  model integration time step (default: 1.0)
+        rng_seed       --  GeNN RNG seed (default: 0, meaning choose a random seed)
         batch_size     --  number of models to run concurrently (default: 1)
         share_weights  --  share weights within model batch (default: False)
-        dt             --  model integration time step (default: 1.0)
-        input_type     --  type of input neurons (default: 'if')
-        rate_factor    --  scale firing rate if input_type is 'poisson' (default: 1.0)
-        rng_seed       --  GeNN RNG seed (default: 0, meaning choose a random seed)
         """
 
+
+
+        import time as t
+        a = t.time()
+
+
+
         # Define GeNN model
-        g_model = genn_model.GeNNModel('float', self.name)
-        g_model.timing_enabled = True
-        g_model.dT = dt
-        g_model._model.set_seed(rng_seed)
-
-        # Add input neurons
-        input_type = InputType(input_type)
-        post_nrn = [None] * batch_size
-        post_nrn_n = self.weight_vals[0].shape[0]
-        for batch_i in range(batch_size):
-            post_nrn_name = 'input_nrn_' + str(batch_i)
-            if input_type == InputType.IF:
-                post_nrn[batch_i] = g_model.add_neuron_population(
-                    post_nrn_name, post_nrn_n, if_input_model, {}, if_input_init
-                )
-            elif input_type == InputType.POISSON:
-                post_nrn[batch_i] = g_model.add_neuron_population(
-                    post_nrn_name, post_nrn_n, poisson_input_model, {'rate_factor': rate_factor}, poisson_input_init
-                )
-            elif input_type == InputType.SPIKE:
-                post_nrn[batch_i] = g_model.add_neuron_population(
-                    post_nrn_name, post_nrn_n, spike_input_model, {}, spike_input_init
-                )
-
-        # For each synapse population
-        for layer_name, w_vals, w_conn, thr in zip(self.layer_names, self.weight_vals,
-                                                   self.weight_conn, self.thresholds):
-
-            # Set presynaptic neurons
-            pre_nrn = post_nrn
-
-            # Add next layer of neurons
-            post_nrn = [None] * batch_size
-            post_nrn_n = w_vals.shape[1]
-            for batch_i in range(batch_size):
-                post_nrn_name = layer_name + '_nrn_' + str(batch_i)
-                post_nrn[batch_i] = g_model.add_neuron_population(
-                    post_nrn_name, post_nrn_n, if_model, {}, if_init
-                )
-                post_nrn[batch_i].set_extra_global_param('Vthr', thr)
-
-            # Add pre_nrn to post_nrn synapses
-            syn = [None] * batch_size
-            for batch_i in range(batch_size):
-                syn_name = layer_name + '_syn_' + str(batch_i)
-
-                # Batch master synapses
-                if not share_weights or batch_i == 0:
-                    if w_conn.all():
-                        # Dense weight matrix
-                        syn[batch_i] = g_model.add_synapse_population(
-                            syn_name, 'DENSE_INDIVIDUALG', NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
-                            'StaticPulse', {}, {'g': w_vals.flatten()}, {}, {}, 'DeltaCurr', {}, {}
-                        )
-
-                    else:
-                        # Sparse weight matrix
-                        w_inds = np.nonzero(w_conn)
-                        syn[batch_i] = g_model.add_synapse_population(
-                            syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
-                            'StaticPulse', {}, {'g': w_vals[w_inds]}, {}, {}, 'DeltaCurr', {}, {}
-                        )
-                        syn[batch_i].set_sparse_connections(w_inds[0], w_inds[1])
-
-                # Batch slave synapses
-                else:
-                    syn[batch_i] = g_model.add_slave_synapse_population(
-                        syn_name, syn[0], NO_DELAY, pre_nrn[batch_i], post_nrn[batch_i],
-                        'DeltaCurr', {}, {}
-                    )
-
-        # Build and load model
-        self.g_model = g_model
+        self.g_model = GeNNModel('float', self.name)
+        self.g_model.timing_enabled = True
+        self.g_model.dT = dt
+        self.g_model._model.set_seed(rng_seed)
         self.batch_size = batch_size
         self.share_weights = share_weights
+
+        # Prepare each layer
+        for layer in self.layers:
+            layer.compile(self)
+
+        # Build and load model
         self.g_model.build()
         self.g_model.load()
 
 
-    def set_input_batch(self, x_data):
+
+        b = t.time()
+        print('compile / load time (secs):  ' + str(b - a))
+        print('remaining CUDA memory (GB):  ' + str(self.g_model.free_device_mem_bytes / (1024 * 1024 * 1024)))
+
+
+
+
+    def set_input_batch(self, data_batch):
         """Set model input with a new batch of samples
 
         Args:
-        x_data  --  data used to set model inputs with
+        data_batch  --  list of data batches for each input layer
         """
 
         # Input sanity check
-        n_samples = x_data.shape[0]
-        sample_size = np.prod(x_data.shape[1:])
-        input_size = self.weight_vals[0].shape[0]
-        if x_data.shape[0] > self.batch_size:
-            raise ValueError('sample count {} > batch size {}'.format(n_samples, self.batch_size))
-        if sample_size != self.weight_vals[0].shape[0]:
-            raise ValueError('sample size {} != input size {}'.format(sample_size, input_size))
+        if len(data_batch) != len(self.input_layers):
+            raise ValueError('data batch list length and input layer list length mismatch')
 
-        # Set model inputs
-        for i in range(self.batch_size):
-            input_name = 'input_nrn_' + str(i)
-            input_nrn = self.g_model.neuron_populations[input_name]
-            if i < n_samples:
-                input_nrn.vars['input'].view[:] = x_data[i].flatten()
-            else:
-                input_nrn.vars['input'].view[:] = np.zeros(input_size)
-            input_nrn.push_state_to_device()
+        for i in range(len(self.input_layers)):
+            self.input_layers[i].set_input_batch(data_batch[i])
 
 
     def step_time(self, iterations=1):
@@ -396,12 +323,12 @@ class TGModel(object):
         self.g_model.t = 0.0
 
 
-    def evaluate(self, x_data, y_data, time, save_samples=[]):
+    def evaluate(self, data, labels, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
         Args:
-        x_data        --  test samples
-        y_data        --  test labels
+        data          --  list of data for each input layer
+        labels        --  list of labels for each output layer
         time          --  sample present time (msec)
 
         Keyword args:
@@ -414,11 +341,14 @@ class TGModel(object):
         """
 
         # Input sanity check
-        n_samples = x_data.shape[0]
-        n_labels = y_data.shape[0]
+        n_samples = data[0].shape[0]
         save_samples = list(set(save_samples))
-        if n_samples != n_labels:
-            raise ValueError('sample count {} != label count {}'.format(n_samples, n_labels))
+        if len(data) != len(self.input_layers):
+            raise ValueError('data list length and input layer list length mismatch')
+        if len(labels) != len(self.output_layers):
+            raise ValueError('label list length and output layer list length mismatch')
+        if not all(x.shape[0] == n_samples for x in data + labels):
+            raise ValueError('sample count mismatch in data and labels arrays')
         if any(i < 0 or i >= n_samples for i in save_samples):
             raise ValueError('one or more invalid save_samples value')
 
@@ -426,16 +356,25 @@ class TGModel(object):
         spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
         spike_t = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
 
+
+
+
+        import time as t
+        t0_kernel = sum(self.get_kernel_times().values())
+        t0_clock = t.time()
+
+
+
         # For each sample batch
         progress = tqdm(total=n_samples)
         for batch_start in range(0, n_samples, self.batch_size):
             batch_end = min(batch_start + self.batch_size, n_samples)
-            batch_x_data = x_data[batch_start:batch_end]
-            batch_y_data = y_data[batch_start:batch_end]
+            batch_data = [x[batch_start:batch_end] for x in data]
+            batch_labels = [y[batch_start:batch_end] for y in labels]
 
             # Set new input
             self.reset()
-            self.set_input_batch(batch_x_data)
+            self.set_input_batch(batch_data)
 
             # Main simulation loop
             while self.g_model.t < time:
@@ -459,16 +398,33 @@ class TGModel(object):
 
             # After simulation
             for batch_i in range(batch_end - batch_start):
+
+
+
                 output_name = self.layer_names[-1] + '_nrn_' + str(batch_i)
                 output_nrn = self.g_model.neuron_populations[output_name]
                 output_nrn.pull_var_from_device('nSpk')
-                n_correct += output_nrn.vars['nSpk'].view.argmax() == batch_y_data[batch_i]
+                n_correct += output_nrn.vars['nSpk'].view.argmax() == batch_labels[batch_i]
+
+
+
 
             accuracy = (n_correct / batch_end) * 100
             progress.set_postfix_str('accuracy: {:2.2f}'.format(accuracy))
             progress.update(batch_end - batch_start)
 
         progress.close()
+
+
+        t_clock = t.time() - t0_clock
+        t_kernel = sum(self.get_kernel_times().values()) - t0_kernel
+
+
+        print('batch_size  clock_time  kernel_time  kernel_ratio')
+        print('{}  {}  {}  {}'.format(self.batch_size, t_clock, t_kernel ,t_kernel / t_clock))
+
+
+
 
         return accuracy, spike_i, spike_t
 

@@ -9,11 +9,12 @@ def model_compare_tf_and_tg(tf_model, x):
 
     # Run TensorGeNN model
     tg_model = tg.TGModel()
-    tg_model.convert_tf_model(tf_model)
-    tg_model.thresholds[0] = np.float64(np.inf)
-    tg_model.compile(batch_size=1, dt=1.0, input_type=tg.InputType.SPIKE)
-    tg_model.set_input_batch(x)
+    tg_model.convert_tf_model(tf_model, input_type=tg.InputType.SPIKE)
+    tg_model.compile(dt=1.0, batch_size=1)
+    tg_model.output_layers[0].set_threshold(np.float64(np.inf))
+    tg_model.set_input_batch([x])
     tg_model.step_time(2)
+
     neurons = tg_model.g_model.neuron_populations['conv2d_nrn_0']
     tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem')
     tg_y = neurons.vars['Vmem'].view.reshape(tf_y.shape)

@@ -1,8 +1,9 @@
 from pygenn.genn_model import create_custom_neuron_class
 
+
 # === IF neuron class ===
 if_model = create_custom_neuron_class(
-    'if_model',
+    'if',
     var_name_types=[('Vmem', 'scalar'), ('nSpk', 'unsigned int')],
     extra_global_params=[('Vthr', 'scalar')],
     sim_code='''
@@ -24,14 +25,32 @@ if_model = create_custom_neuron_class(
     is_auto_refractory_required=False,
 )
 
-if_init = {
-    'Vmem': 0.0,
-    'nSpk': 0,
-}
+
+# === Spike input neuron class ===
+spike_input_model = create_custom_neuron_class(
+    'spike_input',
+    var_name_types=[('input', 'scalar')],
+    threshold_condition_code='''
+    $(input)
+    ''',
+    is_auto_refractory_required=False,
+)
+
+
+# === Poisson input neuron class ===
+poisson_input_model = create_custom_neuron_class(
+    'poisson_input',
+    var_name_types=[('input', 'scalar')],
+    threshold_condition_code='''
+    $(gennrand_uniform) >= exp(-$(input) * DT)
+    ''',
+    is_auto_refractory_required=False,
+)
+
 
 # === IF input neuron class ===
 if_input_model = create_custom_neuron_class(
-    'if_input_model',
+    'if_input',
     var_name_types=[('input', 'scalar'), ('Vmem', 'scalar')],
     sim_code='''
     if ($(t) == 0.0) {
@@ -48,37 +67,3 @@ if_input_model = create_custom_neuron_class(
     ''',
     is_auto_refractory_required=False,
 )
-
-if_input_init = {
-    'input': 0.0,
-    'Vmem': 0.0,
-}
-
-# === Poisson input neuron class ===
-poisson_input_model = create_custom_neuron_class(
-    'poisson_input_model',
-    var_name_types=[('input', 'scalar')],
-    param_names=['rate_factor'],
-    threshold_condition_code='''
-    $(gennrand_uniform) >= exp(-$(input) * $(rate_factor) * DT)
-    ''',
-    is_auto_refractory_required=False,
-)
-
-poisson_input_init = {
-    'input': 0.0,
-}
-
-# === Spike input neuron class ===
-spike_input_model = create_custom_neuron_class(
-    'spike_input_model',
-    var_name_types=[('input', 'scalar')],
-    threshold_condition_code='''
-    $(input)
-    ''',
-    is_auto_refractory_required=False,
-)
-
-spike_input_init = {
-    'input': 0.0,
-}
