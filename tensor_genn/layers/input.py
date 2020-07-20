@@ -1,5 +1,7 @@
 from enum import Enum
 import numpy as np
+
+from tensor_genn.layers import Layer
 from tensor_genn.genn_models import spike_input_model
 from tensor_genn.genn_models import poisson_input_model
 from tensor_genn.genn_models import if_input_model
@@ -11,35 +13,11 @@ class InputType(Enum):
     IF = 'if'
 
 
-class Input(object):
+class Input(Layer):
 
-    def __init__(self, model, params, vars_init, global_params,
-                 name, shape):
-        self.name = name
+    def __init__(self, name, shape, model, params, vars_init, global_params):
+        super(Input, self).__init__(name, model, params, vars_init, global_params)
         self.shape = shape
-        self.model = model
-        self.params = params
-        self.vars_init = vars_init
-        self.global_params = global_params
-
-        self.downstream_layers = []
-
-        self.tg_model = None
-
-
-    def compile(self, tg_model):
-        self.tg_model = tg_model
-
-        nrn_n = np.prod(self.shape)
-        for batch_i in range(tg_model.batch_size):
-
-            # Add neuron population
-            nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
-            nrn = tg_model.g_model.add_neuron_population(
-                nrn_name, nrn_n, self.model, self.params, self.vars_init
-            )
-            for gp in self.global_params:
-                nrn.set_extra_global_param(gp, self.global_params[gp])
 
 
     def set_input_batch(self, data_batch):
@@ -66,22 +44,19 @@ class Input(object):
 class SpikeInput(Input):
     def __init__(self, name, shape):
         super(SpikeInput, self).__init__(
-            spike_input_model, {}, {'input': 0.0}, {},
-            name, shape
+            name, shape, spike_input_model, {}, {'input': 0.0}, {}
         )
 
 
 class PoissonInput(Input):
     def __init__(self, name, shape):
         super(PoissonInput, self).__init__(
-            poisson_input_model, {}, {'input': 0.0}, {},
-            name, shape
+            name, shape, poisson_input_model, {}, {'input': 0.0}, {}
         )
 
 
 class IFInput(Input):
     def __init__(self, name, shape):
         super(IFInput, self).__init__(
-            if_input_model, {}, {'input': 0.0, 'Vmem': 0.0}, {},
-            name, shape
+            name, shape, if_input_model, {}, {'input': 0.0, 'Vmem': 0.0}, {}
         )

@@ -1,3 +1,8 @@
+
+from tensor_genn.layers.connection import BaseConnection
+
+from tensor_genn.layers.layer import Layer
+
 from tensor_genn.layers.input import InputType
 from tensor_genn.layers.input import Input
 from tensor_genn.layers.input import SpikeInput

@@ -41,8 +41,8 @@ class TGModel(object):
 
         self.name = name
         self.layers = []
-        self.input_layers = []
-        self.output_layers = []
+        self.inputs = []
+        self.outputs = []
 
         self.g_model = None
         self.batch_size = None
@@ -81,8 +81,8 @@ class TGModel(object):
 
 
         self.name = tf_model.name
-        self.input_layers = []
-        self.output_layers = []
+        self.inputs = []
+        self.outputs = []
         self.layers = []
 
 
@@ -95,7 +95,7 @@ class TGModel(object):
         elif input_type == InputType.IF:
             layer = IFInput('input', tf_model.input_shape[1:])
 
-        self.input_layers.append(layer)
+        self.inputs.append(layer)
         self.layers.append(layer)
         previous_layer = layer
 
@@ -119,7 +119,7 @@ class TGModel(object):
 
                 layer = IFDense(tf_layer.name, tf_layer.units)
                 layer.connect(previous_layer)
-                layer.set_weights(tf_layer.get_weights()[0])
+                layer.set_weights(tf_layer.get_weights())
 
                 self.layers.append(layer)
                 previous_layer = layer
@@ -131,7 +131,7 @@ class TGModel(object):
 
                 layer = IFConv2D(tf_layer.name, tf_layer.filters, tf_layer.kernel_size, tf_layer.strides, tf_layer.padding)
                 layer.connect(previous_layer)
-                layer.set_weights(tf_layer.get_weights()[0])
+                layer.set_weights(tf_layer.get_weights())
 
                 self.layers.append(layer)
                 previous_layer = layer
@@ -221,30 +221,29 @@ class TGModel(object):
             #     deferred_vals = None
             #     deferred_conn = None
 
-        self.output_layers.append(previous_layer)
+        self.outputs.append(previous_layer)
 
 
-    def set_network(self, input_layers, output_layers):
-        self.input_layers = input_layers
-        self.output_layers = output_layers
+    def set_network(self, inputs, outputs):
+        self.inputs = inputs
+        self.outputs = outputs
         self.layers = []
 
         # Construct topologically sorted list of layers
-        new_layers = set(input_layers)
-        seen_layers = set()
-
+        new_layers = set(inputs)
+        seen_connections = set()
         while new_layers:
             layer = new_layers.pop()
             self.layers.append(layer)
-            seen_layers.add(layer)
 
-            # Explore downstream layers whose upstream layers have all been visited
-            for downstream_layer in layer.downstream_layers:
-                if downstream_layer not in seen_layers and seen_layers.issuperset(downstream_layer.upstream_layers):
-                    new_layers.add(downstream_layer)
+            # Explore downstream layers whose upstream connections have all been seen
+            for downstream_connection in layer.downstream_connections:
+                seen_connections.add(downstream_connection)
+                if seen_connections.issuperset(downstream_connection.target.upstream_connections):
+                    new_layers.add(downstream_connection.target)
 
         # Check that output layers are reachable from input layers
-        if not seen_layers.issuperset(self.output_layers):
+        if not all(output in self.layers for output in self.outputs):
             raise ValueError('output layers unreachable from input layers')
 
 
@@ -298,11 +297,11 @@ class TGModel(object):
         """
 
         # Input sanity check
-        if len(data_batch) != len(self.input_layers):
+        if len(data_batch) != len(self.inputs):
             raise ValueError('data batch list length and input layer list length mismatch')
 
-        for i in range(len(self.input_layers)):
-            self.input_layers[i].set_input_batch(data_batch[i])
+        for i in range(len(self.inputs)):
+            self.inputs[i].set_input_batch(data_batch[i])
 
 
     def step_time(self, iterations=1):
@@ -343,9 +342,9 @@ class TGModel(object):
         # Input sanity check
         n_samples = data[0].shape[0]
         save_samples = list(set(save_samples))
-        if len(data) != len(self.input_layers):
+        if len(data) != len(self.inputs):
             raise ValueError('data list length and input layer list length mismatch')
-        if len(labels) != len(self.output_layers):
+        if len(labels) != len(self.outputs):
             raise ValueError('label list length and output layer list length mismatch')
         if not all(x.shape[0] == n_samples for x in data + labels):
             raise ValueError('sample count mismatch in data and labels arrays')
@@ -382,6 +381,9 @@ class TGModel(object):
                 # Step time
                 self.step_time()
 
+
+
+
                 # Save spikes
                 for sample_i in [i for i in save_samples if batch_start <= i < batch_end]:
                     k = save_samples.index(sample_i)
@@ -395,6 +397,9 @@ class TGModel(object):
                         times = np.ones(indices.shape) * self.g_model.t
                         spike_i[k][l] = np.hstack((spike_i[k][l], indices))
                         spike_t[k][l] = np.hstack((spike_t[k][l], times))
+
+
+
 
             # After simulation
             for batch_i in range(batch_end - batch_start):

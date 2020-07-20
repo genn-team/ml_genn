@@ -1,10 +1,14 @@
 from math import ceil
 from enum import Enum
 import numpy as np
+
 from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import create_dpf_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
+
+from tensor_genn.layers import BaseConnection
+from tensor_genn.layers import Layer
 from tensor_genn.genn_models import if_model
 
 
@@ -58,68 +62,51 @@ conv2d_init = create_custom_init_var_snippet_class(
 )
 
 
-class Conv2D(object):
+class Conv2DConnection(BaseConnection):
 
-    def __init__(self, model, params, vars_init, global_params,
-                 name, filters, kernel_size, strides=(1, 1), padding='valid'):
-        self.name = name
+    def __init__(self, filters, kernel_size, strides=(1, 1), padding='valid'):
+        super(Conv2DConnection, self).__init__()
         self.filters = filters
         self.kernel_size = kernel_size
         self.strides = strides
-        self.padding = Conv2DPadMode(padding)
-        self.model = model
-        self.params = params
-        self.vars_init = vars_init
-        self.global_params = global_params
-
-        self.downstream_layers = []
-        self.upstream_layer = None
-        self.weights = None
-        self.shape = None
-
-        self.tg_model = None
+        self.padding = padding
 
 
-    def connect(self, upstream_layer):
-        upstream_layer.downstream_layers.append(self)
-        self.upstream_layer = upstream_layer
+    def connect(self, source, target):
+        super(Conv2DConnection, self).connect(source, target)
 
         kh, kw = self.kernel_size
         sh, sw = self.strides
-        ih, iw, ic = self.upstream_layer.shape
-
-        self.weights = np.empty((kh, kw, ic, self.filters), dtype=np.float64)
+        ih, iw, ic = source.shape
 
         if self.padding == Conv2DPadMode.VALID:
-            self.shape = (
+            shape = (
                 ceil(float(ih - kh + 1) / float(sh)),
                 ceil(float(iw - kw + 1) / float(sw)),
                 self.filters,
             )
-
         elif self.padding == Conv2DPadMode.SAME:
-            self.shape = (
+            shape = (
                 ceil(float(ih) / float(sh)),
                 ceil(float(iw) / float(sw)),
                 self.filters,
             )
 
+        if target.shape is None:
+            target.shape = shape
+        elif target.shape != shape:
+            raise RuntimeError('layer shape mismatch')
 
-    def set_weights(self, weights):
-        self.weights[:] = weights
-
-
-    def get_weights(self):
-        return self.weights.copy()
+        self.weights = np.empty((kh, kw, ic, self.filters), dtype=np.float64)
 
 
     def compile(self, tg_model):
-        self.tg_model = tg_model
+        super(Conv2DConnection, self).compile(tg_model)
 
         kh, kw = self.kernel_size
         sh, sw = self.strides
-        ih, iw, ic = self.upstream_layer.shape
-        oh, ow, oc = self.shape
+        ih, iw, ic = self.source.shape
+        oh, ow, oc = self.target.shape
 
         if self.padding == Conv2DPadMode.VALID:
             padh = 0
@@ -137,19 +124,10 @@ class Conv2D(object):
             'padh': padh, 'padw': padw,
         })
 
-        post_nrn_n = np.prod(self.shape)
         for batch_i in range(tg_model.batch_size):
-
-            # Add neuron population
-            post_nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
-            post_nrn = tg_model.g_model.add_neuron_population(
-                post_nrn_name, post_nrn_n, self.model, self.params, self.vars_init
-            )
-            for gp in self.global_params:
-                post_nrn.set_extra_global_param(gp, self.global_params[gp])
-
-            pre_nrn_name = '{}_nrn_{}'.format(self.upstream_layer.name, batch_i)
-            syn_name = '{}_to_{}_syn_{}'.format(self.upstream_layer.name, self.name, batch_i)
+            pre_nrn_name = '{}_nrn_{}'.format(self.source.name, batch_i)
+            post_nrn_name = '{}_nrn_{}'.format(self.target.name, batch_i)
+            syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
 
             # Batch master synapses
             if not tg_model.share_weights or batch_i == 0:
@@ -161,18 +139,35 @@ class Conv2D(object):
 
             # Batch slave synapses
             else:
-                master_syn_name = '{}_to_{}_syn_0'.format(self.upstream_layer.name, self.name)
+                master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 syn = tg_model.g_model.add_slave_synapse_population(
                     syn_name, master_syn_name, NO_DELAY, pre_nrn_name, post_nrn_name, 'DeltaCurr', {}, {}
                 )
+
+
+class Conv2D(Layer):
+
+    def __init__(self, name, model, params, vars_init, global_params,
+                 filters, kernel_size, strides=(1, 1), padding='valid'):
+        super(Conv2D, self).__init__(name, model, params, vars_init, global_params)
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.padding = Conv2DPadMode(padding)
+        self.weights = None
+
+
+    def connect(self, source):
+        connection = Conv2DConnection(self.filters, self.kernel_size, self.strides, self.padding)
+        connection.connect(source, self)
 
 
 class IFConv2D(Conv2D):
 
     def __init__(self, name, filters, kernel_size, strides=(1, 1), padding='valid', threshold=1.0):
         super(IFConv2D, self).__init__(
-            if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
-            name, filters, kernel_size, strides, padding
+            name, if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
+            filters, kernel_size, strides, padding
         )
 
         self.threshold = threshold
