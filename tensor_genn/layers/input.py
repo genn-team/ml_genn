@@ -32,13 +32,11 @@ class Input(Layer):
 
         # Set inputs
         for batch_i in range(self.tg_model.batch_size):
-            nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
-            nrn = self.tg_model.g_model.neuron_populations[nrn_name]
             if batch_i < n_samples:
-                nrn.vars['input'].view[:] = data_batch[batch_i].flatten()
+                self.nrn[batch_i].vars['input'].view[:] = data_batch[batch_i].flatten()
             else:
-                nrn.vars['input'].view[:] = np.zeros(input_size)
-            nrn.push_state_to_device()
+                self.nrn[batch_i].vars['input'].view[:] = np.zeros(input_size)
+            self.nrn[batch_i].push_state_to_device()
 
 
 class SpikeInput(Input):

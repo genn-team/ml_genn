@@ -13,6 +13,15 @@ class Layer(object):
         self.upstream_connections = []
         self.shape = None
         self.tg_model = None
+        self.nrn = None
+
+
+    def connect(self, sources, connections):
+        if len(sources) != len(connections):
+            raise ValueError('sources list and connections list length mismatch')
+
+        for source, connection in zip(sources, connections):
+            connection.connect(source, self)
 
 
     def set_weights(self, weights):
@@ -28,17 +37,18 @@ class Layer(object):
 
     def compile(self, tg_model):
         self.tg_model = tg_model
+        self.nrn = [None] * tg_model.batch_size
 
         nrn_n = np.prod(self.shape)
         for batch_i in range(tg_model.batch_size):
 
             # Add neuron population
             nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
-            nrn = tg_model.g_model.add_neuron_population(
+            self.nrn[batch_i] = tg_model.g_model.add_neuron_population(
                 nrn_name, nrn_n, self.model, self.params, self.vars_init
             )
             for gp in self.global_params:
-                nrn.set_extra_global_param(gp, self.global_params[gp])
+                self.nrn[batch_i].set_extra_global_param(gp, self.global_params[gp])
 
         for connection in self.upstream_connections:
             connection.compile(tg_model)

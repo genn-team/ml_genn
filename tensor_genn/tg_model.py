@@ -73,7 +73,7 @@ class TGModel(object):
         for tf_layer in tf_model.layers[:-1]:
             if not isinstance(tf_layer, supported_tf_layers):
                 raise NotImplementedError('{} layers not supported'.format(type(tf_layer)))
-            elif isinstance(tf_layer, tf.keras.layers.Dense):
+            elif isinstance(tf_layer, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
                 if tf_layer.activation != tf.keras.activations.relu:
                     raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
                 if tf_layer.use_bias == True:
@@ -118,7 +118,7 @@ class TGModel(object):
                 print('converting Dense layer <{}>'.format(tf_layer.name))
 
                 layer = IFDense(tf_layer.name, tf_layer.units)
-                layer.connect(previous_layer)
+                layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
 
                 self.layers.append(layer)
@@ -130,7 +130,7 @@ class TGModel(object):
                 print('converting Conv2D layer <{}>'.format(tf_layer.name))
 
                 layer = IFConv2D(tf_layer.name, tf_layer.filters, tf_layer.kernel_size, tf_layer.strides, tf_layer.padding)
-                layer.connect(previous_layer)
+                layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
 
                 self.layers.append(layer)
@@ -257,13 +257,6 @@ class TGModel(object):
         share_weights  --  share weights within model batch (default: False)
         """
 
-
-
-        import time as t
-        a = t.time()
-
-
-
         # Define GeNN model
         self.g_model = GeNNModel('float', self.name)
         self.g_model.timing_enabled = True
@@ -279,14 +272,6 @@ class TGModel(object):
         # Build and load model
         self.g_model.build()
         self.g_model.load()
-
-
-
-        b = t.time()
-        print('compile / load time (secs):  ' + str(b - a))
-        print('remaining CUDA memory (GB):  ' + str(self.g_model.free_device_mem_bytes / (1024 * 1024 * 1024)))
-
-
 
 
     def set_input_batch(self, data_batch):
@@ -351,12 +336,13 @@ class TGModel(object):
         if any(i < 0 or i >= n_samples for i in save_samples):
             raise ValueError('one or more invalid save_samples value')
 
-        n_correct = 0
         spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
         spike_t = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
 
 
 
+
+        print('remaining CUDA memory (GB):  ' + str(self.g_model.free_device_mem_bytes / (1024 * 1024 * 1024)))
 
         import time as t
         t0_kernel = sum(self.get_kernel_times().values())
@@ -365,6 +351,8 @@ class TGModel(object):
 
 
         # For each sample batch
+        n_correct = [0] * len(self.outputs)
+        accuracy = [0] * len(self.outputs)
         progress = tqdm(total=n_samples)
         for batch_start in range(0, n_samples, self.batch_size):
             batch_end = min(batch_start + self.batch_size, n_samples)
@@ -388,10 +376,8 @@ class TGModel(object):
                 for sample_i in [i for i in save_samples if batch_start <= i < batch_end]:
                     k = save_samples.index(sample_i)
                     batch_i = sample_i - batch_start
-                    names = ['input_nrn_' + str(batch_i)]
-                    names += [name + '_nrn_' + str(batch_i) for name in self.layer_names]
-                    for l, name in enumerate(names):
-                        nrn = self.g_model.neuron_populations[name]
+                    for l, layer in enumerate(self.layers):
+                        nrn = layer.nrn[batch_i]
                         nrn.pull_current_spikes_from_device()
                         indices = nrn.current_spikes
                         times = np.ones(indices.shape) * self.g_model.t
@@ -402,28 +388,24 @@ class TGModel(object):
 
 
             # After simulation
-            for batch_i in range(batch_end - batch_start):
+            for output_i in range(len(self.outputs)):
+                for batch_i in range(batch_end - batch_start):
+                    nrn = self.outputs[output_i].nrn[batch_i]
+                    nrn.pull_var_from_device('nSpk')
+                    n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == batch_labels[batch_i]
 
+                accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
 
-
-                output_name = self.layer_names[-1] + '_nrn_' + str(batch_i)
-                output_nrn = self.g_model.neuron_populations[output_name]
-                output_nrn.pull_var_from_device('nSpk')
-                n_correct += output_nrn.vars['nSpk'].view.argmax() == batch_labels[batch_i]
-
-
-
-
-            accuracy = (n_correct / batch_end) * 100
-            progress.set_postfix_str('accuracy: {:2.2f}'.format(accuracy))
+            progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
             progress.update(batch_end - batch_start)
 
         progress.close()
 
 
+
+
         t_clock = t.time() - t0_clock
         t_kernel = sum(self.get_kernel_times().values()) - t0_kernel
-
 
         print('batch_size  clock_time  kernel_time  kernel_ratio')
         print('{}  {}  {}  {}'.format(self.batch_size, t_clock, t_kernel ,t_kernel / t_clock))

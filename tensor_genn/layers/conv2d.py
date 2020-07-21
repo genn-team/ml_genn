@@ -125,23 +125,23 @@ class Conv2DConnection(BaseConnection):
         })
 
         for batch_i in range(tg_model.batch_size):
-            pre_nrn_name = '{}_nrn_{}'.format(self.source.name, batch_i)
-            post_nrn_name = '{}_nrn_{}'.format(self.target.name, batch_i)
+            pre_nrn = self.source.nrn[batch_i]
+            post_nrn = self.target.nrn[batch_i]
             syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
 
             # Batch master synapses
             if not tg_model.share_weights or batch_i == 0:
-                syn = tg_model.g_model.add_synapse_population(
-                    syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn_name, post_nrn_name,
+                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
+                    syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
                     'StaticPulse', {}, {'g': weights_init}, {}, {}, 'DeltaCurr', {}, {}
                 )
-                syn.vars['g'].set_extra_global_init_param('kernels', self.weights.flatten())
+                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernels', self.weights.flatten())
 
             # Batch slave synapses
             else:
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
-                syn = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn_name, post_nrn_name, 'DeltaCurr', {}, {}
+                self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
+                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {}
                 )
 
 
@@ -157,9 +157,12 @@ class Conv2D(Layer):
         self.weights = None
 
 
-    def connect(self, source):
-        connection = Conv2DConnection(self.filters, self.kernel_size, self.strides, self.padding)
-        connection.connect(source, self)
+    def connect(self, sources):
+        connections = [
+            Conv2DConnection(self.filters, self.kernel_size, self.strides, self.padding)
+            for i in range(len(sources))
+        ]
+        super(Conv2D, self).connect(sources, connections)
 
 
 class IFConv2D(Conv2D):
