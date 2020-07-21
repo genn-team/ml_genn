@@ -336,9 +336,6 @@ class TGModel(object):
         if any(i < 0 or i >= n_samples for i in save_samples):
             raise ValueError('one or more invalid save_samples value')
 
-        spike_i = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
-        spike_t = [[np.empty(0)] * len(self.g_model.neuron_populations)] * len(save_samples)
-
 
 
 
@@ -350,14 +347,18 @@ class TGModel(object):
 
 
 
-        # For each sample batch
+
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
+        all_spikes = [[[]] * len(self.layers)] * len(save_samples)
+
+        # Process sample batches
         progress = tqdm(total=n_samples)
         for batch_start in range(0, n_samples, self.batch_size):
             batch_end = min(batch_start + self.batch_size, n_samples)
             batch_data = [x[batch_start:batch_end] for x in data]
             batch_labels = [y[batch_start:batch_end] for y in labels]
+            save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
 
             # Set new input
             self.reset()
@@ -369,25 +370,16 @@ class TGModel(object):
                 # Step time
                 self.step_time()
 
-
-
-
                 # Save spikes
-                for sample_i in [i for i in save_samples if batch_start <= i < batch_end]:
-                    k = save_samples.index(sample_i)
-                    batch_i = sample_i - batch_start
+                for i in save_samples_in_batch:
+                    k = save_samples.index(i)
+                    batch_i = i - batch_start
                     for l, layer in enumerate(self.layers):
                         nrn = layer.nrn[batch_i]
                         nrn.pull_current_spikes_from_device()
-                        indices = nrn.current_spikes
-                        times = np.ones(indices.shape) * self.g_model.t
-                        spike_i[k][l] = np.hstack((spike_i[k][l], indices))
-                        spike_t[k][l] = np.hstack((spike_t[k][l], times))
+                        all_spikes[k][l].append(np.copy(nrn.current_spikes))
 
-
-
-
-            # After simulation
+            # Compute accuracy
             for output_i in range(len(self.outputs)):
                 for batch_i in range(batch_end - batch_start):
                     nrn = self.outputs[output_i].nrn[batch_i]
@@ -404,6 +396,7 @@ class TGModel(object):
 
 
 
+
         t_clock = t.time() - t0_clock
         t_kernel = sum(self.get_kernel_times().values()) - t0_kernel
 
@@ -412,6 +405,14 @@ class TGModel(object):
 
 
 
+        # Create spike index and time lists
+        spike_i = [[[]] * len(self.layers)] * len(save_samples)
+        spike_t = [[[]] * len(self.layers)] * len(save_samples)
+        for i in range(len(save_samples)):
+            for j in range(len(self.layers)):
+                spikes = all_spikes[i][j]
+                spike_i[i][j] = np.concatenate(spikes)
+                spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dt for i, s in enumerate(spikes)])
 
         return accuracy, spike_i, spike_t
 
