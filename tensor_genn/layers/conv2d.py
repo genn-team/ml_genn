@@ -1,32 +1,25 @@
-from math import ceil
-from enum import Enum
 import numpy as np
+from math import ceil
 
 from pygenn.genn_model import create_custom_init_var_snippet_class
-from pygenn.genn_model import create_dpf_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
+from tensor_genn.layers import PadMode
 from tensor_genn.layers import BaseConnection
 from tensor_genn.layers import Layer
-from tensor_genn.genn_models import if_model
+from tensor_genn.layers.neuron_models import if_model
 
 
-class Conv2DPadMode(Enum):
-    VALID = 'valid'
-    SAME = 'same'
-
-
-# === Conv2D initialise class ===
 conv2d_init = create_custom_init_var_snippet_class(
     'conv2d',
 
     param_names=[
-        'kh', 'kw',
-        'sh', 'sw',
-        'ih', 'iw', 'ic',
-        'oh', 'ow', 'oc',
-        'padh', 'padw',
+        'conv_kh', 'conv_kw',
+        'conv_sh', 'conv_sw',
+        'conv_padh', 'conv_padw',
+        'conv_ih', 'conv_iw', 'conv_ic',
+        'conv_oh', 'conv_ow', 'conv_oc',
     ],
 
     extra_global_params=[
@@ -34,28 +27,35 @@ conv2d_init = create_custom_init_var_snippet_class(
     ],
 
     var_init_code='''
-    const int kh = $(kh), kw = $(kw);
-    const int sh = $(sh), sw = $(sw);
-    const int iw = $(iw), ic = $(ic);
-    const int ow = $(ow), oc = $(oc);
+    const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
+    const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
+    const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
+    const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
+    const int conv_ow = $(conv_ow), conv_oc = $(conv_oc);
 
-    int in_row = ($(id_pre) / ic) / iw;
-    int in_col = ($(id_pre) / ic) % iw;
-    int in_chan = $(id_pre) % ic;
+    const int conv_in_row = ($(id_pre) / conv_ic) / conv_iw;
+    const int conv_in_col = ($(id_pre) / conv_ic) % conv_iw;
+    const int conv_in_chan = $(id_pre) % conv_ic;
 
-    int out_row = ($(id_post) / oc) / ow;
-    int out_col = ($(id_post) / oc) % ow;
-    int out_chan = $(id_post) % oc;
+    const int conv_out_row = ($(id_post) / conv_oc) / conv_ow;
+    const int conv_out_col = ($(id_post) / conv_oc) % conv_ow;
+    const int conv_out_chan = $(id_post) % conv_oc;
 
-    int k_offset_row = out_row * sh - $(padh);
-    int k_offset_col = out_col * sw - $(padw);
+    int conv_stride_row = conv_out_row * conv_sh - conv_padh;
+    int conv_stride_col = conv_out_col * conv_sw - conv_padw;
 
-    int k_row = in_row - k_offset_row;
-    int k_col = in_col - k_offset_col;
+    int conv_k_row = conv_in_row - conv_stride_row;
+    int conv_k_col = conv_in_col - conv_stride_col;
 
-    if (k_row >= 0 && k_row < kh && k_col >= 0 && k_col < kw) {
-        $(value) = $(kernels)[k_row * (kw * ic * oc) + k_col * (ic * oc) + in_chan * (oc) + out_chan];
-    } else {
+    if (conv_k_row >= 0 && conv_k_row < conv_kh && conv_k_col >= 0 && conv_k_col < conv_kw) {
+        $(value) = $(kernels)[
+            conv_k_row * (conv_kw * conv_ic * conv_oc) +
+            conv_k_col * (conv_ic * conv_oc) +
+            conv_in_chan * (conv_oc) +
+            conv_out_chan
+        ];
+    }
+    else {
         $(value) = 0.0;
     }
     ''',
@@ -64,64 +64,65 @@ conv2d_init = create_custom_init_var_snippet_class(
 
 class Conv2DConnection(BaseConnection):
 
-    def __init__(self, filters, kernel_size, strides=(1, 1), padding='valid'):
+    def __init__(self, filters, conv_size, conv_strides=None, conv_padding='valid'):
         super(Conv2DConnection, self).__init__()
         self.filters = filters
-        self.kernel_size = kernel_size
-        self.strides = strides
-        self.padding = padding
+        self.conv_size = conv_size
+        if conv_strides == None:
+            self.conv_strides = (1, 1)
+        else:
+            self.conv_strides = conv_strides
+        self.conv_padding = PadMode(conv_padding)
+        self.conv_output_shape = None
 
 
     def connect(self, source, target):
         super(Conv2DConnection, self).connect(source, target)
 
-        kh, kw = self.kernel_size
-        sh, sw = self.strides
-        ih, iw, ic = source.shape
-
-        if self.padding == Conv2DPadMode.VALID:
-            shape = (
-                ceil(float(ih - kh + 1) / float(sh)),
-                ceil(float(iw - kw + 1) / float(sw)),
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = source.shape
+        if self.conv_padding == PadMode.VALID:
+            self.conv_output_shape = (
+                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
+                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
                 self.filters,
             )
-        elif self.padding == Conv2DPadMode.SAME:
-            shape = (
-                ceil(float(ih) / float(sh)),
-                ceil(float(iw) / float(sw)),
+        elif self.conv_padding == PadMode.SAME:
+            self.conv_output_shape = (
+                ceil(float(conv_ih) / float(conv_sh)),
+                ceil(float(conv_iw) / float(conv_sw)),
                 self.filters,
             )
 
         if target.shape is None:
-            target.shape = shape
-        elif target.shape != shape:
-            raise RuntimeError('layer shape mismatch')
+            target.shape = self.conv_output_shape
+        elif self.conv_output_shape != target.shape:
+            raise RuntimeError('target layer shape mismatch')
 
-        self.weights = np.empty((kh, kw, ic, self.filters), dtype=np.float64)
+        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
 
 
     def compile(self, tg_model):
         super(Conv2DConnection, self).compile(tg_model)
 
-        kh, kw = self.kernel_size
-        sh, sw = self.strides
-        ih, iw, ic = self.source.shape
-        oh, ow, oc = self.target.shape
-
-        if self.padding == Conv2DPadMode.VALID:
-            padh = 0
-            padw = 0
-
-        elif self.padding == Conv2DPadMode.SAME:
-            padh = (kh - 1) // 2
-            padw = (kw - 1) // 2
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = self.source.shape
+        conv_oh, conv_ow, conv_oc = self.conv_output_shape
+        if self.conv_padding == PadMode.VALID:
+            conv_padh = 0
+            conv_padw = 0
+        elif self.conv_padding == PadMode.SAME:
+            conv_padh = (conv_kh - 1) // 2
+            conv_padw = (conv_kw - 1) // 2
 
         weights_init = init_var(conv2d_init, {
-            'kh': kh, 'kw': kw,
-            'sh': sh, 'sw': sw,
-            'ih': ih, 'iw': iw, 'ic': ic,
-            'oh': oh, 'ow': ow, 'oc': oc,
-            'padh': padh, 'padw': padw,
+            'conv_kh': conv_kh, 'conv_kw': conv_kw,
+            'conv_sh': conv_sh, 'conv_sw': conv_sw,
+            'conv_padh': conv_padh, 'conv_padw': conv_padw,
+            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc,
         })
 
         for batch_i in range(tg_model.batch_size):
@@ -148,18 +149,20 @@ class Conv2DConnection(BaseConnection):
 class Conv2D(Layer):
 
     def __init__(self, name, model, params, vars_init, global_params,
-                 filters, kernel_size, strides=(1, 1), padding='valid'):
+                 filters, conv_size, conv_strides=None, conv_padding='valid'):
         super(Conv2D, self).__init__(name, model, params, vars_init, global_params)
         self.filters = filters
-        self.kernel_size = kernel_size
-        self.strides = strides
-        self.padding = Conv2DPadMode(padding)
-        self.weights = None
+        self.conv_size = conv_size
+        if conv_strides == None:
+            self.conv_strides = (1, 1)
+        else:
+            self.conv_strides = conv_strides
+        self.conv_padding = PadMode(conv_padding)
 
 
     def connect(self, sources):
         connections = [
-            Conv2DConnection(self.filters, self.kernel_size, self.strides, self.padding)
+            Conv2DConnection(self.filters, self.conv_size, self.conv_strides, self.conv_padding)
             for i in range(len(sources))
         ]
         super(Conv2D, self).connect(sources, connections)
@@ -167,10 +170,10 @@ class Conv2D(Layer):
 
 class IFConv2D(Conv2D):
 
-    def __init__(self, name, filters, kernel_size, strides=(1, 1), padding='valid', threshold=1.0):
+    def __init__(self, name, filters, conv_size, conv_strides=None, conv_padding='valid', threshold=1.0):
         super(IFConv2D, self).__init__(
             name, if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
-            filters, kernel_size, strides, padding
+            filters, conv_size, conv_strides, conv_padding
         )
 
         self.threshold = threshold

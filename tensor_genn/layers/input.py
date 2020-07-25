@@ -2,9 +2,9 @@ from enum import Enum
 import numpy as np
 
 from tensor_genn.layers import Layer
-from tensor_genn.genn_models import spike_input_model
-from tensor_genn.genn_models import poisson_input_model
-from tensor_genn.genn_models import if_input_model
+from tensor_genn.layers.neuron_models import spike_input_model
+from tensor_genn.layers.neuron_models import poisson_input_model
+from tensor_genn.layers.neuron_models import if_input_model
 
 
 class InputType(Enum):

@@ -19,14 +19,19 @@ Example:
         tensorgenn_model.evaluate(test_data, test_labels)
 """
 
-from tqdm import tqdm
+
 import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
+
 from pygenn.genn_model import GeNNModel
 
-from tensor_genn.layers import InputType, Input, SpikeInput, PoissonInput, IFInput
-from tensor_genn.layers import Dense, IFDense
-from tensor_genn.layers import Conv2D, IFConv2D
+from tensor_genn.layers import InputType
+from tensor_genn.layers import SpikeInput, PoissonInput, IFInput
+from tensor_genn.layers import IFDense
+from tensor_genn.layers import IFAvePool2DDense
+from tensor_genn.layers import IFConv2D
+from tensor_genn.layers import IFAvePool2DConv2D
 
 
 class TGModel(object):
@@ -79,12 +84,10 @@ class TGModel(object):
                 if tf_layer.use_bias == True:
                     raise NotImplementedError('bias tensors not supported')
 
-
         self.name = tf_model.name
         self.inputs = []
         self.outputs = []
         self.layers = []
-
 
         # Add input layer
         input_type = InputType(input_type)
@@ -94,11 +97,11 @@ class TGModel(object):
             layer = PoissonInput('input', tf_model.input_shape[1:])
         elif input_type == InputType.IF:
             layer = IFInput('input', tf_model.input_shape[1:])
-
         self.inputs.append(layer)
+
         self.layers.append(layer)
         previous_layer = layer
-
+        pool_layer = None
 
         # For each TensorFlow model layer:
         for tf_layer in tf_model.layers:
@@ -106,120 +109,52 @@ class TGModel(object):
             # === Flatten Layers ===
             if isinstance(tf_layer, tf.keras.layers.Flatten):
                 print('ignoring Flatten layer <{}>'.format(tf_layer.name))
-                continue
 
             # === Dropout Layers ===
             elif isinstance(tf_layer, tf.keras.layers.Dropout):
                 print('ignoring Dropout layer <{}>'.format(tf_layer.name))
-                continue
 
             # === Dense Layers ===
             elif isinstance(tf_layer, tf.keras.layers.Dense):
-                print('converting Dense layer <{}>'.format(tf_layer.name))
+                if pool_layer is None:
+                    print('converting Dense layer <{}>'.format(tf_layer.name))
+                    layer = IFDense(tf_layer.name, tf_layer.units)
+                else:
+                    print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
+                    layer = IFAvePool2DDense(tf_layer.name, tf_layer.units, pool_layer.pool_size,
+                                             pool_layer.strides, pool_layer.padding)
 
-                layer = IFDense(tf_layer.name, tf_layer.units)
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
 
                 self.layers.append(layer)
                 previous_layer = layer
-
+                pool_layer = None
 
             # === Conv2D Layers ===
             elif isinstance(tf_layer, tf.keras.layers.Conv2D):
-                print('converting Conv2D layer <{}>'.format(tf_layer.name))
+                if pool_layer is None:
+                    print('converting Conv2D layer <{}>'.format(tf_layer.name))
+                    layer = IFConv2D(tf_layer.name, tf_layer.filters, tf_layer.kernel_size,
+                                     tf_layer.strides, tf_layer.padding)
+                else:
+                    print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
+                    layer = IFAvePool2DConv2D(tf_layer.name, tf_layer.filters, pool_layer.pool_size,
+                                              tf_layer.kernel_size, pool_layer.strides, tf_layer.strides,
+                                              pool_layer.padding, tf_layer.padding)
 
-                layer = IFConv2D(tf_layer.name, tf_layer.filters, tf_layer.kernel_size, tf_layer.strides, tf_layer.padding)
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
 
                 self.layers.append(layer)
                 previous_layer = layer
+                pool_layer = None
 
+            # === AveragePooling2D Layers ===
+            elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
+                print('deferring AveragePooling2D layer <{}>'.format(tf_layer.name))
 
-            # # === AveragePooling2D Layers ===
-            # elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-            #     print('defer weights for layer <{}>'.format(tf_layer.name))
-            #     g_vals = np.zeros((np.prod(tf_layer.input_shape[1:]), np.prod(tf_layer.output_shape[1:])))
-            #     g_conn = np.zeros(g_vals.shape, dtype=np.bool)
-            #     defer_weights = True
-
-            #     ph, pw = tf_layer.pool_size
-            #     sh, sw = tf_layer.strides
-            #     ih, iw, ic = tf_layer.input_shape[1:]
-            #     oh, ow, oc = tf_layer.output_shape[1:]
-
-            #     # Stride start index iterators.
-            #     if tf_layer.padding == 'valid':
-            #         stride_rows = range(0, ih - ph + 1, sh)
-            #         stride_cols = range(0, iw - pw + 1, sw)
-            #     elif tf_layer.padding == 'same':
-            #         stride_rows = range(0 - ph // 2, ih - ph // 2, sh)
-            #         stride_cols = range(0 - pw // 2, iw - pw // 2, sw)
-
-            #     # For each pool (one-to-one input -> output channels):
-            #     for channel in range(ic):
-            #         g_pool_vals = g_vals[channel::ic, channel::ic]
-            #         g_pool_conn = g_conn[channel::ic, channel::ic]
-
-            #         # For each output neuron:
-            #         for out_row, stride_row in enumerate(stride_rows):
-            #             for out_col, stride_col in enumerate(stride_cols):
-            #                 g_out_vals = g_pool_vals[:, out_row * ow + out_col]
-            #                 g_out_vals.shape = (ih, iw)
-            #                 g_out_conn = g_pool_conn[:, out_row * ow + out_col]
-            #                 g_out_conn.shape = (ih, iw)
-
-            #                 # Get a pool stride view in g_out_vals.
-            #                 g_pool_T = max(stride_row, 0)
-            #                 g_pool_B = min(stride_row + ph, ih)
-            #                 g_pool_L = max(stride_col, 0)
-            #                 g_pool_R = min(stride_col + pw, iw)
-            #                 g_stride_vals = g_out_vals[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
-            #                 g_stride_conn = g_out_conn[g_pool_T:g_pool_B, g_pool_L:g_pool_R]
-
-            #                 # Set weights for this stride.
-            #                 g_stride_vals[:] = 1.0 / g_stride_vals.size
-            #                 g_stride_conn[:] = True
-
-            # # === Combine Deferred Weights ===
-            # if deferred_vals is not None:
-            #     print('combining deferred weights with GeNN weights for layer <{}>'.format(tf_layer.name))
-            #     new_vals = np.zeros((deferred_vals.shape[0], g_vals.shape[1]))
-            #     new_conn = np.zeros(new_vals.shape, dtype=np.bool)
-
-            #     # For each input channel:
-            #     for in_channel in range(ic):
-            #         # Note: it is assumed that the deferred weight matrix maps input
-            #         # channel i one-to-one to output channel i, for all i in [0, ic).
-            #         new_in_channel_vals = new_vals[in_channel::ic, :]
-            #         new_in_channel_conn = new_conn[in_channel::ic, :]
-            #         deferred_in_channel_vals = deferred_vals[in_channel::ic, in_channel::ic]
-            #         deferred_in_channel_conn = deferred_conn[in_channel::ic, in_channel::ic]
-            #         g_in_channel_vals = g_vals[in_channel::ic, :]
-            #         g_in_channel_conn = g_conn[in_channel::ic, :]
-
-            #         # Set weights to dot product of deferred and new weights.
-            #         new_in_channel_vals[:] = np.dot(deferred_in_channel_vals, g_in_channel_vals)
-            #         new_in_channel_conn[:] = np.dot(deferred_in_channel_conn, g_in_channel_conn)
-
-            #     # Update weights.
-            #     g_vals = new_vals
-            #     g_conn = new_conn
-
-            # # === Append Weights ===
-            # if defer_weights:
-            #     # Defer weights to next layer.
-            #     deferred_vals = g_vals
-            #     deferred_conn = g_conn
-            # else:
-            #     # Append weights for this layer.
-            #     self.layer_names.append(tf_layer.name)
-            #     self.weight_vals.append(g_vals)
-            #     self.weight_conn.append(g_conn)
-            #     self.thresholds.append(np.float64(1.0))
-            #     deferred_vals = None
-            #     deferred_conn = None
+                pool_layer = tf_layer
 
         self.outputs.append(previous_layer)
 

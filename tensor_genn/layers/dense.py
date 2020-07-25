@@ -4,7 +4,7 @@ from pygenn.genn_wrapper import NO_DELAY
 
 from tensor_genn.layers import BaseConnection
 from tensor_genn.layers import Layer
-from tensor_genn.genn_models import if_model
+from tensor_genn.layers.neuron_models import if_model
 
 
 class DenseConnection(BaseConnection):
@@ -12,16 +12,18 @@ class DenseConnection(BaseConnection):
     def __init__(self, units):
         super(DenseConnection, self).__init__()
         self.units = units
+        self.dense_output_shape = None
 
 
     def connect(self, source, target):
         super(DenseConnection, self).connect(source, target)
 
-        shape = (self.units, )
+        self.dense_output_shape = (self.units, )
+
         if target.shape is None:
-            target.shape = shape
-        elif target.shape != shape:
-            raise RuntimeError('layer shape mismatch')
+            target.shape = self.dense_output_shape
+        elif self.dense_output_shape != target.shape:
+            raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((np.prod(source.shape), self.units), dtype=np.float64)
 
@@ -55,7 +57,6 @@ class Dense(Layer):
                  units):
         super(Dense, self).__init__(name, model, params, vars_init, global_params)
         self.units = units
-        self.weights = None
 
 
     def connect(self, sources):
