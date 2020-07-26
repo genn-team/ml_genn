@@ -1,5 +1,3 @@
-import numpy as np
-
 from tensor_genn.layers.base_layer import BaseLayer
 
 

@@ -16,6 +16,11 @@ class BaseConnection(object):
         self.syn = None
 
 
+    def compile(self, tg_model):
+        self.tg_model = tg_model
+        self.syn = [None] * tg_model.batch_size
+
+
     def connect(self, source, target):
         self.source = source
         self.target = target
@@ -29,8 +34,3 @@ class BaseConnection(object):
 
     def get_weights(self):
         return self.weights.copy()
-
-
-    def compile(self, tg_model):
-        self.tg_model = tg_model
-        self.syn = [None] * tg_model.batch_size

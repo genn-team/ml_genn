@@ -2,10 +2,10 @@
 from tensor_genn.layers.input import InputType
 from tensor_genn.layers.base_connection import PadMode
 
-from tensor_genn.layers.dense import DenseConnection
-from tensor_genn.layers.conv2d import Conv2DConnection
-from tensor_genn.layers.avepool2d_dense import AvePool2DDenseConnection
-from tensor_genn.layers.avepool2d_conv2d import AvePool2DConv2DConnection
+from tensor_genn.layers.dense_connection import DenseConnection
+from tensor_genn.layers.conv2d_connection import Conv2DConnection
+from tensor_genn.layers.avepool2d_dense_connection import AvePool2DDenseConnection
+from tensor_genn.layers.avepool2d_conv2d_connection import AvePool2DConv2DConnection
 
 from tensor_genn.layers.input import Input
 from tensor_genn.layers.input import SpikeInput
