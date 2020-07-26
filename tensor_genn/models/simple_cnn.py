@@ -11,36 +11,20 @@ class SimpleCNN(TGModel):
 
         # Define TensorFlow model
         tf_model = models.Sequential([
-            # layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=x_train.shape[1:]),
-            # layers.AveragePooling2D(2),
-            # layers.Conv2D(8, 5, padding='valid', activation='relu', use_bias=False),
-            # #layers.AveragePooling2D(2),
-            # layers.Flatten(),
-            # layers.Dense(128, activation='relu', use_bias=False),
-            # layers.Dense(64, activation='relu', use_bias=False),
-            # layers.Dense(y_train.max() + 1, activation='softmax', use_bias=False),
-
-
-
             layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=x_train.shape[1:]),
             layers.AveragePooling2D(2),
+            layers.Conv2D(8, 5, padding='valid', activation='relu', use_bias=False),
+            layers.AveragePooling2D(2),
             layers.Flatten(),
+            layers.Dense(128, activation='relu', use_bias=False),
+            layers.Dense(64, activation='relu', use_bias=False),
             layers.Dense(y_train.max() + 1, activation='softmax', use_bias=False),
-
-
-            # layers.AveragePooling2D(2, input_shape=x_train.shape[1:]),
-            # layers.Flatten(),
-            # layers.Dense(y_train.max() + 1, activation='softmax', use_bias=False),
-
-
-
         ], name='simple_cnn')
 
         # Train and convert model
         #tf_model = models.load_model('simple_cnn_tf_model')
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        #tf_model.fit(x_train, y_train, epochs=10)
-        tf_model.fit(x_train, y_train, epochs=1)
+        tf_model.fit(x_train, y_train, epochs=10)
         #models.save_model(tf_model, 'simple_cnn_tf_model', save_format='h5')
         self.convert_tf_model(tf_model, input_type)
         self.tf_model = tf_model
@@ -76,7 +60,7 @@ if __name__ == '__main__':
                                           save_samples=args.save_samples)
 
     # Report TensorGeNN model results
-    print('Accuracy of SimpleCNN GeNN model: {}%'.format(acc))
+    print('Accuracy of SimpleCNN GeNN model: {}%'.format(acc[0]))
     if args.plot:
         names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
         neurons = [tg_model.g_model.neuron_populations[name] for name in names]

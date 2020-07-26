@@ -32,7 +32,7 @@ avepool2d_conv2d_init = create_custom_init_var_snippet_class(
     const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
     const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
     const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
-    const int pool_iw = $(pool_iw), pool_ic = $(pool_ic);
+    const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
 
     const int pool_in_row = ($(id_pre) / pool_ic) / pool_iw;
     const int pool_in_col = ($(id_pre) / pool_ic) % pool_iw;
@@ -41,7 +41,7 @@ avepool2d_conv2d_init = create_custom_init_var_snippet_class(
     const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
     const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
     const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
-    const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
+    const int conv_ic = $(conv_ic);
     const int conv_ow = $(conv_ow), conv_oc = $(conv_oc);
 
     const int conv_out_row = ($(id_post) / conv_oc) / conv_ow;

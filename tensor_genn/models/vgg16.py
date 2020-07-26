@@ -93,7 +93,7 @@ if __name__ == '__main__':
                                           save_samples=args.save_samples)
 
     # Report TensorGeNN model results
-    print('Accuracy of VGG16 GeNN model: {}%'.format(acc))
+    print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
     if args.plot:
         names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
         neurons = [tg_model.g_model.neuron_populations[name] for name in names]

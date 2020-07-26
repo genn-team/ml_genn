@@ -76,24 +76,6 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
 )
 
 
-# # TEMP DEBUG
-# avepool2d_dense_init = create_custom_init_var_snippet_class(
-#     'avepool2d_dense',
-
-#     param_names=[
-#         'dense_units',
-#     ],
-
-#     extra_global_params=[
-#         ('weights', 'scalar*'),
-#     ],
-
-#     var_init_code='''
-#     $(value) = 0.0;
-#     '''
-# )
-
-
 class AvePool2DDenseConnection(BaseConnection):
 
     def __init__(self, units, pool_size, pool_strides=None, pool_padding='valid'):
@@ -132,11 +114,6 @@ class AvePool2DDenseConnection(BaseConnection):
             'dense_ih': dense_ih, 'dense_iw': dense_iw, 'dense_ic': dense_ic,
             'dense_units': self.units,
         })
-
-        # # TEMP DEBUG
-        # weights_init = init_var(avepool2d_dense_init, {
-        #     'dense_units': self.units,
-        # })
 
         for batch_i in range(tg_model.batch_size):
             pre_nrn = self.source.nrn[batch_i]
