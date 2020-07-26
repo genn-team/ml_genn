@@ -319,7 +319,8 @@ class TGModel(object):
                 for batch_i in range(batch_end - batch_start):
                     nrn = self.outputs[output_i].nrn[batch_i]
                     nrn.pull_var_from_device('nSpk')
-                    n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == batch_labels[batch_i]
+                    label = batch_labels[output_i][batch_i]
+                    n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == label
 
                 accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
 
