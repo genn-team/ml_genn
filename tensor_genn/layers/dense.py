@@ -2,8 +2,8 @@ import numpy as np
 
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers import BaseConnection
-from tensor_genn.layers import Layer
+from tensor_genn.layers.base_connection import BaseConnection
+from tensor_genn.layers.layer import Layer
 from tensor_genn.layers.neuron_models import if_model
 
 

@@ -5,9 +5,9 @@ from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers import PadMode
-from tensor_genn.layers import BaseConnection
-from tensor_genn.layers import Layer
+from tensor_genn.layers.base_connection import PadMode
+from tensor_genn.layers.base_connection import BaseConnection
+from tensor_genn.layers.layer import Layer
 from tensor_genn.layers.neuron_models import if_model
 
 

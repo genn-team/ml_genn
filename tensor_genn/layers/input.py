@@ -1,7 +1,7 @@
 from enum import Enum
 import numpy as np
 
-from tensor_genn.layers import Layer
+from tensor_genn.layers.base_layer import BaseLayer
 from tensor_genn.layers.neuron_models import spike_input_model
 from tensor_genn.layers.neuron_models import poisson_input_model
 from tensor_genn.layers.neuron_models import if_input_model
@@ -13,11 +13,15 @@ class InputType(Enum):
     IF = 'if'
 
 
-class Input(Layer):
+class Input(BaseLayer):
 
     def __init__(self, name, shape, model, params, vars_init, global_params):
         super(Input, self).__init__(name, model, params, vars_init, global_params)
         self.shape = shape
+
+
+    def compile(self, tg_model):
+        super(Input, self).compile(tg_model)
 
 
     def set_input_batch(self, data_batch):
