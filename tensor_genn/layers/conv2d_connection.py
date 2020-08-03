@@ -23,34 +23,39 @@ conv2d_init = create_custom_init_var_snippet_class(
     extra_global_params=[
         ('kernels', 'scalar*'),
     ],
-
+    
+    group_params=[
+        ('conv_kh_reg', 'int', '$(conv_kh)'), 
+        ('conv_kw_reg', 'int', '$(conv_kw)'),
+        ('conv_sh_reg', 'int', '$(conv_sh)'), 
+        ('conv_sw_reg', 'int', '$(conv_sw)'),
+        ('conv_padh_reg', 'int', '$(conv_padh)'), 
+        ('conv_padw_reg', 'int', '$(conv_padw)'),
+        ('conv_iw_reg', 'int', '$(conv_iw)'), 
+        ('conv_ic_reg', 'int', '$(conv_ic)'),
+        ('conv_ow_reg', 'int', '$(conv_ow)'),
+        ('conv_oc_reg', 'int', '$(conv_oc)')],
+    
+    pre_params = [('conv_in_row', 'int', '($(id_pre) / $(conv_ic_reg)) / $(conv_iw_reg)'),
+                  ('conv_in_col', 'int', '($(id_pre) / $(conv_ic_reg)) % $(conv_iw_reg)'),
+                  ('conv_in_chan', 'int', '$(id_pre) % $(conv_ic_reg)')],
+                    
+    post_params = [('conv_out_row', 'int', '($(id_post) / $(conv_oc_reg)) / $(conv_ow_reg)'),
+                   ('conv_out_col', 'int', '($(id_post) / $(conv_oc_reg)) % $(conv_ow_reg)'),
+                   ('conv_out_chan', 'int', '$(id_post) % $(conv_oc_reg)')],
+    
+    
     var_init_code='''
-    const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
-    const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
-    const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
-    const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
-    const int conv_ow = $(conv_ow), conv_oc = $(conv_oc);
-
-    const int conv_in_row = ($(id_pre) / conv_ic) / conv_iw;
-    const int conv_in_col = ($(id_pre) / conv_ic) % conv_iw;
-    const int conv_in_chan = $(id_pre) % conv_ic;
-
-    const int conv_out_row = ($(id_post) / conv_oc) / conv_ow;
-    const int conv_out_col = ($(id_post) / conv_oc) % conv_ow;
-    const int conv_out_chan = $(id_post) % conv_oc;
-
-    int conv_stride_row = conv_out_row * conv_sh - conv_padh;
-    int conv_stride_col = conv_out_col * conv_sw - conv_padw;
-
-    int conv_k_row = conv_in_row - conv_stride_row;
-    int conv_k_col = conv_in_col - conv_stride_col;
-
-    if (conv_k_row >= 0 && conv_k_row < conv_kh && conv_k_col >= 0 && conv_k_col < conv_kw) {
+    const int conv_stride_row = $(conv_out_row) * $(conv_sh_reg) - $(conv_padh_reg);
+    const int conv_stride_col = $(conv_out_col) * $(conv_sw_reg) - $(conv_padw_reg);
+    const int conv_k_row = $(conv_in_row) - conv_stride_row;
+    const int conv_k_col = $(conv_in_col) - conv_stride_col;
+    if (conv_k_row >= 0 && conv_k_row < $(conv_kh_reg) && conv_k_col >= 0 && conv_k_col < $(conv_kw_reg)) {
         $(value) = $(kernels)[
-            conv_k_row * (conv_kw * conv_ic * conv_oc) +
-            conv_k_col * (conv_ic * conv_oc) +
-            conv_in_chan * (conv_oc) +
-            conv_out_chan
+            conv_k_row * ($(conv_kw_reg) * $(conv_ic_reg) * $(conv_oc_reg)) +
+            conv_k_col * ($(conv_ic_reg) * $(conv_oc_reg)) +
+            $(conv_in_chan) * $(conv_oc_reg) +
+            $(conv_out_chan)
         ];
     }
     else {
