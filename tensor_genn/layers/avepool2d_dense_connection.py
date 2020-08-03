@@ -24,17 +24,25 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
     extra_global_params=[
         ('weights', 'scalar*'),
     ],
+    
+    group_params=[
+        ('pool_kh_reg', 'int', '$(pool_kh)'), 
+        ('pool_kw_reg', 'int', '$(pool_kw)'),
+        ('pool_sh_reg', 'int', '$(pool_sh)'), 
+        ('pool_sw_reg', 'int', '$(pool_sw)'),
+        ('pool_padh_reg', 'int', '$(pool_padh)'), 
+        ('pool_padw_reg', 'int', '$(pool_padw)'),
+        ('pool_ih_reg', 'int', '$(pool_ih)'), 
+        ('pool_iw_reg', 'int', '$(pool_iw)'), 
+        ('pool_ic_reg', 'int', '$(pool_ic)')],
+    
+    pre_params = [
+        ('pool_in_row', 'int', '($(id_pre) / $(pool_ic_reg)) / $(pool_iw_reg)'),
+        ('pool_in_col', 'int', '($(id_pre) / $(pool_ic_reg)) % $(pool_iw_reg)'),
+        ('pool_in_chan', 'int', '$(id_pre) % $(pool_ic_reg)')],
 
+  
     var_init_code='''
-    const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
-    const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-    const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
-    const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-
-    const int pool_in_row = ($(id_pre) / pool_ic) / pool_iw;
-    const int pool_in_col = ($(id_pre) / pool_ic) % pool_iw;
-    const int pool_in_chan = $(id_pre) % pool_ic;
-
     const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
     const int dense_units = $(dense_units);
 
@@ -43,20 +51,20 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
     scalar weight = 0.0;
 
     // process only strides with rows containing pool_in_row
-    int pool_out_row = (pool_in_row + pool_padh) / pool_sh;
-    int pool_stride_row = pool_out_row * pool_sh - pool_padh;
-    while ((pool_stride_row >= -pool_padh) && (pool_stride_row + pool_kh > pool_in_row)) {
+    int pool_out_row = ($(pool_in_row) + $(pool_padh_reg)) / $(pool_sh_reg);
+    int pool_stride_row = pool_out_row * $(pool_sh_reg) - $(pool_padh_reg);
+    while ((pool_stride_row >= -$(pool_padh_reg)) && (pool_stride_row + $(pool_kh_reg) > $(pool_in_row))) {
 
-        int pool_kh_crop = min(pool_stride_row + pool_kh, pool_ih) - max(pool_stride_row, 0);
+        int pool_kh_crop = min(pool_stride_row + $(pool_kh_reg), $(pool_ih_reg)) - max(pool_stride_row, 0);
 
         // process only strides with cols containing pool_in_col
-        int pool_out_col = (pool_in_col + pool_padw) / pool_sw;
-        int pool_stride_col = pool_out_col * pool_sw - pool_padw;
-        while ((pool_stride_col >= -pool_padw) && (pool_stride_col + pool_kw > pool_in_col)) {
+        int pool_out_col = ($(pool_in_col) + $(pool_padw_reg)) / $(pool_sw_reg);
+        int pool_stride_col = pool_out_col * $(pool_sw_reg) - $(pool_padw_reg);
+        while ((pool_stride_col >= -$(pool_padw_reg)) && (pool_stride_col + $(pool_kw_reg) > $(pool_in_col))) {
 
-            int pool_kw_crop = min(pool_stride_col + pool_kw, pool_iw) - max(pool_stride_col, 0);
+            const int pool_kw_crop = min(pool_stride_col + $(pool_kw_reg), $(pool_iw_reg)) - max(pool_stride_col, 0);
 
-            int dense_in_unit = pool_out_row * (dense_iw * dense_ic) + pool_out_col * (dense_ic) + pool_in_chan;
+            const int dense_in_unit = pool_out_row * (dense_iw * dense_ic) + pool_out_col * (dense_ic) + $(pool_in_chan);
 
             weight += $(weights)[
                 dense_in_unit * (dense_units) +
@@ -64,11 +72,11 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
             ] / (pool_kh_crop * pool_kw_crop);
 
             pool_out_col--;
-            pool_stride_col = pool_out_col * pool_sw - pool_padw;
+            pool_stride_col = pool_out_col * $(pool_sw_reg) - $(pool_padw_reg);
         }
 
         pool_out_row--;
-        pool_stride_row = pool_out_row * pool_sh - pool_padh;
+        pool_stride_row = pool_out_row * $(pool_sh_reg) - $(pool_padh_reg);
     }
 
     $(value) = weight;
