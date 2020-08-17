@@ -15,8 +15,8 @@ class InputType(Enum):
 
 class Input(BaseLayer):
 
-    def __init__(self, name, shape, model, params, vars_init, global_params):
-        super(Input, self).__init__(name, model, params, vars_init, global_params)
+    def __init__(self, model, params, vars_init, global_params, name, shape):
+        super(Input, self).__init__(model, params, vars_init, global_params, name)
         self.shape = shape
 
 
@@ -46,19 +46,19 @@ class Input(BaseLayer):
 class SpikeInput(Input):
     def __init__(self, name, shape):
         super(SpikeInput, self).__init__(
-            name, shape, spike_input_model, {}, {'input': 0.0}, {}
+            spike_input_model, {}, {'input': 0.0}, {}, name, shape
         )
 
 
 class PoissonInput(Input):
     def __init__(self, name, shape):
         super(PoissonInput, self).__init__(
-            name, shape, poisson_input_model, {}, {'input': 0.0}, {}
+            poisson_input_model, {}, {'input': 0.0}, {}, name, shape
         )
 
 
 class IFInput(Input):
     def __init__(self, name, shape):
         super(IFInput, self).__init__(
-            name, shape, if_input_model, {}, {'input': 0.0, 'Vmem': 0.0}, {}
+            if_input_model, {}, {'input': 0.0, 'Vmem': 0.0}, {}, name, shape
         )

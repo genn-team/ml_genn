@@ -54,14 +54,15 @@ class TGModel(object):
         self.share_weights = None
 
 
-    def convert_tf_model(self, tf_model, input_type='poisson'):
+    def convert_tf_model(self, tf_model, input_type='poisson', genn_procedural=True):
         """Convert from a TensorFlow model
 
         Args:
         tf_model  --  TensorFlow model to be converted
 
         Keyword args:
-        input_type     --  type of input neurons (default: 'poisson')
+        input_type       --  type of input neurons (default: 'poisson')
+        genn_procedural  --  procedural GeNN connectivity, else sparse (default: True)
         """
 
         supported_tf_layers = (
@@ -118,11 +119,18 @@ class TGModel(object):
             elif isinstance(tf_layer, tf.keras.layers.Dense):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
-                    layer = IFDense(tf_layer.name, tf_layer.units)
+                    layer = IFDense(
+                        name=tf_layer.name, units=tf_layer.units, threshold=1.0
+                    )
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
-                    layer = IFAvePool2DDense(tf_layer.name, tf_layer.units, pool_layer.pool_size,
-                                             pool_layer.strides, pool_layer.padding)
+                    layer = IFAvePool2DDense(
+                        name=tf_layer.name, units=tf_layer.units,
+                        pool_size=pool_layer.pool_size,
+                        pool_strides=pool_layer.strides,
+                        pool_padding=pool_layer.padding,
+                        genn_procedural=genn_procedural, threshold=1.0
+                    )
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -135,13 +143,22 @@ class TGModel(object):
             elif isinstance(tf_layer, tf.keras.layers.Conv2D):
                 if pool_layer is None:
                     print('converting Conv2D layer <{}>'.format(tf_layer.name))
-                    layer = IFConv2D(tf_layer.name, tf_layer.filters, tf_layer.kernel_size,
-                                     tf_layer.strides, tf_layer.padding)
+                    layer = IFConv2D(
+                        name=tf_layer.name, filters=tf_layer.filters,
+                        conv_size=tf_layer.kernel_size,
+                        conv_strides=tf_layer.strides,
+                        conv_padding=tf_layer.padding,
+                        genn_procedural=genn_procedural, threshold=1.0
+                    )
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
-                    layer = IFAvePool2DConv2D(tf_layer.name, tf_layer.filters, pool_layer.pool_size,
-                                              tf_layer.kernel_size, pool_layer.strides, tf_layer.strides,
-                                              pool_layer.padding, tf_layer.padding)
+                    layer = IFAvePool2DConv2D(
+                        name=tf_layer.name, filters=tf_layer.filters,
+                        pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
+                        pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
+                        pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
+                        genn_procedural=genn_procedural, threshold=1.0
+                    )
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())

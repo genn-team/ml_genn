@@ -21,27 +21,28 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
         'dense_units',
     ],
 
+    group_params=[
+        ('pool_kh_reg', 'int', '$(pool_kh)'),
+        ('pool_kw_reg', 'int', '$(pool_kw)'),
+        ('pool_sh_reg', 'int', '$(pool_sh)'),
+        ('pool_sw_reg', 'int', '$(pool_sw)'),
+        ('pool_padh_reg', 'int', '$(pool_padh)'),
+        ('pool_padw_reg', 'int', '$(pool_padw)'),
+        ('pool_ih_reg', 'int', '$(pool_ih)'),
+        ('pool_iw_reg', 'int', '$(pool_iw)'),
+        ('pool_ic_reg', 'int', '$(pool_ic)')
+    ],
+
+    pre_params=[
+        ('pool_in_row', 'int', '($(id_pre) / $(pool_ic_reg)) / $(pool_iw_reg)'),
+        ('pool_in_col', 'int', '($(id_pre) / $(pool_ic_reg)) % $(pool_iw_reg)'),
+        ('pool_in_chan', 'int', '$(id_pre) % $(pool_ic_reg)')
+    ],
+
     extra_global_params=[
         ('weights', 'scalar*'),
     ],
-    
-    group_params=[
-        ('pool_kh_reg', 'int', '$(pool_kh)'), 
-        ('pool_kw_reg', 'int', '$(pool_kw)'),
-        ('pool_sh_reg', 'int', '$(pool_sh)'), 
-        ('pool_sw_reg', 'int', '$(pool_sw)'),
-        ('pool_padh_reg', 'int', '$(pool_padh)'), 
-        ('pool_padw_reg', 'int', '$(pool_padw)'),
-        ('pool_ih_reg', 'int', '$(pool_ih)'), 
-        ('pool_iw_reg', 'int', '$(pool_iw)'), 
-        ('pool_ic_reg', 'int', '$(pool_ic)')],
-    
-    pre_params = [
-        ('pool_in_row', 'int', '($(id_pre) / $(pool_ic_reg)) / $(pool_iw_reg)'),
-        ('pool_in_col', 'int', '($(id_pre) / $(pool_ic_reg)) % $(pool_iw_reg)'),
-        ('pool_in_chan', 'int', '$(id_pre) % $(pool_ic_reg)')],
 
-  
     var_init_code='''
     const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
     const int dense_units = $(dense_units);
@@ -86,7 +87,7 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
 
 class AvePool2DDenseConnection(BaseConnection):
 
-    def __init__(self, units, pool_size, pool_strides=None, pool_padding='valid'):
+    def __init__(self, units, pool_size, pool_strides=None, pool_padding='valid', genn_procedural=True):
         super(AvePool2DDenseConnection, self).__init__()
         self.units = units
         self.pool_size = pool_size
@@ -96,47 +97,63 @@ class AvePool2DDenseConnection(BaseConnection):
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
-        self.dense_output_shape = None
+        self.genn_procedural = genn_procedural
 
 
     def compile(self, tg_model):
         super(AvePool2DDenseConnection, self).compile(tg_model)
 
-        pool_kh, pool_kw = self.pool_size
-        pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source.shape
-        if self.pool_padding == PadMode.VALID:
-            pool_padh = 0
-            pool_padw = 0
-        elif self.pool_padding == PadMode.SAME:
-            pool_padh = (pool_kh - 1) // 2
-            pool_padw = (pool_kw - 1) // 2
+        # Procedural initialisation
+        if self.genn_procedural:
+            pool_kh, pool_kw = self.pool_size
+            pool_sh, pool_sw = self.pool_strides
+            pool_ih, pool_iw, pool_ic = self.source.shape
+            if self.pool_padding == PadMode.VALID:
+                pool_padh = 0
+                pool_padw = 0
+            elif self.pool_padding == PadMode.SAME:
+                pool_padh = (pool_kh - 1) // 2
+                pool_padw = (pool_kw - 1) // 2
 
-        dense_ih, dense_iw, dense_ic = self.pool_output_shape
+            dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
-        weights_init = init_var(avepool2d_dense_init, {
-            'pool_kh': pool_kh, 'pool_kw': pool_kw,
-            'pool_sh': pool_sh, 'pool_sw': pool_sw,
-            'pool_padh': pool_padh, 'pool_padw': pool_padw,
-            'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-            'dense_ih': dense_ih, 'dense_iw': dense_iw, 'dense_ic': dense_ic,
-            'dense_units': self.units,
-        })
+            g = init_var(avepool2d_dense_init, {
+                'pool_kh': pool_kh, 'pool_kw': pool_kw,
+                'pool_sh': pool_sh, 'pool_sw': pool_sw,
+                'pool_padh': pool_padh, 'pool_padw': pool_padw,
+                'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
+                'dense_ih': dense_ih, 'dense_iw': dense_iw, 'dense_ic': dense_ic,
+                'dense_units': self.units,
+            })
 
+        # Sparse initialisation
+        else:
+            g, indices = self.genn_sparse_weights()
+
+        # Add batch synapse populations
         for batch_i in range(tg_model.batch_size):
             pre_nrn = self.source.nrn[batch_i]
             post_nrn = self.target.nrn[batch_i]
             syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
 
-            # Batch master synapses
+            # Batch master
             if not tg_model.share_weights or batch_i == 0:
-                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                    syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
-                    'StaticPulse', {}, {'g': weights_init}, {}, {}, 'DeltaCurr', {}, {}
-                )
-                self.syn[batch_i].vars['g'].set_extra_global_init_param('weights', self.weights.flatten())
 
-            # Batch slave synapses
+                if self.genn_procedural:
+                    self.syn[batch_i] = tg_model.g_model.add_synapse_population(
+                        syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
+                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
+                    )
+                    self.syn[batch_i].vars['g'].set_extra_global_init_param('weights', self.weights.flatten())
+
+                else:
+                    self.syn[batch_i] = tg_model.g_model.add_synapse_population(
+                        syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
+                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
+                    )
+                    self.syn[batch_i].set_sparse_connections(indices[0], indices[1])
+
+            # Batch slave
             else:
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
@@ -163,11 +180,84 @@ class AvePool2DDenseConnection(BaseConnection):
                 pool_ic,
             )
 
-        self.dense_output_shape = (self.units, )
+        self.output_shape = (self.units, )
 
         if target.shape is None:
-            target.shape = self.dense_output_shape
-        elif self.dense_output_shape != target.shape:
+            target.shape = self.output_shape
+        elif self.output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
+
+
+    def genn_sparse_weights(self):
+
+        # === AvePool2D Weights ===
+        pool_weights = np.zeros((np.prod(self.source.shape), np.prod(self.pool_output_shape)))
+        pool_connect = np.zeros(pool_weights.shape, dtype=np.bool)
+
+        pool_kh, pool_kw = self.pool_size
+        pool_sh, pool_sw = self.pool_strides
+        pool_ih, pool_iw, pool_ic = self.source.shape
+        pool_oh, pool_ow, pool_oc = self.pool_output_shape
+        if self.pool_padding == PadMode.VALID:
+            pool_padh = 0
+            pool_padw = 0
+        elif self.pool_padding == PadMode.SAME:
+            pool_padh = (pool_kh - 1) // 2
+            pool_padw = (pool_kw - 1) // 2
+
+        # For each in {one-to-one input -> output channel}:
+        for channel in range(pool_ic):
+            pool_chan_weights = pool_weights[channel::pool_ic, channel::pool_oc]
+            pool_chan_connect = pool_connect[channel::pool_ic, channel::pool_oc]
+
+            # For each AvePool2D output pixel:
+            for pool_out_row in range(pool_oh):
+                pool_stride_row = pool_out_row * pool_sh - pool_padh
+                for pool_out_col in range(pool_ow):
+                    pool_stride_col = pool_out_col * pool_sw - pool_padw
+
+                    # Get a weights view for this out pixel.
+                    pool_out_pixel_weights = pool_chan_weights[:, pool_out_row * pool_ow + pool_out_col]
+                    pool_out_pixel_weights.shape = (pool_ih, pool_iw)
+                    pool_out_pixel_connect = pool_chan_connect[:, pool_out_row * pool_ow + pool_out_col]
+                    pool_out_pixel_connect.shape = (pool_ih, pool_iw)
+
+                    # Get a weights view for this cropped stride.
+                    crop_T = max(pool_stride_row, 0)
+                    crop_B = min(pool_stride_row + pool_kh, pool_ih)
+                    crop_L = max(pool_stride_col, 0)
+                    crop_R = min(pool_stride_col + pool_kw, pool_iw)
+                    pool_stride_weights = pool_out_pixel_weights[crop_T:crop_B, crop_L:crop_R]
+                    pool_stride_connect = pool_out_pixel_connect[crop_T:crop_B, crop_L:crop_R]
+
+                    # Set weights for this stride.
+                    pool_stride_weights[:] = 1.0 / pool_stride_weights.size
+                    pool_stride_connect[:] = True
+
+        # === Dense Weights ===
+        dense_weights = self.weights
+        dense_connect = np.ones(dense_weights.shape, dtype=np.bool)
+
+        # === Combined Weights ===
+        combined_weights = np.zeros((pool_weights.shape[0], dense_weights.shape[1]))
+        combined_connect = np.zeros(combined_weights.shape, dtype=np.bool)
+
+        # For each in {one-to-one input -> output channel}:
+        for channel in range(pool_ic):
+            pool_chan_weights = pool_weights[channel::pool_ic, channel::pool_ic]
+            pool_chan_connect = pool_connect[channel::pool_ic, channel::pool_ic]
+            dense_chan_weights = dense_weights[channel::pool_ic, :]
+            dense_chan_connect = dense_connect[channel::pool_ic, :]
+            combined_chan_weights = combined_weights[channel::pool_ic, :]
+            combined_chan_connect = combined_connect[channel::pool_ic, :]
+
+            # Set weights to dot product of AvePool2D and Dense weights.
+            combined_chan_weights[:] = np.dot(pool_chan_weights, dense_chan_weights)
+            combined_chan_connect[:] = np.dot(pool_chan_connect, dense_chan_connect)
+
+        # === Weight Values and Indices ===
+        w_indices = np.nonzero(combined_connect)
+        w_values = combined_weights[w_indices]
+        return w_values, w_indices
