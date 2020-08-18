@@ -6,7 +6,7 @@ from tensor_genn.utils import parse_arguments, raster_plot
 import numpy as np
 
 class VGG16(TGModel):
-    def __init__(self, x_train, y_train, input_type='poisson'):
+    def __init__(self, x_train, y_train, input_type='poisson', connection_type='procedural'):
         super(VGG16, self).__init__()
 
         # Check input size
@@ -59,7 +59,7 @@ class VGG16(TGModel):
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
         #models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
-        self.convert_tf_model(tf_model, input_type)
+        self.convert_tf_model(tf_model, input_type=input_type, connection_type=connection_type)
         self.tf_model = tf_model
 
 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
     # Create, normalise and evaluate TensorGeNN model
-    tg_model = VGG16(x_train, y_train, input_type=args.input_type)
+    tg_model = VGG16(x_train, y_train, input_type=args.input_type, connection_type=args.connection_type)
     tg_model.tf_model.evaluate(x_test, y_test)
     tg_model.compile(dt=args.dt, rng_seed=args.rng_seed,
                      batch_size=args.batch_size, share_weights=args.share_weights)

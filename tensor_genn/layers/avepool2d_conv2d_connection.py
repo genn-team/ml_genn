@@ -1,11 +1,10 @@
 import numpy as np
 from math import ceil
-
 from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers.base_connection import PadMode
+from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
 
 
@@ -113,7 +112,7 @@ avepool2d_conv2d_init = create_custom_init_var_snippet_class(
 class AvePool2DConv2DConnection(BaseConnection):
 
     def __init__(self, filters, pool_size, conv_size, pool_strides=None, conv_strides=None,
-                 pool_padding='valid', conv_padding='valid', genn_procedural=True):
+                 pool_padding='valid', conv_padding='valid', connection_type='procedural'):
         super(AvePool2DConv2DConnection, self).__init__()
         self.filters = filters
         self.pool_size = pool_size
@@ -129,14 +128,14 @@ class AvePool2DConv2DConnection(BaseConnection):
         self.pool_padding = PadMode(pool_padding)
         self.conv_padding = PadMode(conv_padding)
         self.pool_output_shape = None
-        self.genn_procedural = genn_procedural
+        self.connection_type = ConnectionType(connection_type)
 
 
     def compile(self, tg_model):
         super(AvePool2DConv2DConnection, self).compile(tg_model)
 
         # Procedural initialisation
-        if self.genn_procedural:
+        if self.connection_type == ConnectionType.PROCEDURAL:
             pool_kh, pool_kw = self.pool_size
             pool_sh, pool_sw = self.pool_strides
             pool_ih, pool_iw, pool_ic = self.source.shape
@@ -171,7 +170,7 @@ class AvePool2DConv2DConnection(BaseConnection):
             })
 
         # Sparse initialisation
-        else:
+        elif self.connection_type == ConnectionType.SPARSE:
             g, indices = self.genn_sparse_weights()
 
         # Add batch synapse populations
@@ -183,14 +182,14 @@ class AvePool2DConv2DConnection(BaseConnection):
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
 
-                if self.genn_procedural:
+                if self.connection_type == ConnectionType.PROCEDURAL:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                         syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
                         'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
                     )
                     self.syn[batch_i].vars['g'].set_extra_global_init_param('kernels', self.weights.flatten())
 
-                else:
+                elif self.connection_type == ConnectionType.SPARSE:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                         syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
                         'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}

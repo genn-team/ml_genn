@@ -1,5 +1,4 @@
-from tensor_genn.layers.dense_connection import DenseConnection
-from tensor_genn.layers.layer import Layer
+from tensor_genn.layers import Layer, DenseConnection
 from tensor_genn.layers.neuron_models import if_model
 
 

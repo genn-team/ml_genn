@@ -1,5 +1,4 @@
 import numpy as np
-
 from pygenn.genn_wrapper import NO_DELAY
 
 from tensor_genn.layers.base_connection import BaseConnection

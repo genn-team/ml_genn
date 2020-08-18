@@ -23,7 +23,6 @@ Example:
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
-
 from pygenn.genn_model import GeNNModel
 
 from tensor_genn.layers import InputType
@@ -54,15 +53,15 @@ class TGModel(object):
         self.share_weights = None
 
 
-    def convert_tf_model(self, tf_model, input_type='poisson', genn_procedural=True):
+    def convert_tf_model(self, tf_model, input_type='poisson', connection_type='procedural'):
         """Convert from a TensorFlow model
 
         Args:
         tf_model  --  TensorFlow model to be converted
 
         Keyword args:
-        input_type       --  type of input neurons (default: 'poisson')
-        genn_procedural  --  procedural GeNN connectivity, else sparse (default: True)
+        input_type         --  type of input neurons (default: 'poisson')
+        connection_type    --  type of connections in GeNN (default: 'procedural')
         """
 
         supported_tf_layers = (
@@ -129,7 +128,7 @@ class TGModel(object):
                         pool_size=pool_layer.pool_size,
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
-                        genn_procedural=genn_procedural, threshold=1.0
+                        connection_type=connection_type, threshold=1.0
                     )
 
                 layer.connect([previous_layer])
@@ -148,7 +147,7 @@ class TGModel(object):
                         conv_size=tf_layer.kernel_size,
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
-                        genn_procedural=genn_procedural, threshold=1.0
+                        connection_type=connection_type, threshold=1.0
                     )
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
@@ -157,7 +156,7 @@ class TGModel(object):
                         pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
-                        genn_procedural=genn_procedural, threshold=1.0
+                        connection_type=connection_type, threshold=1.0
                     )
 
                 layer.connect([previous_layer])

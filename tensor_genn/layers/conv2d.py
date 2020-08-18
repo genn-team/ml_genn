@@ -1,13 +1,12 @@
-from tensor_genn.layers.base_connection import PadMode
-from tensor_genn.layers.conv2d_connection import Conv2DConnection
-from tensor_genn.layers.layer import Layer
+from tensor_genn.layers import ConnectionType, PadMode
+from tensor_genn.layers import Layer, Conv2DConnection
 from tensor_genn.layers.neuron_models import if_model
 
 
 class Conv2D(Layer):
 
     def __init__(self, model, params, vars_init, global_params, name, filters,
-                 conv_size, conv_strides=None, conv_padding='valid', genn_procedural=True):
+                 conv_size, conv_strides=None, conv_padding='valid', connection_type='procedural'):
         super(Conv2D, self).__init__(model, params, vars_init, global_params, name)
         self.filters = filters
         self.conv_size = conv_size
@@ -16,12 +15,12 @@ class Conv2D(Layer):
         else:
             self.conv_strides = conv_strides
         self.conv_padding = PadMode(conv_padding)
-        self.genn_procedural = genn_procedural
+        self.connection_type = ConnectionType(connection_type)
 
 
     def connect(self, sources):
         connections = [Conv2DConnection(
-            self.filters, self.conv_size, self.conv_strides, self.conv_padding, self.genn_procedural
+            self.filters, self.conv_size, self.conv_strides, self.conv_padding, self.connection_type
         ) for i in range(len(sources))]
         super(Conv2D, self).connect(sources, connections)
 
@@ -29,10 +28,10 @@ class Conv2D(Layer):
 class IFConv2D(Conv2D):
 
     def __init__(self, name, filters, conv_size, conv_strides=None, conv_padding='valid',
-                 genn_procedural=True, threshold=1.0):
+                 connection_type='procedural', threshold=1.0):
         super(IFConv2D, self).__init__(
             if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
-            name, filters, conv_size, conv_strides, conv_padding, genn_procedural
+            name, filters, conv_size, conv_strides, conv_padding, connection_type
         )
 
 

@@ -1,6 +1,5 @@
-from tensor_genn.layers.base_connection import PadMode
-from tensor_genn.layers.avepool2d_conv2d_connection import AvePool2DConv2DConnection
-from tensor_genn.layers.layer import Layer
+from tensor_genn.layers import ConnectionType, PadMode
+from tensor_genn.layers import Layer, AvePool2DConv2DConnection
 from tensor_genn.layers.neuron_models import if_model
 
 
@@ -8,7 +7,7 @@ class AvePool2DConv2D(Layer):
 
     def __init__(self, model, params, vars_init, global_params, name, filters,
                  pool_size, conv_size, pool_strides=None, conv_strides=None,
-                 pool_padding='valid', conv_padding='valid', genn_procedural=True):
+                 pool_padding='valid', conv_padding='valid', connection_type='procedural'):
         super(AvePool2DConv2D, self).__init__(model, params, vars_init, global_params, name)
         self.filters = filters
         self.pool_size = pool_size
@@ -23,13 +22,13 @@ class AvePool2DConv2D(Layer):
             self.conv_strides = conv_strides
         self.pool_padding = PadMode(pool_padding)
         self.conv_padding = PadMode(conv_padding)
-        self.genn_procedural = genn_procedural
+        self.connection_type = ConnectionType(connection_type)
 
 
     def connect(self, sources):
         connections = [AvePool2DConv2DConnection(
             self.filters, self.pool_size, self.conv_size, self.pool_strides, self.conv_strides,
-            self.pool_padding, self.conv_padding, self.genn_procedural
+            self.pool_padding, self.conv_padding, self.connection_type
         ) for i in range(len(sources))]
         super(AvePool2DConv2D, self).connect(sources, connections)
 
@@ -37,11 +36,11 @@ class AvePool2DConv2D(Layer):
 class IFAvePool2DConv2D(AvePool2DConv2D):
 
     def __init__(self, name, filters, pool_size, conv_size, pool_strides=None, conv_strides=None,
-                 pool_padding='valid', conv_padding='valid', genn_procedural=True, threshold=1.0):
+                 pool_padding='valid', conv_padding='valid', connection_type='procedural', threshold=1.0):
         super(IFAvePool2DConv2D, self).__init__(
             if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
             name, filters, pool_size, conv_size, pool_strides, conv_strides,
-            pool_padding, conv_padding, genn_procedural
+            pool_padding, conv_padding, connection_type
         )
 
 

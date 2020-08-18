@@ -1,16 +1,9 @@
-from enum import Enum
 import numpy as np
 
 from tensor_genn.layers.base_layer import BaseLayer
 from tensor_genn.layers.neuron_models import spike_input_model
 from tensor_genn.layers.neuron_models import poisson_input_model
 from tensor_genn.layers.neuron_models import if_input_model
-
-
-class InputType(Enum):
-    SPIKE = 'spike'
-    POISSON = 'poisson'
-    IF = 'if'
 
 
 class Input(BaseLayer):

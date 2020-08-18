@@ -1,6 +1,7 @@
 
-from tensor_genn.layers.input import InputType
-from tensor_genn.layers.base_connection import PadMode
+from tensor_genn.layers.enum import InputType
+from tensor_genn.layers.enum import ConnectionType
+from tensor_genn.layers.enum import PadMode
 
 from tensor_genn.layers.dense_connection import DenseConnection
 from tensor_genn.layers.conv2d_connection import Conv2DConnection
