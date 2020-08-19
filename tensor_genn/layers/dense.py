@@ -25,8 +25,7 @@ class IFDense(Dense):
     def set_threshold(self, threshold):
         self.global_params['Vthr'] = threshold
 
-        if self.tg_model:
+        if self.nrn is not None:
             for batch_i in range(self.tg_model.batch_size):
-                nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
-                nrn = self.tg_model.g_model.neuron_populations[nrn_name]
+                nrn = self.nrn[batch_i]
                 nrn.extra_global_params['Vthr'].view[:] = threshold

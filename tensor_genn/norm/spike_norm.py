@@ -14,28 +14,25 @@ class SpikeNorm(object):
     def normalize(self, tg_model, time):
         print('Spike-Norm')
         g_model = tg_model.g_model
-        n_samples = self.norm_data.shape[0]
+        n_samples = self.norm_data[0].shape[0]
 
-        # Set all layer thresholds high initially
-        for l in range(len(tg_model.layer_names)):
-            for batch_i in range(tg_model.batch_size):
-                name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
-                nrn = g_model.neuron_populations[name]
-                nrn.extra_global_params['Vthr'].view[:] = np.inf
+        # Set layer thresholds high initially
+        for layer in tg_model.layers[1:]:
+            layer.set_threshold(np.inf)
 
         # For each weighted layer
-        for l in range(len(tg_model.layer_names)):
+        for layer in tg_model.layers[1:]:
             threshold = np.float64(0.0)
 
             # For each sample presentation
             progress = tqdm(total=n_samples)
             for batch_start in range(0, n_samples, tg_model.batch_size):
                 batch_end = min(batch_start + tg_model.batch_size, n_samples)
-                batch_norm_data = self.norm_data[batch_start:batch_end]
+                batch_data = [x[batch_start:batch_end] for x in self.norm_data]
 
                 # Set new input
-                tg_model.reset_state()
-                tg_model.set_input_batch(batch_norm_data)
+                tg_model.reset()
+                tg_model.set_input_batch(batch_data)
 
                 # Main simulation loop
                 while g_model.t < time:
@@ -45,8 +42,7 @@ class SpikeNorm(object):
 
                     # Get maximum activation
                     for batch_i in range(batch_end - batch_start):
-                        name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
-                        nrn = g_model.neuron_populations[name]
+                        nrn = layer.nrn[batch_i]
                         nrn.pull_var_from_device('Vmem')
                         threshold = np.max([threshold, nrn.vars['Vmem'].view.max()])
                         nrn.vars['Vmem'].view[:] = np.float64(0.0)
@@ -57,9 +53,5 @@ class SpikeNorm(object):
             progress.close()
 
             # Update this layer's threshold
-            print('layer <{}> threshold: {}'.format(tg_model.layer_names[l], threshold))
-            tg_model.thresholds[l] = threshold
-            for batch_i in range(tg_model.batch_size):
-                name = tg_model.layer_names[l] + '_nrn_' + str(batch_i)
-                nrn = g_model.neuron_populations[name]
-                nrn.extra_global_params['Vthr'].view[:] = threshold
+            print('layer <{}> threshold: {}'.format(layer.name, threshold))
+            layer.set_threshold(threshold)

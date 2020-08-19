@@ -51,10 +51,10 @@ if __name__ == '__main__':
     tg_model.compile(dt=args.dt, rng_seed=args.rng_seed,
                      batch_size=args.batch_size, share_weights=args.share_weights)
     if args.norm_method == 'data-norm':
-        norm = DataNorm(x_norm, tg_model.tf_model)
+        norm = DataNorm([x_norm], tg_model.tf_model)
         norm.normalize(tg_model)
     elif args.norm_method == 'spike-norm':
-        norm = SpikeNorm(x_norm)
+        norm = SpikeNorm([x_norm])
         norm.normalize(tg_model, args.classify_time)
     acc, spk_i, spk_t = tg_model.evaluate([x_test], [y_test], args.classify_time,
                                           save_samples=args.save_samples)
