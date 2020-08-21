@@ -18,6 +18,7 @@ class BaseLayer(object):
 
 
     def compile(self, tg_model):
+        print('compiling layer <{}>'.format(self.name))
         self.tg_model = tg_model
         self.nrn = [None] * tg_model.batch_size
 

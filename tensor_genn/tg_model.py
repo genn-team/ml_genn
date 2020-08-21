@@ -364,7 +364,7 @@ class TGModel(object):
             for j in range(len(self.layers)):
                 spikes = all_spikes[i][j]
                 spike_i[i][j] = np.concatenate(spikes)
-                spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dt for i, s in enumerate(spikes)])
+                spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
 
         return accuracy, spike_i, spike_t
 
