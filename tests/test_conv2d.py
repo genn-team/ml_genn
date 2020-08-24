@@ -3,13 +3,13 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_compare_tf_and_tg(tf_model, x):
+def model_compare_tf_and_tg(tf_model, x, connection_type='procedural'):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
     # Run TensorGeNN model
     tg_model = tg.TGModel()
-    tg_model.convert_tf_model(tf_model, input_type=tg.InputType.SPIKE)
+    tg_model.convert_tf_model(tf_model, input_type=tg.InputType.SPIKE, connection_type=connection_type)
     tg_model.compile(dt=1.0, batch_size=1)
     tg_model.outputs[0].set_threshold(np.float64(np.inf))
     tg_model.set_input_batch([x])
@@ -197,6 +197,35 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
     model_compare_tf_and_tg(tf_model, x)
 
 
+def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid_sparse():
+    '''
+    Test Conv2D with 2 input channels, 2 output channels,
+    a conv stride of (1, 1) and valid conv padding (SPARSE connectivity).
+    '''
+
+    # Inputs
+    x = np.empty((1, 12, 12, 2), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
+    x[0, :, :, 1] = model_input_1()
+
+    # Kernels
+    k = np.empty((3, 3, 2, 2), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+    k[:, :, 1, 0] = model_kernel_1_0()
+    k[:, :, 0, 1] = model_kernel_0_1()
+    k[:, :, 1, 1] = model_kernel_1_1()
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='valid', strides=(1, 1),
+                               use_bias=False, input_shape=(12, 12, 2)),
+    ], name='test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid_sparse')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x, connection_type='sparse')
+
+
 def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     '''
     Test Conv2D with 2 input channels, 2 output channels,
@@ -226,9 +255,40 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     model_compare_tf_and_tg(tf_model, x)
 
 
+def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same_sparse():
+    '''
+    Test Conv2D with 2 input channels, 2 output channels,
+    a conv stride of (1, 1) and same conv padding (SPARSE connectivity).
+    '''
+
+    # Inputs
+    x = np.empty((1, 12, 12, 2), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
+    x[0, :, :, 1] = model_input_1()
+
+    # Kernels
+    k = np.empty((3, 3, 2, 2), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+    k[:, :, 1, 0] = model_kernel_1_0()
+    k[:, :, 0, 1] = model_kernel_0_1()
+    k[:, :, 1, 1] = model_kernel_1_1()
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='same', strides=(1, 1),
+                               use_bias=False, input_shape=(12, 12, 2)),
+    ], name='test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same_sparse')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x, connection_type='sparse')
+
+
 if __name__ == '__main__':
     test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid()
     test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid()
     test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid()
     test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid()
+    test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid_sparse()
     test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same()
+    test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same_sparse()
