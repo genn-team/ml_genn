@@ -15,10 +15,10 @@ def model_compare_tf_and_tg(tf_model, x, connection_type='procedural'):
     tg_model.set_input_batch([x])
     tg_model.step_time(2)
 
-    neurons = tg_model.g_model.neuron_populations['conv2d_nrn_0']
-    tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem')
-    tg_y = neurons.vars['Vmem'].view.reshape(tf_y.shape)
-    print(tg_y)
+    nrn = tg_model.outputs[0].nrn[0]
+    nrn.pull_var_from_device('Vmem')
+    tg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
+
     assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
 
     return tg_model
@@ -106,8 +106,8 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(1, 3, name='conv2d', padding='valid', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
+        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid')
     tf_model.set_weights([k])
 
@@ -133,8 +133,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(1, 3, name='conv2d', padding='valid', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid')
     tf_model.set_weights([k])
 
@@ -159,8 +159,8 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='valid', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid')
     tf_model.set_weights([k])
 
@@ -188,8 +188,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='valid', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid')
     tf_model.set_weights([k])
 
@@ -217,8 +217,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='valid', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse')
     tf_model.set_weights([k])
 
@@ -246,8 +246,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='same', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='same', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='same', strides=(3, 3), input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same')
     tf_model.set_weights([k])
 
@@ -275,8 +275,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, name='avepool2d', padding='same', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='conv2d', padding='same', strides=(1, 1), use_bias=False),
+        tf.keras.layers.AveragePooling2D(2, padding='same', strides=(3, 3), input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', strides=(1, 1), use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse')
     tf_model.set_weights([k])
 

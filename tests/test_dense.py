@@ -15,9 +15,9 @@ def model_compare_tf_and_tg(tf_model, x, connection_type='procedural'):
     tg_model.set_input_batch([x])
     tg_model.step_time(2)
 
-    neurons = tg_model.g_model.neuron_populations['dense_nrn_0']
-    tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem')
-    tg_y = neurons.vars['Vmem'].view.reshape(tf_y.shape)
+    nrn = tg_model.outputs[0].nrn[0]
+    nrn.pull_var_from_device('Vmem')
+    tg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
 
     assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
 
@@ -63,7 +63,7 @@ def test_dense_all_on():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(7, name='dense', use_bias=False, input_shape=(5,)),
+        tf.keras.layers.Dense(7, name='output', use_bias=False, input_shape=(5,)),
     ], name='test_dense_all_on')
     tf_model.set_weights([model_weights_0()])
 
@@ -82,7 +82,7 @@ def test_dense_some_on():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(7, name='dense', use_bias=False, input_shape=(5,)),
+        tf.keras.layers.Dense(7, name='output', use_bias=False, input_shape=(5,)),
     ], name='test_dense_some_on')
     tf_model.set_weights([model_weights_0()])
 
@@ -101,7 +101,7 @@ def test_dense_all_off():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(7, name='dense', use_bias=False, input_shape=(5,)),
+        tf.keras.layers.Dense(7, name='output', use_bias=False, input_shape=(5,)),
     ], name='test_dense_all_off')
     tf_model.set_weights([model_weights_0()])
 

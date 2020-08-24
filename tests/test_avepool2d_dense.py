@@ -15,9 +15,9 @@ def model_compare_tf_and_tg(tf_model, x, connection_type='procedural'):
     tg_model.set_input_batch([x])
     tg_model.step_time(2)
 
-    neurons = tg_model.g_model.neuron_populations['dense_nrn_0']
-    tg_model.g_model.pull_var_from_device(neurons.name, 'Vmem')
-    tg_y = neurons.vars['Vmem'].view.reshape(tf_y.shape)
+    nrn = tg_model.outputs[0].nrn[0]
+    nrn.pull_var_from_device('Vmem')
+    tg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
 
     assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
 
@@ -66,9 +66,9 @@ def test_avepool2d_dense_in_chan_1_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 1)),
+        tf.keras.layers.AveragePooling2D(3, padding='valid', strides=(3, 3), input_shape=(10, 10, 1)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(9, name='dense', use_bias=False),
+        tf.keras.layers.Dense(9, name='output', use_bias=False),
     ], name='test_avepool2d_dense_in_chan_1_stride_3_3_padding_valid')
     tf_model.set_weights([np.identity(9)])
 
@@ -89,9 +89,9 @@ def test_avepool2d_dense_in_chan_2_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 2)),
+        tf.keras.layers.AveragePooling2D(3, padding='valid', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(18, name='dense', use_bias=False),
+        tf.keras.layers.Dense(18, name='output', use_bias=False),
     ], name='test_avepool2d_dense_in_chan_2_stride_3_3_padding_valid')
     tf_model.set_weights([np.identity(18)])
 
@@ -112,9 +112,9 @@ def test_avepool2d_dense_in_chan_2_stride_3_3_padding_valid_sparse():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, name='avepool2d', padding='valid', strides=(3, 3), input_shape=(10, 10, 2)),
+        tf.keras.layers.AveragePooling2D(3, padding='valid', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(18, name='dense', use_bias=False),
+        tf.keras.layers.Dense(18, name='output', use_bias=False),
     ], name='test_avepool2d_dense_in_chan_2_stride_3_3_padding_valid_sparse')
     tf_model.set_weights([np.identity(18)])
 
@@ -135,9 +135,9 @@ def test_avepool2d_dense_in_chan_2_stride_3_3_padding_same():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, name='avepool2d', padding='same', strides=(3, 3), input_shape=(10, 10, 2)),
+        tf.keras.layers.AveragePooling2D(3, padding='same', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, name='dense', use_bias=False),
+        tf.keras.layers.Dense(32, name='output', use_bias=False),
     ], name='test_avepool2d_dense_in_chan_2_stride_3_3_padding_same')
     tf_model.set_weights([np.identity(32)])
 
@@ -158,9 +158,9 @@ def test_avepool2d_dense_in_chan_2_stride_3_3_padding_same_sparse():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, name='avepool2d', padding='same', strides=(3, 3), input_shape=(10, 10, 2)),
+        tf.keras.layers.AveragePooling2D(3, padding='same', strides=(3, 3), input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, name='dense', use_bias=False),
+        tf.keras.layers.Dense(32, name='output', use_bias=False),
     ], name='test_avepool2d_dense_in_chan_2_stride_3_3_padding_same_sparse')
     tf_model.set_weights([np.identity(32)])
 
