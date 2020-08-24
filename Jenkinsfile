@@ -167,7 +167,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     def status_TensorGeNN = sh script:commands_TensorGeNN, returnStatus:true;
                     archive messages_TensorGeNN;
                     if (status_TensorGeNN != 0) {
-                        setBuildStatus("Running tests (${NODE_NAME})", "UNSTABLE");
+                        setBuildStatus("Running tests (${NODE_NAME})", "FAILURE");
                     }
                 }
 	    }
