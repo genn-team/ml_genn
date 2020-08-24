@@ -96,6 +96,9 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
     a pool stride of (3, 3) and valid pool padding.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 1), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -120,6 +123,9 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid():
     Test AvePool2DConv2D with 2 input channels, 1 output channel,
     a pool stride of (3, 3) and valid pool padding.
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
@@ -148,6 +154,9 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid():
     a pool stride of (3, 3) and valid pool padding.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 1), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -173,6 +182,9 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
     Test AvePool2DConv2D with 2 input channels, 2 output channels,
     a pool stride of (3, 3) and valid pool padding.
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
@@ -203,6 +215,9 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse()
     a pool stride of (3, 3) and valid pool padding (SPARSE connectivity).
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -232,6 +247,9 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
     a pool stride of (3, 3) and same pool padding.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -260,6 +278,9 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse():
     Test AvePool2DConv2D with 2 input channels, 2 output channels,
     a pool stride of (3, 3) and same pool padding (SPARSE connectivity).
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)

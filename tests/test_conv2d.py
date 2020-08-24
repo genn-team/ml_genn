@@ -96,6 +96,9 @@ def test_conv2d_in_chan_1_out_chan_1_stride_1_1_padding_valid():
     a conv stride of (1, 1) and valid conv padding.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 1), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -120,6 +123,9 @@ def test_conv2d_in_chan_2_out_chan_1_stride_1_1_padding_valid():
     Test Conv2D with 2 input channels, 1 output channel,
     a conv stride of (1, 1) and valid conv padding.
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
@@ -148,6 +154,9 @@ def test_conv2d_in_chan_1_out_chan_2_stride_1_1_padding_valid():
     a conv stride of (1, 1) and valid conv padding.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 1), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -173,6 +182,9 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid():
     Test Conv2D with 2 input channels, 2 output channels,
     a conv stride of (1, 1) and valid conv padding.
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
@@ -203,6 +215,9 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_valid_sparse():
     a conv stride of (1, 1) and valid conv padding (SPARSE connectivity).
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -232,6 +247,9 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same():
     a conv stride of (1, 1) and same conv padding.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)
     x[0, :, :, 0] = model_input_0()
@@ -260,6 +278,9 @@ def test_conv2d_in_chan_2_out_chan_2_stride_1_1_padding_same_sparse():
     Test Conv2D with 2 input channels, 2 output channels,
     a conv stride of (1, 1) and same conv padding (SPARSE connectivity).
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 12, 12, 2), dtype=np.float32)

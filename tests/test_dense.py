@@ -57,6 +57,9 @@ def test_dense_all_on():
     Test Dense with all inputs on.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 5), dtype=np.float32)
     x[0, :] = model_input_all_on()
@@ -76,6 +79,9 @@ def test_dense_some_on():
     Test Dense with some inputs on.
     '''
 
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     # Inputs
     x = np.empty((1, 5), dtype=np.float32)
     x[0, :] = model_input_some_on()
@@ -94,6 +100,9 @@ def test_dense_all_off():
     '''
     Test Dense with all inputs off.
     '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
     x = np.empty((1, 5), dtype=np.float32)
