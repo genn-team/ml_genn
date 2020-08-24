@@ -57,7 +57,7 @@ def model_input_1():
 def test_avepool2d_dense_in_chan_1_stride_3_3_padding_valid():
     '''
     Test AvePool2DDense with 1 input channel, 1 output channel,
-    a stride of (3, 3) and valid padding.
+    a pool stride of (3, 3) and valid pool padding.
     '''
 
     # Inputs
@@ -79,7 +79,7 @@ def test_avepool2d_dense_in_chan_1_stride_3_3_padding_valid():
 def test_avepool2d_dense_in_chan_2_stride_3_3_padding_valid():
     '''
     Test AvePool2DDense with 2 input channels, 2 output channels,
-    a stride of (3, 3) and valid padding.
+    a pool stride of (3, 3) and valid pool padding.
     '''
 
     # Inputs
@@ -102,7 +102,7 @@ def test_avepool2d_dense_in_chan_2_stride_3_3_padding_valid():
 def test_avepool2d_dense_in_chan_2_stride_3_3_padding_same():
     '''
     Test AvePool2DDense with 2 input channels, 2 output channels,
-    a stride of (3, 3) and same padding.
+    a pool stride of (3, 3) and same pool padding.
     '''
 
     # Inputs
