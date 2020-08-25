@@ -173,8 +173,10 @@ for (b = 0; b < builderNodes.size(); b++) {
 	    }
 
             buildStage("Gathering test results (${NODE_NAME})") {
-                // Process JUnit test output
-                junit "./tests/result_${NODE_NAME}.xml";
+                dir("tests") {
+                    // Process JUnit test output
+                    junit "result_${NODE_NAME}.xml";
+                }
             }
         }
     }
