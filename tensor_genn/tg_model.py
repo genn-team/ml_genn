@@ -1,9 +1,9 @@
 """TensorGeNN model definition
 
-This module provides TGModel class to convert TensorFlow models into GeNN
+This module provides the Model class to convert TensorFlow models into GeNN
 models, and provides helper functions for operating the resulting GeNN model.
 
-A ``TGModel`` object can use a pre-trained TensorFlow model to function.
+A ``Model`` object can use a pre-trained TensorFlow model to function.
 Such a model can be provided by calling the ``convert_tf_model`` method
 with the TensorFlow model and optional parameters.
 
@@ -11,10 +11,9 @@ Example:
     The following is a minimal example which demonstrates the process of
     converting a TensorFlow model into a GeNN model and evaluating it:
 
-        from tensor_genn import TGModel
+        from tensor_genn import Model
 
-        tensorgenn_model = TGmodel()
-        tensorgenn_model.convert_tf_model(tensorflow_model)
+        tensorgenn_model = Model.convert_tf_model(tensorflow_model)
         tensorgenn_model.compile()
         tensorgenn_model.evaluate(test_data, test_labels)
 """
@@ -34,7 +33,7 @@ from tensor_genn.layers import IFConv2D
 from tensor_genn.layers import IFAvePool2DConv2D
 
 
-class TGModel(object):
+class Model(object):
     """TensorGeNN model class
 
     This class converts fully trained TensorFlow models into GeNN models,
@@ -52,128 +51,6 @@ class TGModel(object):
         self.g_model = None
         self.batch_size = None
         self.share_weights = None
-
-
-    def convert_tf_model(self, tf_model, input_type='poisson', connection_type='procedural'):
-        """Convert from a TensorFlow model
-
-        Args:
-        tf_model  --  TensorFlow model to be converted
-
-        Keyword args:
-        input_type         --  type of input neurons (default: 'poisson')
-        connection_type    --  type of connections in GeNN (default: 'procedural')
-        """
-
-        supported_tf_layers = (
-            tf.keras.layers.Dense,
-            tf.keras.layers.Conv2D,
-            tf.keras.layers.AveragePooling2D,
-            tf.keras.layers.Flatten,
-            tf.keras.layers.Dropout,
-        )
-
-        # Check model compatibility
-        if not isinstance(tf_model, tf.keras.Sequential):
-            raise NotImplementedError('{} models not supported'.format(type(tf_model)))
-        for tf_layer in tf_model.layers[:-1]:
-            if not isinstance(tf_layer, supported_tf_layers):
-                raise NotImplementedError('{} layers not supported'.format(type(tf_layer)))
-            elif isinstance(tf_layer, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
-                if tf_layer.activation != tf.keras.activations.relu:
-                    raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
-                if tf_layer.use_bias == True:
-                    raise NotImplementedError('bias tensors not supported')
-
-        self.name = tf_model.name
-        self.inputs = []
-        self.outputs = []
-        self.layers = []
-
-        # Add input layer
-        input_type = InputType(input_type)
-        if input_type == InputType.SPIKE:
-            layer = SpikeInput('input', tf_model.input_shape[1:])
-        elif input_type == InputType.POISSON:
-            layer = PoissonInput('input', tf_model.input_shape[1:])
-        elif input_type == InputType.IF:
-            layer = IFInput('input', tf_model.input_shape[1:])
-        self.inputs.append(layer)
-
-        self.layers.append(layer)
-        previous_layer = layer
-        pool_layer = None
-
-        # For each TensorFlow model layer:
-        for tf_layer in tf_model.layers:
-
-            # === Flatten Layers ===
-            if isinstance(tf_layer, tf.keras.layers.Flatten):
-                print('ignoring Flatten layer <{}>'.format(tf_layer.name))
-
-            # === Dropout Layers ===
-            elif isinstance(tf_layer, tf.keras.layers.Dropout):
-                print('ignoring Dropout layer <{}>'.format(tf_layer.name))
-
-            # === Dense Layers ===
-            elif isinstance(tf_layer, tf.keras.layers.Dense):
-                if pool_layer is None:
-                    print('converting Dense layer <{}>'.format(tf_layer.name))
-                    layer = IFDense(
-                        name=tf_layer.name, units=tf_layer.units, threshold=1.0
-                    )
-                else:
-                    print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
-                    layer = IFAvePool2DDense(
-                        name=tf_layer.name, units=tf_layer.units,
-                        pool_size=pool_layer.pool_size,
-                        pool_strides=pool_layer.strides,
-                        pool_padding=pool_layer.padding,
-                        connection_type=connection_type, threshold=1.0
-                    )
-
-                layer.connect([previous_layer])
-                layer.set_weights(tf_layer.get_weights())
-
-                self.layers.append(layer)
-                previous_layer = layer
-                pool_layer = None
-
-            # === Conv2D Layers ===
-            elif isinstance(tf_layer, tf.keras.layers.Conv2D):
-                if pool_layer is None:
-                    print('converting Conv2D layer <{}>'.format(tf_layer.name))
-                    layer = IFConv2D(
-                        name=tf_layer.name, filters=tf_layer.filters,
-                        conv_size=tf_layer.kernel_size,
-                        conv_strides=tf_layer.strides,
-                        conv_padding=tf_layer.padding,
-                        connection_type=connection_type, threshold=1.0
-                    )
-                else:
-                    print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
-                    layer = IFAvePool2DConv2D(
-                        name=tf_layer.name, filters=tf_layer.filters,
-                        pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
-                        pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
-                        pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
-                        connection_type=connection_type, threshold=1.0
-                    )
-
-                layer.connect([previous_layer])
-                layer.set_weights(tf_layer.get_weights())
-
-                self.layers.append(layer)
-                previous_layer = layer
-                pool_layer = None
-
-            # === AveragePooling2D Layers ===
-            elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-                print('deferring AveragePooling2D layer <{}>'.format(tf_layer.name))
-
-                pool_layer = tf_layer
-
-        self.outputs.append(previous_layer)
 
 
     def set_network(self, inputs, outputs):
@@ -359,3 +236,125 @@ class TGModel(object):
             'postsynaptic_update_time': self.g_model.postsynaptic_update_time,
             'synapse_dynamics_time': self.g_model.synapse_dynamics_time,
         }
+
+
+    @staticmethod
+    def convert_tf_model(tf_model, input_type='poisson', connection_type='procedural'):
+        """Create a TensorGeNN model from a TensorFlow model
+
+        Args:
+        tf_model  --  TensorFlow model to be converted
+
+        Keyword args:
+        input_type         --  type of input neurons (default: 'poisson')
+        connection_type    --  type of connections in GeNN (default: 'procedural')
+        """
+
+        supported_tf_layers = (
+            tf.keras.layers.Dense,
+            tf.keras.layers.Conv2D,
+            tf.keras.layers.AveragePooling2D,
+            tf.keras.layers.Flatten,
+            tf.keras.layers.Dropout,
+        )
+
+        # Check model compatibility
+        if not isinstance(tf_model, tf.keras.Sequential):
+            raise NotImplementedError('{} models not supported'.format(type(tf_model)))
+        for tf_layer in tf_model.layers[:-1]:
+            if not isinstance(tf_layer, supported_tf_layers):
+                raise NotImplementedError('{} layers not supported'.format(type(tf_layer)))
+            elif isinstance(tf_layer, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
+                if tf_layer.activation != tf.keras.activations.relu:
+                    raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
+                if tf_layer.use_bias == True:
+                    raise NotImplementedError('bias tensors not supported')
+
+        model = Model(name=tf_model.name)
+
+        # Add input layer
+        input_type = InputType(input_type)
+        if input_type == InputType.SPIKE:
+            layer = SpikeInput('input', tf_model.input_shape[1:])
+        elif input_type == InputType.POISSON:
+            layer = PoissonInput('input', tf_model.input_shape[1:])
+        elif input_type == InputType.IF:
+            layer = IFInput('input', tf_model.input_shape[1:])
+        model.inputs.append(layer)
+
+        model.layers.append(layer)
+        previous_layer = layer
+        pool_layer = None
+
+        # For each TensorFlow model layer:
+        for tf_layer in tf_model.layers:
+
+            # === Flatten Layers ===
+            if isinstance(tf_layer, tf.keras.layers.Flatten):
+                print('ignoring Flatten layer <{}>'.format(tf_layer.name))
+
+            # === Dropout Layers ===
+            elif isinstance(tf_layer, tf.keras.layers.Dropout):
+                print('ignoring Dropout layer <{}>'.format(tf_layer.name))
+
+            # === Dense Layers ===
+            elif isinstance(tf_layer, tf.keras.layers.Dense):
+                if pool_layer is None:
+                    print('converting Dense layer <{}>'.format(tf_layer.name))
+                    layer = IFDense(
+                        name=tf_layer.name, units=tf_layer.units, threshold=1.0
+                    )
+                else:
+                    print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
+                    layer = IFAvePool2DDense(
+                        name=tf_layer.name, units=tf_layer.units,
+                        pool_size=pool_layer.pool_size,
+                        pool_strides=pool_layer.strides,
+                        pool_padding=pool_layer.padding,
+                        connection_type=connection_type, threshold=1.0
+                    )
+
+                layer.connect([previous_layer])
+                layer.set_weights(tf_layer.get_weights())
+
+                model.layers.append(layer)
+                previous_layer = layer
+                pool_layer = None
+
+            # === Conv2D Layers ===
+            elif isinstance(tf_layer, tf.keras.layers.Conv2D):
+                if pool_layer is None:
+                    print('converting Conv2D layer <{}>'.format(tf_layer.name))
+                    layer = IFConv2D(
+                        name=tf_layer.name, filters=tf_layer.filters,
+                        conv_size=tf_layer.kernel_size,
+                        conv_strides=tf_layer.strides,
+                        conv_padding=tf_layer.padding,
+                        connection_type=connection_type, threshold=1.0
+                    )
+                else:
+                    print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
+                    layer = IFAvePool2DConv2D(
+                        name=tf_layer.name, filters=tf_layer.filters,
+                        pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
+                        pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
+                        pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
+                        connection_type=connection_type, threshold=1.0
+                    )
+
+                layer.connect([previous_layer])
+                layer.set_weights(tf_layer.get_weights())
+
+                model.layers.append(layer)
+                previous_layer = layer
+                pool_layer = None
+
+            # === AveragePooling2D Layers ===
+            elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
+                print('deferring AveragePooling2D layer <{}>'.format(tf_layer.name))
+
+                pool_layer = tf_layer
+
+        model.outputs.append(previous_layer)
+
+        return model
