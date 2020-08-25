@@ -20,6 +20,7 @@ Example:
 """
 
 
+import os
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
@@ -198,14 +199,15 @@ class TGModel(object):
             raise ValueError('output layers unreachable from input layers')
 
 
-    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, **genn_kwargs):
+    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, reuse_genn_model=False, **genn_kwargs):
         """Compile this TensorGeNN model into a GeNN model
 
         Keyword args:
-        dt             --  model integration time step (default: 1.0)
-        rng_seed       --  GeNN RNG seed (default: 0, meaning choose a random seed)
-        batch_size     --  number of models to run concurrently (default: 1)
-        share_weights  --  share weights within model batch (default: False)
+        dt                --  model integration time step (default: 1.0)
+        rng_seed          --  GeNN RNG seed (default: 0, meaning choose a random seed)
+        batch_size        --  number of models to run concurrently (default: 1)
+        share_weights     --  share weights within model batch (default: False)
+        reuse_genn_model  --  Reuse existing compiled GeNN model (default: False)
         """
 
         # Define GeNN model
@@ -220,8 +222,9 @@ class TGModel(object):
         for layer in self.layers:
             layer.compile(self)
 
-        # Build and load model
-        self.g_model.build()
+        # Build and load GeNN model
+        if not reuse_genn_model or not os.path.isfile(self.name + '_CODE/librunner.so'):
+            self.g_model.build()
         self.g_model.load()
 
 
@@ -287,16 +290,6 @@ class TGModel(object):
         if any(i < 0 or i >= n_samples for i in save_samples):
             raise ValueError('one or more invalid save_samples value')
 
-
-
-
-        import time as t
-        t0_kernel = sum(self.get_kernel_times().values())
-        t0_clock = t.time()
-
-
-
-
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[]] * len(self.layers)] * len(save_samples)
@@ -342,17 +335,6 @@ class TGModel(object):
             progress.update(batch_end - batch_start)
 
         progress.close()
-
-
-
-
-        t_clock = t.time() - t0_clock
-        t_kernel = sum(self.get_kernel_times().values()) - t0_kernel
-
-        print('batch_size  clock_time  kernel_time  kernel_ratio')
-        print('{}  {}  {}  {}'.format(self.batch_size, t_clock, t_kernel, t_kernel / t_clock))
-
-
 
         # Create spike index and time lists
         spike_i = [[[]] * len(self.layers)] * len(save_samples)
