@@ -198,7 +198,7 @@ class TGModel(object):
             raise ValueError('output layers unreachable from input layers')
 
 
-    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False):
+    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, **genn_kwargs):
         """Compile this TensorGeNN model into a GeNN model
 
         Keyword args:
@@ -209,7 +209,7 @@ class TGModel(object):
         """
 
         # Define GeNN model
-        self.g_model = GeNNModel('float', self.name)
+        self.g_model = GeNNModel('float', self.name, **genn_kwargs)
         self.g_model.timing_enabled = True
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
@@ -290,8 +290,6 @@ class TGModel(object):
 
 
 
-        print('remaining CUDA memory (GB):  ' + str(self.g_model.free_device_mem_bytes / (1024 * 1024 * 1024)))
-
         import time as t
         t0_kernel = sum(self.get_kernel_times().values())
         t0_clock = t.time()
@@ -348,12 +346,11 @@ class TGModel(object):
 
 
 
-
         t_clock = t.time() - t0_clock
         t_kernel = sum(self.get_kernel_times().values()) - t0_kernel
 
         print('batch_size  clock_time  kernel_time  kernel_ratio')
-        print('{}  {}  {}  {}'.format(self.batch_size, t_clock, t_kernel ,t_kernel / t_clock))
+        print('{}  {}  {}  {}'.format(self.batch_size, t_clock, t_kernel, t_kernel / t_clock))
 
 
 
