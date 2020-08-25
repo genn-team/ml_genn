@@ -36,12 +36,9 @@ void setBuildStatus(String message, String state) {
 
 // All the types of build we'll ideally run if suitable nodes exist
 def desiredBuilds = [
-    ["cpu_only", "linux", "x86_64", "python27"] as Set,
-    ["cpu_only", "linux", "x86_64", "python3"] as Set,
-    ["cuda10", "linux", "x86_64", "python27"] as Set,
-    ["cuda10", "linux", "x86_64", "python3"] as Set,
-    ["cpu_only", "mac", "python27"] as Set,
-    ["cpu_only", "mac", "python3"] as Set
+    ["cpu_only", "linux", "x86_64"] as Set,
+    ["cuda10", "linux", "x86_64"] as Set,
+    ["cpu_only", "mac"] as Set,
 ]
 
 // Build dictionary of available nodes and their labels
