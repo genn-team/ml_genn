@@ -1,14 +1,14 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import create_custom_init_var_snippet_class
-from pygenn.genn_model import init_var
+from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
+from pygenn.genn_model import init_connectivity, create_cmlf_class, create_cksf_class
 from pygenn.genn_wrapper import NO_DELAY
 
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
 
 
-conv2d_init = create_custom_init_var_snippet_class(
+conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'conv2d',
 
     param_names=[
@@ -19,51 +19,39 @@ conv2d_init = create_custom_init_var_snippet_class(
         'conv_oh', 'conv_ow', 'conv_oc',
     ],
 
-    group_params=[
-        ('conv_kh_reg', 'int', '$(conv_kh)'),
-        ('conv_kw_reg', 'int', '$(conv_kw)'),
-        ('conv_sh_reg', 'int', '$(conv_sh)'),
-        ('conv_sw_reg', 'int', '$(conv_sw)'),
-        ('conv_padh_reg', 'int', '$(conv_padh)'),
-        ('conv_padw_reg', 'int', '$(conv_padw)'),
-        ('conv_iw_reg', 'int', '$(conv_iw)'),
-        ('conv_ic_reg', 'int', '$(conv_ic)'),
-        ('conv_ow_reg', 'int', '$(conv_ow)'),
-        ('conv_oc_reg', 'int', '$(conv_oc)')
-    ],
-
-    pre_params=[
-        ('conv_in_row', 'int', '($(id_pre) / $(conv_ic_reg)) / $(conv_iw_reg)'),
-        ('conv_in_col', 'int', '($(id_pre) / $(conv_ic_reg)) % $(conv_iw_reg)'),
-        ('conv_in_chan', 'int', '$(id_pre) % $(conv_ic_reg)')
-    ],
-
-    post_params=[
-        ('conv_out_row', 'int', '($(id_post) / $(conv_oc_reg)) / $(conv_ow_reg)'),
-        ('conv_out_col', 'int', '($(id_post) / $(conv_oc_reg)) % $(conv_ow_reg)'),
-        ('conv_out_chan', 'int', '$(id_post) % $(conv_oc_reg)')
-    ],
-
-    extra_global_params=[
-        ('kernels', 'scalar*'),
-    ],
-
-    var_init_code='''
-    const int conv_stride_row = $(conv_out_row) * $(conv_sh_reg) - $(conv_padh_reg);
-    const int conv_stride_col = $(conv_out_col) * $(conv_sw_reg) - $(conv_padw_reg);
-    const int conv_k_row = $(conv_in_row) - conv_stride_row;
-    const int conv_k_col = $(conv_in_col) - conv_stride_col;
-    if (conv_k_row >= 0 && conv_k_row < $(conv_kh_reg) && conv_k_col >= 0 && conv_k_col < $(conv_kw_reg)) {
-        $(value) = $(kernels)[
-            conv_k_row * ($(conv_kw_reg) * $(conv_ic_reg) * $(conv_oc_reg)) +
-            conv_k_col * ($(conv_ic_reg) * $(conv_oc_reg)) +
-            $(conv_in_chan) * $(conv_oc_reg) +
-            $(conv_out_chan)
-        ];
+    row_build_state_vars=[("inRow", "int", "($(id_pre) / (int)$(conv_ic)) / (int)$(conv_iw)"),
+                          ("inCol", "int", "($(id_pre) / (int)$(conv_ic)) % (int)$(conv_iw)"),
+                          ("inChan", "int", "$(id_pre) % (int)$(conv_ic)"),
+                          ("outRow", "int", "min((int)$(conv_oh), max(0, 1 + ((inRow + (int)$(conv_padh) - (int)$(conv_kh)) / (int)$(conv_sh))))"),
+                          ("maxOutRow", "int", "min((int)$(conv_oh), max(0, 1 + ((inRow + (int)$(conv_padh)) / (int)$(conv_sh))))"),
+                          ("minOutCol", "int", "min((int)$(conv_ow), max(0, 1 + ((inCol + (int)$(conv_padw) - (int)$(conv_kw)) / (int)$(conv_sw))))"),
+                          ("maxOutCol", "int", "min((int)$(conv_ow), max(0, 1 + ((inCol + (int)$(conv_padw)) / (int)$(conv_sw))))")],
+    
+    calc_max_row_len_func=create_cmlf_class(
+        lambda num_pre, num_post, pars: (pars[0] // pars[2]) * (pars[1] // pars[3]) * pars[11]()),
+    
+    calc_kernel_size_func=create_cksf_class(lambda pars: [int(pars[0]), 
+                                                          int(pars[1]), 
+                                                          int(pars[8]), 
+                                                          int(pars[11])]),
+    
+    row_build_code='''
+    if($(outRow) == $(maxOutRow)) {
+       $(endRow);
     }
-    else {
-        $(value) = 0.0;
+    const int strideRow = ($(outRow) * (int)$(conv_sh)) - (int)$(conv_padh);
+    const int kernRow = $(inRow) - strideRow;
+    for(int outCol = $(minOutCol); outCol < $(maxOutCol); outCol++) {
+        const int strideCol = (outCol * (int)$(conv_sw)) - (int)$(conv_padw);
+        const int kernCol = $(inCol) - strideCol;
+        for(unsigned int outChan = 0; outChan < (unsigned int)$(conv_oc); outChan++) {
+            const int idPost = (($(outRow) * (int)$(conv_ow) * (int)$(conv_oc)) +
+                               (outCol * (int)$(conv_oc)) +
+                               outChan);
+            $(addSynapse, idPost, kernRow, kernCol, $(inChan), outChan);
+        }
     }
+    "$(outRow)++
     ''',
 )
 
@@ -98,7 +86,7 @@ class Conv2DConnection(BaseConnection):
                 conv_padh = (conv_kh - 1) // 2
                 conv_padw = (conv_kw - 1) // 2
 
-            g = init_var(conv2d_init, {
+            connect = init_connectivity(conv2d_init, {
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
                 'conv_sh': conv_sh, 'conv_sw': conv_sw,
                 'conv_padh': conv_padh, 'conv_padw': conv_padw,
@@ -121,10 +109,9 @@ class Conv2DConnection(BaseConnection):
 
                 if self.connection_type == ConnectionType.PROCEDURAL:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                        syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
-                    )
-                    self.syn[batch_i].vars['g'].set_extra_global_init_param('kernels', self.weights.flatten())
+                        syn_name, 'PROCEDURAL_KERNELG', NO_DELAY, pre_nrn, post_nrn,
+                        'StaticPulse', {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {},
+                        connect)
 
                 elif self.connection_type == ConnectionType.SPARSE:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
