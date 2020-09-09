@@ -23,85 +23,71 @@ avepool2d_conv2d_init = create_custom_init_var_snippet_class(
         'conv_oh', 'conv_ow', 'conv_oc',
     ],
 
-    group_params=[
-        ('pool_kh_reg', 'int', '$(pool_kh)'),
-        ('pool_kw_reg', 'int', '$(pool_kw)'),
-        ('pool_sh_reg', 'int', '$(pool_sh)'),
-        ('pool_sw_reg', 'int', '$(pool_sw)'),
-        ('pool_padh_reg', 'int', '$(pool_padh)'),
-        ('pool_padw_reg', 'int', '$(pool_padw)'),
-        ('pool_ih_reg', 'int', '$(pool_ih)'),
-        ('pool_iw_reg', 'int', '$(pool_iw)'),
-        ('pool_ic_reg', 'int', '$(pool_ic)'),
-        ('conv_kh_reg', 'int', '$(conv_kh)'),
-        ('conv_kw_reg', 'int', '$(conv_kw)'),
-        ('conv_sh_reg', 'int', '$(conv_sh)'),
-        ('conv_sw_reg', 'int', '$(conv_sw)'),
-        ('conv_ic_reg', 'int', '$(conv_ic)'),
-        ('conv_padh_reg', 'int', '$(conv_padh)'),
-        ('conv_padw_reg', 'int', '$(conv_padw)'),
-        ('conv_ow_reg', 'int', '$(conv_ow)'),
-        ('conv_oc_reg', 'int', '$(conv_oc)')
-    ],
-
-    pre_params=[
-        ('pool_in_row', 'int', '($(id_pre) / $(pool_ic_reg)) / $(pool_iw_reg)'),
-        ('pool_in_col', 'int', '($(id_pre) / $(pool_ic_reg)) % $(pool_iw_reg)'),
-        ('pool_in_chan', 'int', '$(id_pre) % $(pool_ic_reg)')
-    ],
-
-    post_params=[
-        ('conv_out_row', 'int', '($(id_post) / $(conv_oc_reg)) / $(conv_ow_reg)'),
-        ('conv_out_col', 'int', '($(id_post) / $(conv_oc_reg)) % $(conv_ow_reg)'),
-        ('conv_out_chan', 'int', '$(id_post) % $(conv_oc_reg)')
-    ],
-
     extra_global_params=[
         ('kernels', 'scalar*'),
     ],
 
     var_init_code='''
-    int conv_stride_row = $(conv_out_row) * $(conv_sh_reg) - $(conv_padh_reg);
-    int conv_stride_col = $(conv_out_col) * $(conv_sw_reg) - $(conv_padw_reg);
+    const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
+    const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
+    const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
+    const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
+
+    const int pool_in_row = ($(id_pre) / pool_ic) / pool_iw;
+    const int pool_in_col = ($(id_pre) / pool_ic) % pool_iw;
+    const int pool_in_chan = $(id_pre) % pool_ic;
+
+    const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
+    const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
+    const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
+    const int conv_ic = $(conv_ic);
+    const int conv_ow = $(conv_ow), conv_oc = $(conv_oc);
+
+    const int conv_out_row = ($(id_post) / conv_oc) / conv_ow;
+    const int conv_out_col = ($(id_post) / conv_oc) % conv_ow;
+    const int conv_out_chan = $(id_post) % conv_oc;
+
+    int conv_stride_row = conv_out_row * conv_sh - conv_padh;
+    int conv_stride_col = conv_out_col * conv_sw - conv_padw;
 
     scalar weight = 0.0;
 
-    // process only strides with rows containing $(pool_in_row)
-    int pool_out_row = ($(pool_in_row) + $(pool_padh_reg)) / $(pool_sh_reg);
-    int pool_stride_row = pool_out_row * $(pool_sh_reg) - $(pool_padh_reg);
-    while ((pool_stride_row >= -$(pool_padh_reg)) && (pool_stride_row + $(pool_kh_reg) > $(pool_in_row))) {
+    // process only strides with rows containing pool_in_row
+    int pool_out_row = (pool_in_row + pool_padh) / pool_sh;
+    int pool_stride_row = pool_out_row * pool_sh - pool_padh;
+    while ((pool_stride_row >= -pool_padh) && (pool_stride_row + pool_kh > pool_in_row)) {
 
-        int pool_kh_crop = min(pool_stride_row + $(pool_kh_reg), $(pool_ih_reg)) - max(pool_stride_row, 0);
+        int pool_kh_crop = min(pool_stride_row + pool_kh, pool_ih) - max(pool_stride_row, 0);
 
-        // process only strides with cols containing $(pool_in_col)
-        int pool_out_col = ($(pool_in_col) + $(pool_padw_reg)) / $(pool_sw_reg);
-        int pool_stride_col = pool_out_col * $(pool_sw_reg) - $(pool_padw_reg);
-        while ((pool_stride_col >= -$(pool_padw_reg)) && (pool_stride_col + $(pool_kw_reg) > $(pool_in_col))) {
+        // process only strides with cols containing pool_in_col
+        int pool_out_col = (pool_in_col + pool_padw) / pool_sw;
+        int pool_stride_col = pool_out_col * pool_sw - pool_padw;
+        while ((pool_stride_col >= -pool_padw) && (pool_stride_col + pool_kw > pool_in_col)) {
 
-            const int pool_kw_crop = min(pool_stride_col + $(pool_kw_reg), $(pool_iw_reg)) - max(pool_stride_col, 0);
+            int pool_kw_crop = min(pool_stride_col + pool_kw, pool_iw) - max(pool_stride_col, 0);
 
-            const int conv_in_row = pool_out_row;
-            const int conv_in_col = pool_out_col;
-            const int conv_in_chan = $(pool_in_chan);
+            int conv_in_row = pool_out_row;
+            int conv_in_col = pool_out_col;
+            int conv_in_chan = pool_in_chan;
 
-            const int conv_k_row = conv_in_row - conv_stride_row;
-            const int conv_k_col = conv_in_col - conv_stride_col;
+            int conv_k_row = conv_in_row - conv_stride_row;
+            int conv_k_col = conv_in_col - conv_stride_col;
 
-            if (conv_k_row >= 0 && conv_k_row < $(conv_kh_reg) && conv_k_col >= 0 && conv_k_col < $(conv_kw_reg)) {
+            if (conv_k_row >= 0 && conv_k_row < conv_kh && conv_k_col >= 0 && conv_k_col < conv_kw) {
                 weight += $(kernels)[
-                    conv_k_row * ($(conv_kw_reg) * $(conv_ic_reg) * $(conv_oc_reg)) +
-                    conv_k_col * ($(conv_ic_reg) * $(conv_oc_reg)) +
-                    conv_in_chan * ($(conv_oc_reg)) +
-                    $(conv_out_chan)
+                    conv_k_row * (conv_kw * conv_ic * conv_oc) +
+                    conv_k_col * (conv_ic * conv_oc) +
+                    conv_in_chan * (conv_oc) +
+                    conv_out_chan
                 ] / (pool_kh_crop * pool_kw_crop);
             }
 
             pool_out_col--;
-            pool_stride_col = pool_out_col * $(pool_sw_reg) - $(pool_padw_reg);
+            pool_stride_col = pool_out_col * pool_sw - pool_padw;
         }
 
         pool_out_row--;
-        pool_stride_row = pool_out_row * $(pool_sh_reg) - $(pool_padh_reg);
+        pool_stride_row = pool_out_row * pool_sh - pool_padh;
     }
 
     $(value) = weight;
