@@ -3,7 +3,7 @@ from math import ceil
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
 from pygenn.genn_model import init_connectivity, create_cmlf_class, create_cksf_class
 from pygenn.genn_wrapper import NO_DELAY
-
+from pygenn.genn_wrapper.StlContainers import UnsignedIntVector, DoubleVector
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
 
@@ -26,18 +26,16 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
                           ("maxOutRow", "int", "min((int)$(conv_oh), max(0, 1 + ((inRow + (int)$(conv_padh)) / (int)$(conv_sh))))"),
                           ("minOutCol", "int", "min((int)$(conv_ow), max(0, 1 + ((inCol + (int)$(conv_padw) - (int)$(conv_kw)) / (int)$(conv_sw))))"),
                           ("maxOutCol", "int", "min((int)$(conv_ow), max(0, 1 + ((inCol + (int)$(conv_padw)) / (int)$(conv_sw))))")],
-    
+
     calc_max_row_len_func=create_cmlf_class(
-        lambda num_pre, num_post, pars: (pars[0] // pars[2]) * (pars[1] // pars[3]) * pars[11]()),
-    
-    calc_kernel_size_func=create_cksf_class(lambda pars: [int(pars[0]), 
-                                                          int(pars[1]), 
-                                                          int(pars[8]), 
-                                                          int(pars[11])]),
-    
+        lambda num_pre, num_post, pars: (pars[0] // pars[2]) * (pars[1] // pars[3]) * pars[11])(),
+
+    calc_kernel_size_func=create_cksf_class(
+        lambda pars: UnsignedIntVector([int(pars[0]), int(pars[1]), int(pars[8]), int(pars[11])]))(),
+
     row_build_code='''
     if($(outRow) == $(maxOutRow)) {
-       $(endRow);
+        $(endRow);
     }
     const int strideRow = ($(outRow) * (int)$(conv_sh)) - (int)$(conv_padh);
     const int kernRow = $(inRow) - strideRow;
@@ -46,12 +44,12 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
         const int kernCol = $(inCol) - strideCol;
         for(unsigned int outChan = 0; outChan < (unsigned int)$(conv_oc); outChan++) {
             const int idPost = (($(outRow) * (int)$(conv_ow) * (int)$(conv_oc)) +
-                               (outCol * (int)$(conv_oc)) +
-                               outChan);
+                                (outCol * (int)$(conv_oc)) +
+                                outChan);
             $(addSynapse, idPost, kernRow, kernCol, $(inChan), outChan);
         }
     }
-    "$(outRow)++
+    $(outRow)++;
     ''',
 )
 
