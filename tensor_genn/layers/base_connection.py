@@ -1,3 +1,4 @@
+from weakref import proxy
 
 class BaseConnection(object):
 
@@ -11,13 +12,13 @@ class BaseConnection(object):
 
 
     def compile(self, tg_model):
-        self.tg_model = tg_model
+        self.tg_model = proxy(tg_model)
         self.syn = [None] * tg_model.batch_size
 
 
     def connect(self, source, target):
-        self.source = source
-        self.target = target
+        self.source = proxy(source)
+        self.target = proxy(target)
         source.downstream_connections.append(self)
         target.upstream_connections.append(self)
 
