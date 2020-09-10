@@ -3,7 +3,7 @@ from math import ceil
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
 from pygenn.genn_model import init_connectivity, create_cmlf_class, create_cksf_class
 from pygenn.genn_wrapper import NO_DELAY
-from pygenn.genn_wrapper.StlContainers import UnsignedIntVector, DoubleVector
+from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
 
@@ -19,14 +19,6 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
         'conv_oh', 'conv_ow', 'conv_oc',
     ],
 
-    row_build_state_vars=[("inRow", "int", "($(id_pre) / (int)$(conv_ic)) / (int)$(conv_iw)"),
-                          ("inCol", "int", "($(id_pre) / (int)$(conv_ic)) % (int)$(conv_iw)"),
-                          ("inChan", "int", "$(id_pre) % (int)$(conv_ic)"),
-                          ("outRow", "int", "min((int)$(conv_oh), max(0, 1 + ((inRow + (int)$(conv_padh) - (int)$(conv_kh)) / (int)$(conv_sh))))"),
-                          ("maxOutRow", "int", "min((int)$(conv_oh), max(0, 1 + ((inRow + (int)$(conv_padh)) / (int)$(conv_sh))))"),
-                          ("minOutCol", "int", "min((int)$(conv_ow), max(0, 1 + ((inCol + (int)$(conv_padw) - (int)$(conv_kw)) / (int)$(conv_sw))))"),
-                          ("maxOutCol", "int", "min((int)$(conv_ow), max(0, 1 + ((inCol + (int)$(conv_padw)) / (int)$(conv_sw))))")],
-
     calc_max_row_len_func=create_cmlf_class(
         lambda num_pre, num_post, pars: (pars[0] // pars[2]) * (pars[1] // pars[3]) * pars[11])(),
 
@@ -34,22 +26,38 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
         lambda pars: UnsignedIntVector([int(pars[0]), int(pars[1]), int(pars[8]), int(pars[11])]))(),
 
     row_build_code='''
-    if($(outRow) == $(maxOutRow)) {
-        $(endRow);
-    }
-    const int strideRow = ($(outRow) * (int)$(conv_sh)) - (int)$(conv_padh);
-    const int kernRow = $(inRow) - strideRow;
-    for(int outCol = $(minOutCol); outCol < $(maxOutCol); outCol++) {
-        const int strideCol = (outCol * (int)$(conv_sw)) - (int)$(conv_padw);
-        const int kernCol = $(inCol) - strideCol;
-        for(unsigned int outChan = 0; outChan < (unsigned int)$(conv_oc); outChan++) {
-            const int idPost = (($(outRow) * (int)$(conv_ow) * (int)$(conv_oc)) +
-                                (outCol * (int)$(conv_oc)) +
-                                outChan);
-            $(addSynapse, idPost, kernRow, kernCol, $(inChan), outChan);
+    const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
+    const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
+    const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
+    const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
+    const int conv_ow = $(conv_ow), conv_oh = $(conv_oh), conv_oc = $(conv_oc);
+    
+    const int inRow = ($(id_pre) / conv_ic) / conv_iw;
+    const int inCol = ($(id_pre) / conv_ic) % conv_iw;
+    const int inChan = $(id_pre) % conv_ic;
+    const int minOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh - conv_kh) / conv_sh)));
+    const int maxOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh) / conv_sh)));
+    const int minOutCol = min(conv_ow, max(0, 1 + ((inCol + conv_padw - conv_kw) / conv_sw)));
+    const int maxOutCol = min(conv_ow, max(0, 1 + ((inCol + conv_padw) / conv_sw)));
+
+    for(int outRow = minOutRow; outRow != maxOutRow; outRow++) {
+        const int strideRow = (outRow * conv_sh) - conv_padh;
+        const int kernRow = inRow - strideRow;
+        for(int outCol = minOutCol; outCol < maxOutCol; outCol++) {
+            const int strideCol = (outCol * conv_sw) - conv_padw;
+            const int kernCol = inCol - strideCol;
+            for(int outChan = 0; outChan < conv_oc; outChan++) {
+                const int idPost = ((outRow * conv_ow * conv_oc) +
+                                    (outCol * conv_oc) +
+                                    outChan);
+                $(addSynapse, idPost, kernRow, kernCol, inChan, outChan);
+            }
         }
     }
-    $(outRow)++;
+    
+    // End the row
+    // **THINK** beginning to doubt the value of the GeNN-provided outer loop
+    $(endRow);
     ''',
 )
 
