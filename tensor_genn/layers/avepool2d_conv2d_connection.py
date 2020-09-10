@@ -51,13 +51,13 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     int poolOutRow = (poolInRow + pool_padh) / pool_sh;
     int poolStrideRow = (poolOutRow * pool_sh) - pool_padh;
     while ((poolStrideRow >= -pool_padh) && (poolStrideRow + pool_kh > poolInRow)) {
-        const int poolKHCrop = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
+        //const int poolKHCrop = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
 
         // Process only strides with cols containing poolInCol
         int poolOutCol = (poolInCol + pool_padw) / pool_sw;
         int poolStrideCol = (poolOutCol * pool_sw) - pool_padw;
         while ((poolStrideCol >= -pool_padw) && (poolStrideCol + pool_kw > poolInCol)) {
-            const int  poolKWCrop = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
+            //const int  poolKWCrop = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
 
             // Calculate range of rows and columns which presynaptic neuron connects to
             const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
@@ -172,9 +172,10 @@ class AvePool2DConv2DConnection(BaseConnection):
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
                 if self.connection_type == ConnectionType.PROCEDURAL:
+                    scale = np.prod(self.pool_size)
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                         syn_name, 'PROCEDURAL_KERNELG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {},
+                        'StaticPulse', {}, {'g': self.weights.flatten() / scale}, {}, {}, 'DeltaCurr', {}, {},
                         connect)
 
                 elif self.connection_type == ConnectionType.SPARSE:
