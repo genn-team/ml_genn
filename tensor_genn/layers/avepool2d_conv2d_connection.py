@@ -1,14 +1,14 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import create_custom_init_var_snippet_class
-from pygenn.genn_model import init_var
+from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
+from pygenn.genn_model import init_connectivity, create_cmlf_class, create_cksf_class
 from pygenn.genn_wrapper import NO_DELAY
-
+from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
 
 
-avepool2d_conv2d_init = create_custom_init_var_snippet_class(
+avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'avepool2d_conv2d',
 
     param_names=[
@@ -23,74 +23,78 @@ avepool2d_conv2d_init = create_custom_init_var_snippet_class(
         'conv_oh', 'conv_ow', 'conv_oc',
     ],
 
-    extra_global_params=[
-        ('kernels', 'scalar*'),
-    ],
+    calc_max_row_len_func=create_cmlf_class(
+        lambda num_pre, num_post, pars: (pars[9] // pars[11]) * (pars[10] // pars[12]) * pars[20])(),
 
-    var_init_code='''
+    calc_kernel_size_func=create_cksf_class(
+        lambda pars: UnsignedIntVector([int(pars[9]), int(pars[10]), int(pars[17]), int(pars[20])]))(),
+
+    row_build_code='''
+    // Stash all parameters in registers
+    // **NOTE** this means parameters from group structure only get converted from float->int once
+    // **NOTE** if they're actually constant, compiler is still likely to treat them as constants rather than allocating registers
     const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
     const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
     const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
     const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-
-    const int pool_in_row = ($(id_pre) / pool_ic) / pool_iw;
-    const int pool_in_col = ($(id_pre) / pool_ic) % pool_iw;
-    const int pool_in_chan = $(id_pre) % pool_ic;
-
     const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
     const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
     const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
-    const int conv_ic = $(conv_ic);
-    const int conv_ow = $(conv_ow), conv_oc = $(conv_oc);
+    const int conv_ow = $(conv_ow), conv_oh = $(conv_oh), conv_oc = $(conv_oc);
 
-    const int conv_out_row = ($(id_post) / conv_oc) / conv_ow;
-    const int conv_out_col = ($(id_post) / conv_oc) % conv_ow;
-    const int conv_out_chan = $(id_post) % conv_oc;
+    // Convert presynaptic neuron ID to row, column and channel
+    const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
+    const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
+    const int poolInChan = $(id_pre) % pool_ic;
 
-    int conv_stride_row = conv_out_row * conv_sh - conv_padh;
-    int conv_stride_col = conv_out_col * conv_sw - conv_padw;
+    // Process only strides with rows containing poolInRow
+    int poolOutRow = (poolInRow + pool_padh) / pool_sh;
+    int poolStrideRow = (poolOutRow * pool_sh) - pool_padh;
+    while ((poolStrideRow >= -pool_padh) && (poolStrideRow + pool_kh > poolInRow)) {
+        const int poolKHCrop = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
 
-    scalar weight = 0.0;
+        // Process only strides with cols containing poolInCol
+        int poolOutCol = (poolInCol + pool_padw) / pool_sw;
+        int poolStrideCol = (poolOutCol * pool_sw) - pool_padw;
+        while ((poolStrideCol >= -pool_padw) && (poolStrideCol + pool_kw > poolInCol)) {
+            const int  poolKWCrop = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
 
-    // process only strides with rows containing pool_in_row
-    int pool_out_row = (pool_in_row + pool_padh) / pool_sh;
-    int pool_stride_row = pool_out_row * pool_sh - pool_padh;
-    while ((pool_stride_row >= -pool_padh) && (pool_stride_row + pool_kh > pool_in_row)) {
+            // Calculate range of rows and columns which presynaptic neuron connects to
+            const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
+            const int minOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw - conv_kw) / conv_sw)));
+            const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
+            const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
 
-        int pool_kh_crop = min(pool_stride_row + pool_kh, pool_ih) - max(pool_stride_row, 0);
+            // Loop through output rows, columns and channels
+            for(int convOutRow = minOutRow; convOutRow < maxOutRow; convOutRow++) {
+                const int strideRow = (convOutRow * conv_sh) - conv_padh;
+                const int kernRow = poolOutRow - strideRow;
 
-        // process only strides with cols containing pool_in_col
-        int pool_out_col = (pool_in_col + pool_padw) / pool_sw;
-        int pool_stride_col = pool_out_col * pool_sw - pool_padw;
-        while ((pool_stride_col >= -pool_padw) && (pool_stride_col + pool_kw > pool_in_col)) {
+                for(int convOutCol = minOutCol; convOutCol < maxOutCol; convOutCol++) {
+                    const int strideCol = (convOutCol * conv_sw) - conv_padw;
+                    const int kernCol = poolOutCol - strideCol;
+     
+                    for(int outChan = 0; outChan < conv_oc; outChan++) {
+                        // Calculate postsynaptic index and add synapse
+                        const int idPost = ((convOutRow * conv_ow * conv_oc) +
+                                            (convOutCol * conv_oc) +
+                                            outChan);
 
-            int pool_kw_crop = min(pool_stride_col + pool_kw, pool_iw) - max(pool_stride_col, 0);
-
-            int conv_in_row = pool_out_row;
-            int conv_in_col = pool_out_col;
-            int conv_in_chan = pool_in_chan;
-
-            int conv_k_row = conv_in_row - conv_stride_row;
-            int conv_k_col = conv_in_col - conv_stride_col;
-
-            if (conv_k_row >= 0 && conv_k_row < conv_kh && conv_k_col >= 0 && conv_k_col < conv_kw) {
-                weight += $(kernels)[
-                    conv_k_row * (conv_kw * conv_ic * conv_oc) +
-                    conv_k_col * (conv_ic * conv_oc) +
-                    conv_in_chan * (conv_oc) +
-                    conv_out_chan
-                ] / (pool_kh_crop * pool_kw_crop);
+                        $(addSynapse, idPost, kernRow, kernCol, poolInChan, outChan);
+                    }
+                }
             }
 
-            pool_out_col--;
-            pool_stride_col = pool_out_col * pool_sw - pool_padw;
+            poolOutCol--;
+            poolStrideCol = (poolOutCol * pool_sw) - pool_padw;
         }
 
-        pool_out_row--;
-        pool_stride_row = pool_out_row * pool_sh - pool_padh;
+        poolOutRow--;
+        poolStrideRow = (poolOutRow * pool_sh) - pool_padh;
     }
-
-    $(value) = weight;
+    // End the row
+    // **THINK** beginning to doubt the value of the GeNN-provided outer loop
+    $(endRow);
     ''',
 )
 
@@ -143,7 +147,7 @@ class AvePool2DConv2DConnection(BaseConnection):
                 conv_padh = (conv_kh - 1) // 2
                 conv_padw = (conv_kw - 1) // 2
 
-            g = init_var(avepool2d_conv2d_init, {
+            connect = init_connectivity(avepool2d_conv2d_init, {
                 'pool_kh': pool_kh, 'pool_kw': pool_kw,
                 'pool_sh': pool_sh, 'pool_sw': pool_sw,
                 'pool_padh': pool_padh, 'pool_padw': pool_padw,
@@ -167,13 +171,11 @@ class AvePool2DConv2DConnection(BaseConnection):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
-
                 if self.connection_type == ConnectionType.PROCEDURAL:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                        syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
-                    )
-                    self.syn[batch_i].vars['g'].set_extra_global_init_param('kernels', self.weights.flatten())
+                        syn_name, 'PROCEDURAL_KERNELG', NO_DELAY, pre_nrn, post_nrn,
+                        'StaticPulse', {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {},
+                        connect)
 
                 elif self.connection_type == ConnectionType.SPARSE:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
@@ -249,7 +251,7 @@ class AvePool2DConv2DConnection(BaseConnection):
         elif self.pool_padding == PadMode.SAME:
             pool_padh = (pool_kh - 1) // 2
             pool_padw = (pool_kw - 1) // 2
-
+        
         # For each in {one-to-one input -> output channel}:
         for channel in range(pool_ic):
             pool_chan_weights = pool_weights[channel::pool_ic, channel::pool_oc]
@@ -293,7 +295,7 @@ class AvePool2DConv2DConnection(BaseConnection):
         elif self.conv_padding == PadMode.SAME:
             conv_padh = (conv_kh - 1) // 2
             conv_padw = (conv_kw - 1) // 2
-
+    
         # For each in {all-to-all input -> output channel}:
         for in_channel in range(conv_ic):
             for out_channel in range(conv_oc):
@@ -352,4 +354,9 @@ class AvePool2DConv2DConnection(BaseConnection):
         # === Weight Values and Indices ===
         w_indices = np.nonzero(combined_connect)
         w_values = combined_weights[w_indices]
+        
+        import matplotlib.pyplot as plt
+        fig, axis = plt.subplots()
+        axis.imshow(combined_connect)
+        plt.show()
         return w_values, w_indices
