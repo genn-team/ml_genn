@@ -169,7 +169,7 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
         tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid')
+    ], name='test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
