@@ -28,6 +28,7 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     row_build_code='''
     // Stash all parameters in registers
     // **NOTE** this means parameters from group structure only get converted from float->int once
+    // **NOTE** if they're actually constant, compiler is still likely to treat them as constants rather than allocating registers
     const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
     const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
     const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
