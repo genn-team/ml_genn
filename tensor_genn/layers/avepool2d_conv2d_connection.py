@@ -53,16 +53,18 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     while ((poolStrideRow >= -pool_padh) && (poolStrideRow + pool_kh > poolInRow)) {
         //const int poolKHCrop = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
 
+        // Calculate range of rows which presynaptic neuron connects to
+        const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
+        const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
+
         // Process only strides with cols containing poolInCol
         int poolOutCol = (poolInCol + pool_padw) / pool_sw;
         int poolStrideCol = (poolOutCol * pool_sw) - pool_padw;
         while ((poolStrideCol >= -pool_padw) && (poolStrideCol + pool_kw > poolInCol)) {
             //const int  poolKWCrop = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
 
-            // Calculate range of rows and columns which presynaptic neuron connects to
-            const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
+            // Calculate range of columns which presynaptic neuron connects to
             const int minOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw - conv_kw) / conv_sw)));
-            const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
             const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
 
             // Loop through output rows, columns and channels
