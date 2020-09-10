@@ -355,9 +355,4 @@ class AvePool2DConv2DConnection(BaseConnection):
         # === Weight Values and Indices ===
         w_indices = np.nonzero(combined_connect)
         w_values = combined_weights[w_indices]
-        
-        import matplotlib.pyplot as plt
-        fig, axis = plt.subplots()
-        axis.imshow(combined_connect)
-        plt.show()
         return w_values, w_indices
