@@ -76,7 +76,7 @@ class Model(object):
             raise ValueError('output layers unreachable from input layers')
 
 
-    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, reuse_genn_model=False, **genn_kwargs):
+    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, reuse_genn_model=False, kernel_profiling=False, **genn_kwargs):
         """Compile this TensorGeNN model into a GeNN model
 
         Keyword args:
@@ -85,11 +85,12 @@ class Model(object):
         batch_size        --  number of models to run concurrently (default: 1)
         share_weights     --  share weights within model batch (default: False)
         reuse_genn_model  --  Reuse existing compiled GeNN model (default: False)
+        kernel_profiling     --  Should model be built with kernel profiling code (default: False)
         """
 
         # Define GeNN model
         self.g_model = GeNNModel('float', self.name, **genn_kwargs)
-        self.g_model.timing_enabled = True
+        self.g_model.timing_enabled = kernel_profiling
         self.g_model.dT = dt
         self.g_model._model.set_seed(rng_seed)
         self.batch_size = batch_size
