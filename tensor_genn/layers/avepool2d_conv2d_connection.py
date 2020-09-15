@@ -97,7 +97,7 @@ avepool2d_conv2d_big_pool_init = create_custom_sparse_connect_init_snippet_class
     ],
 
     calc_max_row_len_func=create_cmlf_class(
-        lambda num_pre, num_post, pars: (pars[9] // pars[11]) * (pars[10] // pars[12]) * pars[20])(),
+        lambda num_pre, num_post, pars: (int(pars[9]) // int(pars[11])) * (int(pars[10]) // int(pars[12])) * int(pars[20]))(),
 
     calc_kernel_size_func=create_cksf_class(
         lambda pars: UnsignedIntVector([int(pars[9]), int(pars[10]), int(pars[17]), int(pars[20])]))(),
@@ -229,9 +229,9 @@ class AvePool2DConv2DConnection(BaseConnection):
 
         # If pool size is greater than stride then a more complex model which 
         # allows pool inputs to appear in multiple pool outputs is required
-        model = (avepool2d_conv2d_big_pool_init_pool_init if pool_kh > pool_sh or pool_kw > pool_sw 
-                 else avepool2d_conv2d_small_pool_init)
-
+        #model = (avepool2d_conv2d_big_pool_init if pool_kh > pool_sh or pool_kw > pool_sw 
+        #         else avepool2d_conv2d_small_pool_init)
+        model = avepool2d_conv2d_big_pool_init
         connectivity_init = init_connectivity(model, {
             'pool_kh': pool_kh, 'pool_kw': pool_kw,
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
