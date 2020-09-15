@@ -20,7 +20,7 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     ],
 
     calc_max_row_len_func=create_cmlf_class(
-        lambda num_pre, num_post, pars: (pars[0] // pars[2]) * (pars[1] // pars[3]) * pars[11])(),
+        lambda num_pre, num_post, pars: (int(pars[0]) // int(pars[2])) * (int(pars[1]) // int(pars[3])) * int(pars[11]))(),
 
     calc_kernel_size_func=create_cksf_class(
         lambda pars: UnsignedIntVector([int(pars[0]), int(pars[1]), int(pars[8]), int(pars[11])]))(),

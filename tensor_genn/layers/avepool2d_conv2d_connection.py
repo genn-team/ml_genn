@@ -2,7 +2,7 @@ import numpy as np
 from math import ceil
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
 from pygenn.genn_model import init_connectivity, create_cmlf_class, create_cksf_class
-from pygenn.genn_wrapper import NO_DELAY
+from pygenn.genn_wrapper import NO_DELAY, init_var_kernel
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
@@ -23,7 +23,7 @@ avepool2d_conv2d_small_pool_init = create_custom_sparse_connect_init_snippet_cla
     ],
 
     calc_max_row_len_func=create_cmlf_class(
-        lambda num_pre, num_post, pars: (pars[9] // pars[11]) * (pars[10] // pars[12]) * pars[20])(),
+        lambda num_pre, num_post, pars: (int(pars[9]) // int(pars[11])) * (int(pars[10]) // int(pars[12])) * int(pars[20]))(),
 
     calc_kernel_size_func=create_cksf_class(
         lambda pars: UnsignedIntVector([int(pars[9]), int(pars[10]), int(pars[17]), int(pars[20])]))(),
@@ -47,10 +47,8 @@ avepool2d_conv2d_small_pool_init = create_custom_sparse_connect_init_snippet_cla
 
     // Calculate corresponding pool output
     const int poolOutRow = (poolInRow + pool_padh) / pool_sh;
-    const int poolStrideRow = (poolOutRow * pool_sh) - pool_padh;
     const int poolOutCol = (poolInCol + pool_padw) / pool_sw;
-    const int poolStrideCol = (poolOutCol * pool_sw) - pool_padw;
-    
+
     // Calculate range of rows and columns which presynaptic neuron connects to
     const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
     const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
@@ -202,54 +200,52 @@ class AvePool2DConv2DConnection(BaseConnection):
         super(AvePool2DConv2DConnection, self).compile(tg_model)
 
         # Procedural initialisation
-        if self.connection_type == ConnectionType.PROCEDURAL:
-            pool_kh, pool_kw = self.pool_size
-            pool_sh, pool_sw = self.pool_strides
-            pool_ih, pool_iw, pool_ic = self.source.shape
-            if self.pool_padding == PadMode.VALID:
-                pool_padh = 0
-                pool_padw = 0
-            elif self.pool_padding == PadMode.SAME:
-                # Same padding and large pool sizes
-                if pool_sh > 2 or pool_sw > 2:
-                    raise NotImplementedError("Procedural connectivity with "
-                                              "same padding and pool size > 2"
-                                              " is not supported.")
+        pool_kh, pool_kw = self.pool_size
+        pool_sh, pool_sw = self.pool_strides
+        pool_ih, pool_iw, pool_ic = self.source.shape
+        if self.pool_padding == PadMode.VALID:
+            pool_padh = 0
+            pool_padw = 0
+        elif self.pool_padding == PadMode.SAME:
+            # Same padding and large pool sizes
+            if pool_sh > 2 or pool_sw > 2:
+                raise NotImplementedError("Procedural connectivity with "
+                                          "same padding and pool size > 2"
+                                          " is not supported.")
 
-                pool_padh = (pool_kh - 1) // 2
-                pool_padw = (pool_kw - 1) // 2
+            pool_padh = (pool_kh - 1) // 2
+            pool_padw = (pool_kw - 1) // 2
 
-            conv_kh, conv_kw = self.conv_size
-            conv_sh, conv_sw = self.conv_strides
-            conv_ih, conv_iw, conv_ic = self.pool_output_shape
-            conv_oh, conv_ow, conv_oc = self.target.shape
-            if self.conv_padding == PadMode.VALID:
-                conv_padh = 0
-                conv_padw = 0
-            elif self.conv_padding == PadMode.SAME:
-                conv_padh = (conv_kh - 1) // 2
-                conv_padw = (conv_kw - 1) // 2
-            
-            # If pool size is greater than stride then a more complex model which 
-            # allows pool inputs to appear in multiple pool outputs is required
-            model = (avepool2d_conv2d_big_pool_init_pool_init if pool_kh > pool_sh or pool_kw > pool_sw 
-                     else avepool2d_conv2d_small_pool_init)
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = self.pool_output_shape
+        conv_oh, conv_ow, conv_oc = self.target.shape
+        if self.conv_padding == PadMode.VALID:
+            conv_padh = 0
+            conv_padw = 0
+        elif self.conv_padding == PadMode.SAME:
+            conv_padh = (conv_kh - 1) // 2
+            conv_padw = (conv_kw - 1) // 2
 
-            connect = init_connectivity(model, {
-                'pool_kh': pool_kh, 'pool_kw': pool_kw,
-                'pool_sh': pool_sh, 'pool_sw': pool_sw,
-                'pool_padh': pool_padh, 'pool_padw': pool_padw,
-                'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-                'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                'conv_sh': conv_sh, 'conv_sw': conv_sw,
-                'conv_padh': conv_padh, 'conv_padw': conv_padw,
-                'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
-                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc,
-            })
+        # If pool size is greater than stride then a more complex model which 
+        # allows pool inputs to appear in multiple pool outputs is required
+        model = (avepool2d_conv2d_big_pool_init_pool_init if pool_kh > pool_sh or pool_kw > pool_sw 
+                 else avepool2d_conv2d_small_pool_init)
+
+        connectivity_init = init_connectivity(model, {
+            'pool_kh': pool_kh, 'pool_kw': pool_kw,
+            'pool_sh': pool_sh, 'pool_sw': pool_sw,
+            'pool_padh': pool_padh, 'pool_padw': pool_padw,
+            'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
+            'conv_kh': conv_kh, 'conv_kw': conv_kw,
+            'conv_sh': conv_sh, 'conv_sw': conv_sw,
+            'conv_padh': conv_padh, 'conv_padw': conv_padw,
+            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
         # Sparse initialisation
-        elif self.connection_type == ConnectionType.SPARSE:
-            g, indices = self.genn_sparse_weights()
+        #elif self.connection_type == ConnectionType.SPARSE:
+        #    g, indices = self.genn_sparse_weights()
 
         # Add batch synapse populations
         for batch_i in range(tg_model.batch_size):
@@ -258,27 +254,25 @@ class AvePool2DConv2DConnection(BaseConnection):
             syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
 
             # Batch master
+            scale = np.prod(self.pool_size)
             if not tg_model.share_weights or batch_i == 0:
                 if self.connection_type == ConnectionType.PROCEDURAL:
-                    scale = np.prod(self.pool_size)
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                         syn_name, 'PROCEDURAL_KERNELG', NO_DELAY, pre_nrn, post_nrn,
                         'StaticPulse', {}, {'g': self.weights.flatten() / scale}, {}, {}, 'DeltaCurr', {}, {},
-                        connect)
+                        connectivity_init)
 
                 elif self.connection_type == ConnectionType.SPARSE:
                     self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                         syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
-                    )
-                    self.syn[batch_i].set_sparse_connections(indices[0], indices[1])
-
+                        'StaticPulse', {}, {'g': init_var_kernel()}, {}, {}, 'DeltaCurr', {}, {},
+                        connectivity_init)
+                    self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten() / scale)
             # Batch slave
             else:
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {}
-                )
+                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
 
     def connect(self, source, target):
