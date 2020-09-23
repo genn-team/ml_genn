@@ -1,8 +1,9 @@
 import numpy as np
 from math import ceil
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
-from pygenn.genn_model import init_connectivity, create_cmlf_class, create_cksf_class
-from pygenn.genn_wrapper import NO_DELAY, init_var_kernel
+from pygenn.genn_model import (init_connectivity, init_var, 
+                               create_cmlf_class, create_cksf_class)
+from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
@@ -113,20 +114,14 @@ class Conv2DConnection(BaseConnection):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
+                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL
+                               else 'SPARSE_INDIVIDUALG')
 
-                if self.connection_type == ConnectionType.PROCEDURAL:
-                    self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                        syn_name, 'PROCEDURAL_KERNELG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {},
-                        connectivity_init)
-
-                elif self.connection_type == ConnectionType.SPARSE:
-                    self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                        syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': init_var_kernel()}, {}, {}, 'DeltaCurr', {}, {},
-                        connectivity_init)
-                    self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
-
+                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
+                    syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
+                    'StaticPulse', {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {},
+                    connectivity_init)
+                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
             # Batch slave
             else:
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
