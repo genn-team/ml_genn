@@ -1,14 +1,15 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import create_custom_init_var_snippet_class
-from pygenn.genn_model import init_var
+from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
+from pygenn.genn_model import (init_connectivity, init_var, 
+                               create_cmlf_class, create_cksf_class)
 from pygenn.genn_wrapper import NO_DELAY
-
+from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import ConnectionType, PadMode
 from tensor_genn.layers.base_connection import BaseConnection
 
 
-conv2d_init = create_custom_init_var_snippet_class(
+conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'conv2d',
 
     param_names=[
@@ -19,51 +20,53 @@ conv2d_init = create_custom_init_var_snippet_class(
         'conv_oh', 'conv_ow', 'conv_oc',
     ],
 
-    group_params=[
-        ('conv_kh_reg', 'int', '$(conv_kh)'),
-        ('conv_kw_reg', 'int', '$(conv_kw)'),
-        ('conv_sh_reg', 'int', '$(conv_sh)'),
-        ('conv_sw_reg', 'int', '$(conv_sw)'),
-        ('conv_padh_reg', 'int', '$(conv_padh)'),
-        ('conv_padw_reg', 'int', '$(conv_padw)'),
-        ('conv_iw_reg', 'int', '$(conv_iw)'),
-        ('conv_ic_reg', 'int', '$(conv_ic)'),
-        ('conv_ow_reg', 'int', '$(conv_ow)'),
-        ('conv_oc_reg', 'int', '$(conv_oc)')
-    ],
+    calc_max_row_len_func=create_cmlf_class(
+        lambda num_pre, num_post, pars: (int(pars[0]) // int(pars[2])) * (int(pars[1]) // int(pars[3])) * int(pars[11]))(),
 
-    pre_params=[
-        ('conv_in_row', 'int', '($(id_pre) / $(conv_ic_reg)) / $(conv_iw_reg)'),
-        ('conv_in_col', 'int', '($(id_pre) / $(conv_ic_reg)) % $(conv_iw_reg)'),
-        ('conv_in_chan', 'int', '$(id_pre) % $(conv_ic_reg)')
-    ],
+    calc_kernel_size_func=create_cksf_class(
+        lambda pars: UnsignedIntVector([int(pars[0]), int(pars[1]), int(pars[8]), int(pars[11])]))(),
 
-    post_params=[
-        ('conv_out_row', 'int', '($(id_post) / $(conv_oc_reg)) / $(conv_ow_reg)'),
-        ('conv_out_col', 'int', '($(id_post) / $(conv_oc_reg)) % $(conv_ow_reg)'),
-        ('conv_out_chan', 'int', '$(id_post) % $(conv_oc_reg)')
-    ],
+    row_build_code='''
+    // Stash all parameters in registers
+    // **NOTE** this means parameters from group structure only get converted from float->int once
+    // **NOTE** if they're actually constant, compiler is still likely to treat them as constants rather than allocating registers
+    const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
+    const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
+    const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
+    const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
+    const int conv_ow = $(conv_ow), conv_oh = $(conv_oh), conv_oc = $(conv_oc);
 
-    extra_global_params=[
-        ('kernels', 'scalar*'),
-    ],
+    // Convert presynaptic neuron ID to row, column and channel
+    const int inRow = ($(id_pre) / conv_ic) / conv_iw;
+    const int inCol = ($(id_pre) / conv_ic) % conv_iw;
+    const int inChan = $(id_pre) % conv_ic;
 
-    var_init_code='''
-    const int conv_stride_row = $(conv_out_row) * $(conv_sh_reg) - $(conv_padh_reg);
-    const int conv_stride_col = $(conv_out_col) * $(conv_sw_reg) - $(conv_padw_reg);
-    const int conv_k_row = $(conv_in_row) - conv_stride_row;
-    const int conv_k_col = $(conv_in_col) - conv_stride_col;
-    if (conv_k_row >= 0 && conv_k_row < $(conv_kh_reg) && conv_k_col >= 0 && conv_k_col < $(conv_kw_reg)) {
-        $(value) = $(kernels)[
-            conv_k_row * ($(conv_kw_reg) * $(conv_ic_reg) * $(conv_oc_reg)) +
-            conv_k_col * ($(conv_ic_reg) * $(conv_oc_reg)) +
-            $(conv_in_chan) * $(conv_oc_reg) +
-            $(conv_out_chan)
-        ];
+    // Calculate range of output rows and columns which this presynaptic neuron will connect to
+    const int minOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh - conv_kh) / conv_sh)));
+    const int maxOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh) / conv_sh)));
+    const int minOutCol = min(conv_ow, max(0, 1 + ((inCol + conv_padw - conv_kw) / conv_sw)));
+    const int maxOutCol = min(conv_ow, max(0, 1 + ((inCol + conv_padw) / conv_sw)));
+
+    // Loop through output rows, columns and channels
+    for(int outRow = minOutRow; outRow != maxOutRow; outRow++) {
+        const int strideRow = (outRow * conv_sh) - conv_padh;
+        const int kernRow = inRow - strideRow;
+        for(int outCol = minOutCol; outCol < maxOutCol; outCol++) {
+            const int strideCol = (outCol * conv_sw) - conv_padw;
+            const int kernCol = inCol - strideCol;
+            for(int outChan = 0; outChan < conv_oc; outChan++) {
+                // Calculate postsynaptic index and add synapse
+                const int idPost = ((outRow * conv_ow * conv_oc) +
+                                    (outCol * conv_oc) +
+                                    outChan);
+                $(addSynapse, idPost, kernRow, kernCol, inChan, outChan);
+            }
+        }
     }
-    else {
-        $(value) = 0.0;
-    }
+    
+    // End the row
+    // **THINK** beginning to doubt the value of the GeNN-provided outer loop
+    $(endRow);
     ''',
 )
 
@@ -85,30 +88,23 @@ class Conv2DConnection(BaseConnection):
     def compile(self, tg_model):
         super(Conv2DConnection, self).compile(tg_model)
 
-        # Procedural initialisation
-        if self.connection_type == ConnectionType.PROCEDURAL:
-            conv_kh, conv_kw = self.conv_size
-            conv_sh, conv_sw = self.conv_strides
-            conv_ih, conv_iw, conv_ic = self.source.shape
-            conv_oh, conv_ow, conv_oc = self.target.shape
-            if self.conv_padding == PadMode.VALID:
-                conv_padh = 0
-                conv_padw = 0
-            elif self.conv_padding == PadMode.SAME:
-                conv_padh = (conv_kh - 1) // 2
-                conv_padw = (conv_kw - 1) // 2
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = self.source.shape
+        conv_oh, conv_ow, conv_oc = self.target.shape
+        if self.conv_padding == PadMode.VALID:
+            conv_padh = 0
+            conv_padw = 0
+        elif self.conv_padding == PadMode.SAME:
+            conv_padh = (conv_kh - 1) // 2
+            conv_padw = (conv_kw - 1) // 2
 
-            g = init_var(conv2d_init, {
-                'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                'conv_sh': conv_sh, 'conv_sw': conv_sw,
-                'conv_padh': conv_padh, 'conv_padw': conv_padw,
-                'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
-                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc,
-            })
-
-        # Sparse initialisation
-        elif self.connection_type == ConnectionType.SPARSE:
-            g, indices = self.genn_sparse_weights()
+        connectivity_init = init_connectivity(conv2d_init, {
+            'conv_kh': conv_kh, 'conv_kw': conv_kw,
+            'conv_sh': conv_sh, 'conv_sw': conv_sw,
+            'conv_padh': conv_padh, 'conv_padw': conv_padw,
+            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
         # Add batch synapse populations
         for batch_i in range(tg_model.batch_size):
@@ -118,21 +114,14 @@ class Conv2DConnection(BaseConnection):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
+                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL
+                               else 'SPARSE_INDIVIDUALG')
 
-                if self.connection_type == ConnectionType.PROCEDURAL:
-                    self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                        syn_name, 'DENSE_PROCEDURALG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
-                    )
-                    self.syn[batch_i].vars['g'].set_extra_global_init_param('kernels', self.weights.flatten())
-
-                elif self.connection_type == ConnectionType.SPARSE:
-                    self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                        syn_name, 'SPARSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
-                        'StaticPulse', {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
-                    )
-                    self.syn[batch_i].set_sparse_connections(indices[0], indices[1])
-
+                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
+                    syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
+                    'StaticPulse', {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {},
+                    connectivity_init)
+                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
             # Batch slave
             else:
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
@@ -166,64 +155,3 @@ class Conv2DConnection(BaseConnection):
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
-
-
-    def genn_sparse_weights(self):
-
-        # === Conv2D Weights ===
-        conv_weights = np.zeros((np.prod(self.source.shape), np.prod(self.target.shape)))
-        conv_connect = np.zeros(conv_weights.shape, dtype=np.bool)
-
-        conv_kh, conv_kw = self.conv_size
-        conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source.shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
-        if self.conv_padding == PadMode.VALID:
-            conv_padh = 0
-            conv_padw = 0
-        elif self.conv_padding == PadMode.SAME:
-            conv_padh = (conv_kh - 1) // 2
-            conv_padw = (conv_kw - 1) // 2
-
-        # For each in {all-to-all input -> output channel}:
-        for in_channel in range(conv_ic):
-            for out_channel in range(conv_oc):
-                conv_chan_kernel = self.weights[:, :, in_channel, out_channel]
-                conv_chan_weights = conv_weights[in_channel::conv_ic, out_channel::conv_oc]
-                conv_chan_connect = conv_connect[in_channel::conv_ic, out_channel::conv_oc]
-
-                # For each Conv2D output pixel: 
-                for conv_out_row in range(conv_oh):
-                    conv_stride_row = conv_out_row * conv_sh - conv_padh
-                    for conv_out_col in range(conv_ow):
-                        conv_stride_col = conv_out_col * conv_sw - conv_padw
-
-                        # Get a weights view for this out pixel.
-                        conv_out_pixel_weights = conv_chan_weights[:, conv_out_row * conv_ow + conv_out_col]
-                        conv_out_pixel_weights.shape = (conv_ih, conv_iw)
-                        conv_out_pixel_connect = conv_chan_connect[:, conv_out_row * conv_ow + conv_out_col]
-                        conv_out_pixel_connect.shape = (conv_ih, conv_iw)
-
-                        # Get a weights view for this cropped stride.
-                        crop_T = max(conv_stride_row, 0)
-                        crop_B = min(conv_stride_row + conv_kh, conv_ih)
-                        crop_L = max(conv_stride_col, 0)
-                        crop_R = min(conv_stride_col + conv_kw, conv_iw)
-                        conv_stride_weights = conv_out_pixel_weights[crop_T:crop_B, crop_L:crop_R]
-                        conv_stride_connect = conv_out_pixel_connect[crop_T:crop_B, crop_L:crop_R]
-
-                        # Get a cropped kernel view.
-                        crop_T =       0 - min(conv_stride_row, 0)
-                        crop_B = conv_kh - max(conv_stride_row + conv_kh - conv_ih, 0)
-                        crop_L =       0 - min(conv_stride_col, 0)
-                        crop_R = conv_kw - max(conv_stride_col + conv_kw - conv_iw, 0)
-                        conv_cropped_kernel = conv_chan_kernel[crop_T:crop_B, crop_L:crop_R]
-
-                        # Set weights for this stride.
-                        conv_stride_weights[:] = conv_cropped_kernel
-                        conv_stride_connect[:] = True
-
-        # === Weight Values and Indices ===
-        w_indices = np.nonzero(conv_connect)
-        w_values = conv_weights[w_indices]
-        return w_values, w_indices
