@@ -27,4 +27,7 @@ def parse_arguments(model_description='Tensor GeNN model'):
     parser.add_argument('--save-samples', type=int, default=[], nargs='+')
     parser.add_argument('--plot', action='store_true')
 
+    # TensorFlow options
+    parser.add_argument('--reuse-tf-model', action='store_true')
+
     return parser.parse_args()

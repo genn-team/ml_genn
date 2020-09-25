@@ -66,10 +66,12 @@ if __name__ == '__main__':
         layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False),
     ], name='vgg16')
 
-    tf_model = models.load_model('vgg16_tf_model')
-    #tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    #tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
-    #models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
+    if args.reuse_tf_model:
+        tf_model = models.load_model('vgg16_tf_model')
+    else:
+        tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
+        models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate TensorGeNN model
@@ -77,7 +79,7 @@ if __name__ == '__main__':
     tg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
 
     if args.norm_method == 'data-norm':
-        norm = DataNorm([x_norm], tg_model.tf_model)
+        norm = DataNorm([x_norm], tf_model)
         norm.normalize(tg_model)
     elif args.norm_method == 'spike-norm':
         norm = SpikeNorm([x_norm])

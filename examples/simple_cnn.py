@@ -33,10 +33,12 @@ if __name__ == '__main__':
         layers.Dense(y_train.max() + 1, activation='softmax', use_bias=False),
     ], name='simple_cnn')
 
-    tf_model = models.load_model('simple_cnn_tf_model')
-    #tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    #tf_model.fit(x_train, y_train, epochs=10)
-    #models.save_model(tf_model, 'simple_cnn_tf_model', save_format='h5')
+    if args.reuse_tf_model:
+        tf_model = models.load_model('simple_cnn_tf_model')
+    else:
+        tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        tf_model.fit(x_train, y_train, epochs=10)
+        models.save_model(tf_model, 'simple_cnn_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate TensorGeNN model
