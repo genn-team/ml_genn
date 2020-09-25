@@ -15,7 +15,7 @@ Example:
 
         tensorgenn_model = Model.convert_tf_model(tensorflow_model)
         tensorgenn_model.compile()
-        tensorgenn_model.evaluate(test_data, test_labels)
+        tensorgenn_model.evaluate([test_data], [test_labels], 300.0)
 """
 
 
@@ -101,7 +101,11 @@ class Model(object):
             layer.compile(self)
 
         # Build and load GeNN model
-        if not reuse_genn_model or not os.path.isfile(self.name + '_CODE/librunner.so'):
+        if os.name == 'nt':
+            model_exists = os.path.isfile("./runner_Release.dll")
+        else:
+            model_exists = os.path.isfile('./' + self.name + '_CODE/librunner.so')
+        if not reuse_genn_model or not model_exists:
             self.g_model.build()
         self.g_model.load()
 
