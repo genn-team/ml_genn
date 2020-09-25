@@ -100,7 +100,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		// Set up new virtualenv
 		echo "Creating virtualenv";
                 sh "rm -rf ${WORKSPACE}/venv";
-                sh "virtualenv -p /usr/bin/python3 ${WORKSPACE}/venv";
+                sh "python3 -m venv ${WORKSPACE}/venv";
 		sh """
                     . ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
