@@ -1,10 +1,18 @@
 import tensorflow as tf
-from tensorflow.keras import models, layers, datasets
+from tensorflow.keras import models, layers, datasets, callbacks
 from tensor_genn import Model, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
 import numpy as np
 
+# Learning rate schedule
+def schedule(epoch, learning_rate):
+    if epoch < 81:
+        return 0.05
+    elif epoch < 122:
+        return 0.005
+    else:
+        return 0.0005
 
 if __name__ == '__main__':
     args = parse_arguments('VGG16 classifier model')
@@ -16,8 +24,11 @@ if __name__ == '__main__':
     # Retrieve and normalise CIFAR-10 dataset
     (x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()
     x_train = x_train[:args.n_train_samples] / 255.0
+    x_train -= np.average(x_train)
     y_train = y_train[:args.n_train_samples, 0]
+    
     x_test = x_test[:args.n_test_samples] / 255.0
+    x_test -= np.average(x_test)
     y_test = y_test[:args.n_test_samples, 0]
     x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
@@ -69,8 +80,10 @@ if __name__ == '__main__':
     if args.reuse_tf_model:
         tf_model = models.load_model('vgg16_tf_model')
     else:
+        schedule_callback = callbacks.LearningRateScheduler(callback)
+
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, batch_size=256, epochs=200)
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200, callbacks=[schedule_callback])
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
