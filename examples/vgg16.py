@@ -1,5 +1,6 @@
 import tensorflow as tf
-from tensorflow.keras import models, layers, datasets, callbacks, optimizers, initializers
+from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
+                              initializers, regularizers)
 from tensor_genn import Model, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
@@ -40,54 +41,72 @@ if __name__ == '__main__':
     if x_train.shape[1] < 32 or x_train.shape[2] < 32:
         raise ValueError('input must be at least 32x32')
 
+    regularizer = regularizers.l2(0.0001)
     # Create, train and evaluate TensorFlow model
     tf_model = models.Sequential([
-        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:], kernel_initializer=initializer),
+        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:], 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.3),
-        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, 
+                      kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.AveragePooling2D(2),
 
         layers.Flatten(),
-        layers.Dense(4096, activation="relu", use_bias=False),
+        layers.Dense(4096, activation="relu", use_bias=False, kernel_regularizer=regularizer),
         layers.Dropout(0.5),
-        layers.Dense(4096, activation="relu", use_bias=False),
+        layers.Dense(4096, activation="relu", use_bias=False, kernel_regularizer=regularizer),
         layers.Dropout(0.5),
-        layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False),
+        layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False, kernel_regularizer=regularizer),
     ], name='vgg16')
 
     if args.reuse_tf_model:
         tf_model = models.load_model('vgg16_tf_model')
     else:
-        schedule_callback = callbacks.LearningRateScheduler(schedule)
+        callbacks = [callbacks.LearningRateScheduler(schedule)]
+        if args.record_tensorboard:
+            callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))
 
-        tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, batch_size=256, epochs=200, callbacks=[schedule_callback])
+        optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
+
+        tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200, callbacks=callbacks)
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
