@@ -37,50 +37,52 @@ if __name__ == '__main__':
         raise ValueError('input must be at least 32x32')
 
     # Create, train and evaluate TensorFlow model
+    initializer = tf.keras.initializers.GlorotNormal()
+
     tf_model = models.Sequential([
-        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:]),
+        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:], kernel_initializer=initializer),
         layers.Dropout(0.3),
-        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False),
+        layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, kernel_initializer=initializer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.AveragePooling2D(2),
 
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.4),
-        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False),
+        layers.Conv2D(512, 3, padding="same", activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.AveragePooling2D(2),
 
         layers.Flatten(),
-        layers.Dense(4096, activation="relu", use_bias=False),
+        layers.Dense(4096, activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.5),
-        layers.Dense(4096, activation="relu", use_bias=False),
+        layers.Dense(4096, activation="relu", use_bias=False, kernel_initializer=initializer),
         layers.Dropout(0.5),
-        layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False),
+        layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False, kernel_initializer=initializer),
     ], name='vgg16')
 
     if args.reuse_tf_model:
         tf_model = models.load_model('vgg16_tf_model')
     else:
-        schedule_callback = callbacks.LearningRateScheduler(callback)
+        schedule_callback = callbacks.LearningRateScheduler(schedule)
 
         tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         tf_model.fit(x_train, y_train, batch_size=256, epochs=200, callbacks=[schedule_callback])
