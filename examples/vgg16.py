@@ -106,7 +106,7 @@ if __name__ == '__main__':
         optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
 
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, batch_size=256, epochs=200, callbacks=callbacks)
+        tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
