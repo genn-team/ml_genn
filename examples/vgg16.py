@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
                               initializers, regularizers)
+from tensorflow.keras.utils import CustomObjectScope
 from tensor_genn import Model, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
@@ -97,7 +98,8 @@ if __name__ == '__main__':
     ], name='vgg16')
 
     if args.reuse_tf_model:
-        tf_model = models.load_model('vgg16_tf_model')
+        with CustomObjectScope({'initializer': initializer}):
+            tf_model = models.load_model('vgg16_tf_model')
     else:
         callbacks = [callbacks.LearningRateScheduler(schedule)]
         if args.record_tensorboard:
