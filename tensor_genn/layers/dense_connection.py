@@ -2,13 +2,14 @@ import numpy as np
 from pygenn.genn_wrapper import NO_DELAY
 
 from tensor_genn.layers.base_connection import BaseConnection
-
+from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 class DenseConnection(BaseConnection):
 
-    def __init__(self, units):
+    def __init__(self, units, signed_spikes):
         super(DenseConnection, self).__init__()
         self.units = units
+        self.signed_spikes = signed_spikes
 
 
     def compile(self, tg_model):
@@ -22,10 +23,10 @@ class DenseConnection(BaseConnection):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
-
+                model = signed_static_pulse if self.signed_spikes else 'StaticPulse'
                 self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                     syn_name, 'DENSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
-                    'StaticPulse', {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {}
+                    model, {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {}
                 )
 
             # Batch slave

@@ -3,8 +3,10 @@ from tensor_genn.layers.base_layer import BaseLayer
 
 class Layer(BaseLayer):
 
-    def __init__(self, model, params, vars_init, global_params, name):
-        super(Layer, self).__init__(model, params, vars_init, global_params, name)
+    def __init__(self, model, params, vars_init, 
+                 global_params, name, signed_spikes):
+        super(Layer, self).__init__(model, params, vars_init, 
+                                    global_params, name, signed_spikes)
 
 
     def compile(self, tg_model):

@@ -3,6 +3,7 @@ from enum import Enum
 class InputType(Enum):
     SPIKE = 'spike'
     POISSON = 'poisson'
+    POISSON_SIGNED = 'poisson_signed'
     IF = 'if'
 
 class ConnectionType(Enum):

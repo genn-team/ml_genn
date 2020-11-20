@@ -6,7 +6,9 @@ from pygenn.genn_model import (init_connectivity, init_var,
 from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import ConnectionType, PadMode
+
 from tensor_genn.layers.base_connection import BaseConnection
+from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 avepool2d_conv2d_small_pool_init = create_custom_sparse_connect_init_snippet_class(
     'avepool2d_small_pool_conv2d',
@@ -177,8 +179,10 @@ avepool2d_conv2d_big_pool_init = create_custom_sparse_connect_init_snippet_class
 
 class AvePool2DConv2DConnection(BaseConnection):
 
-    def __init__(self, filters, pool_size, conv_size, pool_strides=None, conv_strides=None,
-                 pool_padding='valid', conv_padding='valid', connection_type='procedural'):
+    def __init__(self, filters, pool_size, conv_size, pool_strides=None, 
+                 conv_strides=None, pool_padding='valid', 
+                 conv_padding='valid', connection_type='procedural', 
+                 signed_spikes=False):
         super(AvePool2DConv2DConnection, self).__init__()
         self.filters = filters
         self.pool_size = pool_size
@@ -195,6 +199,7 @@ class AvePool2DConv2DConnection(BaseConnection):
         self.conv_padding = PadMode(conv_padding)
         self.pool_output_shape = None
         self.connection_type = ConnectionType(connection_type)
+        self.signed_spikes = signed_spikes
 
 
     def compile(self, tg_model):
@@ -259,9 +264,11 @@ class AvePool2DConv2DConnection(BaseConnection):
             if not tg_model.share_weights or batch_i == 0:
                 matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL
                                else 'SPARSE_INDIVIDUALG')
+                model = signed_static_pulse if self.signed_spikes else 'StaticPulse'
+
                 self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                     syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
-                    'StaticPulse', {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {},
+                    model, {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {},
                     connectivity_init)
                 self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten() / scale)
             # Batch slave
