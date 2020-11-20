@@ -6,8 +6,9 @@ class Dense(Layer):
     def __init__(self, model, params, vars_init, global_params, 
                  name, units, signed_spikes=False):
         super(Dense, self).__init__(model, params, vars_init, 
-                                    global_params, name, signed_spikes)
+                                    global_params, name)
         self.units = units
+        self.signed_spikes = signed_spikes
 
 
     def connect(self, sources):

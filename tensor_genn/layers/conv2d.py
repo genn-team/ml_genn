@@ -9,7 +9,7 @@ class Conv2D(Layer):
                  conv_size, conv_strides=None, conv_padding='valid', 
                  connection_type='procedural', signed_spikes=False):
         super(Conv2D, self).__init__(model, params, vars_init, 
-                                     global_params, name, signed_spikes)
+                                     global_params, name)
         self.filters = filters
         self.conv_size = conv_size
         if conv_strides == None:
@@ -18,6 +18,7 @@ class Conv2D(Layer):
             self.conv_strides = conv_strides
         self.conv_padding = PadMode(conv_padding)
         self.connection_type = ConnectionType(connection_type)
+        self.signed_spikes = signed_spikes
 
 
     def connect(self, sources):
