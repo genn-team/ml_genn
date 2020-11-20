@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras import models, layers, datasets, callbacks
+from tensorflow.keras import models, layers, datasets, callbacks, optimizers, initializers
 from tensor_genn import Model, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
@@ -14,6 +14,10 @@ def schedule(epoch, learning_rate):
     else:
         return 0.0005
 
+def initializer(shape, dtype=None):
+    stddev = np.sqrt(2.0 / float(shape[0] * shape[1] * shape[3]))
+    return tf.random.normal(shape, dtype=dtype, stddev=stddev)
+
 if __name__ == '__main__':
     args = parse_arguments('VGG16 classifier model')
     print('arguments: ' + str(vars(args)))
@@ -26,7 +30,7 @@ if __name__ == '__main__':
     x_train = x_train[:args.n_train_samples] / 255.0
     x_train -= np.average(x_train)
     y_train = y_train[:args.n_train_samples, 0]
-    
+
     x_test = x_test[:args.n_test_samples] / 255.0
     x_test -= np.average(x_test)
     y_test = y_test[:args.n_test_samples, 0]
@@ -37,8 +41,6 @@ if __name__ == '__main__':
         raise ValueError('input must be at least 32x32')
 
     # Create, train and evaluate TensorFlow model
-    initializer = tf.keras.initializers.GlorotNormal()
-
     tf_model = models.Sequential([
         layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:], kernel_initializer=initializer),
         layers.Dropout(0.3),
@@ -72,11 +74,11 @@ if __name__ == '__main__':
         layers.AveragePooling2D(2),
 
         layers.Flatten(),
-        layers.Dense(4096, activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Dense(4096, activation="relu", use_bias=False),
         layers.Dropout(0.5),
-        layers.Dense(4096, activation="relu", use_bias=False, kernel_initializer=initializer),
+        layers.Dense(4096, activation="relu", use_bias=False),
         layers.Dropout(0.5),
-        layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False, kernel_initializer=initializer),
+        layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False),
     ], name='vgg16')
 
     if args.reuse_tf_model:
