@@ -4,13 +4,12 @@ from weakref import proxy
 class BaseLayer(object):
 
     def __init__(self, model, params, vars_init, 
-                 global_params, name, signed_spikes):
+                 global_params, name):
         self.model = model
         self.params = params
         self.vars_init = vars_init
         self.global_params = global_params
         self.name = name
-        self.signed_spikes = signed_spikes
 
         self.downstream_connections = []
         self.upstream_connections = []

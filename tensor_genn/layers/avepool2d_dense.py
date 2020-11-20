@@ -9,7 +9,7 @@ class AvePool2DDense(Layer):
                  units, pool_size, pool_strides=None, pool_padding='valid', 
                  connection_type='procedural', signed_spikes=False):
         super(AvePool2DDense, self).__init__(model, params, vars_init, 
-                                             global_params, name, signed_spikes)
+                                             global_params, name)
         self.units = units
         self.pool_size = pool_size
         if pool_strides == None:
@@ -18,7 +18,7 @@ class AvePool2DDense(Layer):
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
         self.connection_type = ConnectionType(connection_type)
-
+        self.signed_spikes = signed_spikes
 
     def connect(self, sources):
         connections = [
