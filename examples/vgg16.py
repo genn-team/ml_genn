@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
                               initializers, regularizers)
 from tensorflow.keras.utils import CustomObjectScope
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensor_genn import Model, InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
@@ -42,7 +43,17 @@ if __name__ == '__main__':
     if x_train.shape[1] < 32 or x_train.shape[2] < 32:
         raise ValueError('input must be at least 32x32')
 
+    # If we should augment training data
+    if args.augment_training:
+        # Create image data generator
+        data_gen = ImageDataGenerator(horizontal_flip=True)
+        
+        # Get training iterator
+        iter_train = datagen.flow(x_train, y_train, batch_size=256)
+    
+    # Create L2 regularizer
     regularizer = regularizers.l2(0.0001)
+    
     # Create, train and evaluate TensorFlow model
     tf_model = models.Sequential([
         layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:], 
@@ -108,7 +119,13 @@ if __name__ == '__main__':
         optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
 
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
+        
+        if args.augment_training:
+            steps_per_epoch = x_train.shape[0] // 256
+            tf_model.fit_generator(iter_train, steps_per_epoch=steps_per_epoch, epochs=200, callbacks=callbacks)
+        else:
+            tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
+        
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
