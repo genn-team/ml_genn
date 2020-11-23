@@ -49,7 +49,7 @@ if __name__ == '__main__':
         data_gen = ImageDataGenerator(horizontal_flip=True)
         
         # Get training iterator
-        iter_train = datagen.flow(x_train, y_train, batch_size=256)
+        iter_train = data_gen.flow(x_train, y_train, batch_size=256)
     
     # Create L2 regularizer
     regularizer = regularizers.l2(0.0001)
@@ -122,7 +122,7 @@ if __name__ == '__main__':
         
         if args.augment_training:
             steps_per_epoch = x_train.shape[0] // 256
-            tf_model.fit_generator(iter_train, steps_per_epoch=steps_per_epoch, epochs=200, callbacks=callbacks)
+            tf_model.fit(iter_train, steps_per_epoch=steps_per_epoch, epochs=200, callbacks=callbacks)
         else:
             tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
         
