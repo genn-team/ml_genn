@@ -1,5 +1,5 @@
 from pygenn.genn_model import create_custom_neuron_class
-
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
 
 # === IF neuron class ===
 if_model = create_custom_neuron_class(
@@ -29,7 +29,7 @@ if_model = create_custom_neuron_class(
 # === Spike input neuron class ===
 spike_input_model = create_custom_neuron_class(
     'spike_input',
-    var_name_types=[('input', 'scalar')],
+    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY)],
     threshold_condition_code='''
     $(input)
     ''',
@@ -40,9 +40,12 @@ spike_input_model = create_custom_neuron_class(
 # === Poisson input neuron class ===
 poisson_input_model = create_custom_neuron_class(
     'poisson_input',
-    var_name_types=[('input', 'scalar')],
+    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY)],
+    sim_code='''
+    const scalar u = $(gennrand_uniform);
+    ''',
     threshold_condition_code='''
-    $(gennrand_uniform) >= exp(-$(input) * DT)
+    $(input) > 0 && u >= exp(-$(input) * DT)
     ''',
     is_auto_refractory_required=False,
 )
@@ -51,7 +54,7 @@ poisson_input_model = create_custom_neuron_class(
 # === IF input neuron class ===
 if_input_model = create_custom_neuron_class(
     'if_input',
-    var_name_types=[('input', 'scalar'), ('Vmem', 'scalar')],
+    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY), ('Vmem', 'scalar')],
     sim_code='''
     if ($(t) == 0.0) {
         // Reset state at t = 0

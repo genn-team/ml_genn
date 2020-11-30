@@ -8,14 +8,14 @@ from tensor_genn.layers.neuron_models import if_input_model
 
 class Input(BaseLayer):
 
-    def __init__(self, model, params, vars_init, global_params, name, shape):
-        super(Input, self).__init__(model, params, vars_init, global_params, name)
+    def __init__(self, model, params, vars_init,
+                 global_params, name, shape, signed_spikes=False):
+        super(Input, self).__init__(model, params, vars_init,
+                                    global_params, name, signed_spikes)
         self.shape = shape
-
 
     def compile(self, tg_model):
         super(Input, self).compile(tg_model)
-
 
     def set_input_batch(self, data_batch):
         # Input sanity check
@@ -37,21 +37,21 @@ class Input(BaseLayer):
 
 
 class SpikeInput(Input):
-    def __init__(self, name, shape):
+    def __init__(self, name, shape, signed_spikes=False):
         super(SpikeInput, self).__init__(
-            spike_input_model, {}, {'input': 0.0}, {}, name, shape
-        )
+            spike_input_model, {}, {'input': 0.0}, {},
+            name, shape, signed_spikes)
 
 
 class PoissonInput(Input):
-    def __init__(self, name, shape):
+    def __init__(self, name, shape, signed_spikes=False):
         super(PoissonInput, self).__init__(
-            poisson_input_model, {}, {'input': 0.0}, {}, name, shape
-        )
+            poisson_input_model, {}, {'input': 0.0}, {},
+            name, shape, signed_spikes)
 
 
 class IFInput(Input):
-    def __init__(self, name, shape):
+    def __init__(self, name, shape, signed_spikes=False):
         super(IFInput, self).__init__(
-            if_input_model, {}, {'input': 0.0, 'Vmem': 0.0}, {}, name, shape
-        )
+            if_input_model, {}, {'input': 0.0, 'Vmem': 0.0}, {},
+            name, shape, signed_spikes)

@@ -29,5 +29,7 @@ def parse_arguments(model_description='Tensor GeNN model'):
 
     # TensorFlow options
     parser.add_argument('--reuse-tf-model', action='store_true')
+    parser.add_argument('--record-tensorboard', action='store_true')
+    parser.add_argument('--augment-training', action='store_true')
 
     return parser.parse_args()
