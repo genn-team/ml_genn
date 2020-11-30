@@ -281,8 +281,10 @@ class Model(object):
         input_type = InputType(input_type)
         if input_type == InputType.SPIKE:
             layer = SpikeInput('input', tf_model.input_shape[1:])
-        elif input_type == InputType.POISSON or input_type == InputType.POISSON_SIGNED:
-            layer = PoissonInput('input', tf_model.input_shape[1:])
+        elif input_type == InputType.POISSON:
+            layer = PoissonInput('input', tf_model.input_shape[1:], signed_spikes=False)
+        elif input_type == InputType.POISSON_SIGNED:
+            layer = PoissonInput('input', tf_model.input_shape[1:], signed_spikes=True)
         elif input_type == InputType.IF:
             layer = IFInput('input', tf_model.input_shape[1:])
         model.inputs.append(layer)
@@ -293,10 +295,6 @@ class Model(object):
 
         # For each TensorFlow model layer:
         for tf_layer in tf_model.layers:
-            # Use signed spikes if we're using signed poisson  
-            # input type and this is subsequent layer
-            signed_spikes = (input_type == InputType.POISSON_SIGNED
-                             and len(model.layers) == 1)
                              
             # === Flatten Layers ===
             if isinstance(tf_layer, tf.keras.layers.Flatten):
@@ -311,7 +309,7 @@ class Model(object):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
                     layer = IFDense(name=tf_layer.name, units=tf_layer.units,
-                                    threshold=1.0, signed_spikes=signed_spikes)
+                                    threshold=1.0, signed_spikes=False)
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
                     layer = IFAvePool2DDense(
@@ -320,7 +318,7 @@ class Model(object):
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
                         connection_type=connection_type, 
-                        threshold=1.0, signed_spikes=signed_spikes)
+                        threshold=1.0, signed_spikes=False)
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -339,7 +337,7 @@ class Model(object):
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
                         connection_type=connection_type, 
-                        threshold=1.0, signed_spikes=signed_spikes)
+                        threshold=1.0, signed_spikes=False)
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
                     layer = IFAvePool2DConv2D(
@@ -348,7 +346,7 @@ class Model(object):
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
                         connection_type=connection_type, 
-                        threshold=1.0, signed_spikes=signed_spikes)
+                        threshold=1.0, signed_spikes=False)
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())

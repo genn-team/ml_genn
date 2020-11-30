@@ -10,7 +10,7 @@ class AvePool2DConv2D(Layer):
                  conv_strides=None, pool_padding='valid', conv_padding='valid', 
                  connection_type='procedural', signed_spikes=False):
         super(AvePool2DConv2D, self).__init__(model, params, vars_init, 
-                                              global_params, name)
+                                              global_params, name, signed_spikes)
         self.filters = filters
         self.pool_size = pool_size
         self.conv_size = conv_size
@@ -25,17 +25,12 @@ class AvePool2DConv2D(Layer):
         self.pool_padding = PadMode(pool_padding)
         self.conv_padding = PadMode(conv_padding)
         self.connection_type = ConnectionType(connection_type)
-        self.signed_spikes = signed_spikes
-
 
     def connect(self, sources):
         connections = [
-            AvePool2DConv2DConnection(self.filters, self.pool_size,
-                                      self.conv_size, self.pool_strides,
-                                      self.conv_strides, self.pool_padding,
-                                      self.conv_padding, self.connection_type,
-                                      self.signed_spikes) 
-            for i in range(len(sources))]
+            AvePool2DConv2DConnection(self.filters, self.pool_size, self.conv_size,
+                                      self.pool_strides, self.conv_strides, self.pool_padding,
+                                      self.conv_padding, self.connection_type) for i in range(len(sources))]
         super(AvePool2DConv2D, self).connect(sources, connections)
 
 
@@ -48,7 +43,6 @@ class IFAvePool2DConv2D(AvePool2DConv2D):
             if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
             name, filters, pool_size, conv_size, pool_strides, conv_strides,
             pool_padding, conv_padding, connection_type, signed_spikes)
-
 
     def set_threshold(self, threshold):
         self.global_params['Vthr'] = threshold

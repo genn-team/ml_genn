@@ -9,7 +9,7 @@ class AvePool2DDense(Layer):
                  units, pool_size, pool_strides=None, pool_padding='valid', 
                  connection_type='procedural', signed_spikes=False):
         super(AvePool2DDense, self).__init__(model, params, vars_init, 
-                                             global_params, name)
+                                             global_params, name, signed_spikes)
         self.units = units
         self.pool_size = pool_size
         if pool_strides == None:
@@ -18,13 +18,12 @@ class AvePool2DDense(Layer):
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
         self.connection_type = ConnectionType(connection_type)
-        self.signed_spikes = signed_spikes
 
     def connect(self, sources):
         connections = [
             AvePool2DDenseConnection(self.units, self.pool_size, 
-            self.pool_strides, self.pool_padding, 
-            self.connection_type, self.signed_spikes) for i in range(len(sources))]
+                                     self.pool_strides, self.pool_padding,
+                                     self.connection_type) for i in range(len(sources))]
         super(AvePool2DDense, self).connect(sources, connections)
 
 
@@ -37,7 +36,6 @@ class IFAvePool2DDense(AvePool2DDense):
             if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
             name, units, pool_size, pool_strides, pool_padding, 
             connection_type, signed_spikes)
-
 
     def set_threshold(self, threshold):
         self.global_params['Vthr'] = threshold

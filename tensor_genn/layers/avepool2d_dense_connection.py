@@ -125,8 +125,7 @@ avepool2d_dense_small_pool_init = create_custom_init_var_snippet_class(
 class AvePool2DDenseConnection(BaseConnection):
 
     def __init__(self, units, pool_size, pool_strides=None, 
-                 pool_padding='valid', connection_type='procedural', 
-                 signed_spikes=False):
+                 pool_padding='valid', connection_type='procedural'):
         super(AvePool2DDenseConnection, self).__init__()
         self.units = units
         self.pool_size = pool_size
@@ -137,8 +136,6 @@ class AvePool2DDenseConnection(BaseConnection):
         self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
         self.connection_type = ConnectionType(connection_type)
-        self.signed_spikes = signed_spikes
-
 
     def compile(self, tg_model):
         super(AvePool2DDenseConnection, self).compile(tg_model)
@@ -180,21 +177,18 @@ class AvePool2DDenseConnection(BaseConnection):
             if not tg_model.share_weights or batch_i == 0:
                 algorithm = ('DENSE_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL 
                              else 'DENSE_INDIVIDUALG')
-                model = signed_static_pulse if self.signed_spikes else 'StaticPulse'
+                model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
                 
                 self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                     syn_name, algorithm, NO_DELAY, pre_nrn, post_nrn,
-                    model, {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {}
-                )
+                    model, {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {})
                 self.syn[batch_i].vars['g'].set_extra_global_init_param('weights', self.weights.flatten())
 
             # Batch slave
             else:
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {}
-                )
-
+                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
     def connect(self, source, target):
         super(AvePool2DDenseConnection, self).connect(source, target)

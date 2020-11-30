@@ -1,19 +1,17 @@
 from tensor_genn.layers import Layer, DenseConnection
 from tensor_genn.layers.neuron_models import if_model
 
+
 class Dense(Layer):
 
     def __init__(self, model, params, vars_init, global_params, 
                  name, units, signed_spikes=False):
         super(Dense, self).__init__(model, params, vars_init, 
-                                    global_params, name)
+                                    global_params, name, signed_spikes)
         self.units = units
-        self.signed_spikes = signed_spikes
-
 
     def connect(self, sources):
-        connections = [DenseConnection(self.units, self.signed_spikes) 
-                       for i in range(len(sources))]
+        connections = [DenseConnection(self.units) for i in range(len(sources))]
         super(Dense, self).connect(sources, connections)
 
 
@@ -23,7 +21,6 @@ class IFDense(Dense):
         super(IFDense, self).__init__(
             if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold}, 
             name, units, signed_spikes)
-
 
     def set_threshold(self, threshold):
         self.global_params['Vthr'] = threshold

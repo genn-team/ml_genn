@@ -4,10 +4,9 @@ from tensor_genn.layers.base_layer import BaseLayer
 class Layer(BaseLayer):
 
     def __init__(self, model, params, vars_init, 
-                 global_params, name):
+                 global_params, name, signed_spikes=False):
         super(Layer, self).__init__(model, params, vars_init, 
-                                    global_params, name)
-
+                                    global_params, name, signed_spikes)
 
     def compile(self, tg_model):
         super(Layer, self).compile(tg_model)
@@ -15,14 +14,12 @@ class Layer(BaseLayer):
         for connection in self.upstream_connections:
             connection.compile(tg_model)
 
-
     def connect(self, sources, connections):
         if len(sources) != len(connections):
             raise ValueError('sources list and connections list length mismatch')
 
         for source, connection in zip(sources, connections):
             connection.connect(source, self)
-
 
     def set_weights(self, weights):
         if len(weights) != len(self.upstream_connections):
@@ -37,11 +34,10 @@ class Layer(BaseLayer):
 
 class IFLayer(Layer):
 
-    def __init__(self, name, threshold=1.0):
+    def __init__(self, name, threshold=1.0, signed_spikes=False):
         super(IFLayer, self).__init__(
-            if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold}, name
-        )
-
+            if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
+            name, signed_spikes)
 
     def set_threshold(self, threshold):
         self.global_params['Vthr'] = threshold
