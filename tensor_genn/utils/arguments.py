@@ -1,5 +1,5 @@
 import argparse
-from tensor_genn.layers import InputType, ConnectionType
+from tensor_genn.layers import InputType, SynapseType
 
 def parse_arguments(model_description='Tensor GeNN model'):
     '''
@@ -14,7 +14,7 @@ def parse_arguments(model_description='Tensor GeNN model'):
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--share-weights', action='store_true')
     parser.add_argument('--input-type', default='poisson', choices=[i.value for i in InputType])
-    parser.add_argument('--connection-type', default='procedural', choices=[i.value for i in ConnectionType])
+    parser.add_argument('--synapse-type', default='procedural', choices=[i.value for i in SynapseType])
 
     # normalisation options
     parser.add_argument('--norm-method', default=None, choices=['data-norm', 'spike-norm'])

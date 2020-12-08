@@ -1,5 +1,5 @@
-from tensor_genn.layers import ConnectionType, PadMode
-from tensor_genn.layers import Layer, AvePool2DDenseConnection
+from tensor_genn.layers import SynapseType, PadMode
+from tensor_genn.layers import Layer, AvePool2DDenseSynapse
 from tensor_genn.layers.neuron_models import if_model
 
 
@@ -7,7 +7,7 @@ class AvePool2DDense(Layer):
 
     def __init__(self, model, params, vars_init, global_params, name, 
                  units, pool_size, pool_strides=None, pool_padding='valid', 
-                 connection_type='procedural', signed_spikes=False):
+                 synapse_type='procedural', signed_spikes=False):
         super(AvePool2DDense, self).__init__(model, params, vars_init, 
                                              global_params, name, signed_spikes)
         self.units = units
@@ -17,25 +17,25 @@ class AvePool2DDense(Layer):
         else:
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
-        self.connection_type = ConnectionType(connection_type)
+        self.synapse_type = SynapseType(synapse_type)
 
     def connect(self, sources):
-        connections = [
-            AvePool2DDenseConnection(self.units, self.pool_size, 
-                                     self.pool_strides, self.pool_padding,
-                                     self.connection_type) for i in range(len(sources))]
-        super(AvePool2DDense, self).connect(sources, connections)
+        synapses = [
+            AvePool2DDenseSynapse(self.units, self.pool_size, 
+                                  self.pool_strides, self.pool_padding,
+                                  self.synapse_type) for i in range(len(sources))]
+        super(AvePool2DDense, self).connect(sources, synapses)
 
 
 class IFAvePool2DDense(AvePool2DDense):
 
     def __init__(self, name, units, pool_size, pool_strides=None, 
-                 pool_padding='valid', connection_type='procedural', 
+                 pool_padding='valid', synapse_type='procedural', 
                  threshold=1.0, signed_spikes=False):
         super(IFAvePool2DDense, self).__init__(
             if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
             name, units, pool_size, pool_strides, pool_padding, 
-            connection_type, signed_spikes)
+            synapse_type, signed_spikes)
 
     def set_threshold(self, threshold):
         self.global_params['Vthr'] = threshold

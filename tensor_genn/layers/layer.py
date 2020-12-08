@@ -11,25 +11,25 @@ class Layer(BaseLayer):
     def compile(self, tg_model):
         super(Layer, self).compile(tg_model)
 
-        for connection in self.upstream_connections:
-            connection.compile(tg_model)
+        for synapse in self.upstream_synapses:
+            synapse.compile(tg_model)
 
-    def connect(self, sources, connections):
-        if len(sources) != len(connections):
-            raise ValueError('sources list and connections list length mismatch')
+    def connect(self, sources, synapses):
+        if len(sources) != len(synapses):
+            raise ValueError('sources list and synapse list length mismatch')
 
-        for source, connection in zip(sources, connections):
-            connection.connect(source, self)
+        for source, synapse in zip(sources, synapses):
+            synapse.connect(source, self)
 
     def set_weights(self, weights):
-        if len(weights) != len(self.upstream_connections):
-            raise ValueError('weight matrix list and upsteam connection list length mismatch')
+        if len(weights) != len(self.upstream_synapses):
+            raise ValueError('weight matrix list and upsteam synapse list length mismatch')
 
-        for connection, w in zip(self.upstream_connections, weights):
-            connection.set_weights(w)
+        for synapse, w in zip(self.upstream_synapses, weights):
+            synapse.set_weights(w)
 
     def get_weights(self):
-        return [connection.get_weights() for connection in self.upstream_connections]
+        return [synapse.get_weights() for synapse in self.upstream_synapses]
 
 
 class IFLayer(Layer):

@@ -12,12 +12,11 @@ class BaseLayer(object):
         self.name = name
         self.signed_spikes = signed_spikes
 
-        self.downstream_connections = []
-        self.upstream_connections = []
+        self.downstream_synapses = []
+        self.upstream_synapses = []
         self.shape = None
         self.tg_model = None
         self.nrn = None
-
 
     def compile(self, tg_model):
         print('compiling layer <{}>'.format(self.name))

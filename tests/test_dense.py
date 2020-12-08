@@ -3,12 +3,12 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_compare_tf_and_tg(tf_model, x, connection_type='procedural'):
+def model_compare_tf_and_tg(tf_model, x, synapse_type='procedural'):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
     # Run TensorGeNN model
-    tg_model = tg.Model.convert_tf_model(tf_model, input_type=tg.InputType.SPIKE, connection_type=connection_type)
+    tg_model = tg.Model.convert_tf_model(tf_model, input_type=tg.InputType.SPIKE, synapse_type=synapse_type)
     tg_model.compile(dt=1.0, batch_size=1)
     tg_model.outputs[0].set_threshold(np.float64(np.inf))
     tg_model.set_input_batch([x])

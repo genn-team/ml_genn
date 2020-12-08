@@ -6,8 +6,8 @@ from pygenn.genn_model import (init_connectivity, init_var,
 from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 
-from tensor_genn.layers import ConnectionType, PadMode
-from tensor_genn.layers.base_connection import BaseConnection
+from tensor_genn.layers import SynapseType, PadMode
+from tensor_genn.layers.base_synapse import BaseSynapse
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 conv2d_init = create_custom_sparse_connect_init_snippet_class(
@@ -72,11 +72,11 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
 )
 
 
-class Conv2DConnection(BaseConnection):
+class Conv2DSynapse(BaseSynapse):
 
     def __init__(self, filters, conv_size, conv_strides=None,
-                 conv_padding='valid', connection_type='procedural'):
-        super(Conv2DConnection, self).__init__()
+                 conv_padding='valid', synapse_type='procedural'):
+        super(Conv2DSynapse, self).__init__()
         self.filters = filters
         self.conv_size = conv_size
         if conv_strides == None:
@@ -84,10 +84,10 @@ class Conv2DConnection(BaseConnection):
         else:
             self.conv_strides = conv_strides
         self.conv_padding = PadMode(conv_padding)
-        self.connection_type = ConnectionType(connection_type)
+        self.synapse_type = SynapseType(synapse_type)
 
     def compile(self, tg_model):
-        super(Conv2DConnection, self).compile(tg_model)
+        super(Conv2DSynapse, self).compile(tg_model)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -115,7 +115,7 @@ class Conv2DConnection(BaseConnection):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
-                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL
+                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL
                                else 'SPARSE_INDIVIDUALG')
                 model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
 
@@ -131,7 +131,7 @@ class Conv2DConnection(BaseConnection):
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
     def connect(self, source, target):
-        super(Conv2DConnection, self).connect(source, target)
+        super(Conv2DSynapse, self).connect(source, target)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides

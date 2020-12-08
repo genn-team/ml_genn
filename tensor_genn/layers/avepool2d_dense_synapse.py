@@ -4,8 +4,8 @@ from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers import ConnectionType, PadMode
-from tensor_genn.layers.base_connection import BaseConnection
+from tensor_genn.layers import SynapseType, PadMode
+from tensor_genn.layers.base_synapse import BaseSynapse
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 avepool2d_dense_big_pool_init = create_custom_init_var_snippet_class(
@@ -122,11 +122,11 @@ avepool2d_dense_small_pool_init = create_custom_init_var_snippet_class(
     ''',
 )
 
-class AvePool2DDenseConnection(BaseConnection):
+class AvePool2DDenseSynapse(BaseSynapse):
 
     def __init__(self, units, pool_size, pool_strides=None, 
-                 pool_padding='valid', connection_type='procedural'):
-        super(AvePool2DDenseConnection, self).__init__()
+                 pool_padding='valid', synapse_type='procedural'):
+        super(AvePool2DDenseSynapse, self).__init__()
         self.units = units
         self.pool_size = pool_size
         if pool_strides == None:
@@ -135,10 +135,10 @@ class AvePool2DDenseConnection(BaseConnection):
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
-        self.connection_type = ConnectionType(connection_type)
+        self.synapse_type = SynapseType(synapse_type)
 
     def compile(self, tg_model):
-        super(AvePool2DDenseConnection, self).compile(tg_model)
+        super(AvePool2DDenseSynapse, self).compile(tg_model)
 
         # Procedural initialisation
         pool_kh, pool_kw = self.pool_size
@@ -175,7 +175,7 @@ class AvePool2DDenseConnection(BaseConnection):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
-                algorithm = ('DENSE_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL 
+                algorithm = ('DENSE_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL 
                              else 'DENSE_INDIVIDUALG')
                 model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
                 
@@ -191,7 +191,7 @@ class AvePool2DDenseConnection(BaseConnection):
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
     def connect(self, source, target):
-        super(AvePool2DDenseConnection, self).connect(source, target)
+        super(AvePool2DDenseSynapse, self).connect(source, target)
 
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides

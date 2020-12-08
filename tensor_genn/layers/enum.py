@@ -6,7 +6,7 @@ class InputType(Enum):
     POISSON_SIGNED = 'poisson_signed'
     IF = 'if'
 
-class ConnectionType(Enum):
+class SynapseType(Enum):
     PROCEDURAL = 'procedural'
     SPARSE = 'sparse'
 
