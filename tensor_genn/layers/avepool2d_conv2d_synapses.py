@@ -7,7 +7,7 @@ from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from tensor_genn.layers import SynapseType, PadMode
 
-from tensor_genn.layers.base_synapse import BaseSynapse
+from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 avepool2d_conv2d_small_pool_init = create_custom_sparse_connect_init_snippet_class(
@@ -177,12 +177,12 @@ avepool2d_conv2d_big_pool_init = create_custom_sparse_connect_init_snippet_class
 )
 
 
-class AvePool2DConv2DSynapse(BaseSynapse):
+class AvePool2DConv2DSynapses(BaseSynapses):
 
     def __init__(self, filters, pool_size, conv_size, pool_strides=None, 
                  conv_strides=None, pool_padding='valid', 
                  conv_padding='valid', synapse_type='procedural'):
-        super(AvePool2DConv2DSynapse, self).__init__()
+        super(AvePool2DConv2DSynapses, self).__init__()
         self.filters = filters
         self.pool_size = pool_size
         self.conv_size = conv_size
@@ -200,7 +200,7 @@ class AvePool2DConv2DSynapse(BaseSynapse):
         self.synapse_type = SynapseType(synapse_type)
 
     def compile(self, tg_model):
-        super(AvePool2DConv2DSynapse, self).compile(tg_model)
+        super(AvePool2DConv2DSynapses, self).compile(tg_model)
 
         # Procedural initialisation
         pool_kh, pool_kw = self.pool_size
@@ -271,7 +271,7 @@ class AvePool2DConv2DSynapse(BaseSynapse):
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
     def connect(self, source, target):
-        super(AvePool2DConv2DSynapse, self).connect(source, target)
+        super(AvePool2DConv2DSynapses, self).connect(source, target)
 
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides

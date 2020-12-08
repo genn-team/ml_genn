@@ -1,17 +1,17 @@
 import numpy as np
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers.base_synapse import BaseSynapse
+from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
-class DenseSynapse(BaseSynapse):
+class DenseSynapses(BaseSynapses):
 
     def __init__(self, units):
-        super(DenseSynapse, self).__init__()
+        super(DenseSynapses, self).__init__()
         self.units = units
 
     def compile(self, tg_model):
-        super(DenseSynapse, self).compile(tg_model)
+        super(DenseSynapses, self).compile(tg_model)
 
         # Add batch synapse populations
         for batch_i in range(tg_model.batch_size):
@@ -34,7 +34,7 @@ class DenseSynapse(BaseSynapse):
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
     def connect(self, source, target):
-        super(DenseSynapse, self).connect(source, target)
+        super(DenseSynapses, self).connect(source, target)
 
         self.output_shape = (self.units, )
 

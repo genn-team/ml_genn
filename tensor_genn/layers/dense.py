@@ -1,4 +1,4 @@
-from tensor_genn.layers import Layer, DenseSynapse
+from tensor_genn.layers import Layer, DenseSynapses
 from tensor_genn.layers.neuron_models import if_model
 
 
@@ -11,7 +11,7 @@ class Dense(Layer):
         self.units = units
 
     def connect(self, sources):
-        synapses = [DenseSynapse(self.units) for i in range(len(sources))]
+        synapses = [DenseSynapses(self.units) for i in range(len(sources))]
         super(Dense, self).connect(sources, synapses)
 
 

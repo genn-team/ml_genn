@@ -1,5 +1,5 @@
 from tensor_genn.layers import SynapseType, PadMode
-from tensor_genn.layers import Layer, Conv2DSynapse
+from tensor_genn.layers import Layer, Conv2DSynapses
 from tensor_genn.layers.neuron_models import if_model
 
 
@@ -21,8 +21,8 @@ class Conv2D(Layer):
 
     def connect(self, sources):
         synapses = [
-            Conv2DSynapse(self.filters, self.conv_size, self.conv_strides,
-                          self.conv_padding, self.synapse_type) for i in range(len(sources))]
+            Conv2DSynapses(self.filters, self.conv_size, self.conv_strides,
+                           self.conv_padding, self.synapse_type) for i in range(len(sources))]
         super(Conv2D, self).connect(sources, synapses)
 
 

@@ -1,5 +1,5 @@
 from tensor_genn.layers import SynapseType, PadMode
-from tensor_genn.layers import Layer, AvePool2DConv2DSynapse
+from tensor_genn.layers import Layer, AvePool2DConv2DSynapses
 from tensor_genn.layers.neuron_models import if_model
 
 
@@ -28,9 +28,9 @@ class AvePool2DConv2D(Layer):
 
     def connect(self, sources):
         synapses = [
-            AvePool2DConv2DSynapse(self.filters, self.pool_size, self.conv_size,
-                                   self.pool_strides, self.conv_strides, self.pool_padding,
-                                   self.conv_padding, self.synapse_type) for i in range(len(sources))]
+            AvePool2DConv2DSynapses(self.filters, self.pool_size, self.conv_size,
+                                    self.pool_strides, self.conv_strides, self.pool_padding,
+                                    self.conv_padding, self.synapse_type) for i in range(len(sources))]
         super(AvePool2DConv2D, self).connect(sources, synapses)
 
 

@@ -1,6 +1,6 @@
 from weakref import proxy
 
-class BaseSynapse(object):
+class BaseSynapses(object):
 
     def __init__(self):
         self.source = None

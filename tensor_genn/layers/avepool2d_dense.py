@@ -1,5 +1,5 @@
 from tensor_genn.layers import SynapseType, PadMode
-from tensor_genn.layers import Layer, AvePool2DDenseSynapse
+from tensor_genn.layers import Layer, AvePool2DDenseSynapses
 from tensor_genn.layers.neuron_models import if_model
 
 
@@ -21,9 +21,9 @@ class AvePool2DDense(Layer):
 
     def connect(self, sources):
         synapses = [
-            AvePool2DDenseSynapse(self.units, self.pool_size, 
-                                  self.pool_strides, self.pool_padding,
-                                  self.synapse_type) for i in range(len(sources))]
+            AvePool2DDenseSynapses(self.units, self.pool_size, 
+                                   self.pool_strides, self.pool_padding,
+                                   self.synapse_type) for i in range(len(sources))]
         super(AvePool2DDense, self).connect(sources, synapses)
 
 

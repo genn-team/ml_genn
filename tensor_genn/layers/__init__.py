@@ -3,10 +3,10 @@ from tensor_genn.layers.enum import InputType
 from tensor_genn.layers.enum import SynapseType
 from tensor_genn.layers.enum import PadMode
 
-from tensor_genn.layers.dense_synapse import DenseSynapse
-from tensor_genn.layers.conv2d_synapse import Conv2DSynapse
-from tensor_genn.layers.avepool2d_dense_synapse import AvePool2DDenseSynapse
-from tensor_genn.layers.avepool2d_conv2d_synapse import AvePool2DConv2DSynapse
+from tensor_genn.layers.dense_synapses import DenseSynapses
+from tensor_genn.layers.conv2d_synapses import Conv2DSynapses
+from tensor_genn.layers.avepool2d_dense_synapses import AvePool2DDenseSynapses
+from tensor_genn.layers.avepool2d_conv2d_synapses import AvePool2DConv2DSynapses
 
 from tensor_genn.layers.input import Input
 from tensor_genn.layers.input import SpikeInput

@@ -7,7 +7,7 @@ from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 
 from tensor_genn.layers import SynapseType, PadMode
-from tensor_genn.layers.base_synapse import BaseSynapse
+from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 conv2d_init = create_custom_sparse_connect_init_snippet_class(
@@ -72,11 +72,11 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
 )
 
 
-class Conv2DSynapse(BaseSynapse):
+class Conv2DSynapses(BaseSynapses):
 
     def __init__(self, filters, conv_size, conv_strides=None,
                  conv_padding='valid', synapse_type='procedural'):
-        super(Conv2DSynapse, self).__init__()
+        super(Conv2DSynapses, self).__init__()
         self.filters = filters
         self.conv_size = conv_size
         if conv_strides == None:
@@ -87,7 +87,7 @@ class Conv2DSynapse(BaseSynapse):
         self.synapse_type = SynapseType(synapse_type)
 
     def compile(self, tg_model):
-        super(Conv2DSynapse, self).compile(tg_model)
+        super(Conv2DSynapses, self).compile(tg_model)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -131,7 +131,7 @@ class Conv2DSynapse(BaseSynapse):
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
 
     def connect(self, source, target):
-        super(Conv2DSynapse, self).connect(source, target)
+        super(Conv2DSynapses, self).connect(source, target)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
