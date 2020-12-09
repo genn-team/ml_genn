@@ -293,21 +293,21 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
         if self.conv_padding == PadMode.VALID:
-            self.output_shape = (
+            output_shape = (
                 ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
                 ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
                 self.filters,
             )
         elif self.conv_padding == PadMode.SAME:
-            self.output_shape = (
+            output_shape = (
                 ceil(float(conv_ih) / float(conv_sh)),
                 ceil(float(conv_iw) / float(conv_sw)),
                 self.filters,
             )
 
         if target.shape is None:
-            target.shape = self.output_shape
-        elif self.output_shape != target.shape:
+            target.shape = output_shape
+        elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)

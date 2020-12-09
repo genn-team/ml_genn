@@ -5,7 +5,6 @@ class BaseSynapses(object):
     def __init__(self):
         self.source = None
         self.target = None
-        self.output_shape = None
         self.weights = None
         self.tg_model = None
         self.syn = None

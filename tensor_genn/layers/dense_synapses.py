@@ -36,11 +36,11 @@ class DenseSynapses(BaseSynapses):
     def connect(self, source, target):
         super(DenseSynapses, self).connect(source, target)
 
-        self.output_shape = (self.units, )
+        output_shape = (self.units, )
 
         if target.shape is None:
-            target.shape = self.output_shape
-        elif self.output_shape != target.shape:
+            target.shape = output_shape
+        elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((np.prod(source.shape), self.units), dtype=np.float64)
