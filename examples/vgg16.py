@@ -3,7 +3,8 @@ from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
                               initializers, regularizers)
 from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensor_genn import Model, InputType
+from tensor_genn import Model
+from tensor_genn.layers import InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
 import numpy as np

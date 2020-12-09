@@ -204,14 +204,14 @@ class Model(object):
                     k = save_samples.index(i)
                     batch_i = i - batch_start
                     for l, layer in enumerate(self.layers):
-                        nrn = layer.nrn[batch_i]
+                        nrn = layer.neurons.nrn[batch_i]
                         nrn.pull_current_spikes_from_device()
                         all_spikes[k][l].append(np.copy(nrn.current_spikes))
 
             # Compute accuracy
             for output_i in range(len(self.outputs)):
                 for batch_i in range(batch_end - batch_start):
-                    nrn = self.outputs[output_i].nrn[batch_i]
+                    nrn = self.outputs[output_i].neurons.nrn[batch_i]
                     nrn.pull_var_from_device('nSpk')
                     label = batch_labels[output_i][batch_i]
                     n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == label
