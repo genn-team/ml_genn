@@ -1,8 +1,11 @@
 from weakref import proxy
+import numpy as np
 
 class BaseNeurons(object):
 
-    def __init__(self, model, params, vars_init, global_params):
+    def __init__(self, name=None, model=None, params=None,
+                 vars_init=None, global_params=None):
+        self.name = name
         self.model = model
         self.params = params
         self.vars_init = vars_init

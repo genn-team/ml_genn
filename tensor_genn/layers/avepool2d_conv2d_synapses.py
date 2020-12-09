@@ -199,6 +199,48 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         self.pool_output_shape = None
         self.synapse_type = SynapseType(synapse_type)
 
+    def connect(self, source, target):
+        super(AvePool2DConv2DSynapses, self).connect(source, target)
+
+        pool_kh, pool_kw = self.pool_size
+        pool_sh, pool_sw = self.pool_strides
+        pool_ih, pool_iw, pool_ic = source.shape
+        if self.pool_padding == PadMode.VALID:
+            self.pool_output_shape = (
+                ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
+                ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+                pool_ic,
+            )
+        elif self.pool_padding == PadMode.SAME:
+            self.pool_output_shape = (
+                ceil(float(pool_ih) / float(pool_sh)),
+                ceil(float(pool_iw) / float(pool_sw)),
+                pool_ic,
+            )
+
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = self.pool_output_shape
+        if self.conv_padding == PadMode.VALID:
+            output_shape = (
+                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
+                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
+                self.filters,
+            )
+        elif self.conv_padding == PadMode.SAME:
+            output_shape = (
+                ceil(float(conv_ih) / float(conv_sh)),
+                ceil(float(conv_iw) / float(conv_sw)),
+                self.filters,
+            )
+
+        if target.shape is None:
+            target.shape = output_shape
+        elif output_shape != target.shape:
+            raise RuntimeError('target layer shape mismatch')
+
+        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
+
     def compile(self, tg_model):
         super(AvePool2DConv2DSynapses, self).compile(tg_model)
 
@@ -250,7 +292,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         for batch_i in range(tg_model.batch_size):
             pre_nrn = self.source.nrn[batch_i]
             post_nrn = self.target.nrn[batch_i]
-            syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
+            syn_name = '{}_{}'.format(self.name, batch_i)
 
             # Batch master
             scale = np.prod(self.pool_size)
@@ -269,45 +311,3 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
-
-    def connect(self, source, target):
-        super(AvePool2DConv2DSynapses, self).connect(source, target)
-
-        pool_kh, pool_kw = self.pool_size
-        pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = source.shape
-        if self.pool_padding == PadMode.VALID:
-            self.pool_output_shape = (
-                ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-                ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-                pool_ic,
-            )
-        elif self.pool_padding == PadMode.SAME:
-            self.pool_output_shape = (
-                ceil(float(pool_ih) / float(pool_sh)),
-                ceil(float(pool_iw) / float(pool_sw)),
-                pool_ic,
-            )
-
-        conv_kh, conv_kw = self.conv_size
-        conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.pool_output_shape
-        if self.conv_padding == PadMode.VALID:
-            output_shape = (
-                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
-                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
-                self.filters,
-            )
-        elif self.conv_padding == PadMode.SAME:
-            output_shape = (
-                ceil(float(conv_ih) / float(conv_sh)),
-                ceil(float(conv_iw) / float(conv_sw)),
-                self.filters,
-            )
-
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError('target layer shape mismatch')
-
-        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)

@@ -86,50 +86,6 @@ class Conv2DSynapses(BaseSynapses):
         self.conv_padding = PadMode(conv_padding)
         self.synapse_type = SynapseType(synapse_type)
 
-    def compile(self, tg_model):
-        super(Conv2DSynapses, self).compile(tg_model)
-
-        conv_kh, conv_kw = self.conv_size
-        conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source.shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
-        if self.conv_padding == PadMode.VALID:
-            conv_padh = 0
-            conv_padw = 0
-        elif self.conv_padding == PadMode.SAME:
-            conv_padh = (conv_kh - 1) // 2
-            conv_padw = (conv_kw - 1) // 2
-
-        connectivity_init = init_connectivity(conv2d_init, {
-            'conv_kh': conv_kh, 'conv_kw': conv_kw,
-            'conv_sh': conv_sh, 'conv_sw': conv_sw,
-            'conv_padh': conv_padh, 'conv_padw': conv_padw,
-            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
-            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
-
-        # Add batch synapse populations
-        for batch_i in range(tg_model.batch_size):
-            pre_nrn = self.source.nrn[batch_i]
-            post_nrn = self.target.nrn[batch_i]
-            syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
-
-            # Batch master
-            if not tg_model.share_weights or batch_i == 0:
-                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL
-                               else 'SPARSE_INDIVIDUALG')
-                model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
-
-                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                    syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
-                    model, {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {}, connectivity_init)
-                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
-
-            # Batch slave
-            else:
-                master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
-                self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
-
     def connect(self, source, target):
         super(Conv2DSynapses, self).connect(source, target)
 
@@ -155,3 +111,47 @@ class Conv2DSynapses(BaseSynapses):
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
+
+    def compile(self, tg_model):
+        super(Conv2DSynapses, self).compile(tg_model)
+
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = self.source.shape
+        conv_oh, conv_ow, conv_oc = self.target.shape
+        if self.conv_padding == PadMode.VALID:
+            conv_padh = 0
+            conv_padw = 0
+        elif self.conv_padding == PadMode.SAME:
+            conv_padh = (conv_kh - 1) // 2
+            conv_padw = (conv_kw - 1) // 2
+
+        connectivity_init = init_connectivity(conv2d_init, {
+            'conv_kh': conv_kh, 'conv_kw': conv_kw,
+            'conv_sh': conv_sh, 'conv_sw': conv_sw,
+            'conv_padh': conv_padh, 'conv_padw': conv_padw,
+            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
+
+        # Add batch synapse populations
+        for batch_i in range(tg_model.batch_size):
+            pre_nrn = self.source.nrn[batch_i]
+            post_nrn = self.target.nrn[batch_i]
+            syn_name = '{}_{}'.format(self.name, batch_i)
+
+            # Batch master
+            if not tg_model.share_weights or batch_i == 0:
+                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL
+                               else 'SPARSE_INDIVIDUALG')
+                model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
+
+                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
+                    syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
+                    model, {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {}, connectivity_init)
+                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
+
+            # Batch slave
+            else:
+                master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
+                self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
+                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})

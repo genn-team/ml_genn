@@ -1,5 +1,5 @@
-import numpy as np
 from weakref import proxy
+import numpy as np
 
 class BaseLayer(object):
 

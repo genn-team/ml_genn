@@ -137,6 +137,34 @@ class AvePool2DDenseSynapses(BaseSynapses):
         self.pool_output_shape = None
         self.synapse_type = SynapseType(synapse_type)
 
+    def connect(self, source, target):
+        super(AvePool2DDenseSynapses, self).connect(source, target)
+
+        pool_kh, pool_kw = self.pool_size
+        pool_sh, pool_sw = self.pool_strides
+        pool_ih, pool_iw, pool_ic = source.shape
+        if self.pool_padding == PadMode.VALID:
+            self.pool_output_shape = (
+                ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
+                ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+                pool_ic,
+            )
+        elif self.pool_padding == PadMode.SAME:
+            self.pool_output_shape = (
+                ceil(float(pool_ih) / float(pool_sh)),
+                ceil(float(pool_iw) / float(pool_sw)),
+                pool_ic,
+            )
+
+        output_shape = (self.units, )
+
+        if target.shape is None:
+            target.shape = output_shape
+        elif output_shape != target.shape:
+            raise RuntimeError('target layer shape mismatch')
+
+        self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
+
     def compile(self, tg_model):
         super(AvePool2DDenseSynapses, self).compile(tg_model)
 
@@ -171,7 +199,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
         for batch_i in range(tg_model.batch_size):
             pre_nrn = self.source.nrn[batch_i]
             post_nrn = self.target.nrn[batch_i]
-            syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
+            syn_name = '{}_{}'.format(self.name, batch_i)
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
@@ -189,31 +217,3 @@ class AvePool2DDenseSynapses(BaseSynapses):
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
-
-    def connect(self, source, target):
-        super(AvePool2DDenseSynapses, self).connect(source, target)
-
-        pool_kh, pool_kw = self.pool_size
-        pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = source.shape
-        if self.pool_padding == PadMode.VALID:
-            self.pool_output_shape = (
-                ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-                ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-                pool_ic,
-            )
-        elif self.pool_padding == PadMode.SAME:
-            self.pool_output_shape = (
-                ceil(float(pool_ih) / float(pool_sh)),
-                ceil(float(pool_iw) / float(pool_sw)),
-                pool_ic,
-            )
-
-        output_shape = (self.units, )
-
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError('target layer shape mismatch')
-
-        self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)

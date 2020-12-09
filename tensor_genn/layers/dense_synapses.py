@@ -10,6 +10,18 @@ class DenseSynapses(BaseSynapses):
         super(DenseSynapses, self).__init__()
         self.units = units
 
+    def connect(self, source, target):
+        super(DenseSynapses, self).connect(source, target)
+
+        output_shape = (self.units, )
+
+        if target.shape is None:
+            target.shape = output_shape
+        elif output_shape != target.shape:
+            raise RuntimeError('target layer shape mismatch')
+
+        self.weights = np.empty((np.prod(source.shape), self.units), dtype=np.float64)
+
     def compile(self, tg_model):
         super(DenseSynapses, self).compile(tg_model)
 
@@ -17,7 +29,7 @@ class DenseSynapses(BaseSynapses):
         for batch_i in range(tg_model.batch_size):
             pre_nrn = self.source.nrn[batch_i]
             post_nrn = self.target.nrn[batch_i]
-            syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
+            syn_name = '{}_{}'.format(self.name, batch_i)
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
@@ -32,15 +44,3 @@ class DenseSynapses(BaseSynapses):
                 master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
                 self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
                     syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
-
-    def connect(self, source, target):
-        super(DenseSynapses, self).connect(source, target)
-
-        output_shape = (self.units, )
-
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError('target layer shape mismatch')
-
-        self.weights = np.empty((np.prod(source.shape), self.units), dtype=np.float64)

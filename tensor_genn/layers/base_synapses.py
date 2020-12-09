@@ -2,7 +2,8 @@ from weakref import proxy
 
 class BaseSynapses(object):
 
-    def __init__(self):
+    def __init__(self, name=None):
+        self.name = name
         self.source = None
         self.target = None
         self.weights = None
@@ -14,6 +15,8 @@ class BaseSynapses(object):
         self.target = proxy(target)
         source.downstream_synapses.append(self)
         target.upstream_synapses.append(self)
+        if self.name is None:
+            self.name = '{}_to_{}_syn'.format(self.source.name, self.target.name)
 
     def set_weights(self, weights):
         self.weights[:] = weights

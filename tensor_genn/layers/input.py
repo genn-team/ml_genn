@@ -14,9 +14,6 @@ class Input(BaseLayer):
                                     global_params, name, signed_spikes)
         self.shape = shape
 
-    def compile(self, tg_model):
-        super(Input, self).compile(tg_model)
-
     def set_input_batch(self, data_batch):
         # Input sanity check
         n_samples = data_batch.shape[0]
@@ -34,6 +31,9 @@ class Input(BaseLayer):
             else:
                 self.nrn[batch_i].vars['input'].view[:] = np.zeros(input_size)
             self.nrn[batch_i].push_state_to_device()
+
+    def compile(self, tg_model):
+        super(Input, self).compile(tg_model)
 
 
 class SpikeInput(Input):

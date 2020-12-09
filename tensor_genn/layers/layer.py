@@ -8,12 +8,6 @@ class Layer(BaseLayer):
         super(Layer, self).__init__(model, params, vars_init, 
                                     global_params, name, signed_spikes)
 
-    def compile(self, tg_model):
-        super(Layer, self).compile(tg_model)
-
-        for synapse in self.upstream_synapses:
-            synapse.compile(tg_model)
-
     def connect(self, sources, synapses):
         if len(sources) != len(synapses):
             raise ValueError('sources list and synapse list length mismatch')
@@ -30,6 +24,12 @@ class Layer(BaseLayer):
 
     def get_weights(self):
         return [synapse.get_weights() for synapse in self.upstream_synapses]
+
+    def compile(self, tg_model):
+        super(Layer, self).compile(tg_model)
+
+        for synapse in self.upstream_synapses:
+            synapse.compile(tg_model)
 
 
 class IFLayer(Layer):
