@@ -34,6 +34,7 @@ from tensor_genn.layers import AvePool2DConv2D
 from tensor_genn.layers import IFNeurons
 from tensor_genn.layers import SpikeInputNeurons
 from tensor_genn.layers import PoissonInputNeurons
+from tensor_genn.layers import IFInputNeurons
 
 
 class Model(object):

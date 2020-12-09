@@ -18,7 +18,7 @@ class SpikeNorm(object):
 
         # Set layer thresholds high initially
         for layer in tg_model.layers[1:]:
-            layer.set_threshold(np.inf)
+            layer.neurons.set_threshold(np.inf)
 
         # For each weighted layer
         for layer in tg_model.layers[1:]:
@@ -42,7 +42,7 @@ class SpikeNorm(object):
 
                     # Get maximum activation
                     for batch_i in range(batch_end - batch_start):
-                        nrn = layer.nrn[batch_i]
+                        nrn = layer.neurons.nrn[batch_i]
                         nrn.pull_var_from_device('Vmem')
                         threshold = np.max([threshold, nrn.vars['Vmem'].view.max()])
                         nrn.vars['Vmem'].view[:] = np.float64(0.0)
@@ -54,4 +54,4 @@ class SpikeNorm(object):
 
             # Update this layer's threshold
             print('layer <{}> threshold: {}'.format(layer.name, threshold))
-            layer.set_threshold(threshold)
+            layer.neurons.set_threshold(threshold)
