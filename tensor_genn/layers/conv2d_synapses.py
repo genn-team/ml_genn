@@ -91,7 +91,7 @@ class Conv2DSynapses(BaseSynapses):
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = source.shape
+        conv_ih, conv_iw, conv_ic = source.neurons.shape
         if self.conv_padding == PadMode.VALID:
             output_shape = (
                 ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
@@ -105,9 +105,9 @@ class Conv2DSynapses(BaseSynapses):
                 self.filters,
             )
 
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
+        if target.neurons.shape is None:
+            target.neurons.shape = output_shape
+        elif output_shape != target.neurons.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
@@ -117,8 +117,8 @@ class Conv2DSynapses(BaseSynapses):
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source.shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
+        conv_ih, conv_iw, conv_ic = self.source.neurons.shape
+        conv_oh, conv_ow, conv_oc = self.target.neurons.shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -135,15 +135,15 @@ class Conv2DSynapses(BaseSynapses):
 
         # Add batch synapse populations
         for batch_i in range(tg_model.batch_size):
-            pre_nrn = self.source.nrn[batch_i]
-            post_nrn = self.target.nrn[batch_i]
+            pre_nrn = self.source.neurons.nrn[batch_i]
+            post_nrn = self.target.neurons.nrn[batch_i]
             syn_name = '{}_{}'.format(self.name, batch_i)
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
                 matrix_type = ('PROCEDURAL_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL
                                else 'SPARSE_INDIVIDUALG')
-                model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
+                model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
 
                 self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                     syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,

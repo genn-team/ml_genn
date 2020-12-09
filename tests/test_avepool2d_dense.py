@@ -8,13 +8,13 @@ def model_compare_tf_and_tg(tf_model, x, synapse_type='procedural'):
     tf_y = tf_model(x).numpy()
 
     # Run TensorGeNN model
-    tg_model = tg.Model.convert_tf_model(tf_model, input_type=tg.InputType.SPIKE, synapse_type=synapse_type)
+    tg_model = tg.Model.convert_tf_model(tf_model, input_type='spike', synapse_type=synapse_type)
     tg_model.compile(dt=1.0, batch_size=1)
-    tg_model.outputs[0].set_threshold(np.float64(np.inf))
+    tg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
     tg_model.set_input_batch([x])
     tg_model.step_time(2)
 
-    nrn = tg_model.outputs[0].nrn[0]
+    nrn = tg_model.outputs[0].neurons.nrn[0]
     nrn.pull_var_from_device('Vmem')
     tg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
 

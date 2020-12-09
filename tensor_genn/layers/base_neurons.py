@@ -1,21 +1,18 @@
-from weakref import proxy
 import numpy as np
 
 class BaseNeurons(object):
 
-    def __init__(self, name=None, model=None, params=None,
-                 vars_init=None, global_params=None):
-        self.name = name
+    def __init__(self, model, params, vars_init, global_params):
         self.model = model
         self.params = params
         self.vars_init = vars_init
         self.global_params = global_params
+        self.name = None
         self.shape = None
-        self.tg_model = None
+        self.signed_spikes = False
         self.nrn = None
 
     def compile(self, tg_model):
-        self.tg_model = proxy(tg_model)
         self.nrn = [None] * tg_model.batch_size
 
         # Add batch neuron populations

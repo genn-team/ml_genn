@@ -1,12 +1,15 @@
 from tensor_genn.layers.base_layer import BaseLayer
-
+from tensor_genn.layers.neurons import Neurons
+from tensor_genn.layers.if_neurons import IFNeurons
 
 class Layer(BaseLayer):
 
-    def __init__(self, model, params, vars_init, 
-                 global_params, name, signed_spikes=False):
-        super(Layer, self).__init__(model, params, vars_init, 
-                                    global_params, name, signed_spikes)
+    def __init__(self, name, neurons=None):
+        super(Layer, self).__init__(name, neurons)
+        if self.neurons is None:
+            self.neurons = IFNeurons()
+        if not isinstance(neurons, Neurons):
+            raise ValueError('"Layer" class instances require "Neuron" class neuron groups')
 
     def connect(self, sources, synapses):
         if len(sources) != len(synapses):
@@ -24,25 +27,3 @@ class Layer(BaseLayer):
 
     def get_weights(self):
         return [synapse.get_weights() for synapse in self.upstream_synapses]
-
-    def compile(self, tg_model):
-        super(Layer, self).compile(tg_model)
-
-        for synapse in self.upstream_synapses:
-            synapse.compile(tg_model)
-
-
-class IFLayer(Layer):
-
-    def __init__(self, name, threshold=1.0, signed_spikes=False):
-        super(IFLayer, self).__init__(
-            if_model, {}, {'Vmem': 0.0, 'nSpk': 0}, {'Vthr': threshold},
-            name, signed_spikes)
-
-    def set_threshold(self, threshold):
-        self.global_params['Vthr'] = threshold
-
-        if self.nrn is not None:
-            for batch_i in range(self.tg_model.batch_size):
-                nrn = self.nrn[batch_i]
-                nrn.extra_global_params['Vthr'].view[:] = threshold

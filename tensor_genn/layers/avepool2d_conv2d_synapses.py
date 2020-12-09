@@ -204,7 +204,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
 
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = source.shape
+        pool_ih, pool_iw, pool_ic = source.neurons.shape
         if self.pool_padding == PadMode.VALID:
             self.pool_output_shape = (
                 ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
@@ -234,9 +234,9 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                 self.filters,
             )
 
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
+        if target.neurons.shape is None:
+            target.neurons.shape = output_shape
+        elif output_shape != target.neurons.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
@@ -247,7 +247,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         # Procedural initialisation
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source.shape
+        pool_ih, pool_iw, pool_ic = self.source.neurons.shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -264,7 +264,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
+        conv_oh, conv_ow, conv_oc = self.target.neurons.shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -290,8 +290,8 @@ class AvePool2DConv2DSynapses(BaseSynapses):
 
         # Add batch synapse populations
         for batch_i in range(tg_model.batch_size):
-            pre_nrn = self.source.nrn[batch_i]
-            post_nrn = self.target.nrn[batch_i]
+            pre_nrn = self.source.neurons.nrn[batch_i]
+            post_nrn = self.target.neurons.nrn[batch_i]
             syn_name = '{}_{}'.format(self.name, batch_i)
 
             # Batch master
@@ -299,7 +299,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             if not tg_model.share_weights or batch_i == 0:
                 matrix_type = ('PROCEDURAL_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL
                                else 'SPARSE_INDIVIDUALG')
-                model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
+                model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
 
                 self.syn[batch_i] = tg_model.g_model.add_synapse_population(
                     syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
