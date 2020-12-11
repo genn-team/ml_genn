@@ -1,10 +1,10 @@
-from tensor_genn.layers import SynapseType, PadMode
+from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers import Layer, AvePool2DDenseSynapses
 
 class AvePool2DDense(Layer):
 
     def __init__(self, name, units, pool_size, pool_strides=None,
-                 pool_padding='valid', synapse_type='procedural', neurons=None):
+                 pool_padding='valid', connectivity_type='procedural', neurons=None):
         super(AvePool2DDense, self).__init__(name, neurons)
         self.units = units
         self.pool_size = pool_size
@@ -13,11 +13,11 @@ class AvePool2DDense(Layer):
         else:
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
-        self.synapse_type = SynapseType(synapse_type)
+        self.connectivity_type = ConnectivityType(connectivity_type)
 
     def connect(self, sources):
         synapses = [
             AvePool2DDenseSynapses(self.units, self.pool_size, 
                                    self.pool_strides, self.pool_padding,
-                                   self.synapse_type) for i in range(len(sources))]
+                                   self.connectivity_type) for i in range(len(sources))]
         super(AvePool2DDense, self).connect(sources, synapses)

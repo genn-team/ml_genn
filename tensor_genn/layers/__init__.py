@@ -1,6 +1,6 @@
 
 from tensor_genn.layers.enum import InputType
-from tensor_genn.layers.enum import SynapseType
+from tensor_genn.layers.enum import ConnectivityType
 from tensor_genn.layers.enum import PadMode
 
 from tensor_genn.layers.neurons import Neurons

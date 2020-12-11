@@ -3,12 +3,12 @@ import tensorflow as tf
 import tensor_genn as tg
 
 
-def model_compare_tf_and_tg(tf_model, x, synapse_type='procedural'):
+def model_compare_tf_and_tg(tf_model, x, connectivity_type='procedural'):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
     # Run TensorGeNN model
-    tg_model = tg.Model.convert_tf_model(tf_model, input_type='spike', synapse_type=synapse_type)
+    tg_model = tg.Model.convert_tf_model(tf_model, input_type='spike', connectivity_type=connectivity_type)
     tg_model.compile(dt=1.0, batch_size=1)
     tg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
     tg_model.set_input_batch([x])
@@ -237,7 +237,7 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse()
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x, synapse_type='sparse')
+    model_compare_tf_and_tg(tf_model, x, connectivity_type='sparse')
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
@@ -301,7 +301,7 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x, synapse_type='sparse')
+    model_compare_tf_and_tg(tf_model, x, connectivity_type='sparse')
 
 
 if __name__ == '__main__':

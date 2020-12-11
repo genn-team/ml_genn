@@ -131,7 +131,7 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate TensorGeNN model
-    tg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, synapse_type=args.synapse_type)
+    tg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
     tg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
 
     if args.norm_method == 'data-norm':

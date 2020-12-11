@@ -4,7 +4,7 @@ from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers import SynapseType, PadMode
+from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
@@ -125,7 +125,7 @@ avepool2d_dense_small_pool_init = create_custom_init_var_snippet_class(
 class AvePool2DDenseSynapses(BaseSynapses):
 
     def __init__(self, units, pool_size, pool_strides=None, 
-                 pool_padding='valid', synapse_type='procedural'):
+                 pool_padding='valid', connectivity_type='procedural'):
         super(AvePool2DDenseSynapses, self).__init__()
         self.units = units
         self.pool_size = pool_size
@@ -135,7 +135,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
-        self.synapse_type = SynapseType(synapse_type)
+        self.connectivity_type = ConnectivityType(connectivity_type)
 
     def connect(self, source, target):
         super(AvePool2DDenseSynapses, self).connect(source, target)
@@ -203,7 +203,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
-                algorithm = ('DENSE_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL 
+                algorithm = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
                              else 'DENSE_INDIVIDUALG')
                 model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
                 

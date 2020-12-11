@@ -250,15 +250,15 @@ class Model(object):
 
 
     @staticmethod
-    def convert_tf_model(tf_model, input_type='poisson', synapse_type='procedural'):
+    def convert_tf_model(tf_model, input_type='poisson', connectivity_type='procedural'):
         """Create a TensorGeNN model from a TensorFlow model
 
         Args:
         tf_model  --  TensorFlow model to be converted
 
         Keyword args:
-        input_type      --  type of input neurons (default: 'poisson')
-        synapse_type    --  type of synapses in GeNN (default: 'procedural')
+        input_type         --  type of input neurons (default: 'poisson')
+        connectivity_type  --  type of synapses in GeNN (default: 'procedural')
         """
 
         supported_tf_layers = (
@@ -323,7 +323,7 @@ class Model(object):
                         pool_size=pool_layer.pool_size,
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
-                        synapse_type=synapse_type, 
+                        connectivity_type=connectivity_type, 
                         neurons=IFNeurons(threshold=1.0))
 
                 layer.connect([previous_layer])
@@ -342,7 +342,7 @@ class Model(object):
                         conv_size=tf_layer.kernel_size,
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
-                        synapse_type=synapse_type, 
+                        connectivity_type=connectivity_type, 
                         neurons=IFNeurons(threshold=1.0))
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
@@ -351,7 +351,7 @@ class Model(object):
                         pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
-                        synapse_type=synapse_type, neurons=IFNeurons(threshold=1.0))
+                        connectivity_type=connectivity_type, neurons=IFNeurons(threshold=1.0))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())

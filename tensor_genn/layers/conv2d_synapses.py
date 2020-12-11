@@ -6,7 +6,7 @@ from pygenn.genn_model import (init_connectivity, init_var,
 from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 
-from tensor_genn.layers import SynapseType, PadMode
+from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
@@ -75,7 +75,7 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
 class Conv2DSynapses(BaseSynapses):
 
     def __init__(self, filters, conv_size, conv_strides=None,
-                 conv_padding='valid', synapse_type='procedural'):
+                 conv_padding='valid', connectivity_type='procedural'):
         super(Conv2DSynapses, self).__init__()
         self.filters = filters
         self.conv_size = conv_size
@@ -84,7 +84,7 @@ class Conv2DSynapses(BaseSynapses):
         else:
             self.conv_strides = conv_strides
         self.conv_padding = PadMode(conv_padding)
-        self.synapse_type = SynapseType(synapse_type)
+        self.connectivity_type = ConnectivityType(connectivity_type)
 
     def connect(self, source, target):
         super(Conv2DSynapses, self).connect(source, target)
@@ -141,7 +141,7 @@ class Conv2DSynapses(BaseSynapses):
 
             # Batch master
             if not tg_model.share_weights or batch_i == 0:
-                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.synapse_type == SynapseType.PROCEDURAL
+                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                                else 'SPARSE_INDIVIDUALG')
                 model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
 
