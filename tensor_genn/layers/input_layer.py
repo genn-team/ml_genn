@@ -6,8 +6,10 @@ class InputLayer(BaseLayer):
 
     def __init__(self, name, shape, neurons=PoissonInputNeurons()):
         super(InputLayer, self).__init__(name, neurons)
-        assert(isinstance(self.neurons, InputNeurons))
         self.neurons.shape = shape
+
+        if not isinstance(self.neurons, InputNeurons):
+            raise ValueError('"InputLayer" class instances require "InputNeuron" class neurons')
 
     def set_input_batch(self, data_batch):
         self.neurons.set_input_batch(data_batch)

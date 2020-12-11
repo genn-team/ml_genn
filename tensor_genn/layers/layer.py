@@ -6,15 +6,21 @@ class Layer(BaseLayer):
 
     def __init__(self, name, neurons=IFNeurons()):
         super(Layer, self).__init__(name, neurons)
-        assert(isinstance(self.neurons, Neurons))
+
+        if not isinstance(self.neurons, Neurons):
+            raise ValueError('"Layer" class instances require "Neuron" class neurons')
 
     def connect(self, sources, synapses):
-        assert(len(sources) == len(synapses))
+        if len(sources) != len(synapses):
+            raise ValueError('sources list and synapse list length mismatch')
+
         for source, synapse in zip(sources, synapses):
             synapse.connect(source, self)
 
     def set_weights(self, weights):
-        assert(len(weights) == len(self.upstream_synapses))
+        if len(weights) != len(self.upstream_synapses):
+            raise ValueError('weight matrix list and upsteam synapse list length mismatch')
+
         for synapse, w in zip(self.upstream_synapses, weights):
             synapse.set_weights(w)
 
