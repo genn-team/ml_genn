@@ -89,10 +89,9 @@ def model_kernel_1_1():
     ], dtype=np.float32)
 
 
-def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
+def test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid():
     '''
-    Test AvePool2DConv2D with 1 input channel, 1 output channel,
-    a pool stride of (3, 3) and valid pool padding.
+    Test AvePool2DConv2D with 1 input channel, 1 output channel and valid pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -108,19 +107,46 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid')
+        tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 1)),
+        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
-def test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid():
+def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid():
     '''
-    Test AvePool2DConv2D with 2 input channels, 1 output channel,
-    a pool stride of (3, 3) and valid pool padding.
+    Test AvePool2DConv2D with 1 input channel, 1 output channel and valid pool padding.
+    Pool size 2, pool strides 3, conv size 3, conv strides 1.
+    '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    # Inputs
+    x = np.empty((1, 12, 12, 1), dtype=np.float32)
+    x[0, :, :, 0] = model_input_0()
+
+    # Kernels
+    k = np.empty((3, 3, 1, 1), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.AveragePooling2D(2, strides=3, padding='valid', input_shape=(12, 12, 1)),
+        tf.keras.layers.Conv2D(1, 3, strides=1, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
+
+
+def test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid():
+    '''
+    Test AvePool2DConv2D with 2 input channels, 1 output channel and valid pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -138,19 +164,18 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid')
+        tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
-def test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid():
+def test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid():
     '''
-    Test AvePool2DConv2D with 1 input channel, 2 output channels,
-    a pool stride of (3, 3) and valid pool padding.
+    Test AvePool2DConv2D with 1 input channel, 2 output channels and valid pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -167,19 +192,18 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid')
+        tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 1)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
-def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
+def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid():
     '''
-    Test AvePool2DConv2D with 2 input channels, 2 output channels,
-    a pool stride of (3, 3) and valid pool padding.
+    Test AvePool2DConv2D with 2 input channels, 2 output channels and valid pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -199,19 +223,18 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid')
+        tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
-def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse():
+def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
     '''
-    Test AvePool2DConv2D with 2 input channels, 2 output channels,
-    a pool stride of (3, 3) and valid pool padding (SPARSE connectivity).
+    Test AvePool2DConv2D with 2 input channels, 2 output channels and valid pool padding (SPARSE connectivity).
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -231,19 +254,18 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse()
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='valid', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse')
+        tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
     model_compare_tf_and_tg(tf_model, x, connectivity_type='sparse')
 
 
-def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
+def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same():
     '''
-    Test AvePool2DConv2D with 2 input channels, 2 output channels,
-    a pool stride of (3, 3) and same pool padding.
+    Test AvePool2DConv2D with 2 input channels, 2 output channels and same pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -263,19 +285,18 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='same', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same')
+        tf.keras.layers.AveragePooling2D(2, padding='same', input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
-def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse():
+def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
     '''
-    Test AvePool2DConv2D with 2 input channels, 2 output channels,
-    a pool stride of (3, 3) and same pool padding (SPARSE connectivity).
+    Test AvePool2DConv2D with 2 input channels, 2 output channels and same pool padding (SPARSE connectivity).
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -295,9 +316,9 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse():
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(2, padding='same', strides=(3, 3), input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', strides=(1, 1), use_bias=False),
-    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse')
+        tf.keras.layers.AveragePooling2D(2, padding='same', input_shape=(12, 12, 2)),
+        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', use_bias=False),
+    ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and TensorGeNN models
@@ -305,10 +326,11 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse():
 
 
 if __name__ == '__main__':
-    test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_3_padding_valid()
-    test_avepool2d_conv2d_in_chan_2_out_chan_1_stride_3_3_padding_valid()
-    test_avepool2d_conv2d_in_chan_1_out_chan_2_stride_3_3_padding_valid()
-    test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid()
-    test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_valid_sparse()
-    test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same()
-    test_avepool2d_conv2d_in_chan_2_out_chan_2_stride_3_3_padding_same_sparse()
+    test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid()
+    test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid()
+    test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid()
+    test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid()
+    test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid()
+    test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse()
+    test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same()
+    test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse()

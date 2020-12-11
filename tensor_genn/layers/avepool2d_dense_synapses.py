@@ -8,7 +8,7 @@ from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
-avepool2d_dense_big_pool_init = create_custom_init_var_snippet_class(
+avepool2d_dense_init = create_custom_init_var_snippet_class(
     'avepool2d_dense_big_pool',
 
     param_names=[
@@ -30,95 +30,33 @@ avepool2d_dense_big_pool_init = create_custom_init_var_snippet_class(
     const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
     const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
 
-    const int pool_in_row = ($(id_pre) / pool_ic) / pool_iw;
-    const int pool_in_col = ($(id_pre) / pool_ic) % pool_iw;
-    const int pool_in_chan = $(id_pre) % pool_ic;
-
-    const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
-    const int dense_units = $(dense_units);
-
-    const int dense_out_unit = $(id_post);
-
-    scalar weight = 0.0;
-
-    // process only strides with rows containing pool_in_row
-    int pool_out_row = (pool_in_row + pool_padh) / pool_sh;
-    int pool_stride_row = pool_out_row * pool_sh - pool_padh;
-    while ((pool_stride_row >= -pool_padh) && (pool_stride_row + pool_kh > pool_in_row)) {
-
-        int pool_kh_crop = min(pool_stride_row + pool_kh, pool_ih) - max(pool_stride_row, 0);
-
-        // process only strides with cols containing pool_in_col
-        int pool_out_col = (pool_in_col + pool_padw) / pool_sw;
-        int pool_stride_col = pool_out_col * pool_sw - pool_padw;
-        while ((pool_stride_col >= -pool_padw) && (pool_stride_col + pool_kw > pool_in_col)) {
-
-            int pool_kw_crop = min(pool_stride_col + pool_kw, pool_iw) - max(pool_stride_col, 0);
-
-            int dense_in_unit = pool_out_row * (dense_iw * dense_ic) + pool_out_col * (dense_ic) + pool_in_chan;
-
-            weight += $(weights)[
-                dense_in_unit * (dense_units) +
-                dense_out_unit
-            ] / (pool_kh_crop * pool_kw_crop);
-
-            pool_out_col--;
-            pool_stride_col = pool_out_col * pool_sw - pool_padw;
-        }
-
-        pool_out_row--;
-        pool_stride_row = pool_out_row * pool_sh - pool_padh;
-    }
-
-    $(value) = weight;
-    ''',
-)
-
-avepool2d_dense_small_pool_init = create_custom_init_var_snippet_class(
-    'avepool2d_dense_big_pool',
-
-    param_names=[
-        'pool_kh', 'pool_kw',
-        'pool_sh', 'pool_sw',
-        'pool_padh', 'pool_padw',
-        'pool_ih', 'pool_iw', 'pool_ic',
-        'dense_ih', 'dense_iw', 'dense_ic',
-        'dense_units',
-    ],
-
-    extra_global_params=[
-        ('weights', 'scalar*'),
-    ],
-
-    var_init_code='''
-    const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
-    const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-    const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
-    const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-
-    const int pool_in_row = ($(id_pre) / pool_ic) / pool_iw;
-    const int pool_in_col = ($(id_pre) / pool_ic) % pool_iw;
-    const int pool_in_chan = $(id_pre) % pool_ic;
-
-    const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
-    const int dense_units = $(dense_units);
-
-    const int dense_out_unit = $(id_post);
+    // Convert presynaptic neuron ID to row, column and channel in pool input
+    const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
+    const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
+    const int poolInChan = $(id_pre) % pool_ic;
 
     // Calculate corresponding pool output
-    const int pool_out_row = (pool_in_row + pool_padh) / pool_sh;
-    const int pool_stride_row = pool_out_row * pool_sh - pool_padh;
-    const int pool_kh_crop = min(pool_stride_row + pool_kh, pool_ih) - max(pool_stride_row, 0);
-    const int pool_out_col = (pool_in_col + pool_padw) / pool_sw;
-    const int pool_stride_col = pool_out_col * pool_sw - pool_padw;
-    const int pool_kw_crop = min(pool_stride_col + pool_kw, pool_iw) - max(pool_stride_col, 0);
+    const int poolOutRow = (poolInRow + pool_padh) / pool_sh;
+    const int poolStrideRow = poolOutRow * pool_sh - pool_padh;
+    const int poolCropKH = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
+    const int poolOutCol = (poolInCol + pool_padw) / pool_sw;
+    const int poolStrideCol = poolOutCol * pool_sw - pool_padw;
+    const int poolCropKW = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
 
-    const int dense_in_unit = pool_out_row * (dense_iw * dense_ic) + pool_out_col * (dense_ic) + pool_in_chan;
+    $(value) = 0.0;
+    if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
 
-    $(value) = $(weights)[
-        dense_in_unit * (dense_units) +
-        dense_out_unit
-    ] / (pool_kh_crop * pool_kw_crop);
+        const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
+        const int dense_units = $(dense_units);
+
+        const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
+        const int dense_out_unit = $(id_post);
+
+        $(value) = $(weights)[
+            dense_in_unit * (dense_units) +
+            dense_out_unit
+        ] / (poolCropKH * poolCropKW);
+    }
     ''',
 )
 
@@ -136,6 +74,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
         self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
         self.connectivity_type = ConnectivityType(connectivity_type)
+        if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
+            raise NotImplementedError('pool stride < pool size is not supported')
 
     def connect(self, source, target):
         super(AvePool2DDenseSynapses, self).connect(source, target)
@@ -180,13 +120,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
             pool_padw = (pool_kw - 1) // 2
 
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
-        
-        # If pool size is greater than stride then a more complex model which 
-        # allows pool inputs to appear in multiple pool outputs is required
-        model = (avepool2d_dense_big_pool_init if pool_kh > pool_sh or pool_kw > pool_sw 
-                 else avepool2d_dense_small_pool_init)
                  
-        g = init_var(model, {
+        g = init_var(avepool2d_dense_init, {
             'pool_kh': pool_kh, 'pool_kw': pool_kw,
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
             'pool_padh': pool_padh, 'pool_padw': pool_padw,

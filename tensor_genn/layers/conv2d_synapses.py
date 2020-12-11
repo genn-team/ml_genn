@@ -37,12 +37,12 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
     const int conv_ow = $(conv_ow), conv_oh = $(conv_oh), conv_oc = $(conv_oc);
 
-    // Convert presynaptic neuron ID to row, column and channel
+    // Convert presynaptic neuron ID to row, column and channel in conv input
     const int inRow = ($(id_pre) / conv_ic) / conv_iw;
     const int inCol = ($(id_pre) / conv_ic) % conv_iw;
     const int inChan = $(id_pre) % conv_ic;
 
-    // Calculate range of output rows and columns which this presynaptic neuron will connect to
+    // Calculate range of output rows and columns which this presynaptic neuron connects to
     const int minOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh - conv_kh) / conv_sh)));
     const int maxOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh) / conv_sh)));
     const int minOutCol = min(conv_ow, max(0, 1 + ((inCol + conv_padw - conv_kw) / conv_sw)));
@@ -70,7 +70,6 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     $(endRow);
     ''',
 )
-
 
 class Conv2DSynapses(BaseSynapses):
 

@@ -32,9 +32,10 @@ class DenseSynapses(BaseSynapses):
             # Batch master
             if not tg_model.share_weights or i == 0:
                 model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+                algorithm = 'DENSE_INDIVIDUALG'
 
                 self.syn[i] = tg_model.g_model.add_synapse_population(
-                    name, 'DENSE_INDIVIDUALG', NO_DELAY, pre, post,
+                    name, algorithm, NO_DELAY, pre, post,
                     model, {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {})
 
             # Batch slave
