@@ -8,20 +8,15 @@ class Layer(BaseLayer):
         super(Layer, self).__init__(name, neurons)
         if self.neurons is None:
             self.neurons = IFNeurons()
-        if not isinstance(neurons, Neurons):
-            raise ValueError('"Layer" class instances require "Neuron" class neuron groups')
+        assert(isinstance(self.neurons, Neurons))
 
     def connect(self, sources, synapses):
-        if len(sources) != len(synapses):
-            raise ValueError('sources list and synapse list length mismatch')
-
+        assert(len(sources) == len(synapses))
         for source, synapse in zip(sources, synapses):
             synapse.connect(source, self)
 
     def set_weights(self, weights):
-        if len(weights) != len(self.upstream_synapses):
-            raise ValueError('weight matrix list and upsteam synapse list length mismatch')
-
+        assert(len(weights) == len(self.upstream_synapses))
         for synapse, w in zip(self.upstream_synapses, weights):
             synapse.set_weights(w)
 
