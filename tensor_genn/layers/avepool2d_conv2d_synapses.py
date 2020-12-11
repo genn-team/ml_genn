@@ -289,25 +289,23 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
         # Add batch synapse populations
-        for batch_i in range(tg_model.batch_size):
-            pre_nrn = self.source.neurons.nrn[batch_i]
-            post_nrn = self.target.neurons.nrn[batch_i]
-            syn_name = '{}_{}'.format(self.name, batch_i)
+        for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
+            name = '{}_{}'.format(self.name, i)
 
             # Batch master
-            scale = np.prod(self.pool_size)
-            if not tg_model.share_weights or batch_i == 0:
-                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                               else 'SPARSE_INDIVIDUALG')
+            if not tg_model.share_weights or i == 0:
                 model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+                algorithm = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
+                             else 'SPARSE_INDIVIDUALG')
+                scale = np.prod(self.pool_size)
 
-                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                    syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
+                self.syn[i] = tg_model.g_model.add_synapse_population(
+                    name, algorithm, NO_DELAY, pre, post,
                     model, {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {}, connectivity_init)
-                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten() / scale)
+                self.syn[i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten() / scale)
 
             # Batch slave
             else:
-                master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
-                self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
+                master_name = '{}_0'.format(self.name)
+                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
+                    name, master_name, NO_DELAY, pre, post, 'DeltaCurr', {}, {})

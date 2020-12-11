@@ -10,11 +10,11 @@ class BaseSynapses(object):
         self.syn = None
 
     def connect(self, source, target):
+        self.name = '{}_to_{}_syn'.format(source.name, target.name)
         self.source = proxy(source)
         self.target = proxy(target)
         source.downstream_synapses.append(self)
         target.upstream_synapses.append(self)
-        self.name = '{}_to_{}_syn'.format(self.source.name, self.target.name)
 
     def set_weights(self, weights):
         self.weights[:] = weights

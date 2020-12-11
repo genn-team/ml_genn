@@ -26,21 +26,19 @@ class DenseSynapses(BaseSynapses):
         super(DenseSynapses, self).compile(tg_model)
 
         # Add batch synapse populations
-        for batch_i in range(tg_model.batch_size):
-            pre_nrn = self.source.neurons.nrn[batch_i]
-            post_nrn = self.target.neurons.nrn[batch_i]
-            syn_name = '{}_{}'.format(self.name, batch_i)
+        for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
+            name = '{}_{}'.format(self.name, i)
 
             # Batch master
-            if not tg_model.share_weights or batch_i == 0:
+            if not tg_model.share_weights or i == 0:
                 model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
 
-                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                    syn_name, 'DENSE_INDIVIDUALG', NO_DELAY, pre_nrn, post_nrn,
+                self.syn[i] = tg_model.g_model.add_synapse_population(
+                    name, 'DENSE_INDIVIDUALG', NO_DELAY, pre, post,
                     model, {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {})
 
             # Batch slave
             else:
-                master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
-                self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
+                master_name = '{}_0'.format(self.name)
+                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
+                    name, master_name, NO_DELAY, pre, post, 'DeltaCurr', {}, {})
