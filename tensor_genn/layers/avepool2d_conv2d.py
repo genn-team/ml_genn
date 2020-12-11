@@ -1,11 +1,12 @@
 from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers import Layer, AvePool2DConv2DSynapses
+from tensor_genn.layers.if_neurons import IFNeurons
 
 class AvePool2DConv2D(Layer):
 
     def __init__(self, name, filters, pool_size, conv_size,
                  pool_strides=None, conv_strides=None, pool_padding='valid',
-                 conv_padding='valid', connectivity_type='procedural', neurons=None):
+                 conv_padding='valid', connectivity_type='procedural', neurons=IFNeurons()):
         super(AvePool2DConv2D, self).__init__(name, neurons)
         self.filters = filters
         self.pool_size = pool_size

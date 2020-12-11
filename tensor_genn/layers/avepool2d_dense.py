@@ -1,10 +1,11 @@
 from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers import Layer, AvePool2DDenseSynapses
+from tensor_genn.layers.if_neurons import IFNeurons
 
 class AvePool2DDense(Layer):
 
     def __init__(self, name, units, pool_size, pool_strides=None,
-                 pool_padding='valid', connectivity_type='procedural', neurons=None):
+                 pool_padding='valid', connectivity_type='procedural', neurons=IFNeurons()):
         super(AvePool2DDense, self).__init__(name, neurons)
         self.units = units
         self.pool_size = pool_size

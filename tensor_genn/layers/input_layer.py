@@ -4,10 +4,8 @@ from tensor_genn.layers.poisson_input_neurons import PoissonInputNeurons
 
 class InputLayer(BaseLayer):
 
-    def __init__(self, name, shape, neurons=None):
+    def __init__(self, name, shape, neurons=PoissonInputNeurons()):
         super(InputLayer, self).__init__(name, neurons)
-        if self.neurons is None:
-            self.neurons = PoissonInputNeurons()
         assert(isinstance(self.neurons, InputNeurons))
         self.neurons.shape = shape
 

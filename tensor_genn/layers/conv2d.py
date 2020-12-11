@@ -1,10 +1,11 @@
 from tensor_genn.layers import ConnectivityType, PadMode
 from tensor_genn.layers import Layer, Conv2DSynapses
+from tensor_genn.layers.if_neurons import IFNeurons
 
 class Conv2D(Layer):
 
     def __init__(self, name, filters, conv_size, conv_strides=None,
-                 conv_padding='valid', connectivity_type='procedural', neurons=None):
+                 conv_padding='valid', connectivity_type='procedural', neurons=IFNeurons()):
         super(Conv2D, self).__init__(name, neurons)
         self.filters = filters
         self.conv_size = conv_size
