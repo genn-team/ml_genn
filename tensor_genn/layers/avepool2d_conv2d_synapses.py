@@ -69,17 +69,14 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
         for(int convOutRow = minOutRow; convOutRow < maxOutRow; convOutRow++) {
             const int strideRow = (convOutRow * conv_sh) - conv_padh;
             const int kernRow = poolOutRow - strideRow;
-
             for(int convOutCol = minOutCol; convOutCol < maxOutCol; convOutCol++) {
                 const int strideCol = (convOutCol * conv_sw) - conv_padw;
                 const int kernCol = poolOutCol - strideCol;
-
                 for(int outChan = 0; outChan < conv_oc; outChan++) {
                     // Calculate postsynaptic index and add synapse
                     const int idPost = ((convOutRow * conv_ow * conv_oc) +
                                         (convOutCol * conv_oc) +
                                         outChan);
-
                     $(addSynapse, idPost, kernRow, kernCol, poolInChan, outChan);
                 }
             }
@@ -87,7 +84,6 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     }
 
     // End the row
-    // **THINK** beginning to doubt the value of the GeNN-provided outer loop
     $(endRow);
     ''',
 )

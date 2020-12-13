@@ -66,7 +66,6 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     }
     
     // End the row
-    // **THINK** beginning to doubt the value of the GeNN-provided outer loop
     $(endRow);
     ''',
 )
