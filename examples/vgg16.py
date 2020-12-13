@@ -3,7 +3,8 @@ from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
                               initializers, regularizers)
 from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensor_genn import Model, InputType
+from tensor_genn import Model
+from tensor_genn.layers import InputType
 from tensor_genn.norm import DataNorm, SpikeNorm
 from tensor_genn.utils import parse_arguments, raster_plot
 import numpy as np
@@ -130,7 +131,7 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate TensorGeNN model
-    tg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connection_type=args.connection_type)
+    tg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
     tg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
 
     if args.norm_method == 'data-norm':

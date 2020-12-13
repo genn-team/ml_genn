@@ -6,8 +6,8 @@ from pygenn.genn_model import (init_connectivity, init_var,
 from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 
-from tensor_genn.layers import ConnectionType, PadMode
-from tensor_genn.layers.base_connection import BaseConnection
+from tensor_genn.layers import ConnectivityType, PadMode
+from tensor_genn.layers.base_synapses import BaseSynapses
 from tensor_genn.layers.weight_update_models import signed_static_pulse
 
 conv2d_init = create_custom_sparse_connect_init_snippet_class(
@@ -37,12 +37,12 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     const int conv_iw = $(conv_iw), conv_ic = $(conv_ic);
     const int conv_ow = $(conv_ow), conv_oh = $(conv_oh), conv_oc = $(conv_oc);
 
-    // Convert presynaptic neuron ID to row, column and channel
+    // Convert presynaptic neuron ID to row, column and channel in conv input
     const int inRow = ($(id_pre) / conv_ic) / conv_iw;
     const int inCol = ($(id_pre) / conv_ic) % conv_iw;
     const int inChan = $(id_pre) % conv_ic;
 
-    // Calculate range of output rows and columns which this presynaptic neuron will connect to
+    // Calculate range of output rows and columns which this presynaptic neuron connects to
     const int minOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh - conv_kh) / conv_sh)));
     const int maxOutRow = min(conv_oh, max(0, 1 + ((inRow + conv_padh) / conv_sh)));
     const int minOutCol = min(conv_ow, max(0, 1 + ((inCol + conv_padw - conv_kw) / conv_sw)));
@@ -66,17 +66,15 @@ conv2d_init = create_custom_sparse_connect_init_snippet_class(
     }
     
     // End the row
-    // **THINK** beginning to doubt the value of the GeNN-provided outer loop
     $(endRow);
     ''',
 )
 
-
-class Conv2DConnection(BaseConnection):
+class Conv2DSynapses(BaseSynapses):
 
     def __init__(self, filters, conv_size, conv_strides=None,
-                 conv_padding='valid', connection_type='procedural'):
-        super(Conv2DConnection, self).__init__()
+                 conv_padding='valid', connectivity_type='procedural'):
+        super(Conv2DSynapses, self).__init__()
         self.filters = filters
         self.conv_size = conv_size
         if conv_strides == None:
@@ -84,15 +82,41 @@ class Conv2DConnection(BaseConnection):
         else:
             self.conv_strides = conv_strides
         self.conv_padding = PadMode(conv_padding)
-        self.connection_type = ConnectionType(connection_type)
+        self.connectivity_type = ConnectivityType(connectivity_type)
 
-    def compile(self, tg_model):
-        super(Conv2DConnection, self).compile(tg_model)
+    def connect(self, source, target):
+        super(Conv2DSynapses, self).connect(source, target)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source.shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
+        conv_ih, conv_iw, conv_ic = source.neurons.shape
+        if self.conv_padding == PadMode.VALID:
+            output_shape = (
+                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
+                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
+                self.filters,
+            )
+        elif self.conv_padding == PadMode.SAME:
+            output_shape = (
+                ceil(float(conv_ih) / float(conv_sh)),
+                ceil(float(conv_iw) / float(conv_sw)),
+                self.filters,
+            )
+
+        if target.neurons.shape is None:
+            target.neurons.shape = output_shape
+        elif output_shape != target.neurons.shape:
+            raise RuntimeError('target layer shape mismatch')
+
+        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
+
+    def compile(self, tg_model):
+        super(Conv2DSynapses, self).compile(tg_model)
+
+        conv_kh, conv_kw = self.conv_size
+        conv_sh, conv_sw = self.conv_strides
+        conv_ih, conv_iw, conv_ic = self.source.neurons.shape
+        conv_oh, conv_ow, conv_oc = self.target.neurons.shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -108,50 +132,22 @@ class Conv2DConnection(BaseConnection):
             'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
         # Add batch synapse populations
-        for batch_i in range(tg_model.batch_size):
-            pre_nrn = self.source.nrn[batch_i]
-            post_nrn = self.target.nrn[batch_i]
-            syn_name = '{}_to_{}_syn_{}'.format(self.source.name, self.target.name, batch_i)
+        for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
+            name = '{}_{}'.format(self.name, i)
 
             # Batch master
-            if not tg_model.share_weights or batch_i == 0:
-                matrix_type = ('PROCEDURAL_PROCEDURALG' if self.connection_type == ConnectionType.PROCEDURAL
-                               else 'SPARSE_INDIVIDUALG')
-                model = signed_static_pulse if self.source.signed_spikes else 'StaticPulse'
+            if not tg_model.share_weights or i == 0:
+                model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+                algorithm = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
+                             else 'SPARSE_INDIVIDUALG')
 
-                self.syn[batch_i] = tg_model.g_model.add_synapse_population(
-                    syn_name, matrix_type, NO_DELAY, pre_nrn, post_nrn,
+                self.syn[i] = tg_model.g_model.add_synapse_population(
+                    name, algorithm, NO_DELAY, pre, post,
                     model, {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {}, connectivity_init)
-                self.syn[batch_i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
+                self.syn[i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
 
             # Batch slave
             else:
-                master_syn_name = '{}_to_{}_syn_0'.format(self.source.name, self.target.name)
-                self.syn[batch_i] = tg_model.g_model.add_slave_synapse_population(
-                    syn_name, master_syn_name, NO_DELAY, pre_nrn, post_nrn, 'DeltaCurr', {}, {})
-
-    def connect(self, source, target):
-        super(Conv2DConnection, self).connect(source, target)
-
-        conv_kh, conv_kw = self.conv_size
-        conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = source.shape
-        if self.conv_padding == PadMode.VALID:
-            self.output_shape = (
-                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
-                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
-                self.filters,
-            )
-        elif self.conv_padding == PadMode.SAME:
-            self.output_shape = (
-                ceil(float(conv_ih) / float(conv_sh)),
-                ceil(float(conv_iw) / float(conv_sw)),
-                self.filters,
-            )
-
-        if target.shape is None:
-            target.shape = self.output_shape
-        elif self.output_shape != target.shape:
-            raise RuntimeError('target layer shape mismatch')
-
-        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
+                master_name = '{}_0'.format(self.name)
+                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
+                    name, master_name, NO_DELAY, pre, post, 'DeltaCurr', {}, {})

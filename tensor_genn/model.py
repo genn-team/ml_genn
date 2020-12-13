@@ -26,11 +26,15 @@ from tqdm import tqdm
 from pygenn.genn_model import GeNNModel
 
 from tensor_genn.layers import InputType
-from tensor_genn.layers import SpikeInput, PoissonInput, IFInput
-from tensor_genn.layers import IFDense
-from tensor_genn.layers import IFAvePool2DDense
-from tensor_genn.layers import IFConv2D
-from tensor_genn.layers import IFAvePool2DConv2D
+from tensor_genn.layers import InputLayer
+from tensor_genn.layers import Dense
+from tensor_genn.layers import AvePool2DDense
+from tensor_genn.layers import Conv2D
+from tensor_genn.layers import AvePool2DConv2D
+from tensor_genn.layers import IFNeurons
+from tensor_genn.layers import SpikeInputNeurons
+from tensor_genn.layers import PoissonInputNeurons
+from tensor_genn.layers import IFInputNeurons
 
 
 class Model(object):
@@ -60,16 +64,16 @@ class Model(object):
 
         # Construct topologically sorted list of layers
         new_layers = set(inputs)
-        seen_connections = set()
+        seen_synapses = set()
         while new_layers:
             layer = new_layers.pop()
             self.layers.append(layer)
 
-            # Explore downstream layers whose upstream connections have all been seen
-            for downstream_connection in layer.downstream_connections:
-                seen_connections.add(downstream_connection)
-                if seen_connections.issuperset(downstream_connection.target.upstream_connections):
-                    new_layers.add(downstream_connection.target)
+            # Explore downstream layers whose upstream synapses have all been seen
+            for downstream_synapse in layer.downstream_synapses:
+                seen_synapses.add(downstream_synapse)
+                if seen_synapses.issuperset(downstream_synapse.target.upstream_synapses):
+                    new_layers.add(downstream_synapse.target)
 
         # Check that output layers are reachable from input layers
         if not all(output in self.layers for output in self.outputs):
@@ -98,7 +102,9 @@ class Model(object):
 
         # Prepare each layer
         for layer in self.layers:
-            layer.compile(self)
+            layer.compile_neurons(self)
+        for layer in self.layers:
+            layer.compile_synapses(self)
 
         # Build and load GeNN model
         if os.name == 'nt':
@@ -199,14 +205,14 @@ class Model(object):
                     k = save_samples.index(i)
                     batch_i = i - batch_start
                     for l, layer in enumerate(self.layers):
-                        nrn = layer.nrn[batch_i]
+                        nrn = layer.neurons.nrn[batch_i]
                         nrn.pull_current_spikes_from_device()
                         all_spikes[k][l].append(np.copy(nrn.current_spikes))
 
             # Compute accuracy
             for output_i in range(len(self.outputs)):
                 for batch_i in range(batch_end - batch_start):
-                    nrn = self.outputs[output_i].nrn[batch_i]
+                    nrn = self.outputs[output_i].neurons.nrn[batch_i]
                     nrn.pull_var_from_device('nSpk')
                     label = batch_labels[output_i][batch_i]
                     n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == label
@@ -244,7 +250,7 @@ class Model(object):
 
 
     @staticmethod
-    def convert_tf_model(tf_model, input_type='poisson', connection_type='procedural'):
+    def convert_tf_model(tf_model, input_type='poisson', connectivity_type='procedural'):
         """Create a TensorGeNN model from a TensorFlow model
 
         Args:
@@ -252,7 +258,7 @@ class Model(object):
 
         Keyword args:
         input_type         --  type of input neurons (default: 'poisson')
-        connection_type    --  type of connections in GeNN (default: 'procedural')
+        connectivity_type  --  type of synapses in GeNN (default: 'procedural')
         """
 
         supported_tf_layers = (
@@ -280,13 +286,15 @@ class Model(object):
         # Add input layer
         input_type = InputType(input_type)
         if input_type == InputType.SPIKE:
-            layer = SpikeInput('input', tf_model.input_shape[1:])
+            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons())
+        if input_type == InputType.SPIKE_SIGNED:
+            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons(signed_spikes=True))
         elif input_type == InputType.POISSON:
-            layer = PoissonInput('input', tf_model.input_shape[1:], signed_spikes=False)
+            layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons())
         elif input_type == InputType.POISSON_SIGNED:
-            layer = PoissonInput('input', tf_model.input_shape[1:], signed_spikes=True)
+            layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons(signed_spikes=True))
         elif input_type == InputType.IF:
-            layer = IFInput('input', tf_model.input_shape[1:])
+            layer = InputLayer('input', tf_model.input_shape[1:], IFInputNeurons())
         model.inputs.append(layer)
 
         model.layers.append(layer)
@@ -308,17 +316,17 @@ class Model(object):
             elif isinstance(tf_layer, tf.keras.layers.Dense):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
-                    layer = IFDense(name=tf_layer.name, units=tf_layer.units,
-                                    threshold=1.0, signed_spikes=False)
+                    layer = Dense(name=tf_layer.name, units=tf_layer.units,
+                                  neurons=IFNeurons(threshold=1.0))
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
-                    layer = IFAvePool2DDense(
+                    layer = AvePool2DDense(
                         name=tf_layer.name, units=tf_layer.units,
                         pool_size=pool_layer.pool_size,
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
-                        connection_type=connection_type, 
-                        threshold=1.0, signed_spikes=False)
+                        connectivity_type=connectivity_type, 
+                        neurons=IFNeurons(threshold=1.0))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -331,22 +339,21 @@ class Model(object):
             elif isinstance(tf_layer, tf.keras.layers.Conv2D):
                 if pool_layer is None:
                     print('converting Conv2D layer <{}>'.format(tf_layer.name))
-                    layer = IFConv2D(
+                    layer = Conv2D(
                         name=tf_layer.name, filters=tf_layer.filters,
                         conv_size=tf_layer.kernel_size,
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
-                        connection_type=connection_type, 
-                        threshold=1.0, signed_spikes=False)
+                        connectivity_type=connectivity_type, 
+                        neurons=IFNeurons(threshold=1.0))
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
-                    layer = IFAvePool2DConv2D(
+                    layer = AvePool2DConv2D(
                         name=tf_layer.name, filters=tf_layer.filters,
                         pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
-                        connection_type=connection_type, 
-                        threshold=1.0, signed_spikes=False)
+                        connectivity_type=connectivity_type, neurons=IFNeurons(threshold=1.0))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())

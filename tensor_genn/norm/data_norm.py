@@ -35,4 +35,4 @@ class DataNorm(object):
         # Update layer thresholds
         for layer, threshold in zip(tg_model.layers[1:], applied_factors):
             print('layer <{}> threshold: {}'.format(layer.name, threshold))
-            layer.set_threshold(threshold)
+            layer.neurons.set_threshold(threshold)
