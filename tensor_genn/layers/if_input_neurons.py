@@ -23,10 +23,9 @@ if_input_model = create_custom_neuron_class(
 
 class IFInputNeurons(InputNeurons):
 
-    def __init__(self, signed_spikes=False):
+    def __init__(self):
         model = if_input_model
         params = {}
         vars_init = {'input': 0.0, 'Vmem': 0.0}
         global_params = {}
         super(IFInputNeurons, self).__init__(model, params, vars_init, global_params)
-        self.signed_spikes = signed_spikes

@@ -8,7 +8,6 @@ if_model = create_custom_neuron_class(
     sim_code='''
     if ($(t) == 0.0) {
         // Reset state at t = 0
-        $(Isyn) = 0.0;
         $(Vmem) = 0.0;
         $(nSpk) = 0;
     }

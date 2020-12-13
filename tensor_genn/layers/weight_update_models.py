@@ -11,6 +11,6 @@ signed_static_pulse = create_custom_weight_update_class(
     $(addToInSyn, -$(g));
     ''',
     event_threshold_condition_code='''
-    $(input_pre) < 0 && u >= exp($(input_pre) * DT)
+    $(input_pre) < 0.0 && spike
     '''
 )

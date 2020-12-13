@@ -287,6 +287,8 @@ class Model(object):
         input_type = InputType(input_type)
         if input_type == InputType.SPIKE:
             layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons())
+        if input_type == InputType.SPIKE_SIGNED:
+            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons(signed_spikes=True))
         elif input_type == InputType.POISSON:
             layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons())
         elif input_type == InputType.POISSON_SIGNED:
