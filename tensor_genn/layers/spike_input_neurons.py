@@ -6,7 +6,7 @@ spike_input_model = create_custom_neuron_class(
     'spike_input',
     var_name_types=[('input', 'scalar', VarAccess_READ_ONLY)],
     sim_code='''
-    int spike = $(input) != 0.0;
+    const bool spike = $(input) != 0.0;
     ''',
     threshold_condition_code='''
     $(input) > 0.0 && spike

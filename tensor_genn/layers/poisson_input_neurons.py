@@ -6,7 +6,7 @@ poisson_input_model = create_custom_neuron_class(
     'poisson_input',
     var_name_types=[('input', 'scalar', VarAccess_READ_ONLY)],
     sim_code='''
-    int spike = $(gennrand_uniform) >= exp(-abs($(input)) * DT);
+    const bool spike = $(gennrand_uniform) >= exp(-fabs($(input)) * DT);
     ''',
     threshold_condition_code='''
     $(input) > 0.0 && spike
