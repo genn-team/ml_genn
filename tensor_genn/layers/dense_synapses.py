@@ -23,23 +23,12 @@ class DenseSynapses(BaseSynapses):
         self.weights = np.empty((np.prod(source.neurons.shape), self.units), dtype=np.float64)
 
     def compile(self, tg_model):
-        super(DenseSynapses, self).compile(tg_model)
 
-        # Add batch synapse populations
-        for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
-            name = '{}_{}'.format(self.name, i)
+        conn = 'DENSE_INDIVIDUALG'
 
-            # Batch master
-            if not tg_model.share_weights or i == 0:
-                model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
-                algorithm = 'DENSE_INDIVIDUALG'
+        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
 
-                self.syn[i] = tg_model.g_model.add_synapse_population(
-                    name, algorithm, NO_DELAY, pre, post,
-                    model, {}, {'g': self.weights.flatten()}, {}, {}, 'DeltaCurr', {}, {})
+        wu_var = {'g': self.weights.flatten()}
 
-            # Batch slave
-            else:
-                master_name = '{}_0'.format(self.name)
-                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
-                    name, master_name, NO_DELAY, pre, post, 'DeltaCurr', {}, {})
+        super(DenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var,
+                                           {}, {}, , 'DeltaCurr', {}, {}, None)

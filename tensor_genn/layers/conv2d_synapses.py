@@ -111,7 +111,11 @@ class Conv2DSynapses(BaseSynapses):
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
 
     def compile(self, tg_model):
-        super(Conv2DSynapses, self).compile(tg_model)
+
+        conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
+                else 'SPARSE_INDIVIDUALG')
+
+        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -124,30 +128,16 @@ class Conv2DSynapses(BaseSynapses):
             conv_padh = (conv_kh - 1) // 2
             conv_padw = (conv_kw - 1) // 2
 
-        connectivity_init = init_connectivity(conv2d_init, {
+        conn_init = init_connectivity(conv2d_init, {
             'conv_kh': conv_kh, 'conv_kw': conv_kw,
             'conv_sh': conv_sh, 'conv_sw': conv_sw,
             'conv_padh': conv_padh, 'conv_padw': conv_padw,
             'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
             'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
-        # Add batch synapse populations
-        for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
-            name = '{}_{}'.format(self.name, i)
+        wu_var_init = init_var('weights', {})
 
-            # Batch master
-            if not tg_model.share_weights or i == 0:
-                model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
-                algorithm = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                             else 'SPARSE_INDIVIDUALG')
+        wu_var = {'g': wu_var_init.set_extra_global_init_param('weights', self.weights.flatten())}
 
-                self.syn[i] = tg_model.g_model.add_synapse_population(
-                    name, algorithm, NO_DELAY, pre, post,
-                    model, {}, {'g': init_var("Kernel", {})}, {}, {}, 'DeltaCurr', {}, {}, connectivity_init)
-                self.syn[i].vars['g'].set_extra_global_init_param('kernel', self.weights.flatten())
-
-            # Batch slave
-            else:
-                master_name = '{}_0'.format(self.name)
-                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
-                    name, master_name, NO_DELAY, pre, post, 'DeltaCurr', {}, {})
+        super(Conv2DSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var,
+                                            {}, {}, 'DeltaCurr', {}, {}, conn_init)
