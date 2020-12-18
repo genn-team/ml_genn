@@ -133,7 +133,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
             'dense_units': self.units,
         })
 
-        wu_var = {'g': wu_var_init.set_extra_global_init_param('weights', self.weights.flatten())}
+        wu_var = {'g': wu_var_init}
+        wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var,
+        super(AvePool2DDenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
                                                     {}, {}, 'DeltaCurr', {}, {}, None)

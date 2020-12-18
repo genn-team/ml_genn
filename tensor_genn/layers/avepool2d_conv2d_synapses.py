@@ -193,10 +193,8 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
             'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
-        wu_var_init = init_var('weights', {})
+        wu_var = {'g': init_var('Kernel', {})}
+        wu_var_egp = {'g': {'kernel': self.weights.flatten() / (pool_kh * pool_kw)}}
 
-        scale = pool_kh * pool_kw
-        wu_var = {'g': wu_var_init.set_extra_global_init_param('weights', self.weights.flatten() / scale)}
-
-        super(AvePool2DConv2DSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var,
+        super(AvePool2DConv2DSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
                                                      {}, {}, 'DeltaCurr', {}, {}, conn_init)
