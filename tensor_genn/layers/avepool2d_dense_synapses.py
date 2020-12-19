@@ -106,9 +106,12 @@ class AvePool2DDenseSynapses(BaseSynapses):
         self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
 
     def compile(self, tg_model):
-        super(AvePool2DDenseSynapses, self).compile(tg_model)
 
-        # Procedural initialisation
+        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
+                else 'DENSE_INDIVIDUALG')
+
+        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source.neurons.shape
@@ -120,8 +123,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
             pool_padw = (pool_kw - 1) // 2
 
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
-                 
-        g = init_var(avepool2d_dense_init, {
+
+        wu_var_init = init_var(avepool2d_dense_init, {
             'pool_kh': pool_kh, 'pool_kw': pool_kw,
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
             'pool_padh': pool_padh, 'pool_padw': pool_padw,
@@ -130,23 +133,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
             'dense_units': self.units,
         })
 
-        # Add batch synapse populations
-        for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
-            name = '{}_{}'.format(self.name, i)
+        wu_var = {'g': wu_var_init}
+        wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-            # Batch master
-            if not tg_model.share_weights or i == 0:
-                model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
-                algorithm = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
-                             else 'DENSE_INDIVIDUALG')
-                
-                self.syn[i] = tg_model.g_model.add_synapse_population(
-                    name, algorithm, NO_DELAY, pre, post,
-                    model, {}, {'g': g}, {}, {}, 'DeltaCurr', {}, {})
-                self.syn[i].vars['g'].set_extra_global_init_param('weights', self.weights.flatten())
-
-            # Batch slave
-            else:
-                master_name = '{}_0'.format(self.name)
-                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
-                    name, master_name, NO_DELAY, pre, post, 'DeltaCurr', {}, {})
+        super(AvePool2DDenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
+                                                    {}, {}, 'DeltaCurr', {}, {}, None)

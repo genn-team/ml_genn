@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import tensor_genn as tg
+import pytest
 
 
 def model_compare_tf_and_tg(tf_model, x, connectivity_type='procedural'):
@@ -325,6 +326,32 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
     model_compare_tf_and_tg(tf_model, x, connectivity_type='sparse')
 
 
+@pytest.mark.xfail
+def test_avepool2d_conv2d_border_pool_crop():
+    '''
+    Test AvePool2DConv2D pool cropping at borders.
+    '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    # Inputs
+    x = np.ones((1, 12, 12, 1), dtype=np.float32)
+
+    # Kernels
+    k = np.ones((3, 3, 1, 1), dtype=np.float32)
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.AveragePooling2D(3, padding='same', input_shape=(12, 12, 1)),
+        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', use_bias=False),
+    ], name='test_avepool2d_conv2d_border_pool_crop')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and TensorGeNN models
+    model_compare_tf_and_tg(tf_model, x)
+
+
 if __name__ == '__main__':
     test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid()
     test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid()
@@ -334,3 +361,4 @@ if __name__ == '__main__':
     test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse()
     test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same()
     test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse()
+    test_avepool2d_conv2d_border_pool_crop()
