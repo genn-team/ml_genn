@@ -1,6 +1,6 @@
-from tensor_genn.layers.base_layer import BaseLayer
-from tensor_genn.layers.neurons import Neurons
-from tensor_genn.layers.if_neurons import IFNeurons
+from ml_genn.layers.base_layer import BaseLayer
+from ml_genn.layers.neurons import Neurons
+from ml_genn.layers.if_neurons import IFNeurons
 
 class Layer(BaseLayer):
 

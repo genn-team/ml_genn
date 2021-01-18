@@ -1,5 +1,5 @@
-from tensor_genn.layers import Layer, DenseSynapses
-from tensor_genn.layers.if_neurons import IFNeurons
+from ml_genn.layers import Layer, DenseSynapses
+from ml_genn.layers.if_neurons import IFNeurons
 
 class Dense(Layer):
 

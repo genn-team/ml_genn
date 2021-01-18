@@ -1,13 +1,13 @@
 import numpy as np
 import tensorflow as tf
-import tensor_genn as tg
+import ml_genn as tg
 
 
 def model_compare_tf_and_tg(tf_model, x, connectivity_type='procedural'):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
-    # Run TensorGeNN model
+    # Run ML GeNN model
     tg_model = tg.Model.convert_tf_model(tf_model, input_type='spike', connectivity_type=connectivity_type)
     tg_model.compile(dt=1.0, batch_size=1)
     tg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
@@ -69,7 +69,7 @@ def test_dense_all_on():
     ], name='test_dense_all_on')
     tf_model.set_weights([model_weights_0()])
 
-    # Compare TensorFlow and TensorGeNN models
+    # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
@@ -91,7 +91,7 @@ def test_dense_some_on():
     ], name='test_dense_some_on')
     tf_model.set_weights([model_weights_0()])
 
-    # Compare TensorFlow and TensorGeNN models
+    # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 
@@ -113,7 +113,7 @@ def test_dense_all_off():
     ], name='test_dense_all_off')
     tf_model.set_weights([model_weights_0()])
 
-    # Compare TensorFlow and TensorGeNN models
+    # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_tg(tf_model, x)
 
 

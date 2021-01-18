@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="tensor_genn",
+    name="ml_genn",
     version="0.3.0",
     packages=find_packages(),
 

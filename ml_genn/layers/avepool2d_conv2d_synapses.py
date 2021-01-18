@@ -5,10 +5,10 @@ from pygenn.genn_model import (init_connectivity, init_var,
                                create_cmlf_class, create_cksf_class)
 from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
-from tensor_genn.layers import ConnectivityType, PadMode
+from ml_genn.layers import ConnectivityType, PadMode
 
-from tensor_genn.layers.base_synapses import BaseSynapses
-from tensor_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers.base_synapses import BaseSynapses
+from ml_genn.layers.weight_update_models import signed_static_pulse
 
 avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'avepool2d_conv2d',

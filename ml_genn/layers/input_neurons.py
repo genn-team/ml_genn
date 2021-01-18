@@ -1,5 +1,5 @@
 import numpy as np
-from tensor_genn.layers.base_neurons import BaseNeurons
+from ml_genn.layers.base_neurons import BaseNeurons
 
 class InputNeurons(BaseNeurons):
 

@@ -1,8 +1,8 @@
 import numpy as np
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers.base_synapses import BaseSynapses
-from tensor_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers.base_synapses import BaseSynapses
+from ml_genn.layers.weight_update_models import signed_static_pulse
 
 class DenseSynapses(BaseSynapses):
 

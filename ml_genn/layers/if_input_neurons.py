@@ -1,6 +1,6 @@
 from pygenn.genn_model import create_custom_neuron_class
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
-from tensor_genn.layers.input_neurons import InputNeurons
+from ml_genn.layers.input_neurons import InputNeurons
 
 if_input_model = create_custom_neuron_class(
     'if_input',

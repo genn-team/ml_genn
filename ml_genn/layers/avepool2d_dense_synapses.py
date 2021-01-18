@@ -4,9 +4,9 @@ from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers import ConnectivityType, PadMode
-from tensor_genn.layers.base_synapses import BaseSynapses
-from tensor_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers import ConnectivityType, PadMode
+from ml_genn.layers.base_synapses import BaseSynapses
+from ml_genn.layers.weight_update_models import signed_static_pulse
 
 avepool2d_dense_init = create_custom_init_var_snippet_class(
     'avepool2d_dense_big_pool',

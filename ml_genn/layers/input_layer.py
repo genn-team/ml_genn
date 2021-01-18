@@ -1,6 +1,6 @@
-from tensor_genn.layers.base_layer import BaseLayer
-from tensor_genn.layers.input_neurons import InputNeurons
-from tensor_genn.layers.poisson_input_neurons import PoissonInputNeurons
+from ml_genn.layers.base_layer import BaseLayer
+from ml_genn.layers.input_neurons import InputNeurons
+from ml_genn.layers.poisson_input_neurons import PoissonInputNeurons
 
 class InputLayer(BaseLayer):
 

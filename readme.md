@@ -1,3 +1,3 @@
-# TensorGeNN
+# ML GeNN
 
-A library for converting models trained using Tensor Flow into GeNN
+A library for deep learning with Spiking Neural Networks (SNN).

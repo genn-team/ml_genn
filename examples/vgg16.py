@@ -3,10 +3,10 @@ from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
                               initializers, regularizers)
 from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensor_genn import Model
-from tensor_genn.layers import InputType
-from tensor_genn.norm import DataNorm, SpikeNorm
-from tensor_genn.utils import parse_arguments, raster_plot
+from ml_genn import Model
+from ml_genn.layers import InputType
+from ml_genn.norm import DataNorm, SpikeNorm
+from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
 
 # Learning rate schedule
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
-    # Create, normalise and evaluate TensorGeNN model
+    # Create, normalise and evaluate ML GeNN model
     tg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
     tg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
 
     acc, spk_i, spk_t = tg_model.evaluate([x_test], [y_test], args.classify_time, save_samples=args.save_samples)
 
-    # Report TensorGeNN model results
+    # Report ML GeNN model results
     print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
     if args.plot:
         names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
