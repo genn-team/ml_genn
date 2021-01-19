@@ -22,7 +22,7 @@ class DenseSynapses(BaseSynapses):
 
         self.weights = np.empty((np.prod(source.neurons.shape), self.units), dtype=np.float64)
 
-    def compile(self, tg_model):
+    def compile(self, mlg_model):
 
         conn = 'DENSE_INDIVIDUALG'
 
@@ -31,5 +31,5 @@ class DenseSynapses(BaseSynapses):
         wu_var = {'g': self.weights.flatten()}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(DenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, {},
+        super(DenseSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, {},
                                            {}, {}, 'DeltaCurr', {}, {}, None)

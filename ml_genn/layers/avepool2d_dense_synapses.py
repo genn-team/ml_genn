@@ -105,7 +105,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
         self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
 
-    def compile(self, tg_model):
+    def compile(self, mlg_model):
 
         conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
                 else 'DENSE_INDIVIDUALG')
@@ -136,5 +136,5 @@ class AvePool2DDenseSynapses(BaseSynapses):
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
+        super(AvePool2DDenseSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
                                                     {}, {}, 'DeltaCurr', {}, {}, None)

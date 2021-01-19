@@ -8,12 +8,12 @@ class BaseLayer(object):
         self.downstream_synapses = []
         self.upstream_synapses = []
 
-    def compile_neurons(self, tg_model):
-        self.neurons.compile(tg_model)
+    def compile_neurons(self, mlg_model):
+        self.neurons.compile(mlg_model)
 
-    def compile_synapses(self, tg_model):
+    def compile_synapses(self, mlg_model):
         for synapse in self.upstream_synapses:
-            synapse.compile(tg_model)
+            synapse.compile(mlg_model)
 
     @property
     def shape(self):

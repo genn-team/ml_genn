@@ -113,7 +113,6 @@ for (b = 0; b < builderNodes.size(); b++) {
 		echo "Checking out GeNN";
 		sh "rm -rf genn";
 		sh "git clone https://github.com/genn-team/genn.git";
-		//sh "git clone --branch ml_genn https://github.com/genn-team/genn.git";
 
 		dir("genn") {
 		    // Build dynamic LibGeNN

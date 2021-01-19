@@ -12,9 +12,9 @@ class DataNorm(object):
         self.norm_data = norm_data
         self.tf_model = tf_model
 
-    def normalize(self, tg_model):
+    def normalize(self, mlg_model):
         print('Data-Norm')
-        g_model = tg_model.g_model
+        g_model = mlg_model.g_model
 
         # Get output functions for weighted layers.
         idx = [i for i, l in enumerate(self.tf_model.layers) if l.get_weights() != []]
@@ -33,6 +33,6 @@ class DataNorm(object):
         applied_factors[1:] = scale_factors[1:] / scale_factors[:-1]
 
         # Update layer thresholds
-        for layer, threshold in zip(tg_model.layers[1:], applied_factors):
+        for layer, threshold in zip(mlg_model.layers[1:], applied_factors):
             print('layer <{}> threshold: {}'.format(layer.name, threshold))
             layer.neurons.set_threshold(threshold)

@@ -43,7 +43,7 @@ class Model(object):
     provides an interface for manipulating the underlying GeNN models.
     """
 
-    def __init__(self, name='tg_model'):
+    def __init__(self, name='mlg_model'):
         """Initialise a ML GeNN model"""
 
         self.name = name

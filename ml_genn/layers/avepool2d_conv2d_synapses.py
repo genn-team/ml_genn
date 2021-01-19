@@ -154,7 +154,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
 
-    def compile(self, tg_model):
+    def compile(self, mlg_model):
 
         conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                 else 'SPARSE_INDIVIDUALG')
@@ -196,5 +196,5 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten() / (pool_kh * pool_kw)}}
 
-        super(AvePool2DConv2DSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
+        super(AvePool2DConv2DSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
                                                      {}, {}, 'DeltaCurr', {}, {}, conn_init)
