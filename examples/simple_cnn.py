@@ -1,9 +1,9 @@
 import tensorflow as tf
 from tensorflow.keras import models, layers, datasets
-from tensor_genn import Model
-from tensor_genn.layers import InputType
-from tensor_genn.norm import DataNorm, SpikeNorm
-from tensor_genn.utils import parse_arguments, raster_plot
+from ml_genn import Model
+from ml_genn.layers import InputType
+from ml_genn.norm import DataNorm, SpikeNorm
+from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
 
 
@@ -42,22 +42,22 @@ if __name__ == '__main__':
         models.save_model(tf_model, 'simple_cnn_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
-    # Create, normalise and evaluate TensorGeNN model
-    tg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
-    tg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
+    # Create, normalise and evaluate ML GeNN model
+    mlg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
+    mlg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
 
     if args.norm_method == 'data-norm':
         norm = DataNorm([x_norm], tf_model)
-        norm.normalize(tg_model)
+        norm.normalize(mlg_model)
     elif args.norm_method == 'spike-norm':
         norm = SpikeNorm([x_norm])
-        norm.normalize(tg_model, args.classify_time)
+        norm.normalize(mlg_model, args.classify_time)
 
-    acc, spk_i, spk_t = tg_model.evaluate([x_test], [y_test], args.classify_time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], args.classify_time, save_samples=args.save_samples)
 
-    # Report TensorGeNN model results
+    # Report ML GeNN model results
     print('Accuracy of SimpleCNN GeNN model: {}%'.format(acc[0]))
     if args.plot:
-        names = ['input_nrn'] + [name + '_nrn' for name in tg_model.layer_names]
-        neurons = [tg_model.g_model.neuron_populations[name] for name in names]
+        names = ['input_nrn'] + [name + '_nrn' for name in mlg_model.layer_names]
+        neurons = [mlg_model.g_model.neuron_populations[name] for name in names]
         raster_plot(spk_i, spk_t, neurons)

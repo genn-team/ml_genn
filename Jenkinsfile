@@ -22,7 +22,7 @@ void setBuildStatus(String message, String state) {
     // **NOTE** ManuallyEnteredCommitContextSource set to match the value used by bits of Jenkins outside pipeline control
     step([
         $class: "GitHubCommitStatusSetter",
-        reposSource: [$class: "ManuallyEnteredRepositorySource", url: "https://github.com/genn-team/tensor_genn/"],
+        reposSource: [$class: "ManuallyEnteredRepositorySource", url: "https://github.com/genn-team/ml_genn/"],
         contextSource: [$class: "ManuallyEnteredCommitContextSource", context: "continuous-integration/jenkins/branch"],
         errorHandlers: [[$class: "ChangingBuildStatusErrorHandler", result: "UNSTABLE"]],
         statusResultSource: [ $class: "ConditionalStatusResultSource", results: [[$class: "AnyBuildResult", message: message, state: state]] ]
@@ -90,9 +90,9 @@ for (b = 0; b < builderNodes.size(); b++) {
     builders[nodeName] = {
         node(nodeName) {
             stage("Checkout (${NODE_NAME})") {
-                // Checkout Tensor GeNN
-                echo "Checking out Tensor GeNN";
-                sh "rm -rf tensor_genn";
+                // Checkout ML GeNN
+                echo "Checking out ML GeNN";
+                sh "rm -rf ml_genn";
 		checkout scm
             }
 
@@ -113,7 +113,6 @@ for (b = 0; b < builderNodes.size(); b++) {
 		echo "Checking out GeNN";
 		sh "rm -rf genn";
 		sh "git clone https://github.com/genn-team/genn.git";
-		//sh "git clone --branch tensor_genn https://github.com/genn-team/genn.git";
 
 		dir("genn") {
 		    // Build dynamic LibGeNN
@@ -147,24 +146,24 @@ for (b = 0; b < builderNodes.size(); b++) {
             }
 
             buildStage("Running tests (${NODE_NAME})") {
-                // Install TensorGeNN
-                echo "Installing TensorGeNN";
+                // Install ML GeNN
+                echo "Installing ML GeNN";
                 sh """
                     . ${WORKSPACE}/venv/bin/activate
                     pip install .
                 """;
 
 		dir("tests") {
-                    // Run TensorGeNN test suite
-                    def messages_TensorGeNN = "tensorgenn_${NODE_NAME}";
-                    sh "rm -f ${messages_TensorGeNN}";
-                    def commands_TensorGeNN = """
+                    // Run ML GeNN test suite
+                    def messages_ML_GeNN = "mlgenn_${NODE_NAME}";
+                    sh "rm -f ${messages_ML_GeNN}";
+                    def commands_ML_GeNN = """
                         . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --junitxml result_${NODE_NAME}.xml  1>>\"${messages_TensorGeNN}\" 2>&1
+                        pytest -v --junitxml result_${NODE_NAME}.xml  1>>\"${messages_ML_GeNN}\" 2>&1
                     """;
-                    def status_TensorGeNN = sh script:commands_TensorGeNN, returnStatus:true;
-                    archive messages_TensorGeNN;
-                    if (status_TensorGeNN != 0) {
+                    def status_ML_GeNN = sh script:commands_ML_GeNN, returnStatus:true;
+                    archive messages_ML_GeNN;
+                    if (status_ML_GeNN != 0) {
                         setBuildStatus("Running tests (${NODE_NAME})", "FAILURE");
                     }
                 }

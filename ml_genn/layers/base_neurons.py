@@ -12,15 +12,15 @@ class BaseNeurons(object):
         self.signed_spikes = False
         self.nrn = None
 
-    def compile(self, tg_model):
-        self.nrn = [None] * tg_model.batch_size
+    def compile(self, mlg_model):
+        self.nrn = [None] * mlg_model.batch_size
 
         # Add batch neuron populations
         nrn_n = np.prod(self.shape)
-        for batch_i in range(tg_model.batch_size):
+        for batch_i in range(mlg_model.batch_size):
             nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
 
-            self.nrn[batch_i] = tg_model.g_model.add_neuron_population(
+            self.nrn[batch_i] = mlg_model.g_model.add_neuron_population(
                 nrn_name, nrn_n, self.model, self.params, self.vars_init
             )
             for gp in self.global_params:

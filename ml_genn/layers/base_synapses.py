@@ -22,20 +22,20 @@ class BaseSynapses(object):
     def get_weights(self):
         return self.weights.copy()
 
-    def compile(self, tg_model, conn, delay,
+    def compile(self, mlg_model, conn, delay,
                 wu_model, wu_params, wu_vars, wu_vars_egp,
                 wu_pre_vars, wu_post_vars,
                 ps_model, ps_params, ps_vars,
                 conn_init):
-        self.syn = [None] * tg_model.batch_size
+        self.syn = [None] * mlg_model.batch_size
 
         # Add batch synapse populations
         for i, (pre, post) in enumerate(zip(self.source.neurons.nrn, self.target.neurons.nrn)):
             name = '{}_{}'.format(self.name, i)
 
             # Batch master
-            if not tg_model.share_weights or i == 0:
-                self.syn[i] = tg_model.g_model.add_synapse_population(
+            if not mlg_model.share_weights or i == 0:
+                self.syn[i] = mlg_model.g_model.add_synapse_population(
                     name, conn, delay, pre, post,
                     wu_model, wu_params, wu_vars, wu_pre_vars, wu_post_vars,
                     ps_model, ps_params, ps_vars, conn_init)
@@ -47,5 +47,5 @@ class BaseSynapses(object):
             # Batch slave
             else:
                 master_name = '{}_0'.format(self.name)
-                self.syn[i] = tg_model.g_model.add_slave_synapse_population(
+                self.syn[i] = mlg_model.g_model.add_slave_synapse_population(
                     name, master_name, delay, pre, post, ps_model, ps_params, ps_vars)

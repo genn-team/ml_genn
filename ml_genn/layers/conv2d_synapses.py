@@ -6,9 +6,9 @@ from pygenn.genn_model import (init_connectivity, init_var,
 from pygenn.genn_wrapper import NO_DELAY
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 
-from tensor_genn.layers import ConnectivityType, PadMode
-from tensor_genn.layers.base_synapses import BaseSynapses
-from tensor_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers import ConnectivityType, PadMode
+from ml_genn.layers.base_synapses import BaseSynapses
+from ml_genn.layers.weight_update_models import signed_static_pulse
 
 conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'conv2d',
@@ -110,7 +110,7 @@ class Conv2DSynapses(BaseSynapses):
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
 
-    def compile(self, tg_model):
+    def compile(self, mlg_model):
 
         conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                 else 'SPARSE_INDIVIDUALG')
@@ -138,5 +138,5 @@ class Conv2DSynapses(BaseSynapses):
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten()}}
 
-        super(Conv2DSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
+        super(Conv2DSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
                                             {}, {}, 'DeltaCurr', {}, {}, conn_init)

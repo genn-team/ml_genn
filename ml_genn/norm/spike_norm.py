@@ -11,34 +11,34 @@ class SpikeNorm(object):
     def __init__(self, norm_data):
         self.norm_data = norm_data
 
-    def normalize(self, tg_model, time):
+    def normalize(self, mlg_model, time):
         print('Spike-Norm')
-        g_model = tg_model.g_model
+        g_model = mlg_model.g_model
         n_samples = self.norm_data[0].shape[0]
 
         # Set layer thresholds high initially
-        for layer in tg_model.layers[1:]:
+        for layer in mlg_model.layers[1:]:
             layer.neurons.set_threshold(np.inf)
 
         # For each weighted layer
-        for layer in tg_model.layers[1:]:
+        for layer in mlg_model.layers[1:]:
             threshold = np.float64(0.0)
 
             # For each sample presentation
             progress = tqdm(total=n_samples)
-            for batch_start in range(0, n_samples, tg_model.batch_size):
-                batch_end = min(batch_start + tg_model.batch_size, n_samples)
+            for batch_start in range(0, n_samples, mlg_model.batch_size):
+                batch_end = min(batch_start + mlg_model.batch_size, n_samples)
                 batch_data = [x[batch_start:batch_end] for x in self.norm_data]
 
                 # Set new input
-                tg_model.reset()
-                tg_model.set_input_batch(batch_data)
+                mlg_model.reset()
+                mlg_model.set_input_batch(batch_data)
 
                 # Main simulation loop
                 while g_model.t < time:
 
                     # Step time
-                    tg_model.step_time()
+                    mlg_model.step_time()
 
                     # Get maximum activation
                     for batch_i in range(batch_end - batch_start):

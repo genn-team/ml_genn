@@ -1,9 +1,9 @@
-"""TensorGeNN model definition
+"""ML GeNN model definition
 
-This module provides the Model class to convert TensorFlow models into GeNN
-models, and provides helper functions for operating the resulting GeNN model.
+This module provides the ``Model`` class to create deep learning SNN models,
+and provides helper functions for operating the underlying GeNN model.
 
-A ``Model`` object can use a pre-trained TensorFlow model to function.
+The ``Model`` class can also use a pre-trained TensorFlow model to function.
 Such a model can be provided by calling the ``convert_tf_model`` method
 with the TensorFlow model and optional parameters.
 
@@ -11,13 +11,12 @@ Example:
     The following is a minimal example which demonstrates the process of
     converting a TensorFlow model into a GeNN model and evaluating it:
 
-        from tensor_genn import Model
+        from ml_genn import Model
 
-        tensorgenn_model = Model.convert_tf_model(tensorflow_model)
-        tensorgenn_model.compile()
-        tensorgenn_model.evaluate([test_data], [test_labels], 300.0)
+        ml_genn_model = Model.convert_tf_model(tensorflow_model)
+        ml_genn_model.compile()
+        ml_genn_model.evaluate([test_data], [test_labels], 300.0)
 """
-
 
 import os
 import numpy as np
@@ -25,27 +24,27 @@ import tensorflow as tf
 from tqdm import tqdm
 from pygenn.genn_model import GeNNModel
 
-from tensor_genn.layers import InputType
-from tensor_genn.layers import InputLayer
-from tensor_genn.layers import Dense
-from tensor_genn.layers import AvePool2DDense
-from tensor_genn.layers import Conv2D
-from tensor_genn.layers import AvePool2DConv2D
-from tensor_genn.layers import IFNeurons
-from tensor_genn.layers import SpikeInputNeurons
-from tensor_genn.layers import PoissonInputNeurons
-from tensor_genn.layers import IFInputNeurons
+from ml_genn.layers import InputType
+from ml_genn.layers import InputLayer
+from ml_genn.layers import Dense
+from ml_genn.layers import AvePool2DDense
+from ml_genn.layers import Conv2D
+from ml_genn.layers import AvePool2DConv2D
+from ml_genn.layers import IFNeurons
+from ml_genn.layers import SpikeInputNeurons
+from ml_genn.layers import PoissonInputNeurons
+from ml_genn.layers import IFInputNeurons
 
 
 class Model(object):
-    """TensorGeNN model class
+    """ML GeNN model class
 
-    This class converts fully trained TensorFlow models into GeNN models,
-    and provides an interface for manipulating converted models.
+    This class enables the creation of deep learning SNN models, and
+    provides an interface for manipulating the underlying GeNN models.
     """
 
-    def __init__(self, name='tg_model'):
-        """Initialise a TensorGeNN model"""
+    def __init__(self, name='mlg_model'):
+        """Initialise a ML GeNN model"""
 
         self.name = name
         self.layers = []
@@ -81,7 +80,7 @@ class Model(object):
 
 
     def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, reuse_genn_model=False, kernel_profiling=False, **genn_kwargs):
-        """Compile this TensorGeNN model into a GeNN model
+        """Compile this ML GeNN model into a GeNN model
 
         Keyword args:
         dt                --  model integration time step (default: 1.0)
@@ -251,7 +250,7 @@ class Model(object):
 
     @staticmethod
     def convert_tf_model(tf_model, input_type='poisson', connectivity_type='procedural'):
-        """Create a TensorGeNN model from a TensorFlow model
+        """Create a ML GeNN model from a TensorFlow model
 
         Args:
         tf_model  --  TensorFlow model to be converted

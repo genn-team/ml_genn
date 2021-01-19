@@ -1,9 +1,9 @@
 import argparse
-from tensor_genn.layers import InputType, ConnectivityType
+from ml_genn.layers import InputType, ConnectivityType
 
-def parse_arguments(model_description='Tensor GeNN model'):
+def parse_arguments(model_description='ML GeNN model'):
     '''
-    Parses command line arguments for common Tensor GeNN options, and returns them in namespace form.
+    Parses command line arguments for common ML GeNN options, and returns them in namespace form.
     '''
 
     parser = argparse.ArgumentParser(description=model_description)

@@ -4,9 +4,9 @@ from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 from pygenn.genn_wrapper import NO_DELAY
 
-from tensor_genn.layers import ConnectivityType, PadMode
-from tensor_genn.layers.base_synapses import BaseSynapses
-from tensor_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers import ConnectivityType, PadMode
+from ml_genn.layers.base_synapses import BaseSynapses
+from ml_genn.layers.weight_update_models import signed_static_pulse
 
 avepool2d_dense_init = create_custom_init_var_snippet_class(
     'avepool2d_dense_big_pool',
@@ -105,7 +105,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
         self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
 
-    def compile(self, tg_model):
+    def compile(self, mlg_model):
 
         conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
                 else 'DENSE_INDIVIDUALG')
@@ -136,5 +136,5 @@ class AvePool2DDenseSynapses(BaseSynapses):
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(tg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
+        super(AvePool2DDenseSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
                                                     {}, {}, 'DeltaCurr', {}, {}, None)

@@ -1,27 +1,27 @@
 import numpy as np
 import tensorflow as tf
-import tensor_genn as tg
+import ml_genn as mlg
 import pytest
 
 
-def model_compare_tf_and_tg(tf_model, x, connectivity_type='procedural'):
+def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
     # Run TensorFlow model
     tf_y = tf_model(x).numpy()
 
-    # Run TensorGeNN model
-    tg_model = tg.Model.convert_tf_model(tf_model, input_type='spike', connectivity_type=connectivity_type)
-    tg_model.compile(dt=1.0, batch_size=1)
-    tg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
-    tg_model.set_input_batch([x])
-    tg_model.step_time(2)
+    # Run ML GeNN model
+    mlg_model = mlg.Model.convert_tf_model(tf_model, input_type='spike', connectivity_type=connectivity_type)
+    mlg_model.compile(dt=1.0, batch_size=1)
+    mlg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
+    mlg_model.set_input_batch([x])
+    mlg_model.step_time(2)
 
-    nrn = tg_model.outputs[0].neurons.nrn[0]
+    nrn = mlg_model.outputs[0].neurons.nrn[0]
     nrn.pull_var_from_device('Vmem')
-    tg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
+    mlg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
 
-    assert np.allclose(tg_y, tf_y, rtol=0.0, atol=1.0e-5)
+    assert np.allclose(mlg_y, tf_y, rtol=0.0, atol=1.0e-5)
 
-    return tg_model
+    return mlg_model
 
 
 def model_input_0():
@@ -113,8 +113,8 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid():
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid():
@@ -141,8 +141,8 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid():
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid():
@@ -170,8 +170,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid():
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 def test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid():
@@ -198,8 +198,8 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid():
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid():
@@ -229,8 +229,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid():
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
@@ -260,8 +260,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x, connectivity_type='sparse')
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x, connectivity_type='sparse')
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same():
@@ -291,8 +291,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same():
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
@@ -322,8 +322,8 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x, connectivity_type='sparse')
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x, connectivity_type='sparse')
 
 
 @pytest.mark.xfail
@@ -348,8 +348,8 @@ def test_avepool2d_conv2d_border_pool_crop():
     ], name='test_avepool2d_conv2d_border_pool_crop')
     tf_model.set_weights([k])
 
-    # Compare TensorFlow and TensorGeNN models
-    model_compare_tf_and_tg(tf_model, x)
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, x)
 
 
 if __name__ == '__main__':

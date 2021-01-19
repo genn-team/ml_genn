@@ -1,6 +1,6 @@
-from tensor_genn.layers import ConnectivityType, PadMode
-from tensor_genn.layers import Layer, Conv2DSynapses
-from tensor_genn.layers.if_neurons import IFNeurons
+from ml_genn.layers import ConnectivityType, PadMode
+from ml_genn.layers import Layer, Conv2DSynapses
+from ml_genn.layers.if_neurons import IFNeurons
 
 class Conv2D(Layer):
 
