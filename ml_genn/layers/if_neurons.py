@@ -36,5 +36,4 @@ class IFNeurons(Neurons):
         self.global_params['Vthr'] = threshold
 
         if self.nrn is not None:
-            for n in self.nrn:
-                n.extra_global_params['Vthr'].view[:] = threshold
+            self.nrn.extra_global_params['Vthr'].view[:] = threshold

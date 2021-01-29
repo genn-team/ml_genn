@@ -117,7 +117,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
 
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = source.neurons.shape
+        pool_ih, pool_iw, pool_ic = source.shape
         if self.pool_padding == PadMode.VALID:
             self.pool_output_shape = (
                 ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
@@ -147,23 +147,17 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                 self.filters,
             )
 
-        if target.neurons.shape is None:
-            target.neurons.shape = output_shape
-        elif output_shape != target.neurons.shape:
+        if target.shape is None:
+            target.shape = output_shape
+        elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
 
-    def compile(self, mlg_model):
-
-        conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                else 'SPARSE_INDIVIDUALG')
-
-        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
-
+    def compile(self, mlg_model, mlg_layer):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source.neurons.shape
+        pool_ih, pool_iw, pool_ic = self.source.shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -174,7 +168,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
-        conv_oh, conv_ow, conv_oc = self.target.neurons.shape
+        conv_oh, conv_ow, conv_oc = self.target.shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -193,8 +187,11 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
             'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
+        conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
+                else 'SPARSE_INDIVIDUALG')
+        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten() / (pool_kh * pool_kw)}}
 
-        super(AvePool2DConv2DSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
-                                                     {}, {}, 'DeltaCurr', {}, {}, conn_init)
+        super(AvePool2DConv2DSynapses, self).compile(mlg_model, mlg_layer, conn, 0, wu_model, {}, wu_var,
+                                                     wu_var_egp, {}, {}, 'DeltaCurr', {}, {}, conn_init)

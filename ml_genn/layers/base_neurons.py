@@ -7,21 +7,15 @@ class BaseNeurons(object):
         self.params = params
         self.vars_init = vars_init
         self.global_params = global_params
-        self.name = None
-        self.shape = None
         self.signed_spikes = False
         self.nrn = None
 
-    def compile(self, mlg_model):
-        self.nrn = [None] * mlg_model.batch_size
+    def compile(self, mlg_model, mlg_layer):
+        name = '{}_nrn'.format(mlg_layer.name)
+        n = np.prod(mlg_layer.shape)
 
-        # Add batch neuron populations
-        nrn_n = np.prod(self.shape)
-        for batch_i in range(mlg_model.batch_size):
-            nrn_name = '{}_nrn_{}'.format(self.name, batch_i)
-
-            self.nrn[batch_i] = mlg_model.g_model.add_neuron_population(
-                nrn_name, nrn_n, self.model, self.params, self.vars_init
-            )
-            for gp in self.global_params:
-                self.nrn[batch_i].set_extra_global_param(gp, self.global_params[gp])
+        self.nrn = mlg_model.g_model.add_neuron_population(
+            name, n, self.model, self.params, self.vars_init
+        )
+        for gp in self.global_params:
+            self.nrn.set_extra_global_param(gp, self.global_params[gp])

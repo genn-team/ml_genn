@@ -5,10 +5,10 @@ from ml_genn.layers.if_neurons import IFNeurons
 class Layer(BaseLayer):
 
     def __init__(self, name, neurons=IFNeurons()):
-        super(Layer, self).__init__(name, neurons)
-
-        if not isinstance(self.neurons, Neurons):
+        if not isinstance(neurons, Neurons):
             raise ValueError('"Layer" class instances require "Neuron" class neurons')
+
+        super(Layer, self).__init__(name, neurons)
 
     def connect(self, sources, synapses):
         if len(sources) != len(synapses):
