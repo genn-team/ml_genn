@@ -1,10 +1,10 @@
 from pygenn.genn_model import create_custom_neuron_class
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from ml_genn.layers.input_neurons import InputNeurons
 
 poisson_input_model = create_custom_neuron_class(
     'poisson_input',
-    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY)],
+    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY_DUPLICATE)],
     sim_code='''
     const bool spike = $(gennrand_uniform) >= exp(-fabs($(input)) * DT);
     ''',

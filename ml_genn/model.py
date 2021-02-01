@@ -116,7 +116,7 @@ class Model(object):
 
 
     def set_input_batch(self, data_batch):
-        """Set model input with a new batch of samples
+        """Set model input with a new batch of data
 
         Args:
         data_batch  --  list of data batches for each input layer
@@ -154,7 +154,7 @@ class Model(object):
         Args:
         data          --  list of data for each input layer
         labels        --  list of labels for each output layer
-        time          --  sample present time (msec)
+        time          --  sample presentation time (msec)
 
         Keyword args:
         save_samples  --  list of sample indices to save spikes for (default: [])
@@ -181,10 +181,10 @@ class Model(object):
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[]] * len(self.layers)] * len(save_samples)
 
-        # Process sample batches
+        # Process batches
         progress = tqdm(total=n_samples)
-        for batch_start in range(0, n_samples, self.batch_size):
-            batch_end = min(batch_start + self.batch_size, n_samples)
+        for batch_start in range(0, n_samples, self.g_model.batch_size):
+            batch_end = min(batch_start + self.g_model.batch_size, n_samples)
             batch_data = [x[batch_start:batch_end] for x in data]
             batch_labels = [y[batch_start:batch_end] for y in labels]
             save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
@@ -204,18 +204,19 @@ class Model(object):
                     k = save_samples.index(i)
                     batch_i = i - batch_start
                     for l, layer in enumerate(self.layers):
-                        nrn = layer.neurons.nrn[batch_i]
+                        nrn = layer.neurons.nrn
                         nrn.pull_current_spikes_from_device()
-                        all_spikes[k][l].append(np.copy(nrn.current_spikes))
+                        all_spikes[k][l].append(np.copy(nrn.current_spikes[batch_i]))
 
             # Compute accuracy
             for output_i in range(len(self.outputs)):
-                for batch_i in range(batch_end - batch_start):
-                    nrn = self.outputs[output_i].neurons.nrn[batch_i]
-                    nrn.pull_var_from_device('nSpk')
-                    label = batch_labels[output_i][batch_i]
-                    n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == label
-
+                nrn = self.outputs[output_i].neurons.nrn
+                nrn.pull_var_from_device('nSpk')
+                output_view = nrn.vars['nSpk'].view
+                if len(output_view.shape) == 1:
+                    output_view = output_view.reshape(1, -1)
+                predictions = output_view.argmax(axis=1)
+                n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
                 accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
 
             progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))

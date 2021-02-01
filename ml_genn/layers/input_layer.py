@@ -12,7 +12,19 @@ class InputLayer(BaseLayer):
         self.shape = shape
 
     def set_input_batch(self, data_batch):
-        if data_batch.shape[1:] != self.shape:
-            raise ValueError('data shape {} != layer shape {}'.format(data_batch.shape[1:], self.shape))
+        input_view = self.neurons.nrn.vars['input'].view
 
-        self.neurons.set_input_batch(data_batch)
+        # Add batch dimension if missing
+        if len(input_view.shape) == 1:
+            input_view = input_view.reshape(1, -1)
+
+        # Check batch dimension
+        if data_batch.shape[0] != input_view.shape[0]:
+            raise ValueError('data batch {} != input batch {}'.format(data_batch.shape[0], input_view.shape[0]))
+
+        # Check input dimensions
+        if data_batch.shape[1:] != self.shape:
+            raise ValueError('data shape {} != input shape {}'.format(data_batch.shape[1:], self.shape))
+
+        input_view[:] = data_batch.reshape(input_view.shape[0], -1)
+        self.neurons.nrn.push_state_to_device()
