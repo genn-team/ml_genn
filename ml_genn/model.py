@@ -185,6 +185,7 @@ class Model(object):
         progress = tqdm(total=n_samples)
         for batch_start in range(0, n_samples, self.g_model.batch_size):
             batch_end = min(batch_start + self.g_model.batch_size, n_samples)
+            batch_n = batch_end - batch_start
             batch_data = [x[batch_start:batch_end] for x in data]
             batch_labels = [y[batch_start:batch_end] for y in labels]
             save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
@@ -212,7 +213,7 @@ class Model(object):
             for output_i in range(len(self.outputs)):
                 nrn = self.outputs[output_i].neurons.nrn
                 nrn.pull_var_from_device('nSpk')
-                output_view = nrn.vars['nSpk'].view
+                output_view = nrn.vars['nSpk'].view[:batch_n]
                 if len(output_view.shape) == 1:
                     output_view = output_view.reshape(1, -1)
                 predictions = output_view.argmax(axis=1)
@@ -220,7 +221,7 @@ class Model(object):
                 accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
 
             progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
-            progress.update(batch_end - batch_start)
+            progress.update(batch_n)
 
         progress.close()
 

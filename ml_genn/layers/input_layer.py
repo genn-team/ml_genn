@@ -19,12 +19,12 @@ class InputLayer(BaseLayer):
             input_view = input_view.reshape(1, -1)
 
         # Check batch dimension
-        if data_batch.shape[0] != input_view.shape[0]:
-            raise ValueError('data batch {} != input batch {}'.format(data_batch.shape[0], input_view.shape[0]))
+        if data_batch.shape[0] > input_view.shape[0]:
+            raise ValueError('data batch {} > input batch {}'.format(data_batch.shape[0], input_view.shape[0]))
 
         # Check input dimensions
         if data_batch.shape[1:] != self.shape:
             raise ValueError('data shape {} != input shape {}'.format(data_batch.shape[1:], self.shape))
 
-        input_view[:] = data_batch.reshape(input_view.shape[0], -1)
+        input_view[:data_batch.shape[0]] = data_batch.reshape(data_batch.shape[0], -1)
         self.neurons.nrn.push_state_to_device()
