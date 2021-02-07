@@ -132,7 +132,7 @@ if __name__ == '__main__':
 
     # Create, normalise and evaluate ML GeNN model
     mlg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
-    mlg_model.compile(dt=args.dt, batch_size=args.batch_size, share_weights=args.share_weights, rng_seed=args.rng_seed)
+    mlg_model.compile(dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed)
 
     if args.norm_method == 'data-norm':
         norm = DataNorm([x_norm], tf_model)

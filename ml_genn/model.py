@@ -50,9 +50,7 @@ class Model(object):
         self.layers = []
         self.inputs = []
         self.outputs = []
-
         self.g_model = None
-        self.share_weights = None
 
 
     def set_network(self, inputs, outputs):
@@ -78,14 +76,13 @@ class Model(object):
             raise ValueError('output layers unreachable from input layers')
 
 
-    def compile(self, dt=1.0, batch_size=1, share_weights=False, rng_seed=0,
-                reuse_genn_model=False, kernel_profiling=False, **genn_kwargs):
+    def compile(self, dt=1.0, batch_size=1, rng_seed=0, reuse_genn_model=False,
+                kernel_profiling=False, **genn_kwargs):
         """Compile this ML GeNN model into a GeNN model
 
         Keyword args:
         dt                --  model integration time step (default: 1.0)
         batch_size        --  number of models to run concurrently (default: 1)
-        share_weights     --  share weights within model batch (default: False)
         rng_seed          --  GeNN RNG seed (default: 0, meaning choose a random seed)
         reuse_genn_model  --  Reuse existing compiled GeNN model (default: False)
         kernel_profiling  --  Build model with kernel profiling code (default: False)
@@ -95,7 +92,6 @@ class Model(object):
         self.g_model = GeNNModel('float', self.name, **genn_kwargs)
         self.g_model.dT = dt
         self.g_model.batch_size = batch_size
-        self.share_weights = share_weights
         self.g_model._model.set_seed(rng_seed)
         self.g_model.timing_enabled = kernel_profiling
 
