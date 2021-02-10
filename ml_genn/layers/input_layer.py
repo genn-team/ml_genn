@@ -27,4 +27,4 @@ class InputLayer(BaseLayer):
             raise ValueError('data shape {} != input shape {}'.format(data_batch.shape[1:], self.shape))
 
         input_view[:data_batch.shape[0]] = data_batch.reshape(data_batch.shape[0], -1)
-        self.neurons.nrn.push_state_to_device()
+        self.neurons.nrn.push_var_to_device('input')
