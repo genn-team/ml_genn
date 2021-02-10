@@ -20,7 +20,6 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--n-norm-samples', type=int, default=256)
 
     # evaluation options
-    parser.add_argument('--classify-time', type=float, default=500.0)
     parser.add_argument('--n-train-samples', type=int, default=None)
     parser.add_argument('--n-test-samples', type=int, default=None)
     parser.add_argument('--save-samples', type=int, default=[], nargs='+')

@@ -139,9 +139,9 @@ if __name__ == '__main__':
         norm.normalize(mlg_model)
     elif args.norm_method == 'spike-norm':
         norm = SpikeNorm([x_norm])
-        norm.normalize(mlg_model, args.classify_time)
+        norm.normalize(mlg_model, 2500)
 
-    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], args.classify_time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], 2500, save_samples=args.save_samples)
 
     # Report ML GeNN model results
     print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
