@@ -83,7 +83,7 @@ class Model(object):
         Keyword args:
         dt                --  model integration time step (default: 1.0)
         batch_size        --  number of models to run concurrently (default: 1)
-        rng_seed          --  GeNN RNG seed (default: 0, meaning choose a random seed)
+        rng_seed          --  GeNN RNG seed (default: 0, meaning seed will be randomised at runtime)
         reuse_genn_model  --  Reuse existing compiled GeNN model (default: False)
         kernel_profiling  --  Build model with kernel profiling code (default: False)
         """
