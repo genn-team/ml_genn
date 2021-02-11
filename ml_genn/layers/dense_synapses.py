@@ -22,11 +22,10 @@ class DenseSynapses(BaseSynapses):
 
         self.weights = np.empty((np.prod(source.shape), self.units), dtype=np.float64)
 
-    def compile(self, mlg_model, mlg_layer):
+    def compile(self, mlg_model, name):
         conn = 'DENSE_INDIVIDUALG'
         wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': self.weights.flatten()}
-        wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(DenseSynapses, self).compile(mlg_model, mlg_layer, conn, 0, wu_model, {},
-                                           wu_var, {}, {}, {}, 'DeltaCurr', {}, {}, None)
+        super(DenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+                                           {}, {}, 'DeltaCurr', {}, {}, None, {})

@@ -105,7 +105,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
         self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
 
-    def compile(self, mlg_model, mlg_layer):
+    def compile(self, mlg_model, name):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source.shape
@@ -133,5 +133,5 @@ class AvePool2DDenseSynapses(BaseSynapses):
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(mlg_model, mlg_layer, conn, 0, wu_model, {}, wu_var,
-                                                    wu_var_egp, {}, {}, 'DeltaCurr', {}, {}, None)
+        super(AvePool2DDenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+                                                    {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)

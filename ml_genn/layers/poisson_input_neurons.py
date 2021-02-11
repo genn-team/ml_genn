@@ -17,9 +17,11 @@ poisson_input_model = create_custom_neuron_class(
 class PoissonInputNeurons(InputNeurons):
 
     def __init__(self, signed_spikes=False):
-        model = poisson_input_model
-        params = {}
-        vars_init = {'input': 0.0}
-        global_params = {}
-        super(PoissonInputNeurons, self).__init__(model, params, vars_init, global_params)
+        super(PoissonInputNeurons, self).__init__()
         self.signed_spikes = signed_spikes
+
+    def compile(self, mlg_model, name, n):
+        model = poisson_input_model
+        vars = {'input': 0.0}
+
+        super(PoissonInputNeurons, self).compile(mlg_model, name, n, model, {}, vars, {})

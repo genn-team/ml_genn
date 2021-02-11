@@ -26,14 +26,18 @@ if_model = create_custom_neuron_class(
 class IFNeurons(Neurons):
 
     def __init__(self, threshold=1.0):
+        super(IFNeurons, self).__init__()
+        self.threshold = threshold
+
+    def compile(self, mlg_model, name, n):
         model = if_model
-        params = {}
-        vars_init = {'Vmem': 0.0, 'nSpk': 0}
-        global_params = {'Vthr': threshold}
-        super(IFNeurons, self).__init__(model, params, vars_init, global_params)
+        vars = {'Vmem': 0.0, 'nSpk': 0}
+        egp = {'Vthr': self.threshold}
+
+        super(IFNeurons, self).compile(mlg_model, name, n, model, {}, vars, egp)
 
     def set_threshold(self, threshold):
-        self.global_params['Vthr'] = threshold
+        self.threshold = threshold
 
         if self.nrn is not None:
             self.nrn.extra_global_params['Vthr'].view[:] = threshold

@@ -110,7 +110,7 @@ class Conv2DSynapses(BaseSynapses):
 
         self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
 
-    def compile(self, mlg_model, mlg_layer):
+    def compile(self, mlg_model, name):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.source.shape
@@ -135,5 +135,5 @@ class Conv2DSynapses(BaseSynapses):
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten()}}
 
-        super(Conv2DSynapses, self).compile(mlg_model, mlg_layer, conn, 0, wu_model, {}, wu_var,
-                                            wu_var_egp, {}, {}, 'DeltaCurr', {}, {}, conn_init)
+        super(Conv2DSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+                                            {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)
