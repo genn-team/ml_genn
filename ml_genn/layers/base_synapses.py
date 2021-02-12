@@ -1,4 +1,5 @@
 from weakref import proxy
+from six import iteritems
 
 class BaseSynapses(object):
 
@@ -29,6 +30,6 @@ class BaseSynapses(object):
             name, conn, delay, self.source.neurons.nrn, self.target.neurons.nrn,
             wu_model, wu_params, wu_vars, wu_pre_vars, wu_post_vars,
             ps_model, ps_params, ps_vars, conn_init)
-        for wu_var, wu_var_egp in zip(wu_vars_egp.keys(), wu_vars_egp.values()):
+        for wu_var, wu_var_egp in iteritems(wu_vars_egp):
             for p, value in zip(wu_var_egp.keys(), wu_var_egp.values()):
                 self.syn.vars[wu_var].set_extra_global_init_param(p, value)
