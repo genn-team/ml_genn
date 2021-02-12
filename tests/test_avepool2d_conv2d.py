@@ -15,7 +15,7 @@ def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
     mlg_model.set_input_batch([x])
     mlg_model.step_time(2)
 
-    nrn = mlg_model.outputs[0].neurons.nrn[0]
+    nrn = mlg_model.outputs[0].neurons.nrn
     nrn.pull_var_from_device('Vmem')
     mlg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
 

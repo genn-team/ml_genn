@@ -12,7 +12,6 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--dt', type=float, default=1.0)
     parser.add_argument('--rng-seed', type=int, default=0)
     parser.add_argument('--batch-size', type=int, default=1)
-    parser.add_argument('--share-weights', action='store_true')
     parser.add_argument('--input-type', default='poisson', choices=[i.value for i in InputType])
     parser.add_argument('--connectivity-type', default='procedural', choices=[i.value for i in ConnectivityType])
 
@@ -21,7 +20,6 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--n-norm-samples', type=int, default=256)
 
     # evaluation options
-    parser.add_argument('--classify-time', type=float, default=500.0)
     parser.add_argument('--n-train-samples', type=int, default=None)
     parser.add_argument('--n-test-samples', type=int, default=None)
     parser.add_argument('--save-samples', type=int, default=[], nargs='+')

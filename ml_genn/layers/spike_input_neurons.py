@@ -1,10 +1,10 @@
 from pygenn.genn_model import create_custom_neuron_class
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from ml_genn.layers.input_neurons import InputNeurons
 
 spike_input_model = create_custom_neuron_class(
     'spike_input',
-    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY)],
+    var_name_types=[('input', 'scalar', VarAccess_READ_ONLY_DUPLICATE)],
     sim_code='''
     const bool spike = $(input) != 0.0;
     ''',
@@ -17,9 +17,11 @@ spike_input_model = create_custom_neuron_class(
 class SpikeInputNeurons(InputNeurons):
 
     def __init__(self, signed_spikes=False):
-        model = spike_input_model
-        params = {}
-        vars_init = {'input': 0.0}
-        global_params = {}
-        super(SpikeInputNeurons, self).__init__(model, params, vars_init, global_params)
+        super(SpikeInputNeurons, self).__init__()
         self.signed_spikes = signed_spikes
+
+    def compile(self, mlg_model, name, n):
+        model = spike_input_model
+        vars = {'input': 0.0}
+
+        super(SpikeInputNeurons, self).compile(mlg_model, name, n, model, {}, vars, {})

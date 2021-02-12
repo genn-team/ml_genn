@@ -50,10 +50,7 @@ class Model(object):
         self.layers = []
         self.inputs = []
         self.outputs = []
-
         self.g_model = None
-        self.batch_size = None
-        self.share_weights = None
 
 
     def set_network(self, inputs, outputs):
@@ -79,25 +76,24 @@ class Model(object):
             raise ValueError('output layers unreachable from input layers')
 
 
-    def compile(self, dt=1.0, rng_seed=0, batch_size=1, share_weights=False, reuse_genn_model=False, kernel_profiling=False, **genn_kwargs):
+    def compile(self, dt=1.0, batch_size=1, rng_seed=0, reuse_genn_model=False,
+                kernel_profiling=False, **genn_kwargs):
         """Compile this ML GeNN model into a GeNN model
 
         Keyword args:
         dt                --  model integration time step (default: 1.0)
-        rng_seed          --  GeNN RNG seed (default: 0, meaning choose a random seed)
         batch_size        --  number of models to run concurrently (default: 1)
-        share_weights     --  share weights within model batch (default: False)
+        rng_seed          --  GeNN RNG seed (default: 0, meaning seed will be randomised at runtime)
         reuse_genn_model  --  Reuse existing compiled GeNN model (default: False)
-        kernel_profiling     --  Should model be built with kernel profiling code (default: False)
+        kernel_profiling  --  Build model with kernel profiling code (default: False)
         """
 
         # Define GeNN model
         self.g_model = GeNNModel('float', self.name, **genn_kwargs)
-        self.g_model.timing_enabled = kernel_profiling
         self.g_model.dT = dt
+        self.g_model.batch_size = batch_size
         self.g_model._model.set_seed(rng_seed)
-        self.batch_size = batch_size
-        self.share_weights = share_weights
+        self.g_model.timing_enabled = kernel_profiling
 
         # Prepare each layer
         for layer in self.layers:
@@ -116,7 +112,7 @@ class Model(object):
 
 
     def set_input_batch(self, data_batch):
-        """Set model input with a new batch of samples
+        """Set model input with a new batch of data
 
         Args:
         data_batch  --  list of data batches for each input layer
@@ -154,7 +150,7 @@ class Model(object):
         Args:
         data          --  list of data for each input layer
         labels        --  list of labels for each output layer
-        time          --  sample present time (msec)
+        time          --  sample presentation time (msec)
 
         Keyword args:
         save_samples  --  list of sample indices to save spikes for (default: [])
@@ -181,10 +177,11 @@ class Model(object):
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[]] * len(self.layers)] * len(save_samples)
 
-        # Process sample batches
+        # Process batches
         progress = tqdm(total=n_samples)
-        for batch_start in range(0, n_samples, self.batch_size):
-            batch_end = min(batch_start + self.batch_size, n_samples)
+        for batch_start in range(0, n_samples, self.g_model.batch_size):
+            batch_end = min(batch_start + self.g_model.batch_size, n_samples)
+            batch_n = batch_end - batch_start
             batch_data = [x[batch_start:batch_end] for x in data]
             batch_labels = [y[batch_start:batch_end] for y in labels]
             save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
@@ -204,22 +201,23 @@ class Model(object):
                     k = save_samples.index(i)
                     batch_i = i - batch_start
                     for l, layer in enumerate(self.layers):
-                        nrn = layer.neurons.nrn[batch_i]
+                        nrn = layer.neurons.nrn
                         nrn.pull_current_spikes_from_device()
-                        all_spikes[k][l].append(np.copy(nrn.current_spikes))
+                        all_spikes[k][l].append(np.copy(nrn.current_spikes[batch_i]))
 
             # Compute accuracy
             for output_i in range(len(self.outputs)):
-                for batch_i in range(batch_end - batch_start):
-                    nrn = self.outputs[output_i].neurons.nrn[batch_i]
-                    nrn.pull_var_from_device('nSpk')
-                    label = batch_labels[output_i][batch_i]
-                    n_correct[output_i] += nrn.vars['nSpk'].view.argmax() == label
-
+                nrn = self.outputs[output_i].neurons.nrn
+                nrn.pull_var_from_device('nSpk')
+                output_view = nrn.vars['nSpk'].view[:batch_n]
+                if len(output_view.shape) == 1:
+                    output_view = output_view.reshape(1, -1)
+                predictions = output_view.argmax(axis=1)
+                n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
                 accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
 
             progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
-            progress.update(batch_end - batch_start)
+            progress.update(batch_n)
 
         progress.close()
 

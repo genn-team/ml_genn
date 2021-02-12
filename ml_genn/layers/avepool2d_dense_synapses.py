@@ -82,7 +82,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = source.neurons.shape
+        pool_ih, pool_iw, pool_ic = source.shape
         if self.pool_padding == PadMode.VALID:
             self.pool_output_shape = (
                 ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
@@ -98,23 +98,17 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
         output_shape = (self.units, )
 
-        if target.neurons.shape is None:
-            target.neurons.shape = output_shape
-        elif output_shape != target.neurons.shape:
+        if target.shape is None:
+            target.shape = output_shape
+        elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
         self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
 
-    def compile(self, mlg_model):
-
-        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
-                else 'DENSE_INDIVIDUALG')
-
-        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
-
+    def compile(self, mlg_model, name):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source.neurons.shape
+        pool_ih, pool_iw, pool_ic = self.source.shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -133,8 +127,11 @@ class AvePool2DDenseSynapses(BaseSynapses):
             'dense_units': self.units,
         })
 
+        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
+                else 'DENSE_INDIVIDUALG')
+        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(mlg_model, conn, 0, wu_model, {}, wu_var, wu_var_egp,
-                                                    {}, {}, 'DeltaCurr', {}, {}, None)
+        super(AvePool2DDenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+                                                    {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)

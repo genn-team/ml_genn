@@ -26,8 +26,9 @@ class SpikeNorm(object):
 
             # For each sample presentation
             progress = tqdm(total=n_samples)
-            for batch_start in range(0, n_samples, mlg_model.batch_size):
-                batch_end = min(batch_start + mlg_model.batch_size, n_samples)
+            for batch_start in range(0, n_samples, mlg_model.g_model.batch_size):
+                batch_end = min(batch_start + mlg_model.g_model.batch_size, n_samples)
+                batch_n = batch_end - batch_start
                 batch_data = [x[batch_start:batch_end] for x in self.norm_data]
 
                 # Set new input
@@ -41,14 +42,14 @@ class SpikeNorm(object):
                     mlg_model.step_time()
 
                     # Get maximum activation
-                    for batch_i in range(batch_end - batch_start):
-                        nrn = layer.neurons.nrn[batch_i]
-                        nrn.pull_var_from_device('Vmem')
-                        threshold = np.max([threshold, nrn.vars['Vmem'].view.max()])
-                        nrn.vars['Vmem'].view[:] = np.float64(0.0)
-                        nrn.push_var_to_device('Vmem')
+                    nrn = layer.neurons.nrn
+                    nrn.pull_var_from_device('Vmem')
+                    output_view = nrn.vars['Vmem'].view[:batch_n]
+                    threshold = np.max([threshold, output_view.max()])
+                    output_view[:] = np.float64(0.0)
+                    nrn.push_var_to_device('Vmem')
 
-                progress.update(batch_end - batch_start)
+                progress.update(batch_n)
 
             progress.close()
 

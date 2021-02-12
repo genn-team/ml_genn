@@ -132,16 +132,16 @@ if __name__ == '__main__':
 
     # Create, normalise and evaluate ML GeNN model
     mlg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
-    mlg_model.compile(dt=args.dt, rng_seed=args.rng_seed, batch_size=args.batch_size, share_weights=args.share_weights)
+    mlg_model.compile(dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed)
 
     if args.norm_method == 'data-norm':
         norm = DataNorm([x_norm], tf_model)
         norm.normalize(mlg_model)
     elif args.norm_method == 'spike-norm':
         norm = SpikeNorm([x_norm])
-        norm.normalize(mlg_model, args.classify_time)
+        norm.normalize(mlg_model, 2500)
 
-    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], args.classify_time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], 2500, save_samples=args.save_samples)
 
     # Report ML GeNN model results
     print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
