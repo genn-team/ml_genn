@@ -100,7 +100,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 		// Set up new virtualenv
 		echo "Creating virtualenv";
                 sh "rm -rf ${WORKSPACE}/venv";
-                sh "python3 -m venv ${WORKSPACE}/venv";
+                sh "${env.PYTHON} -m venv ${WORKSPACE}/venv";
 		sh """
                     . ${WORKSPACE}/venv/bin/activate
                     pip install -U pip
@@ -134,8 +134,8 @@ for (b = 0; b < builderNodes.size(); b++) {
                     sh "rm -f ${messages_PyGeNN}";
 		    def commands_PyGeNN = """
                         . ${WORKSPACE}/venv/bin/activate
-                        python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
-                        python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
+                        ${env.PYTHON} setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
+                        ${env.PYTHON} setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
                     """;
 		    def status_PyGeNN = sh script:commands_PyGeNN, returnStatus:true;
 		    archive messages_PyGeNN;
