@@ -44,7 +44,10 @@ class SpikeNorm(object):
                     # Get maximum activation
                     nrn = layer.neurons.nrn
                     nrn.pull_var_from_device('Vmem')
-                    output_view = nrn.vars['Vmem'].view[:batch_n]
+                    if nrn.vars['Vmem'].view.ndim == 1:
+                        output_view = nrn.vars['Vmem'].view[np.newaxis]
+                    else:
+                        output_view = nrn.vars['Vmem'].view[:batch_n]
                     threshold = np.max([threshold, output_view.max()])
                     output_view[:] = np.float64(0.0)
                     nrn.push_var_to_device('Vmem')
