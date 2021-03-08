@@ -209,9 +209,10 @@ class Model(object):
             for output_i in range(len(self.outputs)):
                 nrn = self.outputs[output_i].neurons.nrn
                 nrn.pull_var_from_device('nSpk')
-                output_view = nrn.vars['nSpk'].view[:batch_n]
-                if len(output_view.shape) == 1:
-                    output_view = output_view.reshape(1, -1)
+                if nrn.vars['nSpk'].view.ndim == 1:
+                    output_view = nrn.vars['nSpk'].view[np.newaxis]
+                else:
+                    output_view = nrn.vars['nSpk'].view[:batch_n]
                 predictions = output_view.argmax(axis=1)
                 n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
                 accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
