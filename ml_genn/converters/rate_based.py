@@ -28,5 +28,5 @@ class RateBased(object):
         elif self.input_type == InputType.IF:
             return IFInputNeurons()
             
-    def create_neurons(self, tf_layer):
+    def create_neurons(self, tf_layer, layer_idx):
         return IFNeurons(threshold=1.0)
