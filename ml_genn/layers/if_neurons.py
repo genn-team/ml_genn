@@ -1,4 +1,7 @@
+import numpy as np
+
 from pygenn.genn_model import create_custom_neuron_class
+
 from ml_genn.layers.neurons import Neurons
 
 if_model = create_custom_neuron_class(
@@ -41,3 +44,11 @@ class IFNeurons(Neurons):
 
         if self.nrn is not None:
             self.nrn.extra_global_params['Vthr'].view[:] = threshold
+    
+    def get_predictions(self):
+        self.nrn.pull_var_from_device('nSpk')
+        if self.nrn.vars['nSpk'].view.ndim == 1:
+            output_view = self.nrn.vars['nSpk'].view[np.newaxis]
+        else:
+            output_view = self.nrn.vars['nSpk'].view[:batch_n]
+        return output_view.argmax(axis=1)
