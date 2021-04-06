@@ -31,13 +31,14 @@ fs_relu_input_model = create_custom_neuron_class(
 
 class FSReluInputNeurons(InputNeurons):
     def __init__(self, K=10, alpha=25):
+        super(FSReluInputNeurons, self).__init__()
         self.K = K
         self.alpha = alpha
 
     def compile(self, mlg_model, name, n):
-        model = fs_input_model
+        model = fs_relu_input_model
         params = {'K' : self.K, 'alpha': self.alpha}
         vars = {'input': 0.0, 'Vmem': 0.0}
 
-        super(FSInputNeurons, self).compile(mlg_model, name, n, model,
-                                            params, vars, {})
+        super(FSReluInputNeurons, self).compile(mlg_model, name, n, model,
+                                                params, vars, {})

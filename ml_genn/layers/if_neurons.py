@@ -1,7 +1,5 @@
 import numpy as np
-
 from pygenn.genn_model import create_custom_neuron_class
-
 from ml_genn.layers.neurons import Neurons
 
 if_model = create_custom_neuron_class(

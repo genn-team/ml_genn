@@ -1,3 +1,4 @@
+import numpy as np
 from pygenn.genn_model import create_dpf_class, create_custom_neuron_class
 from ml_genn.layers.neurons import Neurons
 
@@ -76,11 +77,20 @@ class FSReluNeurons(Neurons):
         model = (fs_relu_first_phase_model if self.first_phase
                  else fs_relu_second_phase_model)
         params = {'K': self.K, 'alpha': self.alpha}
-        vars = {'Vmem': 0.0, 'nSpk': 0}
+        vars = {'Fx': 0.0, 'Vmem': 0}
 
-        super(IFNeurons, self).compile(mlg_model, name, n, model, 
-                                       params, vars, {})
+        super(FSReluNeurons, self).compile(mlg_model, name, n, model,
+                                           params, vars, {})
 
     def set_threshold(self, threshold):
         raise NotImplementedError('Few Spike neurons do not have '
                                   'overridable thresholds')
+
+    def get_predictions(self):
+        self.nrn.pull_var_from_device('Fx')
+        if self.nrn.vars['Fx'].view.ndim == 1:
+            output_view = self.nrn.vars['Fx'].view[np.newaxis]
+        else:
+            output_view = self.nrn.vars['Fx'].view[:batch_n]
+
+        return output_view.argmax(axis=1)

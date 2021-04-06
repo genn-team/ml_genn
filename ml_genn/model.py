@@ -280,7 +280,6 @@ class Model(object):
 
         # For each TensorFlow model layer:
         for tf_layer in tf_model.layers:
-                             
             # === Flatten Layers ===
             if isinstance(tf_layer, tf.keras.layers.Flatten):
                 print('ignoring Flatten layer <{}>'.format(tf_layer.name))
