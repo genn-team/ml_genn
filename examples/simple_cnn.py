@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import models, layers, datasets
 from ml_genn import Model
-from ml_genn.layers import InputType
+from ml_genn.converters import RateBased
 from ml_genn.norm import DataNorm, SpikeNorm
 from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate ML GeNN model
-    mlg_model = Model.convert_tf_model(tf_model, input_type=args.input_type, connectivity_type=args.connectivity_type)
+    mlg_model = Model.convert_tf_model(tf_model, converter=RateBased(args.input_type), connectivity_type=args.connectivity_type)
     mlg_model.compile(dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed)
 
     if args.norm_method == 'data-norm':

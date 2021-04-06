@@ -24,16 +24,13 @@ import tensorflow as tf
 from tqdm import tqdm
 from pygenn.genn_model import GeNNModel
 
-from ml_genn.layers import InputType
+from ml_genn.converters import RateBased
 from ml_genn.layers import InputLayer
 from ml_genn.layers import Dense
 from ml_genn.layers import AvePool2DDense
 from ml_genn.layers import Conv2D
 from ml_genn.layers import AvePool2DConv2D
-from ml_genn.layers import IFNeurons
-from ml_genn.layers import SpikeInputNeurons
-from ml_genn.layers import PoissonInputNeurons
-from ml_genn.layers import IFInputNeurons
+
 
 
 class Model(object):
@@ -248,7 +245,8 @@ class Model(object):
 
 
     @staticmethod
-    def convert_tf_model(tf_model, input_type='poisson', connectivity_type='procedural'):
+    def convert_tf_model(tf_model, converter=RateBased('poisson'),
+                         connectivity_type='procedural'):
         """Create a ML GeNN model from a TensorFlow model
 
         Args:
@@ -274,27 +272,14 @@ class Model(object):
             if not isinstance(tf_layer, supported_tf_layers):
                 raise NotImplementedError('{} layers not supported'.format(type(tf_layer)))
             elif isinstance(tf_layer, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
-                if tf_layer.activation != tf.keras.activations.relu:
-                    raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
-                if tf_layer.use_bias == True:
-                    raise NotImplementedError('bias tensors not supported')
+                converter.validate_tf_layer(tf_layer)
 
         model = Model(name=tf_model.name)
 
         # Add input layer
-        input_type = InputType(input_type)
-        if input_type == InputType.SPIKE:
-            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons())
-        if input_type == InputType.SPIKE_SIGNED:
-            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons(signed_spikes=True))
-        elif input_type == InputType.POISSON:
-            layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons())
-        elif input_type == InputType.POISSON_SIGNED:
-            layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons(signed_spikes=True))
-        elif input_type == InputType.IF:
-            layer = InputLayer('input', tf_model.input_shape[1:], IFInputNeurons())
+        layer = InputLayer('input', tf_model.input_shape[1:], 
+                           converter.create_input_neurons())
         model.inputs.append(layer)
-
         model.layers.append(layer)
         previous_layer = layer
         pool_layer = None
@@ -315,7 +300,7 @@ class Model(object):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
                     layer = Dense(name=tf_layer.name, units=tf_layer.units,
-                                  neurons=IFNeurons(threshold=1.0))
+                                  neurons=converter.create_neurons(tf_layer))
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DDense(
@@ -324,7 +309,7 @@ class Model(object):
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=IFNeurons(threshold=1.0))
+                        neurons=converter.create_neurons(tf_layer))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -343,7 +328,7 @@ class Model(object):
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=IFNeurons(threshold=1.0))
+                        neurons=converter.create_neurons(tf_layer))
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DConv2D(
@@ -351,7 +336,8 @@ class Model(object):
                         pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
-                        connectivity_type=connectivity_type, neurons=IFNeurons(threshold=1.0))
+                        connectivity_type=connectivity_type, 
+                        neurons=converter.create_neurons(tf_layer))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
