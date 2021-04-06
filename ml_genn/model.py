@@ -175,7 +175,7 @@ class Model(object):
 
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
-        all_spikes = [[[]] * len(self.layers)] * len(save_samples)
+        all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
 
         # Process batches
         progress = tqdm(total=n_samples)
@@ -203,7 +203,9 @@ class Model(object):
                     for l, layer in enumerate(self.layers):
                         nrn = layer.neurons.nrn
                         nrn.pull_current_spikes_from_device()
-                        all_spikes[k][l].append(np.copy(nrn.current_spikes[batch_i]))
+                        all_spikes[k][l].append(np.copy(
+                            nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
+                            else nrn.current_spikes))
 
             # Compute accuracy
             for output_i in range(len(self.outputs)):
@@ -223,8 +225,8 @@ class Model(object):
         progress.close()
 
         # Create spike index and time lists
-        spike_i = [[[]] * len(self.layers)] * len(save_samples)
-        spike_t = [[[]] * len(self.layers)] * len(save_samples)
+        spike_i = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
+        spike_t = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
         for i in range(len(save_samples)):
             for j in range(len(self.layers)):
                 spikes = all_spikes[i][j]
