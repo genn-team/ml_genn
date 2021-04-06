@@ -58,6 +58,5 @@ if __name__ == '__main__':
     # Report ML GeNN model results
     print('Accuracy of SimpleCNN GeNN model: {}%'.format(acc[0]))
     if args.plot:
-        names = ['input_nrn'] + [name + '_nrn' for name in mlg_model.layer_names]
-        neurons = [mlg_model.g_model.neuron_populations[name] for name in names]
+        neurons = [l.neurons.nrn for l in mlg_model.layers]
         raster_plot(spk_i, spk_t, neurons)
