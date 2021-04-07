@@ -16,6 +16,7 @@ fs_relu_first_phase_model = create_custom_neuron_class(
     const int phaseTimestep = pipeTimestep % kInt;
 
     // Calculate magic constants. For RelU hT=h=T
+    // **NOTE** d uses last timestep as that was when spike was SENT
     const scalar hT = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
     const scalar d = $(scale) * (1 << ((kInt - phaseTimestep) % kInt));
     
@@ -31,7 +32,7 @@ fs_relu_first_phase_model = create_custom_neuron_class(
     
     ''',
     threshold_condition_code='''
-    pipeTimestep < kInt && $(Vmem) > hT
+    pipeTimestep < kInt && $(Vmem) >= hT
     ''',
     reset_code='''
     $(Vmem) -= hT;
@@ -52,6 +53,7 @@ fs_relu_second_phase_model = create_custom_neuron_class(
     const int phaseTimestep = pipeTimestep % kInt;
 
     // Calculate magic constants. For RelU hT=h=T
+    // **NOTE** d uses last timestep as that was when spike was SENT
     const scalar hT = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
     const scalar d = $(scale) * (1 << ((kInt - phaseTimestep) % kInt));
     
@@ -68,7 +70,7 @@ fs_relu_second_phase_model = create_custom_neuron_class(
     }
     ''',
     threshold_condition_code='''
-    pipeTimestep >= kInt && $(Vmem) > hT
+    pipeTimestep >= kInt && $(Vmem) >= hT
     ''',
     reset_code='''
     $(Vmem) -= hT;

@@ -22,7 +22,7 @@ fs_relu_input_model = create_custom_neuron_class(
     const scalar hT = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
     ''',
     threshold_condition_code='''
-    pipeTimestep < kInt && $(Vmem) > hT
+    pipeTimestep < kInt && $(Vmem) >= hT
     ''',
     reset_code='''
     $(Vmem) -= hT;
