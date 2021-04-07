@@ -4,7 +4,7 @@ from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
 from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from ml_genn import Model
-from ml_genn.converters import RateBased
+from ml_genn.converters import RateBased, FewSpike
 from ml_genn.norm import DataNorm, SpikeNorm
 from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
@@ -131,20 +131,23 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate ML GeNN model
-    mlg_model = Model.convert_tf_model(tf_model, converter=RateBased(args.input_type), connectivity_type=args.connectivity_type)
+    converter = FewSpike() if args.few_spike else RateBased(args.input_type)
+    mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
     mlg_model.compile(dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed)
 
-    if args.norm_method == 'data-norm':
-        norm = DataNorm([x_norm], tf_model)
-        norm.normalize(mlg_model)
-    elif args.norm_method == 'spike-norm':
-        norm = SpikeNorm([x_norm])
-        norm.normalize(mlg_model, 2500)
+    if not args.few_spike:
+        if args.norm_method == 'data-norm':
+            norm = DataNorm([x_norm], tf_model)
+            norm.normalize(mlg_model)
+        elif args.norm_method == 'spike-norm':
+            norm = SpikeNorm([x_norm])
+            norm.normalize(mlg_model, 2500)
 
-    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], 2500, save_samples=args.save_samples)
+    time = 20 if args.few_spike else 2500
+    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
 
     # Report ML GeNN model results
     print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
     if args.plot:
         neurons = [l.neurons.nrn for l in mlg_model.layers]
-        raster_plot(spk_i, spk_t, neurons)
+        raster_plot(spk_i, spk_t, neurons, time=time)
