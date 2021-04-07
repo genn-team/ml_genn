@@ -174,12 +174,9 @@ class Model(object):
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
         
-        # **HACK** the pipeline depth needs to be figured out automatically 
-        # from the number of layers and this logic should be disabled for rate-based
-        PIPELINE_DEPTH = 2
-        
         # Pad number of samples so pipeline can be flushed
-        padded_n_samples = n_samples + (PIPELINE_DEPTH * self.g_model.batch_size)
+        pipeline_depth = self.calc_pipeline_depth()
+        padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
         
         # Process batches
         progress = tqdm(total=padded_n_samples)
@@ -214,8 +211,8 @@ class Model(object):
                             else nrn.current_spikes))
 
             # If first input in batch has passed through
-            if batch_start >= (PIPELINE_DEPTH * self.g_model.batch_size):
-                pipe_batch_start = batch_start - (PIPELINE_DEPTH * self.g_model.batch_size)
+            if batch_start >= (pipeline_depth * self.g_model.batch_size):
+                pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
                 pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
                 batch_labels = [y[pipe_batch_start:pipe_batch_end] for y in labels]
                 
@@ -243,7 +240,12 @@ class Model(object):
 
         return accuracy, spike_i, spike_t
 
-
+    def calc_pipeline_depth(self):
+        """Calculate depth of model's pipeline"""
+        # **TODO** this only works for sequential models, branches need to be identified etc with e.g. ResNets
+        return int(sum(l.neurons.pipeline_stages for l in self.layers 
+                       if hasattr(l.neurons, "pipeline_stages")))
+        
     def get_kernel_times(self):
         """Get total kernel run times"""
 

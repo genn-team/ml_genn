@@ -76,6 +76,8 @@ fs_relu_second_phase_model = create_custom_neuron_class(
     is_auto_refractory_required=False)
     
 class FSReluNeurons(Neurons):
+    pipeline_stages = 0.5
+
     def __init__(self, first_phase, K=10, alpha=25):
         super(FSReluNeurons, self).__init__()
         self.first_phase = first_phase
