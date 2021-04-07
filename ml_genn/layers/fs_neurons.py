@@ -13,9 +13,10 @@ fs_relu_first_phase_model = create_custom_neuron_class(
 
     // Get timestep within presentation
     const int pipeTimestep = (int)($(t) / DT) % (2 * kInt);
-
+    const int phaseTimestep = (pipeTimestep >= kInt) ? (pipeTimestep - kInt) : pipeTimestep;
+    
     // Calculate magic constant which, for RelU C=T=h=d
-    const scalar C = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
+    const scalar C = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
 
     // If this is the first timestep, apply input
     if(pipeTimestep == 0) {
@@ -45,9 +46,10 @@ fs_relu_second_phase_model = create_custom_neuron_class(
 
     // Get timestep within presentation
     const int pipeTimestep = (int)($(t) / DT) % (2 * kInt);
+    const int phaseTimestep = (pipeTimestep >= kInt) ? (pipeTimestep - kInt) : pipeTimestep;
 
     // Calculate magic constant which, for RelU C=T=h=d
-    const scalar C = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
+    const scalar C = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
 
     // If this is the first timestep, apply input
     if(pipeTimestep == kInt) {
