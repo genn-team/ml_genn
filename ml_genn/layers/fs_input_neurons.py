@@ -12,20 +12,20 @@ fs_relu_input_model = create_custom_neuron_class(
     const int kInt = (int)$(K);
     
     // Get timestep within presentation
-    const int pipeTimestep = (int)($(t) / DT) % (2 * kInt);
+    const int pipeTimestep = (int)($(t) / DT);
 
     // If this is the first timestep, apply input
     if(pipeTimestep == 0) {
         $(Vmem) = $(input);
     }
     
-    const scalar C = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
+    const scalar hT = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
     ''',
     threshold_condition_code='''
-    pipeTimestep < kInt && $(Vmem) > C
+    pipeTimestep < kInt && $(Vmem) > hT
     ''',
     reset_code='''
-    $(Vmem) -= C;
+    $(Vmem) -= hT;
     ''',
     is_auto_refractory_required=False)
 

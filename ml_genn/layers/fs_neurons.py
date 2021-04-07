@@ -12,26 +12,29 @@ fs_relu_first_phase_model = create_custom_neuron_class(
     const int kInt = (int)$(K);
 
     // Get timestep within presentation
-    const int pipeTimestep = (int)($(t) / DT) % (2 * kInt);
-    const int phaseTimestep = (pipeTimestep >= kInt) ? (pipeTimestep - kInt) : pipeTimestep;
+    const int pipeTimestep = (int)($(t) / DT);
+    const int phaseTimestep = pipeTimestep % kInt;
+
+    // Calculate magic constants. For RelU hT=h=T
+    const scalar hT = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
+    const scalar d = $(scale) * (1 << ((kInt - phaseTimestep) % kInt));
     
-    // Calculate magic constant which, for RelU C=T=h=d
-    const scalar C = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
+    // Accumulate input
+    // **NOTE** needs to be before applying input as spikes from LAST timestep must be processed
+    $(Fx) += ($(Isyn) * d);
 
     // If this is the first timestep, apply input
     if(pipeTimestep == 0) {
         $(Vmem) = $(Fx);
         $(Fx) = 0.0;
     }
-
-    // Accumulate input
-    $(Fx) += ($(Isyn) * C);
+    
     ''',
     threshold_condition_code='''
-    pipeTimestep < kInt && $(Vmem) > C
+    pipeTimestep < kInt && $(Vmem) > hT
     ''',
     reset_code='''
-    $(Vmem) -= C;
+    $(Vmem) -= hT;
     ''',
     is_auto_refractory_required=False)
 
@@ -45,26 +48,30 @@ fs_relu_second_phase_model = create_custom_neuron_class(
     const int kInt = (int)$(K);
 
     // Get timestep within presentation
-    const int pipeTimestep = (int)($(t) / DT) % (2 * kInt);
-    const int phaseTimestep = (pipeTimestep >= kInt) ? (pipeTimestep - kInt) : pipeTimestep;
+    const int pipeTimestep = (int)($(t) / DT);
+    const int phaseTimestep = pipeTimestep % kInt;
 
-    // Calculate magic constant which, for RelU C=T=h=d
-    const scalar C = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
+    // Calculate magic constants. For RelU hT=h=T
+    const scalar hT = $(scale) * (1 << (kInt - (1 + phaseTimestep)));
+    const scalar d = $(scale) * (1 << ((kInt - phaseTimestep) % kInt));
+    
+    // Accumulate input
+    // **NOTE** needs to be before applying input as spikes from LAST timestep must be processed
+    $(Fx) += ($(Isyn) * d);
 
     // If this is the first timestep, apply input
     if(pipeTimestep == kInt) {
         $(Vmem) = $(Fx);
+    }
+    else if(pipeTimestep == 0) {
         $(Fx) = 0.0;
     }
-
-    // Accumulate input
-    $(Fx) += ($(Isyn) * C);
     ''',
     threshold_condition_code='''
-    pipeTimestep >= kInt && $(Vmem) > C
+    pipeTimestep >= kInt && $(Vmem) > hT
     ''',
     reset_code='''
-    $(Vmem) -= C;
+    $(Vmem) -= hT;
     ''',
     is_auto_refractory_required=False)
     
@@ -94,5 +101,4 @@ class FSReluNeurons(Neurons):
             output_view = self.nrn.vars['Fx'].view[np.newaxis]
         else:
             output_view = self.nrn.vars['Fx'].view[:batch_n]
-
         return output_view.argmax(axis=1)
