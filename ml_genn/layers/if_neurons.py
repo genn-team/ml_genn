@@ -43,7 +43,7 @@ class IFNeurons(Neurons):
         if self.nrn is not None:
             self.nrn.extra_global_params['Vthr'].view[:] = threshold
     
-    def get_predictions(self):
+    def get_predictions(self, batch_n):
         self.nrn.pull_var_from_device('nSpk')
         if self.nrn.vars['nSpk'].view.ndim == 1:
             output_view = self.nrn.vars['nSpk'].view[np.newaxis]

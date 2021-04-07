@@ -173,23 +173,32 @@ class Model(object):
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
-
+        
+        # **HACK** the pipeline depth needs to be figured out automatically 
+        # from the number of layers and this logic should be disabled for rate-based
+        PIPELINE_DEPTH = 2
+        
+        # Pad number of samples so pipeline can be flushed
+        padded_n_samples = n_samples + (PIPELINE_DEPTH * self.g_model.batch_size)
+        
         # Process batches
-        progress = tqdm(total=n_samples)
-        for batch_start in range(0, n_samples, self.g_model.batch_size):
-            batch_end = min(batch_start + self.g_model.batch_size, n_samples)
-            batch_n = batch_end - batch_start
-            batch_data = [x[batch_start:batch_end] for x in data]
-            batch_labels = [y[batch_start:batch_end] for y in labels]
-            save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+        progress = tqdm(total=padded_n_samples)
+        for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
+            # If any elements of this batch have data (rather than being entirely pipeline padding)
+            if batch_start < n_samples:
+                batch_end = min(batch_start + self.g_model.batch_size, n_samples)
+                batch_data = [x[batch_start:batch_end] for x in data]
+                
+                save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
 
-            # Set new input
+                # Set new input
+                self.set_input_batch(batch_data)
+
+            # Reset timesteps etc
             self.reset()
-            self.set_input_batch(batch_data)
 
             # Main simulation loop
             while self.g_model.t < time:
-
                 # Step time
                 self.step_time()
 
@@ -204,14 +213,22 @@ class Model(object):
                             nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
                             else nrn.current_spikes))
 
-            # Compute accuracy
-            for output_i in range(len(self.outputs)):
-                predictions = self.outputs[output_i].neurons.get_predictions()
-                n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
-                accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
+            # If first input in batch has passed through
+            if batch_start >= (PIPELINE_DEPTH * self.g_model.batch_size):
+                pipe_batch_start = batch_start - (PIPELINE_DEPTH * self.g_model.batch_size)
+                pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
+                batch_labels = [y[pipe_batch_start:pipe_batch_end] for y in labels]
+                
+                # Compute accuracy
+                for output_i in range(len(self.outputs)):
+                    predictions = self.outputs[output_i].neurons.get_predictions(
+                        pipe_batch_end - pipe_batch_start)
+                    n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
+                    accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
 
-            progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
-            progress.update(batch_n)
+                progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
+            progress.update(min(batch_start + self.g_model.batch_size, 
+                                padded_n_samples) - batch_start)
 
         progress.close()
 

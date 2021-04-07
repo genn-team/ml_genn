@@ -95,7 +95,7 @@ class FSReluNeurons(Neurons):
         raise NotImplementedError('Few Spike neurons do not have '
                                   'overridable thresholds')
 
-    def get_predictions(self):
+    def get_predictions(self, batch_n):
         self.nrn.pull_var_from_device('Fx')
         if self.nrn.vars['Fx'].view.ndim == 1:
             output_view = self.nrn.vars['Fx'].view[np.newaxis]
