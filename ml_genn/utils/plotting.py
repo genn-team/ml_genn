@@ -15,6 +15,6 @@ def raster_plot(spike_ids, spike_times, neuron_pops, time=None):
 
 def trim_ax(ax, N):
     ax = ax.flat
-    for ax in ax[N:]:
-        ax.remove()
+    for a in ax[N:]:
+        a.remove()
     return ax[:N]
