@@ -244,7 +244,7 @@ class Model(object):
         """Calculate depth of model's pipeline"""
         # **TODO** this only works for sequential models, branches need to be identified etc with e.g. ResNets
         return int(sum(l.neurons.pipeline_stages for l in self.layers 
-                       if hasattr(l.neurons, "pipeline_stages")))
+                       if hasattr(l.neurons, "pipeline_stages") and l not in self.outputs))
         
     def get_kernel_times(self):
         """Get total kernel run times"""
