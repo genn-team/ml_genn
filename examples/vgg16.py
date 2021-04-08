@@ -131,7 +131,7 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
 
     # Create, normalise and evaluate ML GeNN model
-    converter = FewSpike() if args.few_spike else RateBased(args.input_type)
+    converter = FewSpike(K=16) if args.few_spike else RateBased(args.input_type)
     mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
     mlg_model.compile(dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed)
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
             norm = SpikeNorm([x_norm])
             norm.normalize(mlg_model, 2500)
 
-    time = 20 if args.few_spike else 2500
+    time = 32 if args.few_spike else 2500
     acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
 
     # Report ML GeNN model results
