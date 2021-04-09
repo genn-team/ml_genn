@@ -176,11 +176,10 @@ class Model(object):
 
         # Pad number of samples so pipeline can be flushed
         pipeline_depth = self.calc_pipeline_depth()
-        print(pipeline_depth)
         padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
 
         # Process batches
-        progress = tqdm(total=padded_n_samples)
+        progress = tqdm(total=n_samples)
         for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
             # If any elements of this batch have data (rather than being entirely pipeline padding)
             if batch_start < n_samples:
@@ -222,11 +221,10 @@ class Model(object):
                     predictions = self.outputs[output_i].neurons.get_predictions(
                         pipe_batch_end - pipe_batch_start)
                     n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
-                    accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
+                    accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
 
                 progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
-            progress.update(min(batch_start + self.g_model.batch_size, 
-                                padded_n_samples) - batch_start)
+                progress.update(pipe_batch_end - pipe_batch_start)
 
         progress.close()
 
