@@ -27,6 +27,6 @@ class RateBased(object):
             return PoissonInputNeurons(signed_spikes=True)
         elif self.input_type == InputType.IF:
             return IFInputNeurons()
-            
-    def create_neurons(self, tf_layer, layer_idx):
+
+    def create_neurons(self, tf_layer):
         return IFNeurons(threshold=1.0)

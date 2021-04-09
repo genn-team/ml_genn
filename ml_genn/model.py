@@ -173,11 +173,12 @@ class Model(object):
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
-        
+
         # Pad number of samples so pipeline can be flushed
         pipeline_depth = self.calc_pipeline_depth()
+        print(pipeline_depth)
         padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
-        
+
         # Process batches
         progress = tqdm(total=padded_n_samples)
         for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
@@ -185,7 +186,7 @@ class Model(object):
             if batch_start < n_samples:
                 batch_end = min(batch_start + self.g_model.batch_size, n_samples)
                 batch_data = [x[batch_start:batch_end] for x in data]
-                
+
                 save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
 
                 # Set new input
@@ -215,7 +216,7 @@ class Model(object):
                 pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
                 pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
                 batch_labels = [y[pipe_batch_start:pipe_batch_end] for y in labels]
-                
+
                 # Compute accuracy
                 for output_i in range(len(self.outputs)):
                     predictions = self.outputs[output_i].neurons.get_predictions(
@@ -243,9 +244,10 @@ class Model(object):
     def calc_pipeline_depth(self):
         """Calculate depth of model's pipeline"""
         # **TODO** this only works for sequential models, branches need to be identified etc with e.g. ResNets
-        return int(sum(l.neurons.pipeline_stages for l in self.layers 
-                       if hasattr(l.neurons, "pipeline_stages") and l not in self.outputs))
-        
+        return int(sum(hasattr(l.neurons, "pipelined")
+                       for l in self.layers
+                       if l not in self.outputs))
+
     def get_kernel_times(self):
         """Get total kernel run times"""
 
@@ -314,8 +316,7 @@ class Model(object):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
                     layer = Dense(name=tf_layer.name, units=tf_layer.units,
-                                  neurons=converter.create_neurons(
-                                      tf_layer, len(model.layers)))
+                                  neurons=converter.create_neurons(tf_layer))
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DDense(
@@ -324,8 +325,7 @@ class Model(object):
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=converter.create_neurons(tf_layer, 
-                                                         len(model.layers)))
+                        neurons=converter.create_neurons(tf_layer))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -344,8 +344,7 @@ class Model(object):
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=converter.create_neurons(tf_layer, 
-                                                         len(model.layers)))
+                        neurons=converter.create_neurons(tf_layer))
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DConv2D(
@@ -354,8 +353,7 @@ class Model(object):
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=converter.create_neurons(tf_layer, 
-                                                         len(model.layers)))
+                        neurons=converter.create_neurons(tf_layer))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())

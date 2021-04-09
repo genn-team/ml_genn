@@ -48,13 +48,13 @@ if __name__ == '__main__':
     if args.augment_training:
         # Create image data generator
         data_gen = ImageDataGenerator(horizontal_flip=True)
-        
+
         # Get training iterator
         iter_train = data_gen.flow(x_train, y_train, batch_size=256)
-    
+
     # Create L2 regularizer
     regularizer = regularizers.l2(0.0001)
-    
+
     # Create, train and evaluate TensorFlow model
     tf_model = models.Sequential([
         layers.Conv2D(64, 3, padding='same', activation='relu', use_bias=False, input_shape=x_train.shape[1:], 
@@ -120,13 +120,13 @@ if __name__ == '__main__':
         optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
 
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        
+
         if args.augment_training:
             steps_per_epoch = x_train.shape[0] // 256
             tf_model.fit(iter_train, steps_per_epoch=steps_per_epoch, epochs=200, callbacks=callbacks)
         else:
             tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
-        
+
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
     tf_model.evaluate(x_test, y_test)
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
             norm = SpikeNorm([x_norm])
             norm.normalize(mlg_model, 2500)
 
-    time = 32 if args.few_spike else 2500
+    time = 16 if args.few_spike else 2500
     acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
 
     # Report ML GeNN model results

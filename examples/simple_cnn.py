@@ -55,7 +55,7 @@ if __name__ == '__main__':
             norm = SpikeNorm([x_norm])
             norm.normalize(mlg_model, 500)
 
-    time = 20 if args.few_spike else 500
+    time = 10 if args.few_spike else 500
     acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
 
     # Report ML GeNN model results

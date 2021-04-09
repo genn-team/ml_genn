@@ -17,5 +17,5 @@ class FewSpike(object):
     def create_input_neurons(self):
         return FSReluInputNeurons(self.K, self.alpha)
 
-    def create_neurons(self, tf_layer, layer_idx):
-        return FSReluNeurons((layer_idx % 2) == 0, self.K, self.alpha)
+    def create_neurons(self, tf_layer):
+        return FSReluNeurons(self.K, self.alpha)
