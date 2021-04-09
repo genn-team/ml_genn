@@ -15,6 +15,7 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--few-spike', action='store_true')
     parser.add_argument('--input-type', default='poisson', choices=[i.value for i in InputType])
     parser.add_argument('--connectivity-type', default='procedural', choices=[i.value for i in ConnectivityType])
+    parser.add_argument('--kernel-profiling', action='store_true')
 
     # normalisation options
     parser.add_argument('--norm-method', default=None, choices=['data-norm', 'spike-norm'])

@@ -8,6 +8,7 @@ from ml_genn import Model
 from ml_genn.converters import RateBased, FewSpike
 from ml_genn.norm import DataNorm, SpikeNorm
 from ml_genn.utils import parse_arguments, raster_plot
+from six import iteritems
 import numpy as np
 
 # Learning rate schedule
@@ -129,13 +130,16 @@ if __name__ == '__main__':
             tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
 
         models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
+
     tf_eval_start_time = perf_counter()
     tf_model.evaluate(x_test, y_test)
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
+
     # Create, normalise and evaluate ML GeNN model
     converter = FewSpike(K=16) if args.few_spike else RateBased(args.input_type)
     mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
-    mlg_model.compile(dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed)
+    mlg_model.compile(dt=args.dt, batch_size=args.batch_size,
+                      rng_seed=args.rng_seed, kernel_profiling=args.kernel_profiling)
 
     if not args.few_spike:
         if args.norm_method == 'data-norm':
@@ -149,6 +153,11 @@ if __name__ == '__main__':
     mlg_eval_start_time = perf_counter()
     acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
     print("MLG evaluation:%f" % (perf_counter() - mlg_eval_start_time))
+
+    if args.kernel_profiling:
+        print("Kernel profiling:")
+        for n, t in iteritems(mlg_model.get_kernel_times()):
+            print("\t%s: %fs" % (n, t))
 
     # Report ML GeNN model results
     print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
