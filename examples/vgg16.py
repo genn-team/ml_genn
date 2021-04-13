@@ -136,7 +136,7 @@ if __name__ == '__main__':
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
     # Create, normalise and evaluate ML GeNN model
-    converter = FewSpike(K=16) if args.few_spike else RateBased(args.input_type)
+    converter = FewSpike(K=16, signed_input=True) if args.few_spike else RateBased(args.input_type)
     mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
     mlg_model.compile(dt=args.dt, batch_size=args.batch_size,
                       rng_seed=args.rng_seed, kernel_profiling=args.kernel_profiling)
