@@ -5,8 +5,9 @@ from ml_genn.layers.neurons import Neurons
 
 fs_relu_model = create_custom_neuron_class(
     'fs_relu',
-    param_names=['K', 'alpha'],
-    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(-pars[0]))())],
+    param_names=['K', 'alpha', 'upstreamAlpha'],
+    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(-pars[0]))()),
+                    ("upstreamScale", create_dpf_class(lambda pars, dt: pars[2] * 2**(-pars[0]))())],
     var_name_types=[('Fx', 'scalar'), ('Vmem', 'scalar')],
     sim_code='''
     // Convert K to integer
@@ -18,7 +19,7 @@ fs_relu_model = create_custom_neuron_class(
     // Calculate magic constants. For RelU hT=h=T
     // **NOTE** d uses last timestep as that was when spike was SENT
     const scalar hT = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
-    const scalar d = $(scale) * (1 << ((kInt - pipeTimestep) % kInt));
+    const scalar d = $(upstreamScale) * (1 << ((kInt - pipeTimestep) % kInt));
 
     // Accumulate input
     // **NOTE** needs to be before applying input as spikes from LAST timestep must be processed
@@ -48,41 +49,46 @@ class FSReluNeurons(Neurons):
 
     def compile(self, mlg_model, layer):
         # Loop through upstream synapses
-        print(layer.name)
+        upstream_alpha = None
         for u in layer.upstream_synapses:
             # Get neuron object associated with the source layer
             nrn = u.source.neurons
             
-            # If the upstream neuron is another FsRelu
+            # If the upstream neuron is some sort of FsRelu
             # **YUCK** is there a better way of accessing the FsReluNeurons type?
-            if isinstance(nrn, type(self)):
+            upstream_relu = isinstance(nrn, type(self))
+            upstream_relu_input = isinstance(nrn, FSReluInputNeurons)
+            if upstream_relu or upstream_relu_input:
                 # Check K parameters match
                 if nrn.K != self.K:
-                    raise ValueError("K parameters of FS neurons must "
-                                     "match across whole model")
-             
-                print("\tSource is FsRelu")
-            # Otherwise, if it's a FSReluInput
-            elif isinstance(nrn, FSReluInputNeurons):
-                # Check K parameters match
-                if nrn.K != self.K:
-                    raise ValueError("K parameters of FS neurons must "
+                    raise ValueError("K parameters of FS ReLU neurons must "
                                      "match across whole model")
                 
-                print("\tSource is FsReluInput")
+                # Check that all upstream neurons have the same alpha 
+                if upstream_alpha is None:
+                    upstream_alpha = nrn.alpha
+                elif upstream_alpha != nrn.alpha:
+                    raise ValueError("All upstream FS ReLU neurons must "
+                                     "have the same alpha parameter values")
             # Otherwise, give error
             else:
-                raise ValueError("Few spike neurons can only be "
-                                 "connected to other few spike neurons") 
+                raise ValueError("FS neurons can only be connected "
+                                 "to other FS neurons") 
 
-        params = {'K': self.K, 'alpha': self.alpha}
+        # If no upstream population is found, use our own alpha
+        # **NOTE** this shouldn't be necessary
+        if upstream_alpha is None:
+            upstream_alpha = self.alpha
+
+        params = {'K': self.K, 'alpha': self.alpha, 
+                  'upstreamAlpha': upstream_alpha}
         vars = {'Fx': 0.0, 'Vmem': 0}
 
         super(FSReluNeurons, self).compile(mlg_model, layer, fs_relu_model,
                                            params, vars, {})
 
     def set_threshold(self, threshold):
-        raise NotImplementedError('Few Spike neurons do not have '
+        raise NotImplementedError('FS neurons do not have '
                                   'overridable thresholds')
 
     def get_predictions(self, batch_n):
