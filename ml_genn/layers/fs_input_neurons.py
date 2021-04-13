@@ -32,21 +32,20 @@ fs_relu_input_model = create_custom_neuron_class(
 fs_relu_signed_input_model = create_custom_neuron_class(
     'fs_relu_signed_input',
     param_names=['K', 'alpha'],
-    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(pars[0]//2))())],
+    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(-pars[0]//2))())],
     var_name_types=[('input', 'scalar', VarAccess_READ_ONLY_DUPLICATE), ('Vmem', 'scalar')],
     sim_code='''
     // Convert K to integer
-    const int kInt = (int)$(K);
-    const int halfK = kInt / 2;
-    
+    const int halfK = (int)$(K) / 2;
+
     // Get timestep within presentation
     const int pipeTimestep = (int)($(t) / DT);
-    
+
     // If this is the first timestep, apply input
     if(pipeTimestep == 0) {
         $(Vmem) = $(input);
     }
-    
+
     // Split timestep into interleaved positive and negative
     const int halfPipetimestep = pipeTimestep / 2;
     const bool positive = (pipeTimestep % 2) == 0;

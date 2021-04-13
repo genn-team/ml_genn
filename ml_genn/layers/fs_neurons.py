@@ -50,7 +50,6 @@ fs_relu_upstream_signed_input_model = create_custom_neuron_class(
     sim_code='''
     // Convert K to integer
     const int kInt = (int)$(K);
-    const int halfK = kInt / 2;
 
     // Get timestep within presentation
     const int pipeTimestep = (int)($(t) / DT);
@@ -59,10 +58,10 @@ fs_relu_upstream_signed_input_model = create_custom_neuron_class(
     const scalar hT = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
     
     // Split timestep into interleaved positive and negative
-    const int halfPipetimestep = pipeTimestep / 2;
-    const scalar dSign = ((pipeTimestep % 2) == 0) ? 1.0 : -1.0;
-    const scalar d = dSign * $(upstreamScale) * (1 << ((halfK - halfPipetimestep) % halfK));
-
+    // **NOTE** sign is flipped compared to input model as we want sign of PREVIOUS timestep
+    const scalar dSign = ((pipeTimestep % 2) == 0) ? -1.0 : 1.0;
+    const scalar d = dSign * $(upstreamScale) * (1 << (((kInt - pipeTimestep) % kInt) / 2));
+    
     // Accumulate input
     // **NOTE** needs to be before applying input as spikes from LAST timestep must be processed
     $(Fx) += ($(Isyn) * d);
