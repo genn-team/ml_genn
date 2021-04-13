@@ -1,5 +1,6 @@
 import numpy as np
 from pygenn.genn_model import create_dpf_class, create_custom_neuron_class
+from ml_genn.layers.fs_input_neurons import FSReluInputNeurons
 from ml_genn.layers.neurons import Neurons
 
 fs_relu_model = create_custom_neuron_class(
@@ -46,6 +47,34 @@ class FSReluNeurons(Neurons):
         self.alpha = alpha
 
     def compile(self, mlg_model, layer):
+        # Loop through upstream synapses
+        print(layer.name)
+        for u in layer.upstream_synapses:
+            # Get neuron object associated with the source layer
+            nrn = u.source.neurons
+            
+            # If the upstream neuron is another FsRelu
+            # **YUCK** is there a better way of accessing the FsReluNeurons type?
+            if isinstance(nrn, type(self)):
+                # Check K parameters match
+                if nrn.K != self.K:
+                    raise ValueError("K parameters of FS neurons must "
+                                     "match across whole model")
+             
+                print("\tSource is FsRelu")
+            # Otherwise, if it's a FSReluInput
+            elif isinstance(nrn, FSReluInputNeurons):
+                # Check K parameters match
+                if nrn.K != self.K:
+                    raise ValueError("K parameters of FS neurons must "
+                                     "match across whole model")
+                
+                print("\tSource is FsReluInput")
+            # Otherwise, give error
+            else:
+                raise ValueError("Few spike neurons can only be "
+                                 "connected to other few spike neurons") 
+
         params = {'K': self.K, 'alpha': self.alpha}
         vars = {'Fx': 0.0, 'Vmem': 0}
 
