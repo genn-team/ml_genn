@@ -10,22 +10,28 @@ class FewSpike(object):
         self.alpha = alpha
         self.signed_input = signed_input
         self.max_activations = {}
-        
+        self.max_input = None
+
     def optimise_alpha(self, tf_model, norm_data):
         # Get weighted layers
         weighted_layers = [l for l in tf_model.layers
                            if len(l.get_weights()) > 0]
-        
+
         # Get output functions for weighted layers.
         get_outputs = tf.keras.backend.function(
             tf_model.inputs, [l.output for l in weighted_layers])
-            
+
         # Get output given input data.
         outputs = get_outputs(norm_data)
-        
+
         # Build dictionary of maximum activation in each layer
         self.max_activations = {l: np.max(out)
                                 for l, out in zip(weighted_layers, outputs)}
+
+        if self.signed_input:
+            self.max_input = np.amax(np.abs(norm_data))
+        else:
+            self.max_input = np.amax(norm_data)
 
     def validate_tf_layer(self, tf_layer):
         if tf_layer.activation != tf.keras.activations.relu:
@@ -34,7 +40,8 @@ class FewSpike(object):
             raise NotImplementedError('bias tensors not supported')
 
     def create_input_neurons(self):
-        return FSReluInputNeurons(self.K, self.alpha, self.signed_input)
+        alpha = self.alpha if self.max_input is None else float(np.ceil(self.max_input))
+        return FSReluInputNeurons(self.K, alpha, self.signed_input)
 
     def create_neurons(self, tf_layer):
         # Lookup optimised alpha value for neuron
