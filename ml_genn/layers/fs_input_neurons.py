@@ -35,10 +35,10 @@ class FSReluInputNeurons(InputNeurons):
         self.K = K
         self.alpha = alpha
 
-    def compile(self, mlg_model, name, n):
+    def compile(self, mlg_model, layer):
         model = fs_relu_input_model
         params = {'K' : self.K, 'alpha': self.alpha}
         vars = {'input': 0.0, 'Vmem': 0.0}
 
-        super(FSReluInputNeurons, self).compile(mlg_model, name, n, model,
+        super(FSReluInputNeurons, self).compile(mlg_model, layer, model,
                                                 params, vars, {})

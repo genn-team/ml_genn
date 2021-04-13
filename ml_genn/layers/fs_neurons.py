@@ -45,11 +45,11 @@ class FSReluNeurons(Neurons):
         self.K = K
         self.alpha = alpha
 
-    def compile(self, mlg_model, name, n):
+    def compile(self, mlg_model, layer):
         params = {'K': self.K, 'alpha': self.alpha}
         vars = {'Fx': 0.0, 'Vmem': 0}
 
-        super(FSReluNeurons, self).compile(mlg_model, name, n, fs_relu_model,
+        super(FSReluNeurons, self).compile(mlg_model, layer, fs_relu_model,
                                            params, vars, {})
 
     def set_threshold(self, threshold):

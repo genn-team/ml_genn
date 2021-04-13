@@ -30,12 +30,12 @@ class IFNeurons(Neurons):
         super(IFNeurons, self).__init__()
         self.threshold = threshold
 
-    def compile(self, mlg_model, name, n):
+    def compile(self, mlg_model, layer):
         model = if_model
         vars = {'Vmem': 0.0, 'nSpk': 0}
         egp = {'Vthr': self.threshold}
 
-        super(IFNeurons, self).compile(mlg_model, name, n, model, {}, vars, egp)
+        super(IFNeurons, self).compile(mlg_model, layer, model, {}, vars, egp)
 
     def set_threshold(self, threshold):
         self.threshold = threshold
