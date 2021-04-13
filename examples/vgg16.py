@@ -137,6 +137,8 @@ if __name__ == '__main__':
 
     # Create, normalise and evaluate ML GeNN model
     converter = FewSpike(K=16, signed_input=True) if args.few_spike else RateBased(args.input_type)
+    if args.few_spike:
+        converter.optimise_alpha(tf_model, [x_norm])
     mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
     mlg_model.compile(dt=args.dt, batch_size=args.batch_size,
                       rng_seed=args.rng_seed, kernel_profiling=args.kernel_profiling)
