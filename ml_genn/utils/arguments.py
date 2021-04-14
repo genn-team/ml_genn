@@ -1,5 +1,6 @@
 import argparse
-from ml_genn.layers import InputType, ConnectivityType
+from ml_genn.converters import InputType
+from ml_genn.layers import ConnectivityType
 
 def parse_arguments(model_description='ML GeNN model'):
     '''

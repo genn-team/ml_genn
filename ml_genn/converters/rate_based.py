@@ -1,10 +1,18 @@
 import tensorflow as tf
 
-from ml_genn.layers import InputType
+from enum import Enum
+
 from ml_genn.layers import IFNeurons
 from ml_genn.layers import SpikeInputNeurons
 from ml_genn.layers import PoissonInputNeurons
 from ml_genn.layers import IFInputNeurons
+
+class InputType(Enum):
+    SPIKE = 'spike'
+    SPIKE_SIGNED = 'spike_signed'
+    POISSON = 'poisson'
+    POISSON_SIGNED = 'poisson_signed'
+    IF = 'if'
 
 class RateBased(object):
     def __init__(self, input_type='poisson'):
