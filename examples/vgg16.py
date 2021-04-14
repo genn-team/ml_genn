@@ -135,21 +135,20 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
-    # Create, normalise and evaluate ML GeNN model
-    converter = FewSpike(K=10, signed_input=True) if args.few_spike else RateBased(args.input_type)
-    if args.few_spike:
-        converter.optimise_alpha(tf_model, [x_norm])
+    # Create, suitable converter to convert TF model to ML GeNN
+    converter = (FewSpike(K=10, signed_input=True, norm_data=[x_norm]) if args.few_spike 
+                 else RateBased(input_type=args.input_type, 
+                                norm_data=[x_norm],
+                                norm_method=args.norm_method,
+                                spike_norm_time=2500))
+                                
+    # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
     mlg_model.compile(dt=args.dt, batch_size=args.batch_size,
                       rng_seed=args.rng_seed, kernel_profiling=args.kernel_profiling)
 
-    if not args.few_spike:
-        if args.norm_method == 'data-norm':
-            norm = DataNorm([x_norm], tf_model)
-            norm.normalize(mlg_model)
-        elif args.norm_method == 'spike-norm':
-            norm = SpikeNorm([x_norm])
-            norm.normalize(mlg_model, 2500)
+    # Perform any post-compilation normalisation operations that might be required
+    converter.normalise_post_compile(tf_model, mlg_model)
 
     time = 10 if args.few_spike else 2500
     mlg_eval_start_time = perf_counter()
