@@ -6,7 +6,6 @@ from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from ml_genn import Model
 from ml_genn.converters import RateBased, FewSpike
-from ml_genn.norm import DataNorm, SpikeNorm
 from ml_genn.utils import parse_arguments, raster_plot
 from six import iteritems
 import numpy as np
