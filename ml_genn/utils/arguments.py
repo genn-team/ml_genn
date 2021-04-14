@@ -1,5 +1,5 @@
 import argparse
-from ml_genn.converters import InputType
+from ml_genn.converters import rate_based
 from ml_genn.layers import ConnectivityType
 
 def parse_arguments(model_description='ML GeNN model'):
@@ -14,12 +14,15 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--rng-seed', type=int, default=0)
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--few-spike', action='store_true')
-    parser.add_argument('--input-type', default='poisson', choices=[i.value for i in InputType])
-    parser.add_argument('--connectivity-type', default='procedural', choices=[i.value for i in ConnectivityType])
+    parser.add_argument('--input-type', default='poisson', 
+                        choices=[i.value for i in rate_based.InputType])
+    parser.add_argument('--connectivity-type', default='procedural', 
+                        choices=[i.value for i in ConnectivityType])
     parser.add_argument('--kernel-profiling', action='store_true')
 
     # normalisation options
-    parser.add_argument('--norm-method', default=None, choices=['data-norm', 'spike-norm'])
+    parser.add_argument('--norm-method', default='data-norm', 
+                        choices=[i.value for i in rate_based.NormMethod])
     parser.add_argument('--n-norm-samples', type=int, default=256)
 
     # evaluation options

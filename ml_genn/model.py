@@ -289,11 +289,14 @@ class Model(object):
             elif isinstance(tf_layer, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
                 converter.validate_tf_layer(tf_layer)
 
+        # Allow converter to perform any pre-compilation normalisation
+        norm_output = converter.normalise_pre_compile(tf_model)
+        
         model = Model(name=tf_model.name)
 
         # Add input layer
         layer = InputLayer('input', tf_model.input_shape[1:], 
-                           converter.create_input_neurons())
+                           converter.create_input_neurons(norm_output))
         model.inputs.append(layer)
         model.layers.append(layer)
         previous_layer = layer
@@ -314,7 +317,8 @@ class Model(object):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
                     layer = Dense(name=tf_layer.name, units=tf_layer.units,
-                                  neurons=converter.create_neurons(tf_layer))
+                                  neurons=converter.create_neurons(tf_layer,
+                                                                   norm_output))
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DDense(
@@ -323,7 +327,8 @@ class Model(object):
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=converter.create_neurons(tf_layer))
+                        neurons=converter.create_neurons(tf_layer, 
+                                                         norm_output))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -342,7 +347,8 @@ class Model(object):
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=converter.create_neurons(tf_layer))
+                        neurons=converter.create_neurons(tf_layer, 
+                                                         norm_output))
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DConv2D(
@@ -351,7 +357,8 @@ class Model(object):
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=converter.create_neurons(tf_layer))
+                        neurons=converter.create_neurons(tf_layer,
+                                                         norm_output))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
