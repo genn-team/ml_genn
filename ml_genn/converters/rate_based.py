@@ -125,3 +125,4 @@ class RateBased(object):
                         nrn.push_var_to_device('Vmem')
 
                     progress.update(batch_n)
+                print('layer <{}> threshold: {}'.format(layer.name, threshold))
