@@ -23,8 +23,8 @@ if_input_model = create_custom_neuron_class(
 
 class IFInputNeurons(InputNeurons):
 
-    def compile(self, mlg_model, name, n):
+    def compile(self, mlg_model, layer):
         model = if_input_model
         vars = {'input': 0.0, 'Vmem': 0.0}
 
-        super(IFInputNeurons, self).compile(mlg_model, name, n, model, {}, vars, {})
+        super(IFInputNeurons, self).compile(mlg_model, layer, model, {}, vars, {})

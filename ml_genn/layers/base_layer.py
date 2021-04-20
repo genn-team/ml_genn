@@ -1,4 +1,3 @@
-import numpy as np
 
 class BaseLayer(object):
 
@@ -10,9 +9,7 @@ class BaseLayer(object):
         self.upstream_synapses = []
 
     def compile_neurons(self, mlg_model):
-        name = '{}_nrn'.format(self.name)
-        n = np.prod(self.shape)
-        self.neurons.compile(mlg_model, name, n)
+        self.neurons.compile(mlg_model, self)
 
     def compile_synapses(self, mlg_model):
         for synapse in self.upstream_synapses:

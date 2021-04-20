@@ -14,7 +14,6 @@ Example:
         from ml_genn import Model
 
         ml_genn_model = Model.convert_tf_model(tensorflow_model)
-        ml_genn_model.compile()
         ml_genn_model.evaluate([test_data], [test_labels], 300.0)
 """
 
@@ -24,16 +23,13 @@ import tensorflow as tf
 from tqdm import tqdm
 from pygenn.genn_model import GeNNModel
 
-from ml_genn.layers import InputType
+from ml_genn.converters import RateBased
 from ml_genn.layers import InputLayer
 from ml_genn.layers import Dense
 from ml_genn.layers import AvePool2DDense
 from ml_genn.layers import Conv2D
 from ml_genn.layers import AvePool2DConv2D
-from ml_genn.layers import IFNeurons
-from ml_genn.layers import SpikeInputNeurons
-from ml_genn.layers import PoissonInputNeurons
-from ml_genn.layers import IFInputNeurons
+
 
 
 class Model(object):
@@ -177,22 +173,28 @@ class Model(object):
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
 
+        # Pad number of samples so pipeline can be flushed
+        pipeline_depth = self.calc_pipeline_depth()
+        padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
+
         # Process batches
         progress = tqdm(total=n_samples)
-        for batch_start in range(0, n_samples, self.g_model.batch_size):
-            batch_end = min(batch_start + self.g_model.batch_size, n_samples)
-            batch_n = batch_end - batch_start
-            batch_data = [x[batch_start:batch_end] for x in data]
-            batch_labels = [y[batch_start:batch_end] for y in labels]
-            save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+        for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
+            # If any elements of this batch have data (rather than being entirely pipeline padding)
+            if batch_start < n_samples:
+                batch_end = min(batch_start + self.g_model.batch_size, n_samples)
+                batch_data = [x[batch_start:batch_end] for x in data]
 
-            # Set new input
+                save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+
+                # Set new input
+                self.set_input_batch(batch_data)
+
+            # Reset timesteps etc
             self.reset()
-            self.set_input_batch(batch_data)
 
             # Main simulation loop
             while self.g_model.t < time:
-
                 # Step time
                 self.step_time()
 
@@ -207,20 +209,21 @@ class Model(object):
                             nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
                             else nrn.current_spikes))
 
-            # Compute accuracy
-            for output_i in range(len(self.outputs)):
-                nrn = self.outputs[output_i].neurons.nrn
-                nrn.pull_var_from_device('nSpk')
-                if nrn.vars['nSpk'].view.ndim == 1:
-                    output_view = nrn.vars['nSpk'].view[np.newaxis]
-                else:
-                    output_view = nrn.vars['nSpk'].view[:batch_n]
-                predictions = output_view.argmax(axis=1)
-                n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
-                accuracy[output_i] = (n_correct[output_i] / batch_end) * 100
+            # If first input in batch has passed through
+            if batch_start >= (pipeline_depth * self.g_model.batch_size):
+                pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
+                pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
+                batch_labels = [y[pipe_batch_start:pipe_batch_end] for y in labels]
 
-            progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
-            progress.update(batch_n)
+                # Compute accuracy
+                for output_i in range(len(self.outputs)):
+                    predictions = self.outputs[output_i].neurons.get_predictions(
+                        pipe_batch_end - pipe_batch_start)
+                    n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
+                    accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
+
+                progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
+                progress.update(pipe_batch_end - pipe_batch_start)
 
         progress.close()
 
@@ -235,6 +238,12 @@ class Model(object):
 
         return accuracy, spike_i, spike_t
 
+    def calc_pipeline_depth(self):
+        """Calculate depth of model's pipeline"""
+        # **TODO** this only works for sequential models, branches need to be identified etc with e.g. ResNets
+        return int(sum(hasattr(l.neurons, "pipelined")
+                       for l in self.layers
+                       if l not in self.outputs))
 
     def get_kernel_times(self):
         """Get total kernel run times"""
@@ -250,7 +259,8 @@ class Model(object):
 
 
     @staticmethod
-    def convert_tf_model(tf_model, input_type='poisson', connectivity_type='procedural'):
+    def convert_tf_model(tf_model, converter=RateBased('poisson'),
+                         connectivity_type='procedural', **compile_kwargs):
         """Create a ML GeNN model from a TensorFlow model
 
         Args:
@@ -259,6 +269,7 @@ class Model(object):
         Keyword args:
         input_type         --  type of input neurons (default: 'poisson')
         connectivity_type  --  type of synapses in GeNN (default: 'procedural')
+        compile_kwargs     --  additional arguments to pass through to Model.compile
         """
 
         supported_tf_layers = (
@@ -276,34 +287,23 @@ class Model(object):
             if not isinstance(tf_layer, supported_tf_layers):
                 raise NotImplementedError('{} layers not supported'.format(type(tf_layer)))
             elif isinstance(tf_layer, (tf.keras.layers.Dense, tf.keras.layers.Conv2D)):
-                if tf_layer.activation != tf.keras.activations.relu:
-                    raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
-                if tf_layer.use_bias == True:
-                    raise NotImplementedError('bias tensors not supported')
+                converter.validate_tf_layer(tf_layer)
 
+        # Allow converter to perform any pre-compilation normalisation
+        norm_output = converter.normalise_pre_compile(tf_model)
+        
         model = Model(name=tf_model.name)
 
         # Add input layer
-        input_type = InputType(input_type)
-        if input_type == InputType.SPIKE:
-            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons())
-        if input_type == InputType.SPIKE_SIGNED:
-            layer = InputLayer('input', tf_model.input_shape[1:], SpikeInputNeurons(signed_spikes=True))
-        elif input_type == InputType.POISSON:
-            layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons())
-        elif input_type == InputType.POISSON_SIGNED:
-            layer = InputLayer('input', tf_model.input_shape[1:], PoissonInputNeurons(signed_spikes=True))
-        elif input_type == InputType.IF:
-            layer = InputLayer('input', tf_model.input_shape[1:], IFInputNeurons())
+        layer = InputLayer('input', tf_model.input_shape[1:], 
+                           converter.create_input_neurons(norm_output))
         model.inputs.append(layer)
-
         model.layers.append(layer)
         previous_layer = layer
         pool_layer = None
 
         # For each TensorFlow model layer:
         for tf_layer in tf_model.layers:
-                             
             # === Flatten Layers ===
             if isinstance(tf_layer, tf.keras.layers.Flatten):
                 print('ignoring Flatten layer <{}>'.format(tf_layer.name))
@@ -317,7 +317,8 @@ class Model(object):
                 if pool_layer is None:
                     print('converting Dense layer <{}>'.format(tf_layer.name))
                     layer = Dense(name=tf_layer.name, units=tf_layer.units,
-                                  neurons=IFNeurons(threshold=1.0))
+                                  neurons=converter.create_neurons(tf_layer,
+                                                                   norm_output))
                 else:
                     print('converting AveragePooling2D -> Dense layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DDense(
@@ -326,7 +327,8 @@ class Model(object):
                         pool_strides=pool_layer.strides,
                         pool_padding=pool_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=IFNeurons(threshold=1.0))
+                        neurons=converter.create_neurons(tf_layer, 
+                                                         norm_output))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -345,7 +347,8 @@ class Model(object):
                         conv_strides=tf_layer.strides,
                         conv_padding=tf_layer.padding,
                         connectivity_type=connectivity_type, 
-                        neurons=IFNeurons(threshold=1.0))
+                        neurons=converter.create_neurons(tf_layer, 
+                                                         norm_output))
                 else:
                     print('converting AveragePooling2D -> Conv2D layers <{}>'.format(tf_layer.name))
                     layer = AvePool2DConv2D(
@@ -353,7 +356,9 @@ class Model(object):
                         pool_size=pool_layer.pool_size, conv_size=tf_layer.kernel_size,
                         pool_strides=pool_layer.strides, conv_strides=tf_layer.strides,
                         pool_padding=pool_layer.padding, conv_padding=tf_layer.padding,
-                        connectivity_type=connectivity_type, neurons=IFNeurons(threshold=1.0))
+                        connectivity_type=connectivity_type, 
+                        neurons=converter.create_neurons(tf_layer,
+                                                         norm_output))
 
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
@@ -369,5 +374,10 @@ class Model(object):
                 pool_layer = tf_layer
 
         model.outputs.append(previous_layer)
-
+        
+        # Compile model
+        model.compile(**compile_kwargs)
+        
+        # Perform any post-compilation normalisation operations that might be required
+        converter.normalise_post_compile(tf_model, model)
         return model

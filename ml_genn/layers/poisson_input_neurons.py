@@ -20,8 +20,9 @@ class PoissonInputNeurons(InputNeurons):
         super(PoissonInputNeurons, self).__init__()
         self.signed_spikes = signed_spikes
 
-    def compile(self, mlg_model, name, n):
+    def compile(self, mlg_model, layer):
         model = poisson_input_model
         vars = {'input': 0.0}
 
-        super(PoissonInputNeurons, self).compile(mlg_model, name, n, model, {}, vars, {})
+        super(PoissonInputNeurons, self).compile(mlg_model, layer, 
+                                                 model, {}, vars, {})
