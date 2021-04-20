@@ -14,7 +14,6 @@ Example:
         from ml_genn import Model
 
         ml_genn_model = Model.convert_tf_model(tensorflow_model)
-        ml_genn_model.compile()
         ml_genn_model.evaluate([test_data], [test_labels], 300.0)
 """
 
