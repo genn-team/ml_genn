@@ -261,7 +261,7 @@ class Model(object):
 
     @staticmethod
     def convert_tf_model(tf_model, converter=RateBased('poisson'),
-                         connectivity_type='procedural'):
+                         connectivity_type='procedural', **compile_kwargs):
         """Create a ML GeNN model from a TensorFlow model
 
         Args:
@@ -270,6 +270,7 @@ class Model(object):
         Keyword args:
         input_type         --  type of input neurons (default: 'poisson')
         connectivity_type  --  type of synapses in GeNN (default: 'procedural')
+        compile_kwargs     --  additional arguments to pass through to Model.compile
         """
 
         supported_tf_layers = (
@@ -374,5 +375,10 @@ class Model(object):
                 pool_layer = tf_layer
 
         model.outputs.append(previous_layer)
-
+        
+        # Compile model
+        model.compile(**compile_kwargs)
+        
+        # Perform any post-compilation normalisation operations that might be required
+        converter.normalise_post_compile(tf_model, model)
         return model

@@ -54,12 +54,10 @@ if __name__ == '__main__':
                                 spike_norm_time=500))
 
     # Convert and compile ML GeNN model
-    mlg_model = Model.convert_tf_model(tf_model, converter=converter, connectivity_type=args.connectivity_type)
-    mlg_model.compile(dt=args.dt, batch_size=args.batch_size,
-                      rng_seed=args.rng_seed, kernel_profiling=args.kernel_profiling)
-    
-    # Perform any post-compilation normalisation operations that might be required
-    converter.normalise_post_compile(tf_model, mlg_model)
+    mlg_model = Model.convert_tf_model(
+        tf_model, converter=converter, connectivity_type=args.connectivity_type,
+        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
+        kernel_profiling=args.kernel_profiling)
     
     time = 8 if args.few_spike else 500
     mlg_eval_start_time = perf_counter()
