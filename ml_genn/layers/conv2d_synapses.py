@@ -113,8 +113,8 @@ class Conv2DSynapses(BaseSynapses):
     def compile(self, mlg_model, name):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source.shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
+        conv_ih, conv_iw, conv_ic = self.source().shape
+        conv_oh, conv_ow, conv_oc = self.target().shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -131,7 +131,7 @@ class Conv2DSynapses(BaseSynapses):
 
         conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                 else 'SPARSE_INDIVIDUALG')
-        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten()}}
 

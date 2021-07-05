@@ -13,5 +13,5 @@ class BaseLayer(object):
 
     def compile_synapses(self, mlg_model):
         for synapse in self.upstream_synapses:
-            name = '{}_to_{}_syn'.format(synapse.source.name, synapse.target.name)
+            name = '{}_to_{}_syn'.format(synapse.source().name, synapse.target().name)
             synapse.compile(mlg_model, name)

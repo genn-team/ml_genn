@@ -94,7 +94,7 @@ class FSReluNeurons(Neurons):
         upstream_signed = None
         for u in layer.upstream_synapses:
             # Get neuron object associated with the source layer
-            nrn = u.source.neurons
+            nrn = u.source().neurons
             
             # If the upstream neuron is some sort of FsRelu
             # **YUCK** is there a better way of accessing the FsReluNeurons type?

@@ -1,4 +1,4 @@
-from weakref import proxy
+from weakref import ref
 from six import iteritems
 
 class BaseSynapses(object):
@@ -10,8 +10,8 @@ class BaseSynapses(object):
         self.syn = None
 
     def connect(self, source, target):
-        self.source = proxy(source)
-        self.target = proxy(target)
+        self.source = ref(source)
+        self.target = ref(target)
         source.downstream_synapses.append(self)
         target.upstream_synapses.append(self)
 
@@ -27,7 +27,7 @@ class BaseSynapses(object):
                 ps_model, ps_params, ps_vars,
                 conn_init, wu_vars_egp):
         self.syn = mlg_model.g_model.add_synapse_population(
-            name, conn, delay, self.source.neurons.nrn, self.target.neurons.nrn,
+            name, conn, delay, self.source().neurons.nrn, self.target().neurons.nrn,
             wu_model, wu_params, wu_vars, wu_pre_vars, wu_post_vars,
             ps_model, ps_params, ps_vars, conn_init)
         for wu_var, wu_var_egp in iteritems(wu_vars_egp):
