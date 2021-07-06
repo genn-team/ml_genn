@@ -157,7 +157,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
     def compile(self, mlg_model, name):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source.shape
+        pool_ih, pool_iw, pool_ic = self.source().shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -168,7 +168,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
-        conv_oh, conv_ow, conv_oc = self.target.shape
+        conv_oh, conv_ow, conv_oc = self.target().shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -189,7 +189,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
 
         conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                 else 'SPARSE_INDIVIDUALG')
-        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten() / (pool_kh * pool_kw)}}
 

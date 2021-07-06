@@ -64,8 +64,8 @@ class Model(object):
             # Explore downstream layers whose upstream synapses have all been seen
             for downstream_synapse in layer.downstream_synapses:
                 seen_synapses.add(downstream_synapse)
-                if seen_synapses.issuperset(downstream_synapse.target.upstream_synapses):
-                    new_layers.add(downstream_synapse.target)
+                if seen_synapses.issuperset(downstream_synapse.target().upstream_synapses):
+                    new_layers.add(downstream_synapse.target())
 
         # Check that output layers are reachable from input layers
         if not all(output in self.layers for output in self.outputs):

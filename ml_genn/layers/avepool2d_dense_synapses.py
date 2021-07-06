@@ -108,7 +108,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
     def compile(self, mlg_model, name):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source.shape
+        pool_ih, pool_iw, pool_ic = self.source().shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -129,7 +129,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
 
         conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
                 else 'DENSE_INDIVIDUALG')
-        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 

@@ -24,7 +24,7 @@ class DenseSynapses(BaseSynapses):
 
     def compile(self, mlg_model, name):
         conn = 'DENSE_INDIVIDUALG'
-        wu_model = signed_static_pulse if self.source.neurons.signed_spikes else 'StaticPulse'
+        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': self.weights.flatten()}
 
         super(DenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
