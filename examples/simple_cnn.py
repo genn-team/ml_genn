@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import models, layers, datasets
 from ml_genn import Model
-from ml_genn.converters import RateBased, FewSpike
+from ml_genn.converters import Simple, DataNorm, SpikeNorm, FewSpike
 from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
 from six import iteritems
@@ -46,20 +46,23 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
-    # Create, suitable converter to convert TF model to ML GeNN
-    converter = (FewSpike(K=8, norm_data=[x_norm]) if args.few_spike 
-                 else RateBased(input_type=args.input_type, 
-                                norm_data=[x_norm],
-                                norm_method=args.norm_method,
-                                spike_norm_time=500))
+    # Create a suitable converter to convert TF model to ML GeNN
+    if args.converter == 'few-spike':
+        converter = FewSpike(K=8, norm_data=[x_norm])
+    elif args.converter == 'data-norm':
+        converter = DataNorm(norm_data=[x_norm], input_type=args.input_type)
+    elif args.converter == 'spike-norm':
+        converter = SpikeNorm(norm_data=[x_norm], norm_time=500, input_type=args.input_type)
+    else:
+        converter = Simple(input_type=args.input_type)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
         tf_model, converter=converter, connectivity_type=args.connectivity_type,
         dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
         kernel_profiling=args.kernel_profiling)
-    
-    time = 8 if args.few_spike else 500
+
+    time = 8 if args.converter == 'few-spike' else 500
     mlg_eval_start_time = perf_counter()
     acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
     print("MLG evaluation:%f" % (perf_counter() - mlg_eval_start_time))
