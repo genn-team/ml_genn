@@ -31,7 +31,6 @@ from ml_genn.layers import Conv2D
 from ml_genn.layers import AvePool2DConv2D
 
 
-
 class Model(object):
     """ML GeNN model class
 
@@ -40,7 +39,11 @@ class Model(object):
     """
 
     def __init__(self, name='mlg_model'):
-        """Initialise a ML GeNN model"""
+        """Initialise an ML GeNN model
+
+        Keyword args:
+        name  --  name of the network (default: 'mlg_model')
+        """
 
         self.name = name
         self.layers = []
@@ -49,10 +52,22 @@ class Model(object):
         self.g_model = None
 
 
-    def set_network(self, inputs, outputs):
+    def set_network(self, inputs, outputs, name='mlg_model'):
+        """Construct an ML GeNN Model from a graph of Layers
+
+        Args:
+        inputs   --  list of network input layers
+        outputs  --  list of network output layers
+
+        Keyword args:
+        name     --  name of the network (default: 'mlg_model')
+        """
+
+        self.name = name
+        self.layers = []
         self.inputs = inputs
         self.outputs = outputs
-        self.layers = []
+        self.g_model = None
 
         # Construct topologically sorted list of layers
         new_layers = set(inputs)
