@@ -22,12 +22,12 @@ class FewSpike(object):
         if tf_layer.use_bias == True:
             raise NotImplementedError('bias tensors not supported')
 
-    def create_input_layer(self, pre_compile_output):
+    def create_input_neurons(self, pre_compile_output):
         alpha = (self.alpha if pre_compile_output.max_input is None 
                  else float(np.ceil(pre_compile_output.max_input)))
         return FSReluInputNeurons(self.K, alpha, self.signed_input)
 
-    def create_layer(self, tf_layer, pre_compile_output):
+    def create_neurons(self, tf_layer, pre_compile_output):
         # Lookup optimised alpha value for neuron
         alpha = (float(np.ceil(pre_compile_output.max_activations[tf_layer]))
                  if tf_layer in pre_compile_output.max_activations 

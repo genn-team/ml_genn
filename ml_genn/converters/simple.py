@@ -16,7 +16,7 @@ class Simple(object):
         if tf_layer.use_bias == True:
             raise NotImplementedError('bias tensors not supported')
 
-    def create_input_layer(self, pre_compile_output):
+    def create_input_neurons(self, pre_compile_output):
         if self.input_type == InputType.SPIKE:
             return SpikeInputNeurons()
         elif self.input_type == InputType.SPIKE_SIGNED:
@@ -28,7 +28,7 @@ class Simple(object):
         elif self.input_type == InputType.IF:
             return IFInputNeurons()
 
-    def create_layer(self, tf_layer, pre_compile_output):
+    def create_neurons(self, tf_layer, pre_compile_output):
         return IFNeurons(threshold=1.0)
 
     def pre_compile(self, tf_model):
