@@ -5,10 +5,10 @@ from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
 from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from ml_genn import Model
-from ml_genn.converters import Simple, DataNorm, SpikeNorm, FewSpike
 from ml_genn.utils import parse_arguments, raster_plot
 from six import iteritems
 import numpy as np
+
 
 # Learning rate schedule
 def schedule(epoch, learning_rate):
@@ -19,9 +19,11 @@ def schedule(epoch, learning_rate):
     else:
         return 0.0005
 
+
 def initializer(shape, dtype=None):
     stddev = np.sqrt(2.0 / float(shape[0] * shape[1] * shape[3]))
     return tf.random.normal(shape, dtype=dtype, stddev=stddev)
+
 
 if __name__ == '__main__':
     args = parse_arguments('VGG16 classifier model')
@@ -135,14 +137,7 @@ if __name__ == '__main__':
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
-    if args.converter == 'few-spike':
-        converter = FewSpike(K=10, signed_input=True, norm_data=[x_norm])
-    elif args.converter == 'data-norm':
-        converter = DataNorm(norm_data=[x_norm], input_type=args.input_type)
-    elif args.converter == 'spike-norm':
-        converter = SpikeNorm(norm_data=[x_norm], norm_time=2500, input_type=args.input_type)
-    else:
-        converter = Simple(input_type=args.input_type)
+    converter = args.build_converter(x_norm, K=10, norm_time=2500)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(

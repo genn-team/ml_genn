@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import models, layers, datasets
 from ml_genn import Model
-from ml_genn.converters import Simple, DataNorm, SpikeNorm, FewSpike
 from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
 from six import iteritems
@@ -47,14 +46,7 @@ if __name__ == '__main__':
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
-    if args.converter == 'few-spike':
-        converter = FewSpike(K=8, norm_data=[x_norm])
-    elif args.converter == 'data-norm':
-        converter = DataNorm(norm_data=[x_norm], input_type=args.input_type)
-    elif args.converter == 'spike-norm':
-        converter = SpikeNorm(norm_data=[x_norm], norm_time=500, input_type=args.input_type)
-    else:
-        converter = Simple(input_type=args.input_type)
+    converter = args.build_converter(x_norm, K=8, norm_time=500)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
