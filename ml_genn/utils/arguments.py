@@ -1,28 +1,35 @@
-import argparse
-from ml_genn.converters import rate_based
+from argparse import ArgumentParser
+from functools import partial
+
+from ml_genn.layers import InputType
 from ml_genn.layers import ConnectivityType
+from ml_genn.converters import ConverterType
+from ml_genn.converters import Simple
+from ml_genn.converters import DataNorm
+from ml_genn.converters import SpikeNorm
+from ml_genn.converters import FewSpike
+
 
 def parse_arguments(model_description='ML GeNN model'):
     '''
     Parses command line arguments for common ML GeNN options, and returns them in namespace form.
     '''
 
-    parser = argparse.ArgumentParser(description=model_description)
+    parser = ArgumentParser(description=model_description)
 
     # compilation options
     parser.add_argument('--dt', type=float, default=1.0)
     parser.add_argument('--rng-seed', type=int, default=0)
     parser.add_argument('--batch-size', type=int, default=1)
-    parser.add_argument('--few-spike', action='store_true')
-    parser.add_argument('--input-type', default='poisson', 
-                        choices=[i.value for i in rate_based.InputType])
-    parser.add_argument('--connectivity-type', default='procedural', 
+    parser.add_argument('--input-type', default='poisson',
+                        choices=[i.value for i in InputType])
+    parser.add_argument('--connectivity-type', default='procedural',
                         choices=[i.value for i in ConnectivityType])
     parser.add_argument('--kernel-profiling', action='store_true')
 
-    # normalisation options
-    parser.add_argument('--norm-method', default='data-norm', 
-                        choices=[i.value for i in rate_based.NormMethod])
+    # ANN conversion options
+    parser.add_argument('--converter', default='few-spike',
+                        choices=[i.value for i in ConverterType])
     parser.add_argument('--n-norm-samples', type=int, default=256)
 
     # evaluation options
@@ -36,4 +43,18 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--record-tensorboard', action='store_true')
     parser.add_argument('--augment-training', action='store_true')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    def build_converter(self, norm_data, K=8, norm_time=500):
+        if self.converter == 'few-spike':
+            return FewSpike(K=K, norm_data=[norm_data])
+        elif args.converter == 'data-norm':
+            return DataNorm(norm_data=[norm_data], input_type=self.input_type)
+        elif args.converter == 'spike-norm':
+            return SpikeNorm(norm_data=[norm_data], norm_time=norm_time, input_type=self.input_type)
+        else:
+            return Simple(input_type=self.input_type)
+
+    args.build_converter = partial(build_converter, args)
+
+    return args

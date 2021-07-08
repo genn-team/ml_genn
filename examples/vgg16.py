@@ -5,10 +5,10 @@ from tensorflow.keras import (models, layers, datasets, callbacks, optimizers,
 from tensorflow.keras.utils import CustomObjectScope
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from ml_genn import Model
-from ml_genn.converters import RateBased, FewSpike
 from ml_genn.utils import parse_arguments, raster_plot
 from six import iteritems
 import numpy as np
+
 
 # Learning rate schedule
 def schedule(epoch, learning_rate):
@@ -19,9 +19,11 @@ def schedule(epoch, learning_rate):
     else:
         return 0.0005
 
+
 def initializer(shape, dtype=None):
     stddev = np.sqrt(2.0 / float(shape[0] * shape[1] * shape[3]))
     return tf.random.normal(shape, dtype=dtype, stddev=stddev)
+
 
 if __name__ == '__main__':
     args = parse_arguments('VGG16 classifier model')
@@ -134,20 +136,16 @@ if __name__ == '__main__':
     tf_model.evaluate(x_test, y_test)
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
-    # Create, suitable converter to convert TF model to ML GeNN
-    converter = (FewSpike(K=10, signed_input=True, norm_data=[x_norm]) if args.few_spike 
-                 else RateBased(input_type=args.input_type, 
-                                norm_data=[x_norm],
-                                norm_method=args.norm_method,
-                                spike_norm_time=2500))
-                                
+    # Create a suitable converter to convert TF model to ML GeNN
+    converter = args.build_converter(x_norm, K=10, norm_time=2500)
+
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
         tf_model, converter=converter, connectivity_type=args.connectivity_type,
         dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
         kernel_profiling=args.kernel_profiling)
     
-    time = 10 if args.few_spike else 2500
+    time = 10 if args.converter == 'few-spike' else 2500
     mlg_eval_start_time = perf_counter()
     acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
     print("MLG evaluation:%f" % (perf_counter() - mlg_eval_start_time))

@@ -1,3 +1,4 @@
+from ml_genn.layers.enum import InputType
 from ml_genn.layers.enum import ConnectivityType
 from ml_genn.layers.enum import PadMode
 

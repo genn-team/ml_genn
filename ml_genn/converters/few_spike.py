@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-
 from collections import namedtuple
 
 from ml_genn.layers import FSReluNeurons
@@ -8,7 +7,7 @@ from ml_genn.layers import FSReluInputNeurons
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
-NormOutput = namedtuple('NormOutput', ['max_activations', 'max_input'])
+PreCompileOutput = namedtuple('PreCompileOutput', ['max_activations', 'max_input'])
 
 class FewSpike(object):
     def __init__(self, K=10, alpha=25, signed_input=False, norm_data=None):
@@ -23,19 +22,19 @@ class FewSpike(object):
         if tf_layer.use_bias == True:
             raise NotImplementedError('bias tensors not supported')
 
-    def create_input_neurons(self, norm_output):
-        alpha = (self.alpha if norm_output.max_input is None 
-                 else float(np.ceil(norm_output.max_input)))
+    def create_input_neurons(self, pre_compile_output):
+        alpha = (self.alpha if pre_compile_output.max_input is None 
+                 else float(np.ceil(pre_compile_output.max_input)))
         return FSReluInputNeurons(self.K, alpha, self.signed_input)
 
-    def create_neurons(self, tf_layer, norm_output):
+    def create_neurons(self, tf_layer, pre_compile_output):
         # Lookup optimised alpha value for neuron
-        alpha = (float(np.ceil(norm_output.max_activations[tf_layer]))
-                 if tf_layer in norm_output.max_activations 
+        alpha = (float(np.ceil(pre_compile_output.max_activations[tf_layer]))
+                 if tf_layer in pre_compile_output.max_activations 
                  else self.alpha)
         return FSReluNeurons(self.K, alpha)
     
-    def normalise_pre_compile(self, tf_model):
+    def pre_compile(self, tf_model):
         # If any normalisation data was provided
         if self.norm_data is not None:
             # Get weighted layers
@@ -60,12 +59,12 @@ class FewSpike(object):
                 max_input = np.amax(self.norm_data)
 
             # Return results of normalisation in tuple
-            return NormOutput(max_activations=max_activations,
-                              max_input=max_input)
+            return PreCompileOutput(max_activations=max_activations,
+                                    max_input=max_input)
 
         # Otherwise, return empty normalisation output tuple
         else:
-            return NormOutput(max_activations={}, max_input=None)
+            return PreCompileOutput(max_activations={}, max_input=None)
     
-    def normalise_post_compile(self, tf_model, mlg_model):
+    def post_compile(self, mlg_model):
         pass
