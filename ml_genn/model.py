@@ -45,7 +45,7 @@ class Model(object):
         name  --  name of the network (default: 'mlg_model')
         """
 
-        self.set_network(inputs, outpts, name)
+        self.set_network(inputs, outputs, name)
 
 
     def set_network(self, inputs, outputs, name='mlg_model'):
@@ -306,7 +306,7 @@ class Model(object):
         # Add input layer
         layer = InputLayer('input', tf_model.input_shape[1:], 
                            converter.create_input_neurons(pre_compile_output))
-        inputs = [layer]
+        model_inputs = [layer]
         previous_layer = layer
         pool_layer = None
 
@@ -375,9 +375,9 @@ class Model(object):
 
                 pool_layer = tf_layer
 
-        outputs = [previous_layer]
+        model_outputs = [previous_layer]
 
-        model = Model(model_inputs, model_outputs, name=tf_model.name):
+        model = Model(model_inputs, model_outputs, name=tf_model.name)
 
         # Compile model
         model.compile(**compile_kwargs)
@@ -413,7 +413,7 @@ class Model(object):
 
         supported_tf_layers = (
             tf.keras.layers.Add,
-            tf.keras.layers.Input
+            tf.keras.layers.Input,
             tf.keras.layers.Dense,
             tf.keras.layers.Conv2D,
             tf.keras.layers.AveragePooling2D,
@@ -508,7 +508,7 @@ class Model(object):
 
 
                 # === Add Layers ===
-                elif isinstance(tf_layer, tf.keras.layers.Add):
+                if isinstance(tf_layer, tf.keras.layers.Add):
                     assert(len(tf_in_layers) > 0)
 
                     print('deferring Add layer <{}>'.format(tf_layer.name))
@@ -597,7 +597,7 @@ class Model(object):
 
 
                 # === Ignored Layers ===
-                if isinstance(tf_layer, ignored_tf_layers):
+                elif isinstance(tf_layer, ignored_tf_layers):
                     assert(len(tf_in_layers) == 1)
 
                     print('ignoring {} layer <{}>'.format(type(tf_layer), tf_layer.name))
@@ -616,7 +616,7 @@ class Model(object):
 
 
         # create ML GeNN model
-        mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name):
+        mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name)
 
         # Compile model
         mlg_model.compile(**compile_kwargs)
