@@ -38,18 +38,14 @@ class Model(object):
     provides an interface for manipulating the underlying GeNN models.
     """
 
-    def __init__(self, name='mlg_model'):
+    def __init__(self, inputs, outputs, name='mlg_model'):
         """Initialise an ML GeNN model
 
         Keyword args:
         name  --  name of the network (default: 'mlg_model')
         """
 
-        self.name = name
-        self.layers = []
-        self.inputs = []
-        self.outputs = []
-        self.g_model = None
+        self.set_network(inputs, outpts, name)
 
 
     def set_network(self, inputs, outputs, name='mlg_model'):
@@ -307,13 +303,10 @@ class Model(object):
         # Perform any pre-compilation tasks
         pre_compile_output = converter.pre_compile(tf_model)
 
-        model = Model(name=tf_model.name)
-
         # Add input layer
         layer = InputLayer('input', tf_model.input_shape[1:], 
                            converter.create_input_neurons(pre_compile_output))
-        model.inputs.append(layer)
-        model.layers.append(layer)
+        inputs = [layer]
         previous_layer = layer
         pool_layer = None
 
@@ -346,7 +339,6 @@ class Model(object):
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
 
-                model.layers.append(layer)
                 previous_layer = layer
                 pool_layer = None
 
@@ -374,7 +366,6 @@ class Model(object):
                 layer.connect([previous_layer])
                 layer.set_weights(tf_layer.get_weights())
 
-                model.layers.append(layer)
                 previous_layer = layer
                 pool_layer = None
 
@@ -384,11 +375,13 @@ class Model(object):
 
                 pool_layer = tf_layer
 
-        model.outputs.append(previous_layer)
-        
+        outputs = [previous_layer]
+
+        model = Model(model_inputs, model_outputs, name=tf_model.name):
+
         # Compile model
         model.compile(**compile_kwargs)
-        
+
         # Perform any post-compilation tasks
         converter.post_compile(model)
 
@@ -623,9 +616,7 @@ class Model(object):
 
 
         # create ML GeNN model
-        mlg_model = Model(name=tf_model.name)
-        mlg_model.set_network(mlg_model_inputs, mlg_model_outputs, name=tf_model.name):
-        #mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name):
+        mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name):
 
         # Compile model
         mlg_model.compile(**compile_kwargs)
