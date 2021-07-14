@@ -67,4 +67,7 @@ class FewSpike(object):
             return PreCompileOutput(max_activations={}, max_input=None)
     
     def post_compile(self, mlg_model):
-        pass
+        # do not allow multiple input or output layers
+        if len(mlg_model.inputs) > 1 or len(mlg_model.outputs) > 1:
+            raise NotImplementedError(
+                'multiple input or output layers not supported for Few Spike conversion')
