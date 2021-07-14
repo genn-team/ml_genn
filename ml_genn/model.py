@@ -155,15 +155,14 @@ class Model(object):
         self.g_model.t = 0.0
 
 
-    def evaluate(self, data, labels, time, one_hot=False, save_samples=[]):
+    def evaluate(self, data, labels, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
         Args:
         data          --  list of data for each input layer
         labels        --  list of labels for each output layer
         time          --  sample presentation time (msec)
-        one_hot       --  Use hot encoding, true or false
-
+        
         Keyword args:
         save_samples  --  list of sample indices to save spikes for (default: [])
 
@@ -235,7 +234,7 @@ class Model(object):
                 for output_i in range(len(self.outputs)):
                     predictions = self.outputs[output_i].neurons.get_predictions(
                         pipe_batch_end - pipe_batch_start)
-                    batch_labels = [np.argmax(i) for i in batch_labels] if one_hot else batch_labels
+                    batch_labels = [np.argmax(i) for i in batch_labels] if (batch_labels[0].shape != predictions[0].shape) else batch_labels
                     n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
                     accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
 
