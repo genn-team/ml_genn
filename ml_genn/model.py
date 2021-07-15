@@ -368,6 +368,8 @@ class Model(object):
         traversed_tf_layers = set()
 
         if isinstance(tf_model, tf.keras.models.Sequential):
+            # In TF Sequential models, the InputLayer is not stored in the model object,
+            # so we must traverse back through nodes to find the input layer's outputs.
             tf_in_layers = tf_in_layers_all[tf_model.layers[0]]
             assert(len(tf_in_layers) == 1)
             tf_out_layers = [n.outbound_layer for n in tf_in_layers[0].outbound_nodes
@@ -375,6 +377,7 @@ class Model(object):
             tf_out_layers_all[tf_in_layers[0]] = tf_out_layers
 
         else:
+            # TF Functional models store all their InputLayers, so no trickery needed.
             tf_in_layers = [tf_model.get_layer(name) for name in tf_model.input_names]
 
         # === Input Layers ===
@@ -458,6 +461,7 @@ class Model(object):
 
                     mlg_layer_lookup[tf_layer] = mlg_layer
                     if len(tf_out_layers) == 0:
+                        # no outbound layers, so it must be an output
                         mlg_model_outputs.append(mlg_layer)
 
                 # === Conv2D Layers ===
@@ -498,6 +502,7 @@ class Model(object):
 
                     mlg_layer_lookup[tf_layer] = mlg_layer
                     if len(tf_out_layers) == 0:
+                        # no outbound layers, so it must be an output
                         mlg_model_outputs.append(mlg_layer)
 
                 # === AveragePooling2D Layers ===
