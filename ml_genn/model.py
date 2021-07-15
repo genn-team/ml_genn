@@ -331,9 +331,9 @@ class Model(object):
                 converter.validate_tf_layer(tf_layer)
 
         # only traverse nodes belonging to this model
-        tf_model_nodes = []
+        tf_model_nodes = set()
         for n in tf_model._nodes_by_depth.values():
-            tf_model_nodes += n
+            tf_model_nodes.update(n)
 
         # get inbound and outbound layers
         tf_in_layers_all = {}
@@ -342,12 +342,13 @@ class Model(object):
 
             # find inbound layers
             tf_in_layers = []
-            for in_layer in [n.inbound_layers for n in tf_layer.inbound_nodes
-                             if n in tf_model_nodes]:
-                if isinstance(in_layer, list):
-                    tf_in_layers += in_layer
+            for n in tf_layer.inbound_nodes:
+                if n not in tf_model_nodes:
+                    continue
+                if isinstance(n.inbound_layers, list):
+                    tf_in_layers += n.inbound_layers
                 else:
-                    tf_in_layers.append(in_layer)
+                    tf_in_layers.append(n.inbound_layers)
             tf_in_layers_all[tf_layer] = tf_in_layers
 
             # find outbound layers
