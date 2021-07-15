@@ -411,14 +411,14 @@ class Model(object):
                 new_tf_layers.add(tf_layer)
 
                 # traverse ignored layers to find more inputs
-                new_tf_in_layers = tf_in_layers.copy()
-                while new_tf_in_layers:
-                    tf_in_layer = new_tf_in_layers.pop()
+                final_tf_in_layers = set()
+                while tf_in_layers:
+                    tf_in_layer = tf_in_layers.pop()
                     if isinstance(tf_in_layer, ignored_tf_layers):
-                        new_tf_in_layers.update(tf_in_layers_all[tf_in_layer])
-                        tf_in_layers.discard(tf_in_layer)
+                        tf_in_layers.update(tf_in_layers_all[tf_in_layer])
                     else:
-                        tf_in_layers.add(tf_in_layer)
+                        final_tf_in_layers.add(tf_in_layer)
+                tf_in_layers = final_tf_in_layers
 
                 # configure layer
                 print('configuring {} layer <{}>'.format(
