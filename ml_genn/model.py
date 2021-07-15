@@ -481,8 +481,8 @@ class Model(object):
 
             # find inbound layers
             tf_in_layers = []
-            for in_layer in [node.inbound_layers for node in tf_layer.inbound_nodes
-                             if node in tf_model_nodes]:
+            for in_layer in [n.inbound_layers for n in tf_layer.inbound_nodes
+                             if n in tf_model_nodes]:
                 if isinstance(in_layer, list):
                     tf_in_layers += in_layer
                 else:
@@ -490,8 +490,8 @@ class Model(object):
             tf_in_layers_all[tf_layer] = tf_in_layers
 
             # find outbound layers
-            tf_out_layers = [node.outbound_layer for node in tf_layer.outbound_nodes
-                             if node in tf_model_nodes]
+            tf_out_layers = [n.outbound_layer for n in tf_layer.outbound_nodes
+                             if n in tf_model_nodes]
             tf_out_layers_all[tf_layer] = tf_out_layers
 
 
@@ -505,23 +505,29 @@ class Model(object):
         new_tf_layers = set()
         traversed_tf_layers = set()
 
+        if isinstance(tf_model, tf.keras.models.Sequential):
+            tf_in_layers = tf_in_layers_all[tf_model.layers[0]]
+            assert(len(tf_in_layers) == 1)
+            tf_out_layers = [n.outbound_layer for n in tf_in_layers[0].outbound_nodes
+                             if n in tf_model_nodes]
+            tf_out_layers_all[tf_in_layers[0]] = tf_out_layers
 
-
-
-        # TODO: NEED TO HANDLE SEQUENTIAL INPUT DIFFERENTLY
-
+        else:
+            tf_in_layers = [tf_model.get_layer(name) for name in tf_model.input_names]
 
 
         # === Input Layers ===
-        for input_name in tf_model.input_names:
-            tf_layer = tf_model.get_layer(input_name)
+        for tf_layer in tf_in_layers:
             new_tf_layers.add(tf_layer)
 
             print('configuring Input layer <{}>'.format(tf_layer.name))
 
+            name = tf_layer.name
+            assert(len(tf_layer.input_shape) == 1)
+            shape = tf_layer.input_shape[0][1:]
+
             # create layer
-            mlg_layer = InputLayer(
-                name=tf_layer.name, shape=tf_layer.input_shape[0][1:],
+            mlg_layer = InputLayer(name=name, shape=shape,
                 neurons=converter.create_input_neurons(pre_compile_output))
 
             mlg_layer_lookup[tf_layer] = mlg_layer
@@ -661,6 +667,7 @@ class Model(object):
 
 
 
+                # TODO: REMOVE
                 print(mlg_layer.name,
                       '  in layers: ', {c.source().name: c.__class__.__name__ for c in mlg_layer.upstream_synapses},
                       '  out shape: ', mlg_layer.shape)
