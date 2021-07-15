@@ -280,13 +280,12 @@ class Model(object):
         print('===== Summary of {} ====='.format(self.name))
 
         for l in self.layers:
-            print('\nname: {}  shape: {}  type: {}'.format(
+            print('\nname: {},  shape: {},  type: {},'.format(
                 l.name, l.shape, l.__class__.__name__))
 
             if isinstance(l, Layer):
-                for s in l.upstream_synapses:
-                    print('connections: {}'.format(
-                        {s.source().name: s.__class__.__name__}))
+                print('incoming: {}'.format(
+                    {s.source().name: s.__class__.__name__ for s in l.upstream_synapses}))
 
     @staticmethod
     def convert_tf_model(tf_model, converter=Simple(),
