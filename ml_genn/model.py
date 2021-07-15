@@ -271,6 +271,21 @@ class Model(object):
             'synapse_dynamics_time': self.g_model.synapse_dynamics_time,
         }
 
+    def summary(self):
+        """Print a summary of this model"""
+
+        # layers should already be topologically sorted
+        print('===== Summary of {} ====='.format(self.name))
+
+        for l in self.layers:
+            print('\nname: {}  shape: {}  type: {}'.format(
+                l.name, l.shape, l.__class__.__name__))
+
+            if isinstance(l, Layer):
+                for s in l.upstream_synapses:
+                    print('connections: {}'.format(
+                        {s.source().name: s.__class__.__name__}))
+
 
 
 
@@ -515,7 +530,6 @@ class Model(object):
         else:
             tf_in_layers = [tf_model.get_layer(name) for name in tf_model.input_names]
 
-
         # === Input Layers ===
         for tf_layer in tf_in_layers:
             new_tf_layers.add(tf_layer)
@@ -532,7 +546,6 @@ class Model(object):
 
             mlg_layer_lookup[tf_layer] = mlg_layer
             mlg_model_inputs.append(mlg_layer)
-
 
         # while there are still layers to traverse
         while new_tf_layers:
@@ -564,7 +577,6 @@ class Model(object):
                 # configure layer
                 print('configuring {} layer <{}>'.format(
                     tf_layer.__class__.__name__, tf_layer.name))
-
 
                 # === Dense Layers ===
                 if isinstance(tf_layer, tf.keras.layers.Dense):
@@ -600,7 +612,6 @@ class Model(object):
                     mlg_layer_lookup[tf_layer] = mlg_layer
                     if len(tf_out_layers) == 0:
                         mlg_model_outputs.append(mlg_layer)
-
 
                 # === Conv2D Layers ===
                 elif isinstance(tf_layer, tf.keras.layers.Conv2D):
@@ -642,7 +653,6 @@ class Model(object):
                     if len(tf_out_layers) == 0:
                         mlg_model_outputs.append(mlg_layer)
 
-
                 # === AveragePooling2D Layers ===
                 elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
 
@@ -658,25 +668,9 @@ class Model(object):
 
                     mlg_layer_lookup[tf_layer] = mlg_layer_lookup[next(iter(tf_in_layers))]
 
-
                 # === Ignored Layers ===
                 elif isinstance(tf_layer, ignored_tf_layers):
                     pass
-
-
-
-
-
-                # TODO: REMOVE
-                print(mlg_layer.name,
-                      '  in layers: ', {c.source().name: c.__class__.__name__ for c in mlg_layer.upstream_synapses},
-                      '  out shape: ', mlg_layer.shape)
-                print()
-
-
-
-
-
 
         # create model
         mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name)
