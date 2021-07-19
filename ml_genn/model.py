@@ -44,6 +44,10 @@ class Model(object):
     def __init__(self, inputs, outputs, name='mlg_model'):
         """Initialise an ML GeNN model
 
+        Args:
+        inputs   --  list of network input layers
+        outputs  --  list of network output layers
+
         Keyword args:
         name  --  name of the network (default: 'mlg_model')
         """
