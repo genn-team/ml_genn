@@ -308,6 +308,7 @@ class Model(object):
             tf.keras.layers.Dense,
             tf.keras.layers.Conv2D,
             tf.keras.layers.AveragePooling2D,
+            tf.keras.layers.GlobalAveragePooling2D,
             tf.keras.layers.Add,
             tf.keras.layers.Flatten,
             tf.keras.layers.Dropout,
@@ -454,6 +455,12 @@ class Model(object):
                                 pool_padding=tf_in_layer.padding,
                                 connectivity_type=connectivity_type))
 
+                        elif isinstance(tf_in_layer, tf.keras.layers.GlobalAveragePooling2D):
+                            synapses.append(AvePool2DDenseSynapses(
+                                units=tf_layer.units,
+                                pool_size=tf_in_layer.output_shape[1:],
+                                connectivity_type=connectivity_type))
+
                         else:
                             synapses.append(DenseSynapses(units=tf_layer.units))
 
@@ -490,6 +497,13 @@ class Model(object):
                                 pool_padding=tf_in_layer.padding, conv_padding=tf_layer.padding,
                                 connectivity_type=connectivity_type))
 
+                        elif isinstance(tf_in_layer, tf.keras.layers.GlobalAveragePooling2D):
+                            synapses.append(AvePool2DConv2DSynapses(
+                                filters=tf_layer.filters,
+                                pool_size=tf_in_layer.output_shape[1:], conv_size=tf_layer.kernel_size,
+                                conv_strides=tf_layer.strides, conv_padding=tf_layer.padding,
+                                connectivity_type=connectivity_type))
+
                         else:
                             synapses.append(Conv2DSynapses(
                                 filters=tf_layer.filters,
@@ -507,18 +521,20 @@ class Model(object):
                         # no outbound layers, so it must be an output
                         mlg_model_outputs.append(mlg_layer)
 
-                # === AveragePooling2D Layers ===
-                elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
+                # === [Global]AveragePooling2D Layers ===
+                elif isinstance(tf_layer, (
+                        tf.keras.layers.AveragePooling2D,
+                        tf.keras.layers.GlobalAveragePooling2D)):
 
                     # only allow pooling layers to have one input layer
                     if len(tf_in_layers) != 1:
                         raise NotImplementedError(
-                            'only one Averagepooling2D layer input supported')
+                            'only one pooling layer input supported')
 
                     # do not allow pooling layers to be output layers
                     if len(tf_out_layers) == 0:
                         raise NotImplementedError(
-                            'output AveragePooling2D layers not supported')
+                            'output pooling layers not supported')
 
                     mlg_layer_lookup[tf_layer] = mlg_layer_lookup[next(iter(tf_in_layers))]
 
