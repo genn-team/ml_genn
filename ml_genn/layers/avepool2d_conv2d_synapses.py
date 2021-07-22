@@ -104,7 +104,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         else:
             self.conv_size = conv_size
         if pool_strides is None:
-            self.pool_strides = (pool_size[0], pool_size[1])
+            self.pool_strides = self.pool_size
         elif isinstance(pool_strides, int):
             self.pool_strides = (pool_strides, pool_strides)
         else:
