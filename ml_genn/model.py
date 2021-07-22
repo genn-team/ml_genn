@@ -497,13 +497,6 @@ class Model(object):
                                 pool_padding=tf_in_layer.padding, conv_padding=tf_layer.padding,
                                 connectivity_type=connectivity_type))
 
-                        elif isinstance(tf_in_layer, tf.keras.layers.GlobalAveragePooling2D):
-                            synapses.append(AvePool2DConv2DSynapses(
-                                filters=tf_layer.filters,
-                                pool_size=tf_in_layer.input_shape[1:3], conv_size=tf_layer.kernel_size,
-                                conv_strides=tf_layer.strides, conv_padding=tf_layer.padding,
-                                connectivity_type=connectivity_type))
-
                         else:
                             synapses.append(Conv2DSynapses(
                                 filters=tf_layer.filters,
