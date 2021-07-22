@@ -95,14 +95,24 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                  conv_padding='valid', connectivity_type='procedural'):
         super(AvePool2DConv2DSynapses, self).__init__()
         self.filters = filters
-        self.pool_size = pool_size
-        self.conv_size = conv_size
-        if pool_strides == None:
+        if isinstance(pool_size, int):
+            self.pool_size = (pool_size, pool_size)
+        else:
+            self.pool_size = pool_size
+        if isinstance(conv_size, int):
+            self.conv_size = (conv_size, conv_size)
+        else:
+            self.conv_size = conv_size
+        if pool_strides is None:
             self.pool_strides = (pool_size[0], pool_size[1])
+        elif isinstance(pool_strides, int):
+            self.pool_strides = (pool_strides, pool_strides)
         else:
             self.pool_strides = pool_strides
-        if conv_strides == None:
+        if conv_strides is None:
             self.conv_strides = (1, 1)
+        elif isinstance(conv_strides, int):
+            self.conv_strides = (conv_strides, conv_strides)
         else:
             self.conv_strides = conv_strides
         self.pool_padding = PadMode(pool_padding)

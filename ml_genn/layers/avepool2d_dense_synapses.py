@@ -66,9 +66,14 @@ class AvePool2DDenseSynapses(BaseSynapses):
                  pool_padding='valid', connectivity_type='procedural'):
         super(AvePool2DDenseSynapses, self).__init__()
         self.units = units
-        self.pool_size = pool_size
-        if pool_strides == None:
+        if isinstance(pool_size, int):
+            self.pool_size = (pool_size, pool_size)
+        else:
+            self.pool_size = pool_size
+        if pool_strides is None:
             self.pool_strides = (pool_size[0], pool_size[1])
+        elif isinstance(pool_strides, int):
+            self.pool_strides = (pool_strides, pool_strides)
         else:
             self.pool_strides = pool_strides
         self.pool_padding = PadMode(pool_padding)

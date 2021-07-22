@@ -76,9 +76,14 @@ class Conv2DSynapses(BaseSynapses):
                  conv_padding='valid', connectivity_type='procedural'):
         super(Conv2DSynapses, self).__init__()
         self.filters = filters
-        self.conv_size = conv_size
-        if conv_strides == None:
+        if isinstance(conv_size, int):
+            self.conv_size = (conv_size, conv_size)
+        else:
+            self.conv_size = conv_size
+        if conv_strides is None:
             self.conv_strides = (1, 1)
+        elif isinstance(conv_strides, int):
+            self.conv_strides = (conv_strides, conv_strides)
         else:
             self.conv_strides = conv_strides
         self.conv_padding = PadMode(conv_padding)
