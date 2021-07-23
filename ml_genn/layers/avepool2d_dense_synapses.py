@@ -7,6 +7,7 @@ from pygenn.genn_wrapper import NO_DELAY
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers.helper import _get_param_2d
 
 avepool2d_dense_init = create_custom_init_var_snippet_class(
     'avepool2d_dense_big_pool',
@@ -66,16 +67,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
                  pool_padding='valid', connectivity_type='procedural'):
         super(AvePool2DDenseSynapses, self).__init__()
         self.units = units
-        if isinstance(pool_size, int):
-            self.pool_size = (pool_size, pool_size)
-        else:
-            self.pool_size = pool_size
-        if pool_strides is None:
-            self.pool_strides = self.pool_size
-        elif isinstance(pool_strides, int):
-            self.pool_strides = (pool_strides, pool_strides)
-        else:
-            self.pool_strides = pool_strides
+        self.pool_size = _get_param_2d('pool_size', pool_size)
+        self.pool_strides = _get_param_2d('pool_strides', pool_strides, default=self.pool_size)
         self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
         self.connectivity_type = ConnectivityType(connectivity_type)
