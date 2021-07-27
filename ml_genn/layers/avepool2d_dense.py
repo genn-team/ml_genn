@@ -1,6 +1,7 @@
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers import Layer, AvePool2DDenseSynapses
 from ml_genn.layers.if_neurons import IFNeurons
+from ml_genn.layers.helper import _get_param_2d
 
 class AvePool2DDense(Layer):
 
@@ -8,11 +9,8 @@ class AvePool2DDense(Layer):
                  pool_padding='valid', connectivity_type='procedural', neurons=IFNeurons()):
         super(AvePool2DDense, self).__init__(name, neurons)
         self.units = units
-        self.pool_size = pool_size
-        if pool_strides == None:
-            self.pool_strides = (pool_size[0], pool_size[1])
-        else:
-            self.pool_strides = pool_strides
+        self.pool_size = _get_param_2d('pool_size', pool_size)
+        self.pool_strides = _get_param_2d('pool_strides', pool_strides, default=self.pool_size)
         self.pool_padding = PadMode(pool_padding)
         self.connectivity_type = ConnectivityType(connectivity_type)
 

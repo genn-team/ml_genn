@@ -9,6 +9,7 @@ from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
+from ml_genn.layers.helper import _get_param_2d
 
 conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'conv2d',
@@ -76,11 +77,8 @@ class Conv2DSynapses(BaseSynapses):
                  conv_padding='valid', connectivity_type='procedural'):
         super(Conv2DSynapses, self).__init__()
         self.filters = filters
-        self.conv_size = conv_size
-        if conv_strides == None:
-            self.conv_strides = (1, 1)
-        else:
-            self.conv_strides = conv_strides
+        self.conv_size = _get_param_2d('conv_size', conv_size)
+        self.conv_strides = _get_param_2d('conv_strides', conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
         self.connectivity_type = ConnectivityType(connectivity_type)
 
