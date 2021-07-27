@@ -455,7 +455,7 @@ class Model(object):
                             while pool_in_layers:
                                 pool_in_layer = pool_in_layers.pop()
                                 if isinstance(pool_in_layer, ignored_tf_layers):
-                                    pool_in_layers.update(tf_in_layers_all[tf_pool_in_layer])
+                                    pool_in_layers.update(tf_in_layers_all[pool_in_layer])
                                 else:
                                     final_pool_in_layers.add(pool_in_layer)
                             pool_in_layers = final_pool_in_layers
@@ -517,7 +517,7 @@ class Model(object):
                             while pool_in_layers:
                                 pool_in_layer = pool_in_layers.pop()
                                 if isinstance(pool_in_layer, ignored_tf_layers):
-                                    pool_in_layers.update(tf_in_layers_all[tf_pool_in_layer])
+                                    pool_in_layers.update(tf_in_layers_all[pool_in_layer])
                                 else:
                                     final_pool_in_layers.add(pool_in_layer)
                             pool_in_layers = final_pool_in_layers
