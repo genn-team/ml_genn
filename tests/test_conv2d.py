@@ -12,7 +12,7 @@ def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
                                            connectivity_type=connectivity_type,
                                            dt=1.0, batch_size=1)
     mlg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
-    mlg_model.set_input_batch([x])
+    mlg_model.set_input_batch(x)
     mlg_model.step_time(2)
 
     nrn = mlg_model.outputs[0].neurons.nrn
@@ -114,7 +114,7 @@ def test_conv2d_in_chan_1_out_chan_1_padding_valid():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_conv2d_in_chan_2_out_chan_1_padding_valid():
@@ -143,7 +143,7 @@ def test_conv2d_in_chan_2_out_chan_1_padding_valid():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_conv2d_in_chan_1_out_chan_2_padding_valid():
@@ -171,7 +171,7 @@ def test_conv2d_in_chan_1_out_chan_2_padding_valid():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_conv2d_in_chan_2_out_chan_2_padding_valid():
@@ -202,7 +202,7 @@ def test_conv2d_in_chan_2_out_chan_2_padding_valid():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
@@ -233,7 +233,7 @@ def test_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x, connectivity_type='sparse')
+    model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
 def test_conv2d_in_chan_2_out_chan_2_padding_same():
@@ -264,7 +264,7 @@ def test_conv2d_in_chan_2_out_chan_2_padding_same():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
@@ -295,7 +295,7 @@ def test_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x, connectivity_type='sparse')
+    model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
 if __name__ == '__main__':
