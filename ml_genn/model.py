@@ -434,9 +434,9 @@ class Model(object):
                 # === Dense Layers ===
                 if isinstance(tf_layer, tf.keras.layers.Dense):
                     name = tf_layer.name
-                    weights = []
                     sources = []
                     synapses = []
+                    weights = []
 
                     # create layer
                     mlg_layer = Layer(name=name, neurons=converter.create_neurons(
@@ -444,25 +444,47 @@ class Model(object):
 
                     # create synapses
                     for tf_in_layer in tf_in_layers:
-                        weights.append(tf_layer.get_weights()[0])
-                        sources.append(mlg_layer_lookup[tf_in_layer])
 
-                        if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
-                            synapses.append(AvePool2DDenseSynapses(
-                                units=tf_layer.units,
-                                pool_size=tf_in_layer.pool_size,
-                                pool_strides=tf_in_layer.strides,
-                                pool_padding=tf_in_layer.padding,
-                                connectivity_type=connectivity_type))
+                        if isinstance(tf_in_layer, (
+                                tf.keras.layers.AveragePooling2D,
+                                tf.keras.layers.GlobalAveragePooling2D)):
 
-                        elif isinstance(tf_in_layer, tf.keras.layers.GlobalAveragePooling2D):
-                            synapses.append(AvePool2DDenseSynapses(
-                                units=tf_layer.units,
-                                pool_size=tf_in_layer.input_shape[1:3],
-                                connectivity_type=connectivity_type))
+                            # traverse ignored layers to find more pool layer inputs
+                            pool_in_layers = set(tf_in_layers_all[tf_in_layer])
+                            final_pool_in_layers = set()
+                            while pool_in_layers:
+                                pool_in_layer = pool_in_layers.pop()
+                                if isinstance(pool_in_layer, ignored_tf_layers):
+                                    pool_in_layers.update(tf_in_layers_all[tf_pool_in_layer])
+                                else:
+                                    final_pool_in_layers.add(pool_in_layer)
+                            pool_in_layers = final_pool_in_layers
+
+                            # set pooling or global pooling
+                            if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
+                                pool_size = tf_in_layer.pool_size
+                                pool_strides = tf_in_layer.strides
+                                pool_padding = tf_in_layer.padding
+                            elif isinstance(tf_in_layer, tf.keras.layers.GlobalAveragePooling2D):
+                                pool_size = tf_in_layer.input_shape[1:3]
+                                pool_strides = None
+                                pool_padding = 'valid'
+
+                            # create connections for all pool layer inputs
+                            for pool_in_layer in pool_in_layers:
+                                sources.append(mlg_layer_lookup[pool_in_layer])
+                                synapses.append(AvePool2DDenseSynapses(
+                                    units=tf_layer.units,
+                                    pool_size=pool_size,
+                                    pool_strides=pool_strides,
+                                    pool_padding=pool_padding,
+                                    connectivity_type=connectivity_type))
+                                weights.append(tf_layer.get_weights()[0])
 
                         else:
+                            sources.append(mlg_layer_lookup[tf_in_layer])
                             synapses.append(DenseSynapses(units=tf_layer.units))
+                            weights.append(tf_layer.get_weights()[0])
 
                     # connect layer and set weights
                     mlg_layer.connect(sources, synapses)
@@ -476,9 +498,9 @@ class Model(object):
                 # === Conv2D Layers ===
                 elif isinstance(tf_layer, tf.keras.layers.Conv2D):
                     name = tf_layer.name
-                    weights = []
                     sources = []
                     synapses = []
+                    weights = []
 
                     # create layer
                     mlg_layer = Layer(name=name, neurons=converter.create_neurons(
@@ -486,24 +508,40 @@ class Model(object):
 
                     # create synapses
                     for tf_in_layer in tf_in_layers:
-                        weights.append(tf_layer.get_weights()[0])
-                        sources.append(mlg_layer_lookup[tf_in_layer])
 
                         if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
-                            synapses.append(AvePool2DConv2DSynapses(
-                                filters=tf_layer.filters,
-                                pool_size=tf_in_layer.pool_size, conv_size=tf_layer.kernel_size,
-                                pool_strides=tf_in_layer.strides, conv_strides=tf_layer.strides,
-                                pool_padding=tf_in_layer.padding, conv_padding=tf_layer.padding,
-                                connectivity_type=connectivity_type))
+
+                            # traverse ignored layers to find more pool layer inputs
+                            pool_in_layers = set(tf_in_layers_all[tf_in_layer])
+                            final_pool_in_layers = set()
+                            while pool_in_layers:
+                                pool_in_layer = pool_in_layers.pop()
+                                if isinstance(pool_in_layer, ignored_tf_layers):
+                                    pool_in_layers.update(tf_in_layers_all[tf_pool_in_layer])
+                                else:
+                                    final_pool_in_layers.add(pool_in_layer)
+                            pool_in_layers = final_pool_in_layers
+
+                            # create connections for all pool layer inputs
+                            for pool_in_layer in pool_in_layers:
+                                sources.append(mlg_layer_lookup[pool_in_layer])
+                                synapses.append(AvePool2DConv2DSynapses(
+                                    filters=tf_layer.filters,
+                                    pool_size=tf_in_layer.pool_size, conv_size=tf_layer.kernel_size,
+                                    pool_strides=tf_in_layer.strides, conv_strides=tf_layer.strides,
+                                    pool_padding=tf_in_layer.padding, conv_padding=tf_layer.padding,
+                                    connectivity_type=connectivity_type))
+                                weights.append(tf_layer.get_weights()[0])
 
                         else:
+                            sources.append(mlg_layer_lookup[tf_in_layer])
                             synapses.append(Conv2DSynapses(
                                 filters=tf_layer.filters,
                                 conv_size=tf_layer.kernel_size,
                                 conv_strides=tf_layer.strides,
                                 conv_padding=tf_layer.padding,
                                 connectivity_type=connectivity_type))
+                            weights.append(tf_layer.get_weights()[0])
 
                     # connect layer and set weights
                     mlg_layer.connect(sources, synapses)
@@ -519,10 +557,13 @@ class Model(object):
                         tf.keras.layers.AveragePooling2D,
                         tf.keras.layers.GlobalAveragePooling2D)):
 
-                    # only allow pooling layers to have one input layer
-                    if len(tf_in_layers) != 1:
-                        raise NotImplementedError(
-                            'only one pooling layer input supported')
+                    # do not allow back-to-back pooling layers
+                    for tf_in_layer in tf_in_layers:
+                        if isinstance(tf_in_layer, (
+                                tf.keras.layers.AveragePooling2D,
+                                tf.keras.layers.GlobalAveragePooling2D)):
+                            raise NotImplementedError(
+                                'back-to-back pooling layers not supported')
 
                     # do not allow pooling layers to be output layers
                     if len(tf_out_layers) == 0:
