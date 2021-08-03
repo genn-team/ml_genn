@@ -311,26 +311,23 @@ class Model(object):
             tf.keras.layers.GlobalAveragePooling2D,
             tf.keras.layers.Add,
             tf.keras.layers.Flatten,
-            tf.keras.layers.Dropout,
-        )
+            tf.keras.layers.Dropout)
 
         weighted_tf_layers = (
             tf.keras.layers.Dense,
-            tf.keras.layers.Conv2D,
-        )
+            tf.keras.layers.Conv2D)
 
         ignored_tf_layers = (
             tf.keras.layers.Add,
             tf.keras.layers.Flatten,
-            tf.keras.layers.Dropout,
-        )
+            tf.keras.layers.Dropout)
 
         # Check model compatibility
         for tf_layer in tf_model.layers[:-1]:
             if not isinstance(tf_layer, supported_tf_layers):
                 raise NotImplementedError('{} layers not supported'.format(
                     tf_layer.__class__.__name__))
-            elif isinstance(tf_layer, weighted_tf_layers):
+            if isinstance(tf_layer, weighted_tf_layers):
                 converter.validate_tf_layer(tf_layer)
 
         # only traverse nodes belonging to this model
@@ -358,6 +355,34 @@ class Model(object):
             tf_out_layers = [n.outbound_layer for n in tf_layer.outbound_nodes
                              if n in tf_model_nodes]
             tf_out_layers_all[tf_layer] = tf_out_layers
+
+        # function for traversing upstream layers
+        def traverse_tf_in_layers(in_layers):
+            new_in_layers = set(in_layers)
+            final_in_layers = set()
+
+            while new_in_layers:
+                layer = new_in_layers.pop()
+                if isinstance(layer, ignored_tf_layers):
+                    new_in_layers.update(tf_in_layers_all[layer])
+                else:
+                    final_in_layers.add(layer)
+
+            return final_in_layers
+
+        # function for traversing downstream layers
+        def traverse_tf_out_layers(out_layers):
+            new_out_layers = set(out_layers)
+            final_out_layers = set()
+
+            while new_out_layers:
+                layer = new_out_layers.pop()
+                if isinstance(layer, ignored_tf_layers):
+                    new_out_layers.update(tf_out_layers_all[layer])
+                else:
+                    final_out_layers.add(layer)
+
+            return final_out_layers
 
 
         # Perform any pre-compilation tasks
@@ -418,14 +443,7 @@ class Model(object):
                 new_tf_layers.add(tf_layer)
 
                 # traverse ignored layers to find more inputs
-                final_tf_in_layers = set()
-                while tf_in_layers:
-                    tf_in_layer = tf_in_layers.pop()
-                    if isinstance(tf_in_layer, ignored_tf_layers):
-                        tf_in_layers.update(tf_in_layers_all[tf_in_layer])
-                    else:
-                        final_tf_in_layers.add(tf_in_layer)
-                tf_in_layers = final_tf_in_layers
+                tf_in_layers = traverse_tf_in_layers(tf_in_layers)
 
                 # configure layer
                 print('configuring {} layer <{}>'.format(
@@ -449,16 +467,8 @@ class Model(object):
                                 tf.keras.layers.AveragePooling2D,
                                 tf.keras.layers.GlobalAveragePooling2D)):
 
-                            # traverse ignored layers to find more pool layer inputs
-                            pool_in_layers = set(tf_in_layers_all[tf_in_layer])
-                            final_pool_in_layers = set()
-                            while pool_in_layers:
-                                pool_in_layer = pool_in_layers.pop()
-                                if isinstance(pool_in_layer, ignored_tf_layers):
-                                    pool_in_layers.update(tf_in_layers_all[pool_in_layer])
-                                else:
-                                    final_pool_in_layers.add(pool_in_layer)
-                            pool_in_layers = final_pool_in_layers
+                            # traverse ignored layers to find more inputs
+                            pool_in_layers = traverse_tf_in_layers(tf_in_layers_all[tf_in_layer])
 
                             # set pooling or global pooling
                             if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
@@ -511,16 +521,8 @@ class Model(object):
 
                         if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
 
-                            # traverse ignored layers to find more pool layer inputs
-                            pool_in_layers = set(tf_in_layers_all[tf_in_layer])
-                            final_pool_in_layers = set()
-                            while pool_in_layers:
-                                pool_in_layer = pool_in_layers.pop()
-                                if isinstance(pool_in_layer, ignored_tf_layers):
-                                    pool_in_layers.update(tf_in_layers_all[pool_in_layer])
-                                else:
-                                    final_pool_in_layers.add(pool_in_layer)
-                            pool_in_layers = final_pool_in_layers
+                            # traverse ignored layers to find more inputs
+                            pool_in_layers = traverse_tf_in_layers(tf_in_layers_all[tf_in_layer])
 
                             # create connections for all pool layer inputs
                             for pool_in_layer in pool_in_layers:
