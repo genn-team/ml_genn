@@ -10,10 +10,10 @@ def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
 
     # Run ML GeNN model
     mlg_model = mlg.Model.convert_tf_model(tf_model, converter=mlg.converters.Simple('spike'), 
-                                           connectivity_type=connectivity_type)
-    mlg_model.compile(dt=1.0, batch_size=1)
+                                           connectivity_type=connectivity_type,
+                                           dt=1.0, batch_size=1)
     mlg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
-    mlg_model.set_input_batch([x])
+    mlg_model.set_input_batch(x)
     mlg_model.step_time(2)
 
     nrn = mlg_model.outputs[0].neurons.nrn
@@ -110,12 +110,12 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(1, 3, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid():
@@ -138,12 +138,12 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, strides=3, padding='valid', input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(1, 3, strides=1, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(1, 3, strides=1, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_1_stride_3_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid():
@@ -167,12 +167,12 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(1, 3, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_1_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid():
@@ -195,12 +195,12 @@ def test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(2, 3, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_1_out_chan_2_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid():
@@ -226,12 +226,12 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(2, 3, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
@@ -257,12 +257,12 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='valid', input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(2, 3, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_valid_sparse')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x, connectivity_type='sparse')
+    model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same():
@@ -288,12 +288,12 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='same', input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', use_bias=False),
+        tf.keras.layers.Conv2D(2, 3, padding='same', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
 
 
 def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
@@ -319,12 +319,12 @@ def test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(2, padding='same', input_shape=(12, 12, 2)),
-        tf.keras.layers.Conv2D(2, 3, name='output', padding='same', use_bias=False),
+        tf.keras.layers.Conv2D(2, 3, padding='same', use_bias=False),
     ], name='test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x, connectivity_type='sparse')
+    model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
 @pytest.mark.xfail
@@ -345,12 +345,43 @@ def test_avepool2d_conv2d_border_pool_crop():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, padding='same', input_shape=(12, 12, 1)),
-        tf.keras.layers.Conv2D(1, 3, name='output', padding='valid', use_bias=False),
+        tf.keras.layers.Conv2D(1, 3, padding='valid', use_bias=False),
     ], name='test_avepool2d_conv2d_border_pool_crop')
     tf_model.set_weights([k])
 
     # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, x)
+    model_compare_tf_and_mlg(tf_model, [x])
+
+
+def test_avepool2d_conv2d_inputs_2():
+    '''
+    Test AvePool2DConv2D with 2 input layers.
+    '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    # Inputs
+    x0 = np.empty((1, 12, 12, 1), dtype=np.float32)
+    x0[0, :, :, 0] = model_input_0()
+    x1 = np.empty((1, 12, 12, 1), dtype=np.float32)
+    x1[0, :, :, 0] = model_input_1()
+
+    # Kernels
+    k = np.empty((3, 3, 1, 1), dtype=np.float32)
+    k[:, :, 0, 0] = model_kernel_0_0()
+
+    # Create TensorFlow model
+    in0 = tf.keras.layers.Input(shape=(12, 12, 1))
+    in1 = tf.keras.layers.Input(shape=(12, 12, 1))
+    add = tf.keras.layers.Add()([in0, in1])
+    pool = tf.keras.layers.AveragePooling2D(2, padding='valid')(add)
+    conv = tf.keras.layers.Conv2D(1, 3, padding='valid', use_bias=False)(pool)
+    tf_model = tf.keras.models.Model([in0, in1], [conv], name='test_avepool2d_conv2d_inputs_2')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, [x0, x1])
 
 
 if __name__ == '__main__':
@@ -363,3 +394,4 @@ if __name__ == '__main__':
     test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same()
     test_avepool2d_conv2d_in_chan_2_out_chan_2_padding_same_sparse()
     test_avepool2d_conv2d_border_pool_crop()
+    test_avepool2d_conv2d_inputs_2()
