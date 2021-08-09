@@ -14,11 +14,49 @@ class SpikeNorm(object):
         self.norm_time = norm_time
         self.input_type = InputType(input_type)
 
-    def validate_tf_layer(self, tf_layer):
-        if tf_layer.activation != tf.keras.activations.relu:
-            raise NotImplementedError('{} activation not supported'.format(type(tf_layer.activation)))
-        if tf_layer.use_bias == True:
-            raise NotImplementedError('bias tensors not supported')
+    def validate_tf_layer(self, tf_layer, config):
+        if isinstance(tf_layer, (
+                tf.keras.layers.Dense,
+                tf.keras.layers.Conv2D)):
+
+            if tf_layer.use_bias:
+                # no bias tensors allowed
+                raise NotImplementedError('Spike-Norm converter: bias tensors not supported')
+
+            if config.is_output:
+                # ReLU and softmax activation allowd in output layers
+                if (not tf_layer.activation is tf.keras.activations.relu and
+                    not tf_layer.activation is tf.keras.activations.softmax):
+                    raise NotImplementedError(
+                        'Spike-Norm converter: output layer must have ReLU or softmax activation')
+
+            elif config.has_activation:
+                # ReLU activation allowed everywhere
+                if not tf_layer.activation is tf.keras.activations.relu:
+                    raise NotImplementedError(
+                        'Spike-Norm converter: hidden layers must have ReLU activation')
+
+        elif isinstance(tf_layer, tf.keras.layers.ReLU):
+            # ReLU activation allowed everywhere
+            pass
+
+        elif isinstance(tf_layer, tf.keras.layers.Softmax):
+            # softmax activation only allowed for output layers
+            if not config.is_output:
+                raise NotImplementedError(
+                    'Spike-Norm converter: only output layers may use softmax')
+
+        elif isinstance(tf_layer, (
+                tf.keras.layers.AveragePooling2D,
+                tf.keras.layers.GlobalAveragePooling2D)):
+            # average pooling allowed
+            pass
+
+        else:
+            # no other layers allowed
+            raise NotImplementedError(
+                'Spike-Norm converter: {} layers are not supported'.format(
+                    tf_layer.__class__.__name__))
 
     def create_input_neurons(self, pre_compile_output):
         if self.input_type == InputType.SPIKE:

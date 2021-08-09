@@ -28,9 +28,11 @@ from ml_genn.converters import Simple
 from ml_genn.layers import InputLayer
 from ml_genn.layers import Layer
 
+from ml_genn.layers import IdentitySynapses
 from ml_genn.layers import DenseSynapses
-from ml_genn.layers import AvePool2DDenseSynapses
 from ml_genn.layers import Conv2DSynapses
+from ml_genn.layers import AvePool2DSynapses
+from ml_genn.layers import AvePool2DDenseSynapses
 from ml_genn.layers import AvePool2DConv2DSynapses
 
 
@@ -303,32 +305,12 @@ class Model(object):
         compile_kwargs     --  additional arguments to pass through to Model.compile
         """
 
-        supported_tf_layers = (
-            tf.keras.layers.InputLayer,
-            tf.keras.layers.Dense,
-            tf.keras.layers.Conv2D,
-            tf.keras.layers.AveragePooling2D,
-            tf.keras.layers.GlobalAveragePooling2D,
-            tf.keras.layers.Add,
+        tf_activation_layers = (
+            tf.keras.layers.ReLU)
+
+        tf_ignored_layers = (
             tf.keras.layers.Flatten,
             tf.keras.layers.Dropout)
-
-        weighted_tf_layers = (
-            tf.keras.layers.Dense,
-            tf.keras.layers.Conv2D)
-
-        ignored_tf_layers = (
-            tf.keras.layers.Add,
-            tf.keras.layers.Flatten,
-            tf.keras.layers.Dropout)
-
-        # Check model compatibility
-        for tf_layer in tf_model.layers[:-1]:
-            if not isinstance(tf_layer, supported_tf_layers):
-                raise NotImplementedError('{} layers not supported'.format(
-                    tf_layer.__class__.__name__))
-            if isinstance(tf_layer, weighted_tf_layers):
-                converter.validate_tf_layer(tf_layer)
 
         # only traverse nodes belonging to this model
         tf_model_nodes = set()
@@ -356,45 +338,30 @@ class Model(object):
                              if n in tf_model_nodes]
             tf_out_layers_all[tf_layer] = tf_out_layers
 
-        # function for traversing upstream layers
-        def traverse_tf_in_layers(in_layers):
-            new_in_layers = set(in_layers)
-            final_in_layers = set()
-
-            while new_in_layers:
-                layer = new_in_layers.pop()
-                if isinstance(layer, ignored_tf_layers):
-                    new_in_layers.update(tf_in_layers_all[layer])
-                else:
-                    final_in_layers.add(layer)
-
-            return final_in_layers
-
-        # function for traversing downstream layers
-        def traverse_tf_out_layers(out_layers):
-            new_out_layers = set(out_layers)
-            final_out_layers = set()
-
-            while new_out_layers:
-                layer = new_out_layers.pop()
-                if isinstance(layer, ignored_tf_layers):
-                    new_out_layers.update(tf_out_layers_all[layer])
-                else:
-                    final_out_layers.add(layer)
-
-            return final_out_layers
-
 
         # Perform any pre-compilation tasks
         pre_compile_output = converter.pre_compile(tf_model)
 
-        # configure ML GeNN model build process
-        mlg_model_inputs = []
-        mlg_model_outputs = []
-        mlg_layer_lookup = {}
+        # configure model build process
+        class LayerConfig(object):
+            def __init__(self):
+                self.is_input = False
+                self.is_output = False
+                self.has_activation = False
+                self.name = None
+                self.shape = None
+                self.neurons = None
+                self.synapses_class = []
+                self.synapses_params = []
+                self.synapses_source = []
+                self.synapses_weights = []
+
+        config_steps = []
+        configs_lookups = {}
         new_tf_layers = set()
         traversed_tf_layers = set()
 
+        # get and check input layers
         if isinstance(tf_model, tf.keras.models.Sequential):
             # In TF Sequential models, the InputLayer is not stored in the model object,
             # so we must traverse back through nodes to find the input layer's outputs.
@@ -408,175 +375,319 @@ class Model(object):
             # TF Functional models store all their InputLayers, so no trickery needed.
             tf_in_layers = [tf_model.get_layer(name) for name in tf_model.input_names]
 
+        for tf_in_layer in tf_in_layers:
+            assert(len(tf_in_layer.output_shape) == 1)
+
+            # input layers cannot be output layers
+            if len(tf_out_layers_all[tf_in_layer]) == 0:
+                raise NotImplementedError(
+                    'input layers as output layers not supported')
+
+
         # === Input Layers ===
         for tf_layer in tf_in_layers:
             new_tf_layers.add(tf_layer)
-
             print('configuring Input layer <{}>'.format(tf_layer.name))
 
-            name = tf_layer.name
-            assert(len(tf_layer.input_shape) == 1)
-            shape = tf_layer.input_shape[0][1:]
+            # configure layer
+            config = LayerConfig()
+            config.is_input = True
+            config.has_activation = True
+            config.name = tf_layer.name
+            config.shape = tf_layer.output_shape[0][1:]
+            config.neurons = converter.create_input_neurons(pre_compile_output)
 
-            # create layer
-            mlg_layer = InputLayer(name=name, shape=shape,
-                neurons=converter.create_input_neurons(pre_compile_output))
+            config_steps.append(config)
+            configs_lookups[tf_layer] = [config]
 
-            mlg_layer_lookup[tf_layer] = mlg_layer
-            mlg_model_inputs.append(mlg_layer)
 
         # while there are still layers to traverse
         while new_tf_layers:
             new_tf_layer = new_tf_layers.pop()
+            new_tf_out_layers = tf_out_layers_all[new_tf_layer]
             traversed_tf_layers.add(new_tf_layer)
 
             # get next TF layer to configure
-            for tf_layer in tf_out_layers_all[new_tf_layer]:
-                tf_in_layers = set(tf_in_layers_all[tf_layer])
-                tf_out_layers = set(tf_out_layers_all[tf_layer])
+            for tf_layer in new_tf_out_layers:
+                tf_in_layers = tf_in_layers_all[tf_layer]
+                tf_out_layers = tf_out_layers_all[tf_layer]
 
                 # skip if we still need to configure inbound layers
                 if not traversed_tf_layers.issuperset(tf_in_layers):
                     continue
 
-                # add this layer to new layers list
                 new_tf_layers.add(tf_layer)
-
-                # traverse ignored layers to find more inputs
-                tf_in_layers = traverse_tf_in_layers(tf_in_layers)
-
-                # configure layer
                 print('configuring {} layer <{}>'.format(
                     tf_layer.__class__.__name__, tf_layer.name))
 
-                # === Dense Layers ===
-                if isinstance(tf_layer, tf.keras.layers.Dense):
-                    name = tf_layer.name
-                    sources = []
-                    synapses = []
-                    weights = []
 
-                    # create layer
-                    mlg_layer = Layer(name=name, neurons=converter.create_neurons(
-                        tf_layer, pre_compile_output))
+                # === Add Layers ===
+                if isinstance(tf_layer, tf.keras.layers.Add):
+                    config = []
 
-                    # create synapses
+                    # concatenate incoming layer configs
                     for tf_in_layer in tf_in_layers:
+                        config += configs_lookups[tf_in_layer]
 
-                        if isinstance(tf_in_layer, (
-                                tf.keras.layers.AveragePooling2D,
-                                tf.keras.layers.GlobalAveragePooling2D)):
+                    # do not allow output Add layers
+                    if len(tf_out_layers) == 0:
+                        raise NotImplementedError(
+                            'output Add layers not supported')
 
-                            # traverse ignored layers to find more inputs
-                            pool_in_layers = traverse_tf_in_layers(tf_in_layers_all[tf_in_layer])
+                    configs_lookups[tf_layer] = config
 
-                            # set pooling or global pooling
-                            if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
-                                pool_size = tf_in_layer.pool_size
-                                pool_strides = tf_in_layer.strides
-                                pool_padding = tf_in_layer.padding
-                            elif isinstance(tf_in_layer, tf.keras.layers.GlobalAveragePooling2D):
-                                pool_size = tf_in_layer.input_shape[1:3]
-                                pool_strides = None
-                                pool_padding = 'valid'
 
-                            # create connections for all pool layer inputs
-                            for pool_in_layer in pool_in_layers:
-                                sources.append(mlg_layer_lookup[pool_in_layer])
-                                synapses.append(AvePool2DDenseSynapses(
-                                    units=tf_layer.units,
-                                    pool_size=pool_size,
-                                    pool_strides=pool_strides,
-                                    pool_padding=pool_padding,
-                                    connectivity_type=connectivity_type))
-                                weights.append(tf_layer.get_weights()[0])
+                # === Dense Layers ===
+                elif isinstance(tf_layer, tf.keras.layers.Dense):
+
+                    assert(len(tf_in_layers) == 1)
+                    tf_in_layer = tf_in_layers[0]
+                    in_configs = configs_lookups[tf_in_layer]
+
+                    # configure layer
+                    config = LayerConfig()
+                    config.is_output = len(tf_out_layers) == 0
+                    config.name = tf_layer.name
+                    config.shape = tf_layer.output_shape[1:]
+                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+                    if not tf_layer.activation is tf.keras.activations.linear:
+                        config.has_activation = True
+
+                    converter.validate_tf_layer(tf_layer, config)
+
+                    # configure synapses
+                    for in_config in in_configs:
+
+                        if in_config.has_activation:
+                            # configure Dense synapses
+                            config.synapses_class.append(DenseSynapses)
+                            config.synapses_params.append({'units': tf_layer.units})
+                            config.synapses_source.append(in_config)
+                            config.synapses_weights.append(tf_layer.get_weights()[0])
 
                         else:
-                            sources.append(mlg_layer_lookup[tf_in_layer])
-                            synapses.append(DenseSynapses(units=tf_layer.units))
-                            weights.append(tf_layer.get_weights()[0])
+                            for i in range(len(in_config.synapses_class)):
 
-                    # connect layer and set weights
-                    mlg_layer.connect(sources, synapses)
-                    mlg_layer.set_weights(weights)
+                                if in_config.synapses_class[i] is AvePool2DSynapses:
+                                    # configure AvePool2D -> Dense synapses
+                                    config.synapses_class.append(AvePool2DDenseSynapses)
+                                    config.synapses_params.append(in_config.synapses_params[i].copy())
+                                    config.synapses_params[-1].update({'units': tf_layer.units})
+                                    config.synapses_source.append(in_config.synapses_source[i])
+                                    config.synapses_weights.append(tf_layer.get_weights()[0])
 
-                    mlg_layer_lookup[tf_layer] = mlg_layer
-                    if len(tf_out_layers) == 0:
-                        # no outbound layers, so it must be an output
-                        mlg_model_outputs.append(mlg_layer)
+                                else:
+                                    # fail if incoming (weighted) layer does not have activation
+                                    if not in_config.has_activation:
+                                        raise NotImplementedError(
+                                            'weighted layers without activation not supported')
+
+                    if config.has_activation or config.is_output:
+                        config_steps.append(config)
+
+                    configs_lookups[tf_layer] = [config]
+
 
                 # === Conv2D Layers ===
                 elif isinstance(tf_layer, tf.keras.layers.Conv2D):
-                    name = tf_layer.name
-                    sources = []
-                    synapses = []
-                    weights = []
 
-                    # create layer
-                    mlg_layer = Layer(name=name, neurons=converter.create_neurons(
-                        tf_layer, pre_compile_output))
+                    assert(len(tf_in_layers) == 1)
+                    tf_in_layer = tf_in_layers[0]
+                    in_configs = configs_lookups[tf_in_layer]
 
-                    # create synapses
-                    for tf_in_layer in tf_in_layers:
+                    # configure layer
+                    config = LayerConfig()
+                    config.is_output = len(tf_out_layers) == 0
+                    config.name = tf_layer.name
+                    config.shape = tf_layer.output_shape[1:]
+                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+                    if not tf_layer.activation is tf.keras.activations.linear:
+                        config.has_activation = True
 
-                        if isinstance(tf_in_layer, tf.keras.layers.AveragePooling2D):
+                    converter.validate_tf_layer(tf_layer, config)
 
-                            # traverse ignored layers to find more inputs
-                            pool_in_layers = traverse_tf_in_layers(tf_in_layers_all[tf_in_layer])
+                    # configure synapses
+                    for in_config in in_configs:
 
-                            # create connections for all pool layer inputs
-                            for pool_in_layer in pool_in_layers:
-                                sources.append(mlg_layer_lookup[pool_in_layer])
-                                synapses.append(AvePool2DConv2DSynapses(
-                                    filters=tf_layer.filters,
-                                    pool_size=tf_in_layer.pool_size, conv_size=tf_layer.kernel_size,
-                                    pool_strides=tf_in_layer.strides, conv_strides=tf_layer.strides,
-                                    pool_padding=tf_in_layer.padding, conv_padding=tf_layer.padding,
-                                    connectivity_type=connectivity_type))
-                                weights.append(tf_layer.get_weights()[0])
+                        if in_config.has_activation:
+                            # configure Conv2D synapses
+                            config.synapses_class.append(Conv2DSynapses)
+                            config.synapses_params.append({
+                                'filters': tf_layer.filters,
+                                'conv_size': tf_layer.kernel_size,
+                                'conv_strides': tf_layer.strides,
+                                'conv_padding': tf_layer.padding,
+                                'connectivity_type': connectivity_type})
+                            config.synapses_source.append(in_config)
+                            config.synapses_weights.append(tf_layer.get_weights()[0])
 
                         else:
-                            sources.append(mlg_layer_lookup[tf_in_layer])
-                            synapses.append(Conv2DSynapses(
-                                filters=tf_layer.filters,
-                                conv_size=tf_layer.kernel_size,
-                                conv_strides=tf_layer.strides,
-                                conv_padding=tf_layer.padding,
-                                connectivity_type=connectivity_type))
-                            weights.append(tf_layer.get_weights()[0])
+                            for i in range(len(in_config.synapses_class)):
 
-                    # connect layer and set weights
-                    mlg_layer.connect(sources, synapses)
-                    mlg_layer.set_weights(weights)
+                                if in_config.synapses_class[i] is AvePool2DSynapses:
+                                    # configure AvePool2D -> Conv2D synapses
+                                    config.synapses_class.append(AvePool2DConv2DSynapses)
+                                    config.synapses_params.append(in_config.synapses_params[i].copy())
+                                    config.synapses_params[-1].update({
+                                        'filters': tf_layer.filters,
+                                        'conv_size': tf_layer.kernel_size,
+                                        'conv_strides': tf_layer.strides,
+                                        'conv_padding': tf_layer.padding,
+                                        'connectivity_type': connectivity_type})
+                                    config.synapses_source.append(in_config.synapses_source[i])
+                                    config.synapses_weights.append(tf_layer.get_weights()[0])
 
-                    mlg_layer_lookup[tf_layer] = mlg_layer
-                    if len(tf_out_layers) == 0:
-                        # no outbound layers, so it must be an output
-                        mlg_model_outputs.append(mlg_layer)
+                                else:
+                                    # fail if incoming (weighted) layer does not have activation
+                                    if not in_config.has_activation:
+                                        raise NotImplementedError(
+                                            'weighted layers without activation not supported')
+
+                    if config.has_activation or config.is_output:
+                        config_steps.append(config)
+
+                    configs_lookups[tf_layer] = [config]
+
 
                 # === [Global]AveragePooling2D Layers ===
                 elif isinstance(tf_layer, (
                         tf.keras.layers.AveragePooling2D,
                         tf.keras.layers.GlobalAveragePooling2D)):
 
-                    # do not allow back-to-back pooling layers
-                    for tf_in_layer in tf_in_layers:
-                        if isinstance(tf_in_layer, (
-                                tf.keras.layers.AveragePooling2D,
-                                tf.keras.layers.GlobalAveragePooling2D)):
-                            raise NotImplementedError(
-                                'back-to-back pooling layers not supported')
+                    assert(len(tf_in_layers) == 1)
+                    tf_in_layer = tf_in_layers[0]
+                    in_configs = configs_lookups[tf_in_layer]
 
-                    # do not allow pooling layers to be output layers
-                    if len(tf_out_layers) == 0:
+                    # configure layer
+                    config = LayerConfig()
+                    config.is_output = len(tf_out_layers) == 0
+                    config.name = tf_layer.name
+                    config.shape = tf_layer.output_shape[1:]
+
+                    converter.validate_tf_layer(tf_layer, config)
+
+                    # do not allow output pooling layers
+                    if config.is_output:
                         raise NotImplementedError(
                             'output pooling layers not supported')
 
-                    mlg_layer_lookup[tf_layer] = mlg_layer_lookup[next(iter(tf_in_layers))]
+                    # configure synapses
+                    for in_config in in_configs:
+
+                        if in_config.has_activation:
+                            # configure AvePool2D synapses
+                            config.synapses_class.append(AvePool2DSynapses)
+                            if isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
+                                config.synapses_params.append({
+                                    'pool_size': tf_layer.pool_size,
+                                    'pool_strides': tf_layer.strides,
+                                    'pool_padding': tf_layer.padding})
+                            elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
+                                config.synapses_params.append({
+                                    'pool_size': tf_layer.input_shape[1:3],
+                                    'pool_strides': None,
+                                    'pool_padding': 'valid'})
+                            config.synapses_source.append(in_config)
+                            config.synapses_weights.append(None)
+
+                        else:
+                            # fail if incoming (weighted) layer does not have activation
+                            if not in_config.has_activation:
+                                raise NotImplementedError(
+                                    'weighted layers without activation not supported')
+
+                    configs_lookups[tf_layer] = [config]
+
+
+                # === Activation Layers ===
+                elif isinstance(tf_layer, tf_activation_layers):
+
+                    assert(len(tf_in_layers) == 1)
+                    tf_in_layer = tf_in_layers[0]
+                    in_configs = configs_lookups[tf_in_layer]
+
+                    # configure layer
+                    config = LayerConfig()
+                    config.is_output = len(tf_out_layers) == 0
+                    config.name = tf_layer.name
+                    config.shape = tf_layer.output_shape[1:]
+                    config.has_activation = True
+                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+
+                    converter.validate_tf_layer(tf_layer, config)
+
+                    # configure synapses
+                    for in_config in in_configs:
+
+                        if in_config.has_activation:
+                            # configure Identity synapses
+                            config.synapses_class.append(IdentitySynapses)
+                            config.synapses_params.append({})
+                            config.synapses_source.append(in_config)
+                            config.synapses_weights.append(None)
+
+                        else:
+                            for i in range(len(in_config.synapses_class)):
+                                # copy incoming synapses
+                                config.synapses_class.append(in_config.synapses_class[i])
+                                config.synapses_params.append(in_config.synapses_params[i])
+                                config.synapses_source.append(in_config.synapses_source[i])
+                                config.synapses_weights.append(in_config.synapses_weights[i])
+
+                    config_steps.append(config)
+
+                    configs_lookups[tf_layer] = [config]
+
 
                 # === Ignored Layers ===
-                elif isinstance(tf_layer, ignored_tf_layers):
-                    pass
+                elif isinstance(tf_layer, tf_ignored_layers):
+
+                    assert(len(tf_in_layers) == 1)
+                    tf_in_layer = tf_in_layers[0]
+                    in_configs = configs_lookups[tf_in_layer]
+
+                    configs_lookups[tf_layer] = in_configs
+
+
+                # === Unsupported Layers ===
+                else:
+                    raise NotImplementedError('{} layers not supported'.format(
+                        tf_layer.__class__.__name__))
+
+
+        # execute model build process
+        mlg_layer_lookup = {}
+        mlg_model_inputs = []
+        mlg_model_outputs = []
+
+        # for each build step
+        for config in config_steps:
+
+            if config.is_input:
+                # build layer
+                mlg_layer = InputLayer(config.name, config.shape, config.neurons)
+
+                mlg_model_inputs.append(mlg_layer)
+
+            else:
+                # build layer
+                mlg_layer = Layer(config.name, config.neurons)
+
+                # build synapses
+                sources = []
+                synapses = []
+                weights = config.synapses_weights
+                for i in range(len(config.synapses_class)):
+                    sources.append(mlg_layer_lookup[config.synapses_source[i]])
+                    synapses.append(config.synapses_class[i](**config.synapses_params[i]))
+                mlg_layer.connect(sources, synapses)
+                mlg_layer.set_weights(weights)
+
+                if config.is_output:
+                    mlg_model_outputs.append(mlg_layer)
+
+            mlg_layer_lookup[config] = mlg_layer
+
 
         # create model
         mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name)
