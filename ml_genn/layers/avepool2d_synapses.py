@@ -1,3 +1,4 @@
+import numpy as np
 from math import ceil
 from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
@@ -15,6 +16,7 @@ avepool2d_init = create_custom_init_var_snippet_class(
         'pool_sh', 'pool_sw',
         'pool_padh', 'pool_padw',
         'pool_ih', 'pool_iw', 'pool_ic',
+        'pool_oh', 'pool_ow', 'pool_oc',
     ],
 
     var_init_code='''
@@ -38,7 +40,14 @@ avepool2d_init = create_custom_init_var_snippet_class(
 
     $(value) = 0.0;
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-        $(value) = 1.0 / (poolCropKH * poolCropKW);
+
+        const int pool_ow = $(pool_ow), pool_oc = $(pool_oc);
+
+        const int poolOutId = poolOutRow * (pool_ow * pool_oc) + poolOutCol * (pool_oc) + poolInChan;
+
+        if (poolOutId == $(id_post)) {
+            $(value) = 1.0 / (poolCropKH * poolCropKW);
+        }
     }
     ''',
 )
@@ -79,12 +88,13 @@ class AvePool2DSynapses(BaseSynapses):
         elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
-        self.weights = None
+        self.weights = np.empty(0, dtype=np.float64)
 
     def compile(self, mlg_model, name):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
+        pool_oh, pool_ow, pool_oc = self.target().shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -97,7 +107,7 @@ class AvePool2DSynapses(BaseSynapses):
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
             'pool_padh': pool_padh, 'pool_padw': pool_padw,
             'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-        })
+            'pool_oh': pool_oh, 'pool_ow': pool_ow, 'pool_oc': pool_oc})
 
         conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                 else 'DENSE_INDIVIDUALG')
@@ -105,4 +115,4 @@ class AvePool2DSynapses(BaseSynapses):
         wu_var = {'g': wu_var_init}
 
         super(AvePool2DSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
-                                               {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)
+                                               {}, {}, 'DeltaCurr', {}, {}, None, {})

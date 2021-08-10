@@ -19,8 +19,10 @@ from ml_genn.layers.avepool2d_dense_synapses import AvePool2DDenseSynapses
 from ml_genn.layers.avepool2d_conv2d_synapses import AvePool2DConv2DSynapses
 
 from ml_genn.layers.layer import Layer
+from ml_genn.layers.identity import Identity
 from ml_genn.layers.dense import Dense
 from ml_genn.layers.conv2d import Conv2D
+from ml_genn.layers.avepool2d import AvePool2D
 from ml_genn.layers.avepool2d_dense import AvePool2DDense
 from ml_genn.layers.avepool2d_conv2d import AvePool2DConv2D
 from ml_genn.layers.input_layer import InputLayer

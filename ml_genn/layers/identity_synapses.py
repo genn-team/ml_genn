@@ -1,5 +1,8 @@
+import numpy as np
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
+from pygenn.genn_model import init_connectivity
 
+from ml_genn.layers import ConnectivityType
 from ml_genn.layers.base_synapses import BaseSynapses
 
 identity_init = create_custom_sparse_connect_init_snippet_class(
@@ -13,8 +16,9 @@ identity_init = create_custom_sparse_connect_init_snippet_class(
 
 class IdentitySynapses(BaseSynapses):
 
-    def __init__(self):
+    def __init__(self, connectivity_type='procedural'):
         super(IdentitySynapses, self).__init__()
+        self.connectivity_type = ConnectivityType(connectivity_type)
 
     def connect(self, source, target):
         super(IdentitySynapses, self).connect(source, target)
@@ -26,14 +30,14 @@ class IdentitySynapses(BaseSynapses):
         elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
-        self.weights = None
+        self.weights = np.empty(0, dtype=np.float64)
 
     def compile(self, mlg_model, name):
-
-        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                else 'DENSE_INDIVIDUALG')
+        conn_init = init_connectivity(identity_init, {})
+        conn = ('PROCEDURAL_GLOBALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
+                else 'SPARSE_GLOBALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
-        wu_var = {'g': wu_var_init}
+        wu_var = {'g': 1.0}
 
         super(IdentitySynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
-                                              {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)
+                                              {}, {}, 'DeltaCurr', {}, {}, conn_init, {})
