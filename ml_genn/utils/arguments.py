@@ -45,15 +45,17 @@ def parse_arguments(model_description='ML GeNN model'):
 
     args = parser.parse_args()
 
-    def build_converter(self, norm_data, K=8, norm_time=500):
+    def build_converter(self, norm_data, signed_input=False, K=8, norm_time=500):
         if self.converter == 'few-spike':
-            return FewSpike(K=K, norm_data=[norm_data])
+            return FewSpike(K=K, signed_input=signed_input, norm_data=[norm_data])
         elif args.converter == 'data-norm':
-            return DataNorm(norm_data=[norm_data], input_type=self.input_type)
+            return DataNorm(norm_data=[norm_data], signed_input=signed_input, 
+                            input_type=self.input_type)
         elif args.converter == 'spike-norm':
-            return SpikeNorm(norm_data=[norm_data], norm_time=norm_time, input_type=self.input_type)
+            return SpikeNorm(norm_data=[norm_data], norm_time=norm_time, 
+                             signed_input=signed_input, input_type=self.input_type)
         else:
-            return Simple(input_type=self.input_type)
+            return Simple(signed_input=signed_input, input_type=self.input_type)
 
     args.build_converter = partial(build_converter, args)
 
