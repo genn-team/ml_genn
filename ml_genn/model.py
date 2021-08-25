@@ -239,6 +239,8 @@ class Model(object):
                 for output_i in range(len(self.outputs)):
                     predictions = self.outputs[output_i].neurons.get_predictions(
                         pipe_batch_end - pipe_batch_start)
+                    if batch_labels[output_i].shape != predictions.shape:
+                        batch_labels[output_i] = [np.argmax(i) for i in batch_labels[output_i]]
                     n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
                     accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
 
