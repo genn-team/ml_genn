@@ -18,6 +18,7 @@ Example:
 """
 
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
@@ -259,11 +260,49 @@ class Model(object):
         return accuracy, spike_i, spike_t
 
     def calc_pipeline_depth(self):
-        """Calculate depth of model's pipeline"""
-        # **TODO** this only works for sequential models, branches need to be identified etc with e.g. ResNets
-        return int(sum(hasattr(l.neurons, "pipelined")
-                       for l in self.layers
-                       if l not in self.outputs))
+        # If none of the layers have the pipelined attribute, return 0
+        if all(not hasattr(l.neurons, "pipelined")
+               for l in self.layers if l not in self.outputs):
+           return 0
+       
+        # If there are multiple inputs, give an error
+        # **NOTE** inputs would have to be injected at different times to relax this
+        if len(self.inputs) > 1:
+            raise NotImplementedError("Pipelined models with multiple inputs "
+                                      "are not currently supported")
+        
+        # If there are multiple outputs, give an error
+        # **NOTE** outputs would need to be retrieved at different times to relax this
+        if len(self.outputs) > 1:
+            raise NotImplementedError("Pipelined models with multiple outputs "
+                                      "are not currently supported")
+                  
+        # Check input is first layer (it should be)
+        assert self.layers.index(self.inputs[0]) == 0
+        
+        # Initialise layer distances to maxsize for all layers aside from input
+        shortest_distance = {layer: (0 if layer == self.inputs[0] else sys.maxsize)
+                             for layer in self.layers}
+       
+        # Initialiser list of best layer predecessors
+        best_predecessor = {layer: None for layer in self.layers}
+        
+        # Loop through layers
+        for v in self.layers:
+            # Loop through layer's outgoing edges
+            for s in v.downstream_synapses:
+                # Edges add one to pipeline depth if target is 
+                # not an output and its neuron model isn't pipelined
+                u = s.target()
+                weight = 1 if u not in self.outputs and hasattr(u.neurons, "pipelined") else 0
+                
+                # If this results in a shorter route, return
+                if shortest_distance[u] > shortest_distance[v]:
+                    shortest_distance[u] = shortest_distance[v] + weight
+                    best_predecessor[u] = v
+        
+        # Return shortest distance to output
+        return shortest_distance[self.outputs[0]]
 
     def get_kernel_times(self):
         """Get total kernel run times"""
