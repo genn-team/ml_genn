@@ -138,42 +138,34 @@ class FewSpike(object):
                         rejoin_points.append(i)
                 assert len(rejoin_points) == 1
                 branches.append((l, rejoin_points[0]))
-        
+
+        # Recursive generator to find (single) paths to target
+        def dfs(synapse, target):
+            yield synapse
+    
+            # If we've hit target, stop
+            layer = synapse.target()
+            if layer == target:
+                return
+            
+            # Check that there's only one downstream synapse from here
+            assert len(layer.downstream_synapses) == 1
+            
+            # Recurse through this synapse
+            yield from dfs(layer.downstream_synapses[0], target)
+
         # Loop through branches
         for split, rejoin in branches:
-            print("Branch:", split.name, "-", rejoin.name)
+            # Build list of synapses forming paths between split and rejoin
+            branch_synapses = [list(dfs(s, rejoin)) 
+                               for s in split.downstream_synapses]
+           
+            # Find length of longest path
+            longest_path = max(len(s) for s in branch_synapses)
             
-            # Slice out layers starting at split point
-            split_index = mlg_model.layers.index(split)
-            branch_layers = mlg_model.layers[split_index:]
-            
-            # Initialise layer distances to min and max size for all layers between split and rejoin
-            shortest_distance = {layer: (0 if layer == split else sys.maxsize)
-                                 for layer in branch_layers}
-            longest_distance = {layer: (0 if layer == split else -sys.maxsize)
-                                 for layer in branch_layers}
-            
-            # Initialiser list of best layer predecessors
-            best_short_predecessor = {layer: None for layer in branch_layers}
-            best_long_predecessor = {layer: None for layer in branch_layers}
-            
-            # Loop through layers in branching section
-            for v in branch_layers:
-                # Loop through layer's outgoing edges
-                for s in v.downstream_synapses:
-                    # If this results in a shorter route, relax
-                    u = s.target()
-                    if shortest_distance[u] > shortest_distance[v]:
-                        shortest_distance[u] = shortest_distance[v] + 1
-                        best_short_predecessor[u] = v
-                    
-                    # If this results in a longer route, relax
-                    if longest_distance[u] < longest_distance[v]:
-                        longest_distance[u] = longest_distance[v] + 1
-                        best_long_predecessor[u] = v
-            
-            # Return shortest distance to output
-            print(shortest_distance[rejoin], longest_distance[rejoin])
+            # Add delay to balance branches to (arbitrarily) first synapses in each branch
+            for s in branch_synapses:
+                s[0].delay = (longest_path - len(s)) * self.K
     
     def post_compile(self, mlg_model):
         # do not allow multiple input or output layers
