@@ -276,33 +276,19 @@ class Model(object):
         if len(self.outputs) > 1:
             raise NotImplementedError("Pipelined models with multiple outputs "
                                       "are not currently supported")
-                  
-        # Check input is first layer (it should be)
-        assert self.layers.index(self.inputs[0]) == 0
+        # Recursive function to get delay along (arbitrary) path to target
+        def calc_delay(synapse, target):
+            # If we've hit target, stop
+            layer = synapse.target()
+            if layer == target:
+                return 0
+
+            # Recurse through first downstream synapse
+            return synapse.delay + 1 + calc_delay(layer.downstream_synapses[0], target)
         
-        # Initialise layer distances to maxsize for all layers aside from input
-        shortest_distance = {layer: (0 if layer == self.inputs[0] else sys.maxsize)
-                             for layer in self.layers}
-       
-        # Initialiser list of best layer predecessors
-        best_predecessor = {layer: None for layer in self.layers}
-        
-        # Loop through layers
-        for v in self.layers:
-            # Loop through layer's outgoing edges
-            for s in v.downstream_synapses:
-                # Edges add one to pipeline depth if target is 
-                # not an output and its neuron model isn't pipelined
-                u = s.target()
-                weight = 1 if u not in self.outputs and hasattr(u.neurons, "pipelined") else 0
-                
-                # If this results in a shorter route, return
-                if shortest_distance[u] > shortest_distance[v]:
-                    shortest_distance[u] = shortest_distance[v] + weight
-                    best_predecessor[u] = v
-        
-        # Return shortest distance to output
-        return shortest_distance[self.outputs[0]]
+        # Calculate delay from input to output
+        # **NOTE** in pipelined networks, delay should have been balanced
+        return calc_delay(self.inputs[0].downstream_synapses[0], self.outputs[0])
 
     def get_kernel_times(self):
         """Get total kernel run times"""
