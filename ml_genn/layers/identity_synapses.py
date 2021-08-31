@@ -39,5 +39,5 @@ class IdentitySynapses(BaseSynapses):
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': 1.0}
 
-        super(IdentitySynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+        super(IdentitySynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                               {}, {}, 'DeltaCurr', {}, {}, conn_init, {})
