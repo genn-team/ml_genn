@@ -60,19 +60,19 @@ class FewSpike(object):
                 'Few-Spike converter: {} layers are not supported'.format(
                     tf_layer.__class__.__name__))
 
-    def create_input_neurons(self, pre_compile_output):
-        alpha = (self.alpha if pre_compile_output.max_input is None 
-                 else float(np.ceil(pre_compile_output.max_input)))
+    def create_input_neurons(self, pre_convert_output):
+        alpha = (self.alpha if pre_convert_output.max_input is None 
+                 else float(np.ceil(pre_convert_output.max_input)))
         return FSReluInputNeurons(self.K, alpha, self.signed_input)
 
-    def create_neurons(self, tf_layer, pre_compile_output):
+    def create_neurons(self, tf_layer, pre_convert_output):
         # Lookup optimised alpha value for neuron
-        alpha = (float(np.ceil(pre_compile_output.max_activations[tf_layer]))
-                 if tf_layer in pre_compile_output.max_activations 
+        alpha = (float(np.ceil(pre_convert_output.max_activations[tf_layer]))
+                 if tf_layer in pre_convert_output.max_activations 
                  else self.alpha)
         return FSReluNeurons(self.K, alpha)
     
-    def pre_compile(self, tf_model):
+    def pre_convert(self, tf_model):
         # If any normalisation data was provided
         if self.norm_data is not None:
             # Get weighted layers
@@ -103,6 +103,9 @@ class FewSpike(object):
         # Otherwise, return empty normalisation output tuple
         else:
             return PreCompileOutput(max_activations={}, max_input=None)
+
+    def pre_compile(self, mlg_model):
+        pass
     
     def post_compile(self, mlg_model):
         # do not allow multiple input or output layers

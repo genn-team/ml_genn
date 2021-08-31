@@ -378,8 +378,8 @@ class Model(object):
             tf_out_layers_all[tf_layer] = tf_out_layers
 
 
-        # Perform any pre-compilation tasks
-        pre_compile_output = converter.pre_compile(tf_model)
+        # Perform any pre-conversion tasks
+        pre_convert_output = converter.pre_convert(tf_model)
 
         # configure model build process
         class LayerConfig(object):
@@ -434,7 +434,7 @@ class Model(object):
             config.has_activation = True
             config.name = tf_layer.name
             config.shape = tf_layer.output_shape[0][1:]
-            config.neurons = converter.create_input_neurons(pre_compile_output)
+            config.neurons = converter.create_input_neurons(pre_convert_output)
 
             config_steps.append(config)
             configs_lookups[tf_layer] = [config]
@@ -488,7 +488,7 @@ class Model(object):
                     config.is_output = len(tf_out_layers) == 0
                     config.name = tf_layer.name
                     config.shape = tf_layer.output_shape[1:]
-                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+                    config.neurons = converter.create_neurons(tf_layer, pre_convert_output)
                     if not tf_layer.activation is tf.keras.activations.linear:
                         config.has_activation = True
 
@@ -539,7 +539,7 @@ class Model(object):
                     config.is_output = len(tf_out_layers) == 0
                     config.name = tf_layer.name
                     config.shape = tf_layer.output_shape[1:]
-                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+                    config.neurons = converter.create_neurons(tf_layer, pre_convert_output)
                     if not tf_layer.activation is tf.keras.activations.linear:
                         config.has_activation = True
 
@@ -651,7 +651,7 @@ class Model(object):
                     config.name = tf_layer.name
                     config.shape = tf_layer.output_shape[1:]
                     config.has_activation = True
-                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+                    config.neurons = converter.create_neurons(tf_layer, pre_convert_output)
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -730,7 +730,10 @@ class Model(object):
 
         # create model
         mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name)
-
+    
+        # Perform any pre-compilation tasks
+        converter.pre_compile(mlg_model)
+        
         # Compile model
         mlg_model.compile(**compile_kwargs)
 

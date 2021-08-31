@@ -63,7 +63,7 @@ class DataNorm(object):
                 'Data-Norm converter: {} layers are not supported'.format(
                     tf_layer.__class__.__name__))
 
-    def create_input_neurons(self, pre_compile_output):
+    def create_input_neurons(self, pre_convert_output):
         if self.input_type == InputType.SPIKE:
             return SpikeInputNeurons(signed_spikes=self.signed_input)
         elif self.input_type == InputType.POISSON:
@@ -71,10 +71,10 @@ class DataNorm(object):
         elif self.input_type == InputType.IF:
             return IFInputNeurons()
 
-    def create_neurons(self, tf_layer, pre_compile_output):
-        return IFNeurons(threshold=pre_compile_output.thresholds[tf_layer])
+    def create_neurons(self, tf_layer, pre_convert_output):
+        return IFNeurons(threshold=pre_convert_output.thresholds[tf_layer])
 
-    def pre_compile(self, tf_model):
+    def pre_convert(self, tf_model):
         # Get output functions for weighted layers.
         idx = [i for i, layer in enumerate(tf_model.layers)
                if len(layer.get_weights()) > 0]
@@ -104,6 +104,9 @@ class DataNorm(object):
                       in zip(weighted_layers, applied_factors)}
 
         return PreCompileOutput(thresholds=thresholds)
+    
+    def pre_compile(self, mlg_model):
+        pass
 
     def post_compile(self, mlg_model):
         pass

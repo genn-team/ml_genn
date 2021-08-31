@@ -66,7 +66,10 @@ class Simple(object):
     def create_neurons(self, tf_layer, pre_compile_output):
         return IFNeurons(threshold=1.0)
 
-    def pre_compile(self, tf_model):
+    def pre_convert(self, tf_model):
+        pass
+    
+    def pre_compile(self, mlg_model):
         pass
 
     def post_compile(self, mlg_model):
