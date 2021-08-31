@@ -1,3 +1,5 @@
+from copy import copy
+from six import iteritems
 from ml_genn.model import Model
 from ml_genn.layers import (AvePool2D, AvePool2DConv2D, AvePool2DDense, Conv2D, 
                             Dense, IdentitySynapses, InputLayer, FSReluNeurons, FSReluInputNeurons)
@@ -51,6 +53,35 @@ def test_pipe_resnet():
     # create model
     model = Model([input], [pool1], name="test_pipe_resnet")
     print(model.calc_pipeline_depth())
-    
+
+    # Dominators of the source node of the edge-reversed DAG is set containing just it 
+    # **NOTE** reversing topologically-sorted layers is a valid topological order for the edge-reversed DAG
+    dominators = {model.layers[-1]: set((model.layers[-1],))}
+
+    # Loop through layers in reverse topological order
+    for l in reversed(model.layers[:-1]):
+        # Get intersection of all this layers predecessor
+        # **NOTE** because we're operating on the edge-reversed graph, these are downstream targets
+        downstream_dominators = set.intersection(*(dominators[d.target()] 
+                                                   for d in l.downstream_synapses))
+        dominators[l] = downstream_dominators.union((l,))
+
+    # Create dictionary of STRICT dominators by removing layers from their own dominator sets 
+    strict_dominators = {l: d.difference((l,)) 
+                         for l, d in iteritems(dominators)}
+
+    # Loop through layers
+    for l in model.layers:
+        # If graph diverges at this point
+        if len(l.downstream_synapses) > 1:
+            print("Split:", l.name)
+            # Loop through split layer's strict dominators
+            for i in strict_dominators[l]:
+                # If i does not strictly dominate any of split layer's other strict dominators 
+                if not any(i in strict_dominators[j] 
+                           for j in strict_dominators[l]):
+                    # It's the rejoin layer!
+                    print("Rejoin:", i.name)
+
 #test_pipe_sequential()
 test_pipe_resnet()
