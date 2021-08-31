@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 import ml_genn as mlg
-from converter import Converter
 import pytest
 
 
@@ -10,8 +9,7 @@ def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
     tf_y = tf_model(x).numpy()
 
     # Run ML GeNN model
-    mlg_model = mlg.Model.convert_tf_model(tf_model, converter=Converter(),
-                                           connectivity_type=connectivity_type,
+    mlg_model = mlg.Model.convert_tf_model(tf_model, connectivity_type=connectivity_type,
                                            dt=1.0, batch_size=1)
     mlg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
     mlg_model.set_input_batch(x)
