@@ -142,15 +142,15 @@ class FewSpike(object):
         # Recursive generator to find (single) paths to target
         def dfs(synapse, target):
             yield synapse
-    
+
             # If we've hit target, stop
             layer = synapse.target()
             if layer == target:
                 return
-            
+
             # Check that there's only one downstream synapse from here
             assert len(layer.downstream_synapses) == 1
-            
+
             # Recurse through this synapse
             yield from dfs(layer.downstream_synapses[0], target)
 
@@ -159,14 +159,23 @@ class FewSpike(object):
             # Build list of synapses forming paths between split and rejoin
             branch_synapses = [list(dfs(s, rejoin)) 
                                for s in split.downstream_synapses]
-           
+
             # Find length of longest path
             longest_path = max(len(s) for s in branch_synapses)
-            
+
             # Add delay to balance branches to (arbitrarily) first synapses in each branch
             for s in branch_synapses:
                 s[0].delay = (longest_path - len(s)) * self.K
+            
+            # Determine the maximum alpha value of layers upstream of rejoin point
+            max_rejoin_alpha = max(s.source().neurons.alpha
+                                   for s in rejoin.upstream_synapses)
+            
+            # Update all layer's alpha to this value
+            for s in rejoin.upstream_synapses:
+                s.source().neurons.alpha = max_rejoin_alpha
     
+
     def post_compile(self, mlg_model):
         # do not allow multiple input or output layers
         if len(mlg_model.inputs) > 1 or len(mlg_model.outputs) > 1:
