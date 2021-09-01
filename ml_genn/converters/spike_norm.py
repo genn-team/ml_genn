@@ -9,9 +9,11 @@ from ml_genn.layers import PoissonInputNeurons
 from ml_genn.layers import IFInputNeurons
 
 class SpikeNorm(object):
-    def __init__(self, norm_data, norm_time, input_type=InputType.POISSON):
+    def __init__(self, norm_data, norm_time, signed_input=False, 
+                 input_type=InputType.POISSON):
         self.norm_data = norm_data
         self.norm_time = norm_time
+        self.signed_input = signed_input
         self.input_type = InputType(input_type)
 
     def validate_tf_layer(self, tf_layer, config):
@@ -60,13 +62,9 @@ class SpikeNorm(object):
 
     def create_input_neurons(self, pre_compile_output):
         if self.input_type == InputType.SPIKE:
-            return SpikeInputNeurons()
-        elif self.input_type == InputType.SPIKE_SIGNED:
-            return SpikeInputNeurons(signed_spikes=True)
+            return SpikeInputNeurons(signed_spikes=self.signed_input)
         elif self.input_type == InputType.POISSON:
-            return PoissonInputNeurons()
-        elif self.input_type == InputType.POISSON_SIGNED:
-            return PoissonInputNeurons(signed_spikes=True)
+            return PoissonInputNeurons(signed_spikes=self.signed_input)
         elif self.input_type == InputType.IF:
             return IFInputNeurons()
 
