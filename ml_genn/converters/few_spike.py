@@ -108,72 +108,28 @@ class FewSpike(object):
             return PreCompileOutput(max_activations={}, max_input=None)
 
     def pre_compile(self, mlg_model):
-        # Dominators of the source node of the edge-reversed DAG is set containing just it 
-        # **NOTE** reversing topologically-sorted layers is a valid topological order for the edge-reversed DAG
-        dominators = {mlg_model.layers[-1]: set((mlg_model.layers[-1],))}
-
-        # Loop through layers in reverse topological order
-        for l in reversed(mlg_model.layers[:-1]):
-            # Get intersection of all this layers predecessor
-            # **NOTE** because we're operating on the edge-reversed graph, these are downstream targets
-            downstream_dominators = set.intersection(*(dominators[d.target()] 
-                                                       for d in l.downstream_synapses))
-            dominators[l] = downstream_dominators.union((l,))
-
-        # Create dictionary of STRICT dominators by removing layers from their own dominator sets 
-        strict_dominators = {l: d.difference((l,)) 
-                             for l, d in iteritems(dominators)}
-
+        delay_to_layers = {}
+        
         # Loop through layers
-        branches = []
         for l in mlg_model.layers:
-            # If graph diverges at this point
-            if len(l.downstream_synapses) > 1:
-                # Loop through split layer's strict dominators
-                rejoin_points = []
-                for i in strict_dominators[l]:
-                    # If i does not strictly dominate any of split layer's other strict dominators 
-                    if not any(i in strict_dominators[j] 
-                               for j in strict_dominators[l]):
-                        rejoin_points.append(i)
-                assert len(rejoin_points) == 1
-                branches.append((l, rejoin_points[0]))
-
-        # Recursive generator to find (single) paths to target
-        def dfs(synapse, target):
-            yield synapse
-
-            # If we've hit target, stop
-            layer = synapse.target()
-            if layer == target:
-                return
-
-            # Check that there's only one downstream synapse from here
-            assert len(layer.downstream_synapses) == 1
-
-            # Recurse through this synapse
-            yield from dfs(layer.downstream_synapses[0], target)
-
-        # Loop through branches
-        for split, rejoin in branches:
-            # Build list of synapses forming paths between split and rejoin
-            branch_synapses = [list(dfs(s, rejoin)) 
-                               for s in split.downstream_synapses]
-
-            # Find length of longest path
-            longest_path = max(len(s) for s in branch_synapses)
-
-            # Add delay to balance branches to (arbitrarily) first synapses in each branch
-            for s in branch_synapses:
-                s[0].delay = (longest_path - len(s)) * self.K
-            
-            # Determine the maximum alpha value of layers upstream of rejoin point
-            max_rejoin_alpha = max(s.source().neurons.alpha
-                                   for s in rejoin.upstream_synapses)
-            
-            # Update all layer's alpha to this value
-            for s in rejoin.upstream_synapses:
-                s.source().neurons.alpha = max_rejoin_alpha
+            # If layer has upstream synaptic connections, delay is 
+            # one more than maximum delay from upstream layers
+            if len(l.upstream_synapses) > 0:
+                # Calculate max delay from upstream synapses
+                max_delay = max(delay_to_layers[s.source()]
+                                for s in l.upstream_synapses)
+                
+                delay_to_layers[l] = 1 + max_delay
+                print("Layer %s delay = %u (from %u upstream)" % (l.name, delay_to_layers[l],
+                                                                  len(l.upstream_synapses)))
+                for s in l.upstream_synapses:
+                    s.delay = (max_delay - delay_to_layers[s.source()]) * self.K
+                    print("\tAdding delay of %u to synapses from %s" % (s.delay, s.source().name))
+                
+                
+            else:
+                print("Layer %s input (no delay)" % l.name)
+                delay_to_layers[l] = 0
     
 
     def post_compile(self, mlg_model):
