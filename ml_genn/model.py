@@ -72,7 +72,7 @@ class Model(object):
         self.outputs = outputs
         self.g_model = None
 
-        # Construct topologically sorted list of layers
+        # Construct topologically sorted list of layers (Kahn's algorithm as described here: https://en.wikipedia.org/wiki/Topological_sorting)
         new_layers = set(inputs)
         seen_synapses = set()
         while new_layers:
