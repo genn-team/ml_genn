@@ -71,7 +71,7 @@ def test_delay_balancing():
         if i >= pipeline_depth:
             nrn = mlg_model.outputs[0].neurons.nrn
             nrn.pull_var_from_device('Fx')
-            assert abs(nrn.vars['Fx'].view[0] - x[i - pipeline_depth]) <= ((4.0 * (2.0 ** -7)))
+            assert abs(nrn.vars['Fx'].view[0] - x[i - pipeline_depth]) < 0.1
     
 if __name__ == '__main__':
     test_delay_balancing()
