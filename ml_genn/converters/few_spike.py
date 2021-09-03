@@ -112,23 +112,29 @@ class FewSpike(object):
         
         # Loop through layers
         for l in mlg_model.layers:
-            # If layer has upstream synaptic connections, delay is 
-            # one more than maximum delay from upstream layers
+            # If layer has upstream synaptic connections
             if len(l.upstream_synapses) > 0:
                 # Calculate max delay from upstream synapses
                 max_delay = max(delay_to_layers[s.source()]
                                 for s in l.upstream_synapses)
                 
+                # Delay to this layer is one more than this
                 delay_to_layers[l] = 1 + max_delay
-                print("Layer %s delay = %u (from %u upstream)" % (l.name, delay_to_layers[l],
-                                                                  len(l.upstream_synapses)))
+                
+                # Determine the maximum alpha value upstream layers
+                max_alpha = max(s.source().neurons.alpha
+                                for s in l.upstream_synapses)
+
+                # Loop through upstream synapses
                 for s in l.upstream_synapses:
+                    # Set delay to balance
                     s.delay = (max_delay - delay_to_layers[s.source()]) * self.K
-                    print("\tAdding delay of %u to synapses from %s" % (s.delay, s.source().name))
-                
-                
+
+                    # Set alpha to maximum
+                    s.source().neurons.alpha = max_alpha
+
+            # Otherwise (layer is an input layer), set this layer's delay as zero
             else:
-                print("Layer %s input (no delay)" % l.name)
                 delay_to_layers[l] = 0
     
 
