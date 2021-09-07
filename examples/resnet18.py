@@ -114,7 +114,7 @@ if __name__ == '__main__':
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
         fit_callbacks = [callbacks.LearningRateScheduler(schedule),
-                         callbacks.EarlyStopping()]
+                         callbacks.EarlyStopping(patience=4)]
     
         if args.record_tensorboard:
             fit_callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))

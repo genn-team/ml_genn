@@ -83,7 +83,7 @@ if __name__ == '__main__':
         tf_model = models.load_model('alexnet_tf_model')
     else:
         fit_callbacks = [callbacks.LearningRateScheduler(schedule),
-                         callbacks.EarlyStopping()]
+                         callbacks.EarlyStopping(patience=4)]
         if args.record_tensorboard:
             fit_callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))
 
