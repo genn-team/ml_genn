@@ -95,7 +95,7 @@ if __name__ == '__main__':
             tf_model.fit(iter_train, epochs=75, validation_data=iter_validate, callbacks=fit_callbacks)
         else:
             tf_model.fit(x_train, y_train, batch_size=256, epochs=75, shuffle=True, 
-                         validation_split=0.1, callbacks=callbacks)
+                         validation_split=0.1, callbacks=fit_callbacks)
 
         #Save alexnet_tf_model
         models.save_model(tf_model, 'alexnet_tf_model', save_format='h5')
