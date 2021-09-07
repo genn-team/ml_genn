@@ -113,14 +113,17 @@ if __name__ == '__main__':
         optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-        fit_callbacks = [callbacks.LearningRateScheduler(schedule)]
+        fit_callbacks = [callbacks.LearningRateScheduler(schedule),
+                         callbacks.EarlyStopping()]
+    
         if args.record_tensorboard:
             fit_callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))
 
         if args.augment_training:
             tf_model.fit(iter_train, validation_data=iter_validate, epochs=200, callbacks=fit_callbacks)
         else:
-            tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=fit_callbacks, validation_split=0.1)
+            tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, 
+                         validation_split=0.1, callbacks=fit_callbacks)
 
         models.save_model(tf_model, 'resnet_tf_model', save_format='h5')
 

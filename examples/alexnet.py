@@ -56,7 +56,7 @@ if __name__ == '__main__':
         iter_validate = data_gen.flow(x_train, y_train, batch_size=256, subset="validation")
 
     # Create L2 regularizer
-    regularizer = regularizers.l2(0.000001)
+    regularizer = regularizers.l2(0.0001)
     initializer = "he_uniform"
 
     tf_model = models.Sequential([
