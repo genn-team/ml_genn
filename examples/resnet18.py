@@ -22,42 +22,44 @@ def initializer_res(shape, dtype=None):
 initializer = "he_normal"
 initializer_res = "he_normal"
 
-def resnetFunctionalIdentity(input_layer, filters, regularizer, identity_cnn=False, final_layer = False, drop_out_layer = False):
-  strides = [2, 1] if identity_cnn else [1, 1]
-  KERNEL_SIZE = (3,3)
-  input_layer = tf.keras.layers.Conv2D(filters, kernel_size=(1,1), padding='same', kernel_initializer=initializer_res, use_bias=False, activation='relu')(input_layer)
-  x = tf.keras.layers.Conv2D(filters, kernel_size=KERNEL_SIZE, padding='same', strides=strides[0], kernel_initializer=initializer_res, use_bias=False, activation='relu', kernel_regularizer=regularizer)(input_layer)
-  x = tf.keras.layers.Dropout(0.05)(x)
-  x = tf.keras.layers.Conv2D(filters, kernel_size=KERNEL_SIZE, padding='same', strides=strides[1], kernel_initializer=initializer_res, use_bias=False, activation='relu', kernel_regularizer=regularizer)(x)
-  x = tf.keras.layers.Dropout(0.05)(x)
+def resnetFunctionalIdentity(input_layer, filters, regularizer, identity_cnn=False):
+    stride = 2 if identity_cnn else 1
+    KERNEL_SIZE = (3,3)
+    input_layer = tf.keras.layers.ReLU()(input_layer)
+    x = tf.keras.layers.Conv2D(filters, kernel_size=KERNEL_SIZE, padding='same', strides=stride, kernel_initializer=initializer_res, use_bias=False, activation='relu', kernel_regularizer=regularizer)(input_layer)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    x = tf.keras.layers.Conv2D(filters, kernel_size=KERNEL_SIZE, padding='same', strides=1, kernel_initializer=initializer_res, use_bias=False, kernel_regularizer=regularizer)(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
 
-  res = tf.keras.layers.Conv2D(filters, kernel_size=(1,1), padding='same', strides=2, kernel_initializer=initializer_res, use_bias=False, activation='relu')(input_layer) if identity_cnn else input_layer
+    if identity_cnn:
+        res = tf.keras.layers.Conv2D(filters, kernel_size=(1,1), padding='same', strides=2, kernel_initializer=initializer_res, use_bias=False)(input_layer) 
+    else:
+        res = input_layer
 
-  x = tf.keras.layers.Add()([x, res])
-  return x
+    x = tf.keras.layers.Add()([x, res])
+    return x
 
 def resnet18(num_classes, regularizer):
-  input = tf.keras.layers.Input(shape=(32,32,3))
-  x = tf.keras.layers.Conv2D(64, (7,7), padding='same', kernel_initializer=initializer, activation='relu', use_bias=False, kernel_regularizer=regularizer)(input)
-  x = tf.keras.layers.AveragePooling2D((3,3))(x)
+    input = tf.keras.layers.Input(shape=(32,32,3))
+    x = tf.keras.layers.Conv2D(64, (7,7), padding='same', kernel_initializer=initializer, activation='relu', use_bias=False, kernel_regularizer=regularizer)(input)
+    x = tf.keras.layers.AveragePooling2D((3,3))(x)
 
-  x = resnetFunctionalIdentity(x, 64, regularizer)
-  x = resnetFunctionalIdentity(x, 64,  regularizer)
-  
-  counter = -1
-  for i in range(1, 7):
-    counter += 1 if i%2==1 else 0
-    drop_out_layer = True if i > 5 else False
+    x = resnetFunctionalIdentity(x, 64, regularizer)
+    x = resnetFunctionalIdentity(x, 64,  regularizer)
 
-    final_layer = True if i == 6 else False
-    x = resnetFunctionalIdentity(x, 128*(2**counter), regularizer, i%2, final_layer, drop_out_layer)
-  
-  x = tf.keras.layers.GlobalAveragePooling2D()(x)
-  x = tf.keras.layers.Dense(num_classes, activation='softmax', use_bias=False, kernel_regularizer=regularizer)(x)
+    counter = -1
+    for i in range(1, 7):
+        counter += 1 if i%2==1 else 0
 
-  model = tf.keras.Model(inputs=input, outputs=x, name='Resnet18')
+        x = resnetFunctionalIdentity(x, 128*(2**counter), regularizer, i%2)
+        print(128*(2**counter), bool(i%2))
 
-  return model
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dense(num_classes, activation='softmax', use_bias=False, kernel_regularizer=regularizer)(x)
+    model = tf.keras.Model(inputs=input, outputs=x, name='Resnet18')
+
+    return model
 
 # Learning rate schedule
 def schedule(epoch, learning_rate):
@@ -113,8 +115,8 @@ if __name__ == '__main__':
         optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-        fit_callbacks = [callbacks.LearningRateScheduler(schedule),
-                         callbacks.EarlyStopping(patience=4)]
+        fit_callbacks = [callbacks.LearningRateScheduler(schedule)]#,
+#                         callbacks.EarlyStopping(patience=10)]
     
         if args.record_tensorboard:
             fit_callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))
