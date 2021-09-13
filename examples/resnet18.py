@@ -24,11 +24,10 @@ initializer_res = "he_normal"
 
 def resnetFunctionalIdentity(input_layer, filters, regularizer, identity_cnn=False):
     stride = 2 if identity_cnn else 1
-    KERNEL_SIZE = (3,3)
     input_layer = tf.keras.layers.ReLU()(input_layer)
-    x = tf.keras.layers.Conv2D(filters, kernel_size=KERNEL_SIZE, padding='same', strides=stride, kernel_initializer=initializer_res, use_bias=False, activation='relu', kernel_regularizer=regularizer)(input_layer)
+    x = tf.keras.layers.Conv2D(filters, 3, padding='same', strides=stride, kernel_initializer=initializer_res, use_bias=False, activation='relu', kernel_regularizer=regularizer)(input_layer)
     x = tf.keras.layers.Dropout(0.2)(x)
-    x = tf.keras.layers.Conv2D(filters, kernel_size=KERNEL_SIZE, padding='same', strides=1, kernel_initializer=initializer_res, use_bias=False, kernel_regularizer=regularizer)(x)
+    x = tf.keras.layers.Conv2D(filters, 3, padding='same', strides=1, kernel_initializer=initializer_res, use_bias=False, kernel_regularizer=regularizer)(x)
     x = tf.keras.layers.Dropout(0.2)(x)
 
     if identity_cnn:
@@ -41,18 +40,20 @@ def resnetFunctionalIdentity(input_layer, filters, regularizer, identity_cnn=Fal
 
 def resnet18(num_classes, regularizer):
     input = tf.keras.layers.Input(shape=(32,32,3))
-    x = tf.keras.layers.Conv2D(64, (7,7), padding='same', kernel_initializer=initializer, activation='relu', use_bias=False, kernel_regularizer=regularizer)(input)
-    x = tf.keras.layers.AveragePooling2D((3,3))(x)
+    x = tf.keras.layers.Conv2D(64, 7, padding='same', strides=2, kernel_initializer=initializer, activation='relu', use_bias=False, kernel_regularizer=regularizer)(input)
+    x = tf.keras.layers.AveragePooling2D(3, strides=2)(x)
 
     x = resnetFunctionalIdentity(x, 64, regularizer)
     x = resnetFunctionalIdentity(x, 64,  regularizer)
-
-    counter = -1
-    for i in range(1, 7):
-        counter += 1 if i%2==1 else 0
-
-        x = resnetFunctionalIdentity(x, 128*(2**counter), regularizer, i%2)
-        print(128*(2**counter), bool(i%2))
+    
+    x = resnetFunctionalIdentity(x, 128, regularizer, True)
+    x = resnetFunctionalIdentity(x, 128,  regularizer)
+    
+    x = resnetFunctionalIdentity(x, 256, regularizer, True)
+    x = resnetFunctionalIdentity(x, 256,  regularizer)
+    
+    x = resnetFunctionalIdentity(x, 512, regularizer, True)
+    x = resnetFunctionalIdentity(x, 512,  regularizer)
 
     x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
