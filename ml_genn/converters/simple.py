@@ -33,6 +33,20 @@ class Simple(object):
                     raise NotImplementedError(
                         'Simple converter: hidden layers must have ReLU activation')
 
+        elif isinstance(tf_layer, tf.keras.layers.Activation):
+            if config.is_output:
+                # ReLU and softmax activation allowd in output layers
+                if (not tf_layer.activation is tf.keras.activations.relu and
+                    not tf_layer.activation is tf.keras.activations.softmax):
+                    raise NotImplementedError(
+                        'Simple converter: output layer must have ReLU or softmax activation')
+
+            else:
+                # ReLU activation allowed everywhere
+                if not tf_layer.activation is tf.keras.activations.relu:
+                    raise NotImplementedError(
+                        'Simple converter: hidden layers must have ReLU activation')
+
         elif isinstance(tf_layer, tf.keras.layers.ReLU):
             # ReLU activation allowed everywhere
             pass
