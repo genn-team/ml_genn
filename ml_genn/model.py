@@ -21,6 +21,8 @@ import os
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
+from collections import namedtuple
+
 from pygenn.genn_model import GeNNModel
 
 from ml_genn.converters import Simple
@@ -308,6 +310,7 @@ class Model(object):
         """
 
         tf_activation_layers = (
+            tf.keras.layers.Activation,
             tf.keras.layers.ReLU)
 
         tf_ignored_layers = (
@@ -346,17 +349,17 @@ class Model(object):
 
         # configure model build process
         class LayerConfig(object):
-            def __init__(self):
-                self.is_input = False
-                self.is_output = False
-                self.has_activation = False
-                self.name = None
-                self.shape = None
-                self.neurons = None
-                self.synapses_class = []
-                self.synapses_params = []
-                self.synapses_source = []
-                self.synapses_weights = []
+            def __init__(self, name, shape, is_input=False, is_output=False,
+                         has_activation=False, neurons=None):
+                self.name = name
+                self.shape = shape
+                self.is_input = is_input
+                self.is_output = is_output
+                self.has_activation = has_activation
+                self.neurons = neurons
+                self.synapses = []
+
+        InSynConfig = namedtuple('InSynconfig', ['type', 'params', 'source', 'weights'])
 
         config_steps = []
         configs_lookups = {}
@@ -392,12 +395,10 @@ class Model(object):
             print('configuring Input layer <{}>'.format(tf_layer.name))
 
             # configure layer
-            config = LayerConfig()
-            config.is_input = True
-            config.has_activation = True
-            config.name = tf_layer.name
-            config.shape = tf_layer.output_shape[0][1:]
-            config.neurons = converter.create_input_neurons(pre_compile_output)
+            config = LayerConfig(
+                tf_layer.name, tf_layer.output_shape[0][1:],
+                is_input=True, has_activation=True,
+                neurons=converter.create_input_neurons(pre_compile_output))
 
             config_steps.append(config)
             configs_lookups[tf_layer] = [config]
@@ -447,13 +448,11 @@ class Model(object):
                     in_configs = configs_lookups[tf_in_layer]
 
                     # configure layer
-                    config = LayerConfig()
-                    config.is_output = len(tf_out_layers) == 0
-                    config.name = tf_layer.name
-                    config.shape = tf_layer.output_shape[1:]
-                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
-                    if not tf_layer.activation is tf.keras.activations.linear:
-                        config.has_activation = True
+                    config = LayerConfig(
+                        tf_layer.name, tf_layer.output_shape[1:],
+                        is_output=len(tf_out_layers) == 0,
+                        has_activation=not tf_layer.activation is tf.keras.activations.linear,
+                        neurons=converter.create_neurons(tf_layer, pre_compile_output))
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -462,21 +461,24 @@ class Model(object):
 
                         if in_config.has_activation:
                             # configure Dense synapses
-                            config.synapses_class.append(DenseSynapses)
-                            config.synapses_params.append({'units': tf_layer.units})
-                            config.synapses_source.append(in_config)
-                            config.synapses_weights.append(tf_layer.get_weights()[0])
+                            config.synapses.append(InSynConfig(
+                                type=DenseSynapses,
+                                params={'units': tf_layer.units},
+                                source=in_config,
+                                weights=tf_layer.get_weights()[0]))
 
                         else:
-                            for i in range(len(in_config.synapses_class)):
+                            for i in range(len(in_config.synapses)):
 
-                                if in_config.synapses_class[i] is AvePool2DSynapses:
+                                if in_config.synapses[i].type is AvePool2DSynapses:
                                     # configure AvePool2D -> Dense synapses
-                                    config.synapses_class.append(AvePool2DDenseSynapses)
-                                    config.synapses_params.append(in_config.synapses_params[i].copy())
-                                    config.synapses_params[-1].update({'units': tf_layer.units})
-                                    config.synapses_source.append(in_config.synapses_source[i])
-                                    config.synapses_weights.append(tf_layer.get_weights()[0])
+                                    config.synapses.append(InSynConfig(
+                                        type=AvePool2DDenseSynapses,
+                                        params=in_config.synapses[i].params.copy(),
+                                        source=in_config.synapses[i].source,
+                                        weights=tf_layer.get_weights()[0]))
+                                    config.synapses[-1].params.update({
+                                        'units': tf_layer.units})
 
                                 else:
                                     # fail if incoming (weighted) layer does not have activation
@@ -498,13 +500,11 @@ class Model(object):
                     in_configs = configs_lookups[tf_in_layer]
 
                     # configure layer
-                    config = LayerConfig()
-                    config.is_output = len(tf_out_layers) == 0
-                    config.name = tf_layer.name
-                    config.shape = tf_layer.output_shape[1:]
-                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
-                    if not tf_layer.activation is tf.keras.activations.linear:
-                        config.has_activation = True
+                    config = LayerConfig(
+                        tf_layer.name, tf_layer.output_shape[1:],
+                        is_output=len(tf_out_layers) == 0,
+                        has_activation=not tf_layer.activation is tf.keras.activations.linear,
+                        neurons=converter.create_neurons(tf_layer, pre_compile_output))
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -513,31 +513,33 @@ class Model(object):
 
                         if in_config.has_activation:
                             # configure Conv2D synapses
-                            config.synapses_class.append(Conv2DSynapses)
-                            config.synapses_params.append({
-                                'filters': tf_layer.filters,
-                                'conv_size': tf_layer.kernel_size,
-                                'conv_strides': tf_layer.strides,
-                                'conv_padding': tf_layer.padding,
-                                'connectivity_type': connectivity_type})
-                            config.synapses_source.append(in_config)
-                            config.synapses_weights.append(tf_layer.get_weights()[0])
+                            config.synapses.append(InSynConfig(
+                                type=Conv2DSynapses,
+                                params={
+                                    'filters': tf_layer.filters,
+                                    'conv_size': tf_layer.kernel_size,
+                                    'conv_strides': tf_layer.strides,
+                                    'conv_padding': tf_layer.padding,
+                                    'connectivity_type': connectivity_type},
+                                source=in_config,
+                                weights=tf_layer.get_weights()[0]))
 
                         else:
-                            for i in range(len(in_config.synapses_class)):
+                            for i in range(len(in_config.synapses)):
 
-                                if in_config.synapses_class[i] is AvePool2DSynapses:
+                                if in_config.synapses[i].type is AvePool2DSynapses:
                                     # configure AvePool2D -> Conv2D synapses
-                                    config.synapses_class.append(AvePool2DConv2DSynapses)
-                                    config.synapses_params.append(in_config.synapses_params[i].copy())
-                                    config.synapses_params[-1].update({
+                                    config.synapses.append(InSynConfig(
+                                        type=AvePool2DConv2DSynapses,
+                                        params=in_config.synapses[i].params.copy(),
+                                        source=in_config.synapses[i].source,
+                                        weights=tf_layer.get_weights()[0]))
+                                    config.synapses[-1].params.update({
                                         'filters': tf_layer.filters,
                                         'conv_size': tf_layer.kernel_size,
                                         'conv_strides': tf_layer.strides,
                                         'conv_padding': tf_layer.padding,
                                         'connectivity_type': connectivity_type})
-                                    config.synapses_source.append(in_config.synapses_source[i])
-                                    config.synapses_weights.append(tf_layer.get_weights()[0])
 
                                 else:
                                     # fail if incoming (weighted) layer does not have activation
@@ -561,10 +563,9 @@ class Model(object):
                     in_configs = configs_lookups[tf_in_layer]
 
                     # configure layer
-                    config = LayerConfig()
-                    config.is_output = len(tf_out_layers) == 0
-                    config.name = tf_layer.name
-                    config.shape = tf_layer.output_shape[1:]
+                    config = LayerConfig(
+                        tf_layer.name, tf_layer.output_shape[1:],
+                        is_output=len(tf_out_layers) == 0)
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -578,19 +579,24 @@ class Model(object):
 
                         if in_config.has_activation:
                             # configure AvePool2D synapses
-                            config.synapses_class.append(AvePool2DSynapses)
                             if isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-                                config.synapses_params.append({
-                                    'pool_size': tf_layer.pool_size,
-                                    'pool_strides': tf_layer.strides,
-                                    'pool_padding': tf_layer.padding})
+                                config.synapses.append(InSynConfig(
+                                    type=AvePool2DSynapses,
+                                    params={
+                                        'pool_size': tf_layer.pool_size,
+                                        'pool_strides': tf_layer.strides,
+                                        'pool_padding': tf_layer.padding},
+                                    source=in_config,
+                                    weights=None))
                             elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
-                                config.synapses_params.append({
-                                    'pool_size': tf_layer.input_shape[1:3],
-                                    'pool_strides': None,
-                                    'pool_padding': 'valid'})
-                            config.synapses_source.append(in_config)
-                            config.synapses_weights.append(None)
+                                config.synapses.append(InSynConfig(
+                                    type=AvePool2DSynapses,
+                                    params={
+                                        'pool_size': tf_layer.input_shape[1:3],
+                                        'pool_strides': None,
+                                        'pool_padding': 'valid'},
+                                    source=in_config,
+                                    weights=None))
 
                         else:
                             # fail if incoming (weighted) layer does not have activation
@@ -609,12 +615,11 @@ class Model(object):
                     in_configs = configs_lookups[tf_in_layer]
 
                     # configure layer
-                    config = LayerConfig()
-                    config.is_output = len(tf_out_layers) == 0
-                    config.name = tf_layer.name
-                    config.shape = tf_layer.output_shape[1:]
-                    config.has_activation = True
-                    config.neurons = converter.create_neurons(tf_layer, pre_compile_output)
+                    config = LayerConfig(
+                        tf_layer.name, tf_layer.output_shape[1:],
+                        is_output=len(tf_out_layers) == 0,
+                        has_activation=True,
+                        neurons=converter.create_neurons(tf_layer, pre_compile_output))
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -623,18 +628,20 @@ class Model(object):
 
                         if in_config.has_activation:
                             # configure Identity synapses
-                            config.synapses_class.append(IdentitySynapses)
-                            config.synapses_params.append({})
-                            config.synapses_source.append(in_config)
-                            config.synapses_weights.append(None)
+                            config.synapses.append(InSynConfig(
+                                type=IdentitySynapses,
+                                params={},
+                                source=in_config,
+                                weights=None))
 
                         else:
-                            for i in range(len(in_config.synapses_class)):
+                            for i in range(len(in_config.synapses)):
                                 # copy incoming synapses
-                                config.synapses_class.append(in_config.synapses_class[i])
-                                config.synapses_params.append(in_config.synapses_params[i])
-                                config.synapses_source.append(in_config.synapses_source[i])
-                                config.synapses_weights.append(in_config.synapses_weights[i])
+                                config.synapses.append(InSynConfig(
+                                    type=in_config.synapses[i].type,
+                                    params=in_config.synapses[i].params,
+                                    source=in_config.synapses[i].source,
+                                    weights=in_config.synapses[i].weights))
 
                     config_steps.append(config)
 
@@ -676,13 +683,10 @@ class Model(object):
                 mlg_layer = Layer(config.name, config.neurons)
 
                 # build synapses
-                sources = []
-                synapses = []
-                weights = config.synapses_weights
-                for i in range(len(config.synapses_class)):
-                    sources.append(mlg_layer_lookup[config.synapses_source[i]])
-                    synapses.append(config.synapses_class[i](**config.synapses_params[i]))
+                sources = [mlg_layer_lookup[s.source] for s in config.synapses]
+                synapses = [s.type(**s.params) for s in config.synapses]
                 mlg_layer.connect(sources, synapses)
+                weights = [s.weights for s in config.synapses]
                 mlg_layer.set_weights(weights)
 
                 if config.is_output:

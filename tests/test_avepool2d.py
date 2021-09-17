@@ -20,14 +20,6 @@ def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
     nrn.pull_var_from_device('Vmem')
     mlg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
 
-    print()
-    print()
-    print('DDDDDDDD')
-    print(mlg_y)
-    print(tf_y)
-    print()
-    print()
-
     assert(np.allclose(mlg_y, tf_y, atol=0.0, rtol=1.0e-3))
 
     return mlg_model
