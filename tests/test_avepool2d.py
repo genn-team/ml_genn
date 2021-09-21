@@ -55,9 +55,9 @@ def model_input_1():
     ], dtype=np.float64)
 
 
-def test_avepool2d_dense_in_chan_1_padding_valid():
+def test_avepool2d_in_chan_1_padding_valid():
     '''
-    Test AvePool2DDense with 1 input channel, 1 output channel and valid pool padding.
+    Test AvePool2D with 1 input channel, 1 output channel and valid pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -71,17 +71,16 @@ def test_avepool2d_dense_in_chan_1_padding_valid():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, padding='valid', input_shape=(10, 10, 1)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(9, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_1_padding_valid')
-    tf_model.set_weights([np.array(range(1, 82)).reshape(9, 9)])
+        tf.keras.layers.ReLU(),
+    ], name='test_avepool2d_in_chan_1_padding_valid')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
 
-def test_avepool2d_dense_in_chan_2_padding_valid():
+def test_avepool2d_in_chan_2_padding_valid():
     '''
-    Test AvePool2DDense with 2 input channels, 2 output channels and valid pool padding.
+    Test AvePool2D with 2 input channels, 2 output channels and valid pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -96,17 +95,16 @@ def test_avepool2d_dense_in_chan_2_padding_valid():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, padding='valid', input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(18, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_2_padding_valid')
-    tf_model.set_weights([np.array(range(1, 325)).reshape(18, 18)])
+        tf.keras.layers.ReLU(),
+    ], name='test_avepool2d_in_chan_2_padding_valid')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
 
-def test_avepool2d_dense_in_chan_2_padding_valid_sparse():
+def test_avepool2d_in_chan_2_padding_valid_sparse():
     '''
-    Test AvePool2DDense with 2 input channels, 2 output channels and valid pool padding (SPARSE connectivity).
+    Test AvePool2D with 2 input channels, 2 output channels and valid pool padding (SPARSE connectivity).
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -121,17 +119,16 @@ def test_avepool2d_dense_in_chan_2_padding_valid_sparse():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, padding='valid', input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(18, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_2_padding_valid_sparse')
-    tf_model.set_weights([np.array(range(1, 325)).reshape(18, 18)])
+        tf.keras.layers.ReLU(),
+    ], name='test_avepool2d_in_chan_2_padding_valid_sparse')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
-def test_avepool2d_dense_in_chan_2_padding_same():
+def test_avepool2d_in_chan_2_padding_same():
     '''
-    Test AvePool2DDense with 2 input channels, 2 output channels and same pool padding.
+    Test AvePool2D with 2 input channels, 2 output channels and same pool padding.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -146,17 +143,16 @@ def test_avepool2d_dense_in_chan_2_padding_same():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, padding='same', input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_2_padding_same')
-    tf_model.set_weights([np.array(range(1, 1025)).reshape(32, 32)])
+        tf.keras.layers.ReLU(),
+    ], name='test_avepool2d_in_chan_2_padding_same')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
 
-def test_avepool2d_dense_in_chan_2_padding_same_sparse():
+def test_avepool2d_in_chan_2_padding_same_sparse():
     '''
-    Test AvePool2DDense with 2 input channels, 2 output channels and same pool padding (SPARSE connectivity).
+    Test AvePool2D with 2 input channels, 2 output channels and same pool padding (SPARSE connectivity).
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -171,17 +167,16 @@ def test_avepool2d_dense_in_chan_2_padding_same_sparse():
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(3, padding='same', input_shape=(10, 10, 2)),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_2_padding_same_sparse')
-    tf_model.set_weights([np.array(range(1, 1025)).reshape(32, 32)])
+        tf.keras.layers.ReLU(),
+    ], name='test_avepool2d_in_chan_2_padding_same_sparse')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
-def test_avepool2d_dense_inputs_2():
+def test_avepool2d_inputs_2():
     '''
-    Test AvePool2DDense with 2 input layers.
+    Test AvePool2D with 2 input layers.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -199,17 +194,16 @@ def test_avepool2d_dense_inputs_2():
     add = tf.keras.layers.Add()([in0, in1])
     pool = tf.keras.layers.AveragePooling2D(3, padding='valid')(add)
     flat = tf.keras.layers.Flatten()(pool)
-    dense = tf.keras.layers.Dense(9, use_bias=False)(flat)
-    tf_model = tf.keras.models.Model([in0, in1], [dense], name='test_avepool2d_dense_inputs_2')
-    tf_model.set_weights([np.array(range(1, 82)).reshape(9, 9)])
+    relu = tf.keras.layers.ReLU()(flat)
+    tf_model = tf.keras.models.Model([in0, in1], [relu], name='test_avepool2d_inputs_2')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x0, x1])
 
 
-def test_global_avepool2d_dense_in_chan_1():
+def test_global_avepool2d_in_chan_1():
     '''
-    Test global AvePool2DDense with 1 input channel and 1 output channel.
+    Test global AvePool2D with 1 input channel and 1 output channel.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -222,17 +216,16 @@ def test_global_avepool2d_dense_in_chan_1():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.GlobalAveragePooling2D(input_shape=(10, 10, 1)),
-        tf.keras.layers.Dense(1, use_bias=False),
-    ], name='test_global_avepool2d_dense_in_chan_1')
-    tf_model.set_weights([np.array([[1]])])
+        tf.keras.layers.ReLU(),
+    ], name='test_global_avepool2d_in_chan_1')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
 
-def test_global_avepool2d_dense_in_chan_2():
+def test_global_avepool2d_in_chan_2():
     '''
-    Test global AvePool2DDense with 2 input channels and 2 output channels.
+    Test global AvePool2D with 2 input channels and 2 output channels.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -246,17 +239,16 @@ def test_global_avepool2d_dense_in_chan_2():
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.GlobalAveragePooling2D(input_shape=(10, 10, 2)),
-        tf.keras.layers.Dense(2, use_bias=False),
-    ], name='test_global_avepool2d_dense_in_chan_2')
-    tf_model.set_weights([np.array(range(1, 5)).reshape(2, 2)])
+        tf.keras.layers.ReLU(),
+    ], name='test_global_avepool2d_in_chan_2')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
 
-def test_global_avepool2d_dense_inputs_2():
+def test_global_avepool2d_inputs_2():
     '''
-    Test global AvePool2DDense with 2 input layers.
+    Test global AvePool2D with 2 input layers.
     '''
 
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -273,21 +265,20 @@ def test_global_avepool2d_dense_inputs_2():
     in1 = tf.keras.layers.Input(shape=(10, 10, 1))
     add = tf.keras.layers.Add()([in0, in1])
     pool = tf.keras.layers.GlobalAveragePooling2D()(add)
-    dense = tf.keras.layers.Dense(1, use_bias=False)(pool)
-    tf_model = tf.keras.models.Model([in0, in1], [dense], name='test_global_avepool2d_dense_inputs_2')
-    tf_model.set_weights([np.array([[1]])])
+    relu = tf.keras.layers.ReLU()(pool)
+    tf_model = tf.keras.models.Model([in0, in1], [relu], name='test_global_avepool2d_inputs_2')
 
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x0, x1])
 
 
 if __name__ == '__main__':
-    test_avepool2d_dense_in_chan_1_padding_valid()
-    test_avepool2d_dense_in_chan_2_padding_valid()
-    test_avepool2d_dense_in_chan_2_padding_valid_sparse()
-    test_avepool2d_dense_in_chan_2_padding_same()
-    test_avepool2d_dense_in_chan_2_padding_same_sparse()
-    test_avepool2d_dense_inputs_2()
-    test_global_avepool2d_dense_in_chan_1()
-    test_global_avepool2d_dense_in_chan_2()
-    test_global_avepool2d_dense_inputs_2()
+    test_avepool2d_in_chan_1_padding_valid()
+    test_avepool2d_in_chan_2_padding_valid()
+    test_avepool2d_in_chan_2_padding_valid_sparse()
+    test_avepool2d_in_chan_2_padding_same()
+    test_avepool2d_in_chan_2_padding_same_sparse()
+    test_avepool2d_inputs_2()
+    test_global_avepool2d_in_chan_1()
+    test_global_avepool2d_in_chan_2()
+    test_global_avepool2d_inputs_2()

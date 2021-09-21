@@ -8,20 +8,15 @@ from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
 from ml_genn.layers.helper import _get_param_2d
 
-avepool2d_dense_init = create_custom_init_var_snippet_class(
-    'avepool2d_dense',
+avepool2d_init = create_custom_init_var_snippet_class(
+    'avepool2d',
 
     param_names=[
         'pool_kh', 'pool_kw',
         'pool_sh', 'pool_sw',
         'pool_padh', 'pool_padw',
         'pool_ih', 'pool_iw', 'pool_ic',
-        'dense_ih', 'dense_iw', 'dense_ic',
-        'dense_units',
-    ],
-
-    extra_global_params=[
-        ('weights', 'scalar*'),
+        'pool_oh', 'pool_ow', 'pool_oc',
     ],
 
     var_init_code='''
@@ -46,66 +41,60 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
     $(value) = 0.0;
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
 
-        const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
-        const int dense_units = $(dense_units);
+        const int pool_ow = $(pool_ow), pool_oc = $(pool_oc);
 
-        const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
-        const int dense_out_unit = $(id_post);
+        const int poolOutId = poolOutRow * (pool_ow * pool_oc) + poolOutCol * (pool_oc) + poolInChan;
 
-        $(value) = $(weights)[
-            dense_in_unit * (dense_units) +
-            dense_out_unit
-        ] / (poolCropKH * poolCropKW);
+        if (poolOutId == $(id_post)) {
+            $(value) = 1.0 / (poolCropKH * poolCropKW);
+        }
     }
     ''',
 )
 
-class AvePool2DDenseSynapses(BaseSynapses):
+class AvePool2DSynapses(BaseSynapses):
 
-    def __init__(self, units, pool_size, pool_strides=None, 
+    def __init__(self, pool_size, pool_strides=None,
                  pool_padding='valid', connectivity_type='procedural'):
-        super(AvePool2DDenseSynapses, self).__init__()
-        self.units = units
+        super(AvePool2DSynapses, self).__init__()
         self.pool_size = _get_param_2d('pool_size', pool_size)
         self.pool_strides = _get_param_2d('pool_strides', pool_strides, default=self.pool_size)
         self.pool_padding = PadMode(pool_padding)
-        self.pool_output_shape = None
         self.connectivity_type = ConnectivityType(connectivity_type)
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
             raise NotImplementedError('pool stride < pool size is not supported')
 
     def connect(self, source, target):
-        super(AvePool2DDenseSynapses, self).connect(source, target)
+        super(AvePool2DSynapses, self).connect(source, target)
 
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
         if self.pool_padding == PadMode.VALID:
-            self.pool_output_shape = (
+            output_shape = (
                 ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
                 ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
                 pool_ic,
             )
         elif self.pool_padding == PadMode.SAME:
-            self.pool_output_shape = (
+            output_shape = (
                 ceil(float(pool_ih) / float(pool_sh)),
                 ceil(float(pool_iw) / float(pool_sw)),
                 pool_ic,
             )
-
-        output_shape = (self.units, )
 
         if target.shape is None:
             target.shape = output_shape
         elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
-        self.weights = np.empty((np.prod(self.pool_output_shape), self.units), dtype=np.float64)
+        self.weights = np.empty(0, dtype=np.float64)
 
     def compile(self, mlg_model, name):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
+        pool_oh, pool_ow, pool_oc = self.target().shape
         if self.pool_padding == PadMode.VALID:
             pool_padh = 0
             pool_padw = 0
@@ -113,22 +102,17 @@ class AvePool2DDenseSynapses(BaseSynapses):
             pool_padh = (pool_kh - 1) // 2
             pool_padw = (pool_kw - 1) // 2
 
-        dense_ih, dense_iw, dense_ic = self.pool_output_shape
-
-        wu_var_init = init_var(avepool2d_dense_init, {
+        wu_var_init = init_var(avepool2d_init, {
             'pool_kh': pool_kh, 'pool_kw': pool_kw,
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
             'pool_padh': pool_padh, 'pool_padw': pool_padw,
             'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-            'dense_ih': dense_ih, 'dense_iw': dense_iw, 'dense_ic': dense_ic,
-            'dense_units': self.units,
-        })
+            'pool_oh': pool_oh, 'pool_ow': pool_ow, 'pool_oc': pool_oc})
 
-        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
+        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
                 else 'DENSE_INDIVIDUALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
-        wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
-                                                    {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)
+        super(AvePool2DSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+                                               {}, {}, 'DeltaCurr', {}, {}, None, {})
