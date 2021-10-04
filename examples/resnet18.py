@@ -63,15 +63,6 @@ def resnet18(num_classes):
 
     return model
 
-# Learning rate schedule
-def schedule(epoch, learning_rate):
-    if epoch < 81:
-        return 0.05
-    elif epoch < 122:
-        return 0.005
-    else:
-        return 0.0005
-
 if __name__ == '__main__':
     args = parse_arguments('Resnet classifier')
     print('arguments: ' + str(vars(args)))
