@@ -18,6 +18,7 @@ Example:
 """
 
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
@@ -263,11 +264,35 @@ class Model(object):
         return accuracy, spike_i, spike_t
 
     def calc_pipeline_depth(self):
-        """Calculate depth of model's pipeline"""
-        # **TODO** this only works for sequential models, branches need to be identified etc with e.g. ResNets
-        return int(sum(hasattr(l.neurons, "pipelined")
-                       for l in self.layers
-                       if l not in self.outputs))
+        # If none of the layers have the pipelined attribute, return 0
+        if all(not hasattr(l.neurons, "pipelined")
+               for l in self.layers if l not in self.outputs):
+           return 0
+       
+        # If there are multiple inputs, give an error
+        # **NOTE** inputs would have to be injected at different times to relax this
+        if len(self.inputs) > 1:
+            raise NotImplementedError("Pipelined models with multiple inputs "
+                                      "are not currently supported")
+        
+        # If there are multiple outputs, give an error
+        # **NOTE** outputs would need to be retrieved at different times to relax this
+        if len(self.outputs) > 1:
+            raise NotImplementedError("Pipelined models with multiple outputs "
+                                      "are not currently supported")
+        # Recursive function to get delay along (arbitrary) path to target
+        def calc_delay(synapse, target):
+            # If we've hit target, stop
+            layer = synapse.target()
+            if layer == target:
+                return 0
+
+            # Recurse through first downstream synapse
+            return synapse.delay + 1 + calc_delay(layer.downstream_synapses[0], target)
+        
+        # Calculate delay from input to output
+        # **NOTE** in pipelined networks, delay should have been balanced
+        return calc_delay(self.inputs[0].downstream_synapses[0], self.outputs[0])
 
     def get_kernel_times(self):
         """Get total kernel run times"""
@@ -344,8 +369,8 @@ class Model(object):
             tf_out_layers_all[tf_layer] = tf_out_layers
 
 
-        # Perform any pre-compilation tasks
-        pre_compile_output = converter.pre_compile(tf_model)
+        # Perform any pre-conversion tasks
+        pre_convert_output = converter.pre_convert(tf_model)
 
         # configure model build process
         class LayerConfig(object):
@@ -398,7 +423,7 @@ class Model(object):
             config = LayerConfig(
                 tf_layer.name, tf_layer.output_shape[0][1:],
                 is_input=True, has_activation=True,
-                neurons=converter.create_input_neurons(pre_compile_output))
+                neurons=converter.create_input_neurons(pre_convert_output))
 
             config_steps.append(config)
             configs_lookups[tf_layer] = [config]
@@ -452,7 +477,7 @@ class Model(object):
                         tf_layer.name, tf_layer.output_shape[1:],
                         is_output=len(tf_out_layers) == 0,
                         has_activation=not tf_layer.activation is tf.keras.activations.linear,
-                        neurons=converter.create_neurons(tf_layer, pre_compile_output))
+                        neurons=converter.create_neurons(tf_layer, pre_convert_output))
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -504,7 +529,7 @@ class Model(object):
                         tf_layer.name, tf_layer.output_shape[1:],
                         is_output=len(tf_out_layers) == 0,
                         has_activation=not tf_layer.activation is tf.keras.activations.linear,
-                        neurons=converter.create_neurons(tf_layer, pre_compile_output))
+                        neurons=converter.create_neurons(tf_layer, pre_convert_output))
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -619,7 +644,7 @@ class Model(object):
                         tf_layer.name, tf_layer.output_shape[1:],
                         is_output=len(tf_out_layers) == 0,
                         has_activation=True,
-                        neurons=converter.create_neurons(tf_layer, pre_compile_output))
+                        neurons=converter.create_neurons(tf_layer, pre_convert_output))
 
                     converter.validate_tf_layer(tf_layer, config)
 
@@ -697,7 +722,10 @@ class Model(object):
 
         # create model
         mlg_model = Model(mlg_model_inputs, mlg_model_outputs, name=tf_model.name)
-
+    
+        # Perform any pre-compilation tasks
+        converter.pre_compile(mlg_model)
+        
         # Compile model
         mlg_model.compile(**compile_kwargs)
 

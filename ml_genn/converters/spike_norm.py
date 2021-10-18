@@ -74,7 +74,7 @@ class SpikeNorm(object):
                 'Spike-Norm converter: {} layers are not supported'.format(
                     tf_layer.__class__.__name__))
 
-    def create_input_neurons(self, pre_compile_output):
+    def create_input_neurons(self, pre_convert_output):
         if self.input_type == InputType.SPIKE:
             return SpikeInputNeurons(signed_spikes=self.signed_input)
         elif self.input_type == InputType.POISSON:
@@ -82,10 +82,13 @@ class SpikeNorm(object):
         elif self.input_type == InputType.IF:
             return IFInputNeurons()
 
-    def create_neurons(self, tf_layer, pre_compile_output):
+    def create_neurons(self, tf_layer, pre_convert_output):
         return IFNeurons(threshold=1.0)
 
-    def pre_compile(self, tf_model):
+    def pre_convert(self, tf_model):
+        pass
+    
+    def pre_compile(self, mlg_model):
         pass
 
     def post_compile(self, mlg_model):

@@ -187,5 +187,5 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         wu_var = {'g': init_var('Kernel', {})}
         wu_var_egp = {'g': {'kernel': self.weights.flatten() / (pool_kh * pool_kw)}}
 
-        super(AvePool2DConv2DSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+        super(AvePool2DConv2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                      {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)

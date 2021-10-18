@@ -114,5 +114,5 @@ class AvePool2DSynapses(BaseSynapses):
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
 
-        super(AvePool2DSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+        super(AvePool2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                {}, {}, 'DeltaCurr', {}, {}, None, {})

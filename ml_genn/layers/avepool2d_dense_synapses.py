@@ -130,5 +130,5 @@ class AvePool2DDenseSynapses(BaseSynapses):
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten()}}
 
-        super(AvePool2DDenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+        super(AvePool2DDenseSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                     {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)

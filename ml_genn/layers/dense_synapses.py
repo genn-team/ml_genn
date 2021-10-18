@@ -26,5 +26,5 @@ class DenseSynapses(BaseSynapses):
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': self.weights.flatten()}
 
-        super(DenseSynapses, self).compile(mlg_model, name, conn, 0, wu_model, {}, wu_var,
+        super(DenseSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                            {}, {}, 'DeltaCurr', {}, {}, None, {})
