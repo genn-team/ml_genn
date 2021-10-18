@@ -333,7 +333,8 @@ class Model(object):
         """
 
         tf_activation_layers = (
-            tf.keras.layers.ReLU)
+            tf.keras.layers.ReLU,
+            tf.keras.layers.Softmax)
 
         tf_ignored_layers = (
             tf.keras.layers.Flatten,
