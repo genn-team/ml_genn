@@ -167,8 +167,10 @@ class Model(object):
         """Evaluate the accuracy of a GeNN model
 
         Args:
-        data          --  list of data for each input layer
-        labels        --  list of labels for each output layer
+        data          --  list of data for each input layer,
+                          or (data, labels) iterator if labels is None
+        labels        --  list of labels for each output layer,
+                          or None if data is a (data, labels) iterator
         time          --  sample presentation time (msec)
 
         Keyword args:
@@ -179,6 +181,12 @@ class Model(object):
         spike_i       --  list of spike indices for each sample index in save_samples
         spike_t       --  list of spike times for each sample index in save_samples
         """
+
+        # Convert (data, labels) iterator to data and labels arrays
+        if labels == None and hasattr(data, '__next__'):
+            data_new, labels_new = zip(*data)
+            data = [np.array(data_new)]
+            labels = [np.array(labels_new)]
 
         # Input sanity check
         n_samples = data[0].shape[0]
