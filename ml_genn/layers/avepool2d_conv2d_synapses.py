@@ -181,11 +181,17 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
             'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
 
-        conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                else 'SPARSE_INDIVIDUALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
-        wu_var = {'g': init_var('Kernel', {})}
-        wu_var_egp = {'g': {'kernel': self.weights.flatten() / (pool_kh * pool_kw)}}
+
+        scaled_weights = self.weights.flatten() / (pool_kh * pool_kw)
+        if self.connectivity_type == ConnectivityType.PROCEDURAL:
+            conn = 'PROCEDURAL_KERNELG'
+            wu_var = {'g': scaled_weights}
+            wu_var_egp = {}
+        else:
+            conn = 'SPARSE_INDIVIDUALG'
+            wu_var = {'g': init_var('Kernel', {})}
+            wu_var_egp = {'g': {'kernel': scaled_weights}}
 
         super(AvePool2DConv2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                      {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)
