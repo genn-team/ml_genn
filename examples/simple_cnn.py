@@ -14,39 +14,45 @@ if __name__ == '__main__':
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
 
-    # Retrieve and normalise MNIST dataset
-    (x_train, y_train), (x_test, y_test) = datasets.mnist.load_data()
-    x_train = x_train[:args.n_train_samples].reshape((-1, 28, 28, 1)) / 255.0
-    y_train = y_train[:args.n_train_samples]
-    x_test = x_test[:args.n_test_samples].reshape((-1, 28, 28, 1)) / 255.0
-    y_test = y_test[:args.n_test_samples]
-    x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
+    # Load MNIST data
+    (train_x, train_y), (validate_x, validate_y) = datasets.mnist.load_data()
+    train_x = train_x[:args.n_train_samples].reshape((-1, 28, 28, 1)) / 255.0
+    train_y = train_y[:args.n_train_samples]
+    validate_x = validate_x[:args.n_test_samples].reshape((-1, 28, 28, 1)) / 255.0
+    validate_y = validate_y[:args.n_test_samples]
+    norm_x = train_x[np.random.choice(train_x.shape[0], args.n_norm_samples, replace=False)]
 
-    # Create, train and evaluate TensorFlow model
+    # Create and compile TF model
     tf_model = models.Sequential([
-        layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=x_train.shape[1:]),
+        layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=train_x.shape[1:]),
         layers.AveragePooling2D(2),
         layers.Conv2D(8, 5, padding='valid', activation='relu', use_bias=False),
         layers.AveragePooling2D(2),
         layers.Flatten(),
         layers.Dense(128, activation='relu', use_bias=False),
         layers.Dense(64, activation='relu', use_bias=False),
-        layers.Dense(y_train.max() + 1, activation='softmax', use_bias=False),
+        layers.Dense(train_y.max() + 1, activation='softmax', use_bias=False),
     ], name='simple_cnn')
+    tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     if args.reuse_tf_model:
-        tf_model = models.load_model('simple_cnn_tf_model')
-    else:
-        tf_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        tf_model.fit(x_train, y_train, epochs=10)
-        models.save_model(tf_model, 'simple_cnn_tf_model', save_format='h5')
+        # Load old weights
+        tf_model.load_weights('simple_cnn_tf_weights.h5')
 
+    else:
+        # Fit TF model
+        tf_model.fit(train_x, train_y, epochs=10)
+
+        # Save weights
+        tf_model.save_weights('simple_cnn_tf_weights.h5')
+
+    # Evaluate TF model
     tf_eval_start_time = perf_counter()
-    tf_model.evaluate(x_test, y_test)
-    print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
+    tf_model.evaluate(validate_x, validate_y)
+    print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
-    converter = args.build_converter(x_norm, signed_input=False, K=8, norm_time=500)
+    converter = args.build_converter(norm_x, signed_input=False, K=8, norm_time=500)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
@@ -54,10 +60,11 @@ if __name__ == '__main__':
         dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
         kernel_profiling=args.kernel_profiling)
 
+    # Evaluate ML GeNN model
     time = 8 if args.converter == 'few-spike' else 500
     mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate([x_test], [y_test], time, save_samples=args.save_samples)
-    print("MLG evaluation:%f" % (perf_counter() - mlg_eval_start_time))
+    acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
+    print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
 
     if args.kernel_profiling:
         print("Kernel profiling:")
