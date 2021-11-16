@@ -12,7 +12,8 @@ from ml_genn.utils import parse_arguments, raster_plot
 from transforms import *
 
 
-data_path = os.path.expanduser('~/../shared/data/imagenet')
+#data_path = os.path.expanduser('~/../shared/data/imagenet')
+data_path = os.path.expanduser('/mnt/data0/imagenet')
 
 train_path = os.path.join(data_path, 'train')
 validate_path = os.path.join(data_path, 'validation')
@@ -102,7 +103,11 @@ def parse_buffer(buffer):
     return image, label
 
 
-if __name__ == '__main__':
+for gpu in tf.config.experimental.list_physical_devices('GPU'):
+    tf.config.experimental.set_memory_growth(gpu, True)
+
+#if __name__ == '__main__':
+with tf.device('/CPU:0'):
     args = parse_arguments('VGG16 classifier')
     print('arguments: ' + str(vars(args)))
     
@@ -148,6 +153,35 @@ if __name__ == '__main__':
     tf_validate_ds = validate_ds.batch(batch_size)
     tf_validate_ds = tf_validate_ds.prefetch(tf.data.AUTOTUNE)
 
+    # Prepare data for ML GeNN
+    mlg_norm_ds = train_ds.take(args.n_norm_samples).as_numpy_iterator()
+    norm_x = np.array([d[0] for d in mlg_norm_ds])
+
+
+    #for x, y in validate_ds.take(1):
+    #    print('ddddddddddd', y)
+    #exit(0)
+
+
+    # if args.n_test_samples is None:
+    #     args.n_test_samples = 50000
+    # mlg_validate_ds = validate_ds.take(args.n_test_samples)
+    # mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
+    # validate_x, validate_y = zip(*mlg_validate_ds)
+    # validate_x = np.array(validate_x)
+    # validate_y = np.array(validate_y)
+
+
+    if args.n_test_samples is None:
+        args.n_test_samples = 50000
+    mlg_validate_ds = validate_ds.take(args.n_test_samples)
+    mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
+    mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
+
+
+
+
     # If there are any existing checkpoints
     existing_checkpoints = list(sorted(glob.glob(os.path.join(checkpoint_path, '*.h5'))))
     if len(existing_checkpoints) > 0:
@@ -192,8 +226,9 @@ if __name__ == '__main__':
         wd_schedule = 0.0001 * 0.001
 
     # Create and compile TF model
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
+    #strategy = tf.distribute.MirroredStrategy()
+    #with strategy.scope():
+    if True:
         tf_model = vgg16()
         optimizer = SGDW(learning_rate=lr_schedule, momentum=0.9, nesterov=True, weight_decay=wd_schedule)
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -217,18 +252,10 @@ if __name__ == '__main__':
         # Save weights
         tf_model.save_weights('vgg16_imagenet_tf_weights.h5')
 
-    # Evaluate TF model
-    tf_eval_start_time = perf_counter()
-    tf_model.evaluate(tf_validate_ds)
-    print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
-
-    # Prepare data for ML GeNN
-    mlg_norm_ds = train_ds.take(args.n_norm_samples).as_numpy_iterator()
-    norm_x = np.array([d[0] for d in mlg_norm_ds])
-    mlg_validate_ds = validate_ds.as_numpy_iterator()
-    validate_x, validate_y = zip(*mlg_validate_ds)
-    validate_x = np.array(validate_x)
-    validate_y = np.array(validate_y)
+    # # Evaluate TF model
+    # tf_eval_start_time = perf_counter()
+    # tf_model.evaluate(tf_validate_ds)
+    # print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
     converter = args.build_converter(norm_x, signed_input=True, K=10, norm_time=2500)
@@ -242,7 +269,8 @@ if __name__ == '__main__':
     # Evaluate ML GeNN model
     time = 10 if args.converter == 'few-spike' else 2500
     mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
+    #acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate_iterator(mlg_validate_ds, args.n_test_samples, time, save_samples=args.save_samples)
     print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
 
     if args.kernel_profiling:
