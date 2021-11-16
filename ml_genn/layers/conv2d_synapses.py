@@ -1,6 +1,7 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import init_connectivity, init_toeplitz_connectivity, init_var
+from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity,
+                               init_var)
 
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses

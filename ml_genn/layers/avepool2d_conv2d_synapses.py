@@ -1,8 +1,8 @@
 import numpy as np
 from math import ceil
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
-from pygenn.genn_model import (init_connectivity, init_var, 
-                               create_cmlf_class, create_cksf_class)
+from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity,
+                               init_var, create_cmlf_class, create_cksf_class)
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 
 from ml_genn.layers import ConnectivityType, PadMode
@@ -170,28 +170,46 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             conv_padh = (conv_kh - 1) // 2
             conv_padw = (conv_kw - 1) // 2
 
-        conn_init = init_connectivity(avepool2d_conv2d_init, {
-            'pool_kh': pool_kh, 'pool_kw': pool_kw,
-            'pool_sh': pool_sh, 'pool_sw': pool_sw,
-            'pool_padh': pool_padh, 'pool_padw': pool_padw,
-            'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-            'conv_kh': conv_kh, 'conv_kw': conv_kw,
-            'conv_sh': conv_sh, 'conv_sw': conv_sw,
-            'conv_padh': conv_padh, 'conv_padw': conv_padw,
-            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
-            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
+        
 
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
 
         scaled_weights = self.weights.flatten() / (pool_kh * pool_kw)
-        if self.connectivity_type == ConnectivityType.SPARSE:
-            conn = 'SPARSE_INDIVIDUALG'
-            wu_var = {'g': init_var('Kernel', {})}
-            wu_var_egp = {'g': {'kernel': scaled_weights}}
-        else:
-            conn = 'PROCEDURAL_KERNELG'
+        if self.connectivity_type == ConnectivityType.TOEPLITZ:
+            assert pool_padh == 0 and pool_padw == 0
+            assert conv_sh == 1 and conv_sw == 1
+
+            conn_init = init_toeplitz_connectivity('AvgPoolConv2D', {
+                'conv_kh': conv_kh, 'conv_kw': conv_kw,
+                #'conv_sh': conv_sh, 'conv_sw': conv_sw,
+                'pool_kh': pool_kh, 'pool_kw': pool_kw,
+                'pool_sh': pool_sh, 'pool_sw': pool_sw,
+                'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
+                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
+
+            conn = 'TOEPLITZ_KERNELG'
             wu_var = {'g': scaled_weights}
             wu_var_egp = {}
+        else:
+            conn_init = init_connectivity(avepool2d_conv2d_init, {
+                'pool_kh': pool_kh, 'pool_kw': pool_kw,
+                'pool_sh': pool_sh, 'pool_sw': pool_sw,
+                'pool_padh': pool_padh, 'pool_padw': pool_padw,
+                'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
+                'conv_kh': conv_kh, 'conv_kw': conv_kw,
+                'conv_sh': conv_sh, 'conv_sw': conv_sw,
+                'conv_padh': conv_padh, 'conv_padw': conv_padw,
+                'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
+
+            if self.connectivity_type == ConnectivityType.SPARSE:
+                conn = 'SPARSE_INDIVIDUALG'
+                wu_var = {'g': init_var('Kernel', {})}
+                wu_var_egp = {'g': {'kernel': scaled_weights}}
+            else:
+                conn = 'PROCEDURAL_KERNELG'
+                wu_var = {'g': scaled_weights}
+                wu_var_egp = {}
 
         super(AvePool2DConv2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                      {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)
