@@ -109,8 +109,8 @@ class AvePool2DSynapses(BaseSynapses):
             'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
             'pool_oh': pool_oh, 'pool_ow': pool_ow, 'pool_oc': pool_oc})
 
-        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                else 'DENSE_INDIVIDUALG')
+        conn = ('DENSE_INDIVIDUALG' if self.connectivity_type == ConnectivityType.SPARSE
+                else 'DENSE_PROCEDURALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
 

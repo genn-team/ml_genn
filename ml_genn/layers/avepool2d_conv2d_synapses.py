@@ -184,14 +184,14 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
 
         scaled_weights = self.weights.flatten() / (pool_kh * pool_kw)
-        if self.connectivity_type == ConnectivityType.PROCEDURAL:
-            conn = 'PROCEDURAL_KERNELG'
-            wu_var = {'g': scaled_weights}
-            wu_var_egp = {}
-        else:
+        if self.connectivity_type == ConnectivityType.SPARSE:
             conn = 'SPARSE_INDIVIDUALG'
             wu_var = {'g': init_var('Kernel', {})}
             wu_var_egp = {'g': {'kernel': scaled_weights}}
+        else:
+            conn = 'PROCEDURAL_KERNELG'
+            wu_var = {'g': scaled_weights}
+            wu_var_egp = {}
 
         super(AvePool2DConv2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                      {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)
