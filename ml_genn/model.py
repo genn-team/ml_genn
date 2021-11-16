@@ -163,6 +163,154 @@ class Model(object):
         self.g_model.t = 0.0
 
 
+
+
+
+
+
+
+
+
+    def evaluate_iterator(self, data_iterator, n_samples, time, save_samples=[]):
+        """Evaluate the accuracy of a GeNN model
+
+        Args:
+        data_iterator --  an (x, y) iterator
+        n_samples     --  number of samples in data_iterator
+        time          --  sample presentation time (msec)
+
+        Keyword args:
+        save_samples  --  list of sample indices to save spikes for (default: [])
+
+        Returns:
+        accuracy      --  percentage of correctly classified results
+        spike_i       --  list of spike indices for each sample index in save_samples
+        spike_t       --  list of spike times for each sample index in save_samples
+        """
+
+        # Input sanity check
+        save_samples = list(set(save_samples))
+        if any(i < 0 or i >= n_samples for i in save_samples):
+            raise ValueError('one or more invalid save_samples value')
+
+        n_correct = [0] * len(self.outputs)
+        accuracy = [0] * len(self.outputs)
+        all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
+
+        # Pad number of samples so pipeline can be flushed
+        pipeline_depth = self.calc_pipeline_depth()
+        padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
+
+        import queue
+        batch_labels_queue = queue.Queue(maxsize=pipeline_depth * self.g_model.batch_size)
+
+        # Process batches
+        progress = tqdm(total=n_samples)
+        for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
+
+            # If any elements of this batch have data (rather than being entirely pipeline padding)
+            if batch_start < n_samples:
+                batch_end = min(batch_start + self.g_model.batch_size, n_samples)
+                batch_data, batch_labels = next(data_iterator)
+                batch_data = [batch_data]
+                batch_labels = [batch_labels]
+                batch_labels_queue.put(batch_labels, block=False)
+
+
+
+                assert(batch_data[0].shape[0] == batch_end - batch_start)
+                assert(batch_labels[0].shape[0] == batch_end - batch_start)
+
+
+                # batch_data = []
+                # batch_labels = []
+                # for batch_i in range(batch_end - batch_start):
+                #     next_data, next_label = next(data_iterator)
+                #     batch_data.append(next_data)
+                #     batch_labels.append(next_label)
+                # batch_data = [np.array(batch_data)]
+                # batch_labels = [np.array(batch_labels)]
+                # batch_labels_queue.put(batch_labels, block=False)
+
+
+
+
+                save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+
+                # Set new input
+                self.set_input_batch(batch_data)
+
+            # Reset timesteps etc
+            self.reset()
+
+            # Main simulation loop
+            while self.g_model.t < time:
+
+                # Step time
+                self.step_time()
+
+                # Save spikes
+                for i in save_samples_in_batch:
+                    k = save_samples.index(i)
+                    batch_i = i - batch_start
+                    for l, layer in enumerate(self.layers):
+                        nrn = layer.neurons.nrn
+                        nrn.pull_current_spikes_from_device()
+                        all_spikes[k][l].append(np.copy(
+                            nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
+                            else nrn.current_spikes))
+
+            # If first input in batch has passed through
+            if batch_start >= (pipeline_depth * self.g_model.batch_size):
+                pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
+                pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
+                batch_labels = batch_labels_queue.get(block=False)
+
+                # Compute accuracy
+                for output_i in range(len(self.outputs)):
+                    predictions = self.outputs[output_i].neurons.get_predictions(
+                        pipe_batch_end - pipe_batch_start)
+                    if batch_labels[output_i].shape != predictions.shape:
+                        batch_labels[output_i] = [np.argmax(i) for i in batch_labels[output_i]]
+                    n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
+                    accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
+
+                progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
+                progress.update(pipe_batch_end - pipe_batch_start)
+
+        progress.close()
+
+        # Create spike index and time lists
+        spike_i = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
+        spike_t = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
+        for i in range(len(save_samples)):
+            for j in range(len(self.layers)):
+                spikes = all_spikes[i][j]
+                spike_i[i][j] = np.concatenate(spikes)
+                spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
+
+        return accuracy, spike_i, spike_t
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def evaluate(self, data, labels, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
@@ -203,6 +351,7 @@ class Model(object):
         # Process batches
         progress = tqdm(total=n_samples)
         for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
+
             # If any elements of this batch have data (rather than being entirely pipeline padding)
             if batch_start < n_samples:
                 batch_end = min(batch_start + self.g_model.batch_size, n_samples)
@@ -218,6 +367,7 @@ class Model(object):
 
             # Main simulation loop
             while self.g_model.t < time:
+
                 # Step time
                 self.step_time()
 
@@ -262,6 +412,7 @@ class Model(object):
                 spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
 
         return accuracy, spike_i, spike_t
+
 
     def calc_pipeline_depth(self):
         # If none of the layers have the pipelined attribute, return 0
