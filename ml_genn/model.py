@@ -22,7 +22,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
-from collections import namedtuple
+from collections import namedtuple, deque
 
 from pygenn.genn_model import GeNNModel
 
@@ -201,8 +201,7 @@ class Model(object):
         pipeline_depth = self.calc_pipeline_depth()
         padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
 
-        import queue
-        batch_labels_queue = queue.Queue(maxsize=pipeline_depth * self.g_model.batch_size)
+        batch_labels_queue = deque()
 
         # Process batches
         progress = tqdm(total=n_samples)
@@ -214,13 +213,10 @@ class Model(object):
                 batch_data, batch_labels = next(data_iterator)
                 batch_data = [batch_data]
                 batch_labels = [batch_labels]
-                batch_labels_queue.put(batch_labels, block=False)
-
-
+                batch_labels_queue.append(batch_labels)
 
                 assert(batch_data[0].shape[0] == batch_end - batch_start)
                 assert(batch_labels[0].shape[0] == batch_end - batch_start)
-
 
                 # batch_data = []
                 # batch_labels = []
@@ -231,9 +227,6 @@ class Model(object):
                 # batch_data = [np.array(batch_data)]
                 # batch_labels = [np.array(batch_labels)]
                 # batch_labels_queue.put(batch_labels, block=False)
-
-
-
 
                 save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
 
@@ -259,13 +252,11 @@ class Model(object):
                         all_spikes[k][l].append(np.copy(
                             nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
                             else nrn.current_spikes))
-
             # If first input in batch has passed through
             if batch_start >= (pipeline_depth * self.g_model.batch_size):
                 pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
                 pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
-                batch_labels = batch_labels_queue.get(block=False)
-
+                batch_labels = batch_labels_queue.popleft()
                 # Compute accuracy
                 for output_i in range(len(self.outputs)):
                     predictions = self.outputs[output_i].neurons.get_predictions(
