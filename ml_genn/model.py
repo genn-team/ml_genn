@@ -542,6 +542,7 @@ class Model(object):
             assert(len(tf_in_layers) == 1)
             tf_out_layers = [n.outbound_layer for n in tf_in_layers[0].outbound_nodes
                              if n in tf_model_nodes]
+            tf_in_layers_all[tf_in_layers[0]] = []
             tf_out_layers_all[tf_in_layers[0]] = tf_out_layers
 
         else:

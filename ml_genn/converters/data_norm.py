@@ -94,6 +94,10 @@ class DataNorm(object):
         # are not currently supported, and the thresholds of layers after
         # branching (e.g. in ResNet) are left at 1.0.
 
+        # Default to 1.0 threshold
+        scale_factors = {tf_layer: np.float64(1.0) for tf_layer in tf_model.layers}
+        thresholds = {tf_layer: np.float64(1.0) for tf_layer in tf_model.layers}
+
         # Only traverse nodes belonging to this model
         tf_model_nodes = set()
         for n in tf_model._nodes_by_depth.values():
@@ -125,18 +129,30 @@ class DataNorm(object):
             # In TF Sequential models, the InputLayer is not stored in the model object,
             # so we must traverse back through nodes to find the input layer's outputs.
             tf_in_layers = tf_in_layers_all[tf_model.layers[0]]
+            assert(len(tf_in_layers) == 1)
+            tf_out_layers = [n.outbound_layer for n in tf_in_layers[0].outbound_nodes
+                             if n in tf_model_nodes]
+            scale_factors[tf_in_layers[0]] = np.float64(1.0)
+            thresholds[tf_in_layers[0]] = np.float64(1.0)
+            tf_in_layers_all[tf_in_layers[0]] = []
+            tf_out_layers_all[tf_in_layers[0]] = tf_out_layers
+
         else:
             # TF Functional models store all their InputLayers, so no trickery needed.
             tf_in_layers = [tf_model.get_layer(name) for name in tf_model.input_names]
+
+        for tf_in_layer in tf_in_layers:
+            assert(len(tf_in_layer.output_shape) == 1)
+
+            # input layers cannot be output layers
+            if len(tf_out_layers_all[tf_in_layer]) == 0:
+                raise NotImplementedError(
+                    'input layers as output layers not supported')
 
         # Don't allow models with multiple input layers
         if len(tf_in_layers) != 1:
             raise NotImplementedError(
                 'Data-Norm converter: models with multiple input layers not supported')
-
-        # Default to 1.0 threshold
-        scale_factors = {tf_layer: np.float64(1.0) for tf_layer in tf_model.layers}
-        thresholds = {tf_layer: np.float64(1.0) for tf_layer in tf_model.layers}
 
         tf_layer = tf_in_layers[0]
 
