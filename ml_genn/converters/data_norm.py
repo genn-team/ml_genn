@@ -89,33 +89,94 @@ class DataNorm(object):
         return IFNeurons(threshold=pre_convert_output.thresholds[tf_layer])
 
     def pre_convert(self, tf_model):
-        # Get output functions for weighted layers.
-        idx = [i for i, layer in enumerate(tf_model.layers)
-               if len(layer.get_weights()) > 0]
-        weighted_layers = [tf_model.layers[i] for i in idx]
-        get_outputs = tf.keras.backend.function(
-            tf_model.inputs, [layer.output for layer in weighted_layers])
+        # NOTE: Data-Norm only normalises an initial sequential portion of
+        # a model with one input layer. Models with multiple input layers
+        # are not currently supported, and the thresholds of layers after
+        # branching (e.g. in ResNet) are left at 1.0.
 
-        # Find the maximum activation in each layer, given input data.
-        max_activation = np.array([np.max(out) for out in get_outputs(self.norm_data)],
-                                  dtype=np.float64)
+        # Only traverse nodes belonging to this model
+        tf_model_nodes = set()
+        for n in tf_model._nodes_by_depth.values():
+            tf_model_nodes.update(n)
 
-        # Find the maximum weight in each layer.
-        max_weights = np.array([np.max(w) for w in tf_model.get_weights()],
-                               dtype=np.float64)
+        # Get inbound and outbound layers
+        tf_in_layers_all = {}
+        tf_out_layers_all = {}
+        for tf_layer in tf_model.layers:
 
-        # Compute scale factors and normalize weights.
-        scale_factors = np.max([max_activation, max_weights], 0)
-        applied_factors = np.empty(scale_factors.shape, dtype=np.float64)
-        applied_factors[0] = scale_factors[0]
-        applied_factors[1:] = scale_factors[1:] / scale_factors[:-1]
+            # Find inbound layers
+            tf_in_layers = []
+            for n in tf_layer.inbound_nodes:
+                if n not in tf_model_nodes:
+                    continue
+                if isinstance(n.inbound_layers, list):
+                    tf_in_layers += n.inbound_layers
+                else:
+                    tf_in_layers.append(n.inbound_layers)
+            tf_in_layers_all[tf_layer] = tf_in_layers
 
-        for layer, threshold in zip(weighted_layers, applied_factors):
-            print('layer <{}> threshold: {}'.format(layer.name, threshold))
+            # Find outbound layers
+            tf_out_layers = [n.outbound_layer for n in tf_layer.outbound_nodes
+                             if n in tf_model_nodes]
+            tf_out_layers_all[tf_layer] = tf_out_layers
 
-        # Build dictionary of thresholds for each layer
-        thresholds = {layer: threshold for layer, threshold
-                      in zip(weighted_layers, applied_factors)}
+        # Get input layers
+        if isinstance(tf_model, tf.keras.models.Sequential):
+            # In TF Sequential models, the InputLayer is not stored in the model object,
+            # so we must traverse back through nodes to find the input layer's outputs.
+            tf_in_layers = tf_in_layers_all[tf_model.layers[0]]
+        else:
+            # TF Functional models store all their InputLayers, so no trickery needed.
+            tf_in_layers = [tf_model.get_layer(name) for name in tf_model.input_names]
+
+        # Don't allow models with multiple input layers
+        if len(tf_in_layers) != 1:
+            raise NotImplementedError(
+                'Data-Norm converter: models with multiple input layers not supported')
+
+        # Default to 1.0 threshold
+        scale_factors = {tf_layer: np.float64(1.0) for tf_layer in tf_model.layers}
+        thresholds = {tf_layer: np.float64(1.0) for tf_layer in tf_model.layers}
+
+        tf_layer = tf_in_layers[0]
+
+        while True:
+            tf_in_layers = tf_in_layers_all[tf_layer]
+            tf_out_layers = tf_out_layers_all[tf_layer]
+
+            # Skip input layer
+            if len(tf_in_layers) == 0:
+                tf_layer = tf_out_layers[0]
+                continue
+
+            # Break at branch (many outbound)
+            if len(tf_out_layers) > 1:
+                break
+
+            if len(tf_layer.get_weights()) > 0:
+                # Layer is weighted, so compute max activation and weight
+                layer_out_fn = tf.keras.backend.function(tf_model.inputs, tf_layer.output)
+                max_activation = np.max(layer_out_fn(self.norm_data))
+                max_weight = np.max(tf_layer.get_weights()[0])
+                scale_factor = np.maximum(max_activation, max_weight)
+                threshold = scale_factor / scale_factors[tf_in_layers[0]]
+                print(f'layer <{tf_layer.name}  max activation {max_activation}  max weight {max_weight}')
+
+            else:
+                # If layer is not weighted (like ReLU or Flatten),
+                # use data from inbound layer (like Dense or Conv2D)
+                scale_factor = scale_factors[tf_in_layers[0]]
+                threshold = thresholds[tf_in_layers[0]]
+
+            scale_factors[tf_layer] = scale_factor
+            thresholds[tf_layer] = threshold
+
+            # Break at end (no outbound)
+            if len(tf_out_layers) == 0:
+                break
+
+            # Outbound layer
+            tf_layer = tf_out_layers[0]
 
         return PreCompileOutput(thresholds=thresholds)
     
@@ -123,4 +184,9 @@ class DataNorm(object):
         pass
 
     def post_compile(self, mlg_model):
-        pass
+        # For each layer (these *should* be topologically sorted)
+        for layer in mlg_model.layers:
+            if layer in mlg_model.inputs:
+                continue
+
+            print('layer <{}> threshold: {}'.format(layer.name, layer.neurons.threshold))

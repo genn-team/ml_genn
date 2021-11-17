@@ -33,4 +33,5 @@ class InputLayer(BaseLayer):
             raise ValueError('data shape {} != input shape {}'.format(data_batch.shape[1:], self.shape))
 
         input_view[:data_batch.shape[0]] = data_batch.reshape(data_batch.shape[0], -1)
+        input_view[data_batch.shape[0]:] = 0.0
         nrn.push_var_to_device('input')

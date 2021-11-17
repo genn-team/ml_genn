@@ -95,17 +95,37 @@ class SpikeNorm(object):
         g_model = mlg_model.g_model
         n_samples = self.norm_data[0].shape[0]
 
+        # Don't allow models with multiple input layers
+        if len(mlg_model.inputs) != 1:
+            raise NotImplementedError(
+                'Spike-Norm converter: models with multiple input layers not supported')
+
+        final_thresholds = {}
+
         # Set layer thresholds high initially
         for layer in mlg_model.layers[1:]:
-            layer.neurons.set_threshold(np.inf)
+            if layer in mlg_model.inputs:
+                continue
 
-        # For each weighted layer
-        for layer in mlg_model.layers[1:]:
+            layer.neurons.set_threshold(np.inf)
+            final_thresholds[layer] = np.float64(1.0)
+
+        # For each layer (these *should* be topologically sorted)
+        for layer in mlg_model.layers:
+            if layer in mlg_model.inputs:
+                continue
+
+            # Break at branch (many outbound)
+            if len(layer.downstream_synapses) > 1:
+                break
+
             threshold = np.float64(0.0)
 
             # For each sample presentation
             progress = tqdm(total=n_samples)
             for batch_start in range(0, n_samples, g_model.batch_size):
+                progress.set_description(f'layer <{layer.name}>')
+
                 batch_end = min(batch_start + g_model.batch_size, n_samples)
                 batch_n = batch_end - batch_start
                 batch_data = [x[batch_start:batch_end]
@@ -136,5 +156,14 @@ class SpikeNorm(object):
             progress.close()
 
             # Update this layer's threshold
-            print('layer <{}> threshold: {}'.format(layer.name, threshold))
             layer.neurons.set_threshold(threshold)
+            final_thresholds[layer] = threshold
+
+        # For each layer (these *should* be topologically sorted)
+        for layer in mlg_model.layers:
+            if layer in mlg_model.inputs:
+                continue
+
+            # Update this layer's threshold
+            layer.neurons.set_threshold(final_thresholds[layer])
+            print('layer <{}> threshold: {}'.format(layer.name, layer.neurons.threshold))
