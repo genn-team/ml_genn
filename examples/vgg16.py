@@ -112,28 +112,26 @@ if __name__ == '__main__':
         layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False, kernel_regularizer=regularizer),
     ], name='vgg16')
 
+    callbacks = [callbacks.LearningRateScheduler(schedule)]
+    if args.record_tensorboard:
+        callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))
+
+    optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
+
+    tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     if args.reuse_tf_model:
-        with CustomObjectScope({'initializer': initializer}):
-            tf_model = models.load_model('vgg16_tf_model')
+        tf_model.load_weights('vgg16_tf_weights.h5')
     else:
-        callbacks = [callbacks.LearningRateScheduler(schedule)]
-        if args.record_tensorboard:
-            callbacks.append(callbacks.TensorBoard(log_dir="logs", histogram_freq=1))
-
-        optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
-
-        tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
         if args.augment_training:
             steps_per_epoch = x_train.shape[0] // 256
             tf_model.fit(iter_train, steps_per_epoch=steps_per_epoch, epochs=200, callbacks=callbacks)
         else:
             tf_model.fit(x_train, y_train, batch_size=256, epochs=200, shuffle=True, callbacks=callbacks)
 
-        models.save_model(tf_model, 'vgg16_tf_model', save_format='h5')
+        tf_model.save_weights('vgg16_tf_weights.h5')
 
     tf_eval_start_time = perf_counter()
-    tf_model.evaluate(x_test, y_test)
+    tf_model.evaluate(x_test, y_test, batch_size=128)
     print("TF evaluation:%f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
