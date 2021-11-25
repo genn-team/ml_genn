@@ -1,18 +1,24 @@
 from tqdm import tqdm
 import time as t
 import numpy as np
+from typing import Iterable, Optional, Union, Tuple, Sequence
 
 import tensorflow as tf
-from tensorflow.keras import models, layers, datasets
+from tensorflow.keras import models, layers, datasets, regularizers, optimizers
 
 from ml_genn import Model
 from ml_genn.converters import DataNorm
 from ml_genn.utils import parse_arguments
 
 import torch
+
 import bindsnet.network as bnn
 from bindsnet.datasets import DataLoader
 from bindsnet.encoding import NullEncoder, PoissonEncoder
+
+def initializer(shape, dtype=None):
+    stddev = np.sqrt(2.0 / float(shape[0] * shape[1] * shape[3]))
+    return tf.random.normal(shape, dtype=dtype, stddev=stddev)
 
 class AvgPool2dConnection(bnn.topology.AbstractConnection):
     # language=rst
@@ -23,8 +29,8 @@ class AvgPool2dConnection(bnn.topology.AbstractConnection):
 
     def __init__(
         self,
-        source: Nodes,
-        target: Nodes,
+        source: bnn.nodes.Nodes,
+        target: bnn.nodes.Nodes,
         kernel_size: Union[int, Tuple[int, int]],
         stride: Union[int, Tuple[int, int]] = 1,
         padding: Union[int, Tuple[int, int]] = 0,
@@ -43,9 +49,9 @@ class AvgPool2dConnection(bnn.topology.AbstractConnection):
         """
         super().__init__(source, target, None, None, 0.0, **kwargs)
 
-        self.kernel_size = _pair(kernel_size)
-        self.stride = _pair(stride)
-        self.padding = _pair(padding)
+        self.kernel_size = torch.nn.modules.utils._pair(kernel_size)
+        self.stride = torch.nn.modules.utils._pair(stride)
+        self.padding = torch.nn.modules.utils._pair(padding)
 
     def compute(self, s: torch.Tensor) -> torch.Tensor:
         # language=rst
@@ -78,12 +84,12 @@ class AvgPool2dConnection(bnn.topology.AbstractConnection):
         """
         pass
 
-    def reset_(self) -> None:
+    def reset_state_variables(self) -> None:
         # language=rst
         """
         Contains resetting logic for the connection.
         """
-        super().reset_()
+        super().reset_state_variables()
 
 class PassThroughNodes(bnn.nodes.Nodes):
     # language=rst
@@ -131,7 +137,7 @@ class PassThroughNodes(bnn.nodes.Nodes):
         """
         self.s = x
 
-    def reset_(self) -> None:
+    def reset_state_variables(self) -> None:
         # language=rst
         """
         Resets relevant state variables.
@@ -149,7 +155,7 @@ with tf.device('/CPU:0'):
     # Retrieve and normalise CIFAR-10 dataset
     (x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()
     x_test = x_test[:args.n_test_samples] / 255.0
-    x_test -= np.average(x_test)
+    #x_test -= np.average(x_test)
     y_test = y_test[:args.n_test_samples, 0]
     x_norm = x_train[np.random.choice(x_train.shape[0], args.n_norm_samples, replace=False)]
 
@@ -180,7 +186,7 @@ with tf.device('/CPU:0'):
         layers.Conv2D(128, 3, padding="same", activation="relu", use_bias=False, 
                       kernel_initializer=initializer, kernel_regularizer=regularizer),
         layers.AveragePooling2D(2),
-    
+
         # 8x8
         layers.Conv2D(256, 3, padding="same", activation="relu", use_bias=False, 
                       kernel_initializer=initializer, kernel_regularizer=regularizer),
@@ -220,7 +226,7 @@ with tf.device('/CPU:0'):
         layers.Dense(4096, activation="relu", use_bias=False, kernel_regularizer=regularizer),
         layers.Dropout(0.5),
         layers.Dense(y_train.max() + 1, activation="softmax", use_bias=False, kernel_regularizer=regularizer),
-    ], name='vgg16')
+    ], name='vgg16_bindsnet')
 
     optimizer = optimizers.SGD(lr=0.05, momentum=0.9)
 
@@ -228,17 +234,8 @@ with tf.device('/CPU:0'):
     tf_model.load_weights('vgg16_tf_weights.h5')
 
     # Create a suitable converter to convert TF model to ML GeNN
-    converter = args.build_converter(x_norm, signed_input=True, K=10, norm_time=2500)
-
-    # Convert and compile ML GeNN model
-    mlg_model = Model.convert_tf_model(
-        tf_model, converter=converter, connectivity_type=args.connectivity_type,
-        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-        kernel_profiling=args.kernel_profiling)
-    
-    # Create a suitable converter to convert TF model to ML GeNN
     # **THINK** BindsNet will not be signed
-    converter = DataNorm(x_norm, signed_input=True)
+    converter = DataNorm(x_norm, signed_input=False)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
@@ -254,7 +251,6 @@ with tf.device('/CPU:0'):
     # convert input to pytorch channel first from tf channel last
     x_test_chan_first = np.moveaxis(x_test, 3, 1)
 
-    print(tf_model.get_weights())
     # convert conv weights to pytorch format [out_ch, in_ch, h, w] from tf format [h, w, in_ch, out_ch]
     syn_conv_w = [np.moveaxis(tf_model.get_weights()[i], (3, 2), (0, 1))
                   for i in range(13)]
@@ -268,74 +264,74 @@ with tf.device('/CPU:0'):
     bn_model.add_layer(layer=input_layer, name='input')
 
     # Block 1
-    conv_layer_1 = bnn.nodes.IFNodes(n=(64 * 32 * 32), shape=(64, 32, 32), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_1 = bnn.nodes.IFNodes(n=(64 * 32 * 32), shape=(64, 32, 32), thresh=641.8155517578125, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_1, name='conv_1')
 
-    conv_layer_2 = bnn.nodes.IFNodes(n=(64 * 32 * 32), shape=(64, 32, 32), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_2 = bnn.nodes.IFNodes(n=(64 * 32 * 32), shape=(64, 32, 32), thresh=3.6156136989593506, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_2, name='conv_2')
 
     pass_layer_1 = PassThroughNodes(n=(64 * 16 * 16), shape=(64, 16, 16))
     bn_model.add_layer(layer=pass_layer_1, name='pass_1')
-    
+
     # Block 2
-    conv_layer_3 = bnn.nodes.IFNodes(n=(128 * 16 * 16), shape=(128, 16, 16), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_3 = bnn.nodes.IFNodes(n=(128 * 16 * 16), shape=(128, 16, 16), thresh=0.43528640270233154, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_3, name='conv_3')
 
-    conv_layer_4 = bnn.nodes.IFNodes(n=(128 * 16 * 16), shape=(128, 16, 16), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_4 = bnn.nodes.IFNodes(n=(128 * 16 * 16), shape=(128, 16, 16), thresh=1.3611167669296265, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_4, name='conv_4')
 
     pass_layer_2 = PassThroughNodes(n=(128 * 8 * 8), shape=(128, 8, 8))
     bn_model.add_layer(layer=pass_layer_2, name='pass_2')
-    
+
     # Block 3
-    conv_layer_5 = bnn.nodes.IFNodes(n=(256 * 8 * 8), shape=(256, 8, 8), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_5 = bnn.nodes.IFNodes(n=(256 * 8 * 8), shape=(256, 8, 8), thresh=0.34528371691703796, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_5, name='conv_5')
 
-    conv_layer_6 = bnn.nodes.IFNodes(n=(256 * 8 * 8), shape=(256, 8, 8), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_6 = bnn.nodes.IFNodes(n=(256 * 8 * 8), shape=(256, 8, 8), thresh=0.9875544905662537, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_6, name='conv_6')
 
-    conv_layer_7 = bnn.nodes.IFNodes(n=(256 * 8 * 8), shape=(256, 8, 8), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_7 = bnn.nodes.IFNodes(n=(256 * 8 * 8), shape=(256, 8, 8), thresh=1.470356822013855, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_7, name='conv_7')
-    
+
     pass_layer_3 = PassThroughNodes(n=(256 * 4 * 4), shape=(256, 4, 4))
     bn_model.add_layer(layer=pass_layer_3, name='pass_3')
-    
+
     # Block 4
-    conv_layer_8 = bnn.nodes.IFNodes(n=(512 * 4 * 4), shape=(512, 4, 4), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_8 = bnn.nodes.IFNodes(n=(512 * 4 * 4), shape=(512, 4, 4), thresh=0.3519073724746704, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_8, name='conv_8')
 
-    conv_layer_9 = bnn.nodes.IFNodes(n=(512 * 4 * 4), shape=(512, 4, 4), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_9 = bnn.nodes.IFNodes(n=(512 * 4 * 4), shape=(512, 4, 4), thresh=1.2192555665969849, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_9, name='conv_9')
 
-    conv_layer_10 = bnn.nodes.IFNodes(n=(512 * 4 * 4), shape=(256, 4, 4), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_10 = bnn.nodes.IFNodes(n=(512 * 4 * 4), shape=(512, 4, 4), thresh=1.4588868618011475, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_10, name='conv_10')
-    
+
     pass_layer_4 = PassThroughNodes(n=(512 * 2 * 2), shape=(512, 2, 2))
     bn_model.add_layer(layer=pass_layer_4, name='pass_4')
-    
+
     # Block 5
-    conv_layer_11 = bnn.nodes.IFNodes(n=(512 * 2 * 2), shape=(512, 2, 2), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_11 = bnn.nodes.IFNodes(n=(512 * 2 * 2), shape=(512, 2, 2), thresh=0.5751084089279175, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_11, name='conv_11')
 
-    conv_layer_12 = bnn.nodes.IFNodes(n=(512 * 2 * 2), shape=(512, 2, 2), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_12 = bnn.nodes.IFNodes(n=(512 * 2 * 2), shape=(512, 2, 2), thresh=1.98782217502594, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_12, name='conv_12')
 
-    conv_layer_13 = bnn.nodes.IFNodes(n=(512 * 2 * 2), shape=(256, 2, 2), thresh=1.0, reset=0.0, refac=0)
+    conv_layer_13 = bnn.nodes.IFNodes(n=(512 * 2 * 2), shape=(512, 2, 2), thresh=3.515345573425293, reset=0.0, refac=0)
     bn_model.add_layer(layer=conv_layer_13, name='conv_13')
-    
+
     pass_layer_5 = PassThroughNodes(n=(512 * 1 * 1), shape=(512, 1, 1))
     bn_model.add_layer(layer=pass_layer_5, name='pass_5')
-    
+
     # Classifier
-    dense_layer_1 = bnn.nodes.IFNodes(n=4096, thresh=1.0, reset=0.0, refac=0)
+    dense_layer_1 = bnn.nodes.IFNodes(n=4096, thresh=0.39055076241493225, reset=0.0, refac=0)
     bn_model.add_layer(layer=dense_layer_1, name='dense_1')
 
-    dense_layer_2 = bnn.nodes.IFNodes(n=4096, thresh=1.0, reset=0.0, refac=0)
+    dense_layer_2 = bnn.nodes.IFNodes(n=4096, thresh=1.4990026950836182, reset=0.0, refac=0)
     bn_model.add_layer(layer=dense_layer_2, name='dense_2')
 
-    dense_layer_3 = bnn.nodes.IFNodes(n=10, thresh=1.0, reset=0.0, refac=0)
+    dense_layer_3 = bnn.nodes.IFNodes(n=10, thresh=0.0009850480128079653, reset=0.0, refac=0)
     bn_model.add_layer(layer=dense_layer_3, name='dense_3')
-    
+
     # Make convolutional connections
     for src, src_name, trg, trg_name, w in zip([input_layer, conv_layer_1, pass_layer_1, conv_layer_3, pass_layer_2, conv_layer_5, conv_layer_6, pass_layer_3, conv_layer_8, conv_layer_9, pass_layer_4, conv_layer_11, conv_layer_12],
                                                ["input", "conv_1", "pass_1", "conv_3", "pass_2", "conv_5", "conv_6", "pass_3", "conv_8", "conv_9", "pass_4", "conv_11", "conv_12"],
@@ -348,8 +344,7 @@ with tf.device('/CPU:0'):
         bn_model.add_connection(connection=syn_conv, source=src_name, target=trg_name)
         assert (syn_conv.w.numpy() == w).all()
         assert (syn_conv.b == 0.0).all()
-                                                     
-    
+
     # Make Avg pool connections
     for src, src_name, trg, trg_name in zip([conv_layer_2, conv_layer_4, conv_layer_7, conv_layer_10, conv_layer_13],
                                             ["conv_2", "conv_4", "conv_7", "conv_10", "conv_13"],
@@ -358,8 +353,7 @@ with tf.device('/CPU:0'):
         syn_avg = AvgPool2dConnection(source=src, target=trg, 
                                       kernel_size=2, stride=2)
         bn_model.add_connection(connection=syn_avg, source=src_name, target=trg_name)
-        
-    
+
     # Make dense connections
     for src, src_name, trg, trg_name, w in zip([pass_layer_5, dense_layer_1, dense_layer_2],
                                                ["pass_5", "dense_1", "dense_2"],
