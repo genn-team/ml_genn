@@ -254,7 +254,7 @@ with tf.device('/CPU:0'):
     # convert input to pytorch channel first from tf channel last
     x_test_chan_first = np.moveaxis(x_test, 3, 1)
 
-    print(tf_model.get_weights()
+    print(tf_model.get_weights())
     # convert conv weights to pytorch format [out_ch, in_ch, h, w] from tf format [h, w, in_ch, out_ch]
     syn_conv_w = [np.moveaxis(tf_model.get_weights()[i], (3, 2), (0, 1))
                   for i in range(13)]
@@ -341,7 +341,7 @@ with tf.device('/CPU:0'):
                                                ["input", "conv_1", "pass_1", "conv_3", "pass_2", "conv_5", "conv_6", "pass_3", "conv_8", "conv_9", "pass_4", "conv_11", "conv_12"],
                                                [conv_layer_1, conv_layer_2, conv_layer_3, conv_layer_4, conv_layer_5, conv_layer_6, conv_layer_7, conv_layer_8, conv_layer_9, conv_layer_10, conv_layer_11, conv_layer_12, conv_layer_13],
                                                ["conv_1", "conv_2", "conv_3", "conv_4", "conv_5", "conv_6", "conv_7", "conv_8", "conv_9", "conv_10", "conv_11", "conv_12", "conv_13"],
-                                               "syn_conv_w):
+                                               syn_conv_w):
         syn_conv = bnn.topology.Conv2dConnection(source=src, target=trg, 
                                                  kernel_size=3, padding=1,
                                                  w=torch.tensor(w))
@@ -351,7 +351,7 @@ with tf.device('/CPU:0'):
                                                      
     
     # Make Avg pool connections
-    for src, src_name, trg, trg_name in zip([conv_layer_2, conv_layer_4, conv_layer_7, conv_layer_10, conv_layer_13]
+    for src, src_name, trg, trg_name in zip([conv_layer_2, conv_layer_4, conv_layer_7, conv_layer_10, conv_layer_13],
                                             ["conv_2", "conv_4", "conv_7", "conv_10", "conv_13"],
                                             [pass_layer_1, pass_layer_2, pass_layer_3, pass_layer_4, pass_layer_5],
                                             ["pass_1", "pass_2", "pass_3", "pass_4", "pass_5"]):
@@ -365,7 +365,7 @@ with tf.device('/CPU:0'):
                                                ["pass_5", "dense_1", "dense_2"],
                                                [dense_layer_1, dense_layer_2,  dense_layer_3],
                                                ["dense_1", "dense_2", "dense_3"],
-                                               [syn_dense_1_w, tf_model.get_weights()[14], tf_model.get_weights()[15]):
+                                               [syn_dense_1_w, tf_model.get_weights()[14], tf_model.get_weights()[15]]):
         syn_dense = bnn.topology.Connection(
             source=src, target=trg,
             w=torch.tensor(w))
