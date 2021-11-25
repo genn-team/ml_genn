@@ -148,7 +148,7 @@ with tf.device('/CPU:0'):
     args = parse_arguments('VGG16 classifier model')
     print('arguments: ' + str(vars(args)))
 
-    classify_time = 500
+    classify_time = 2500
     dt = args.dt
     batch_size = args.batch_size
 
