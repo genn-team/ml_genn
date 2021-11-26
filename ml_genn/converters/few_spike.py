@@ -83,29 +83,31 @@ class FewSpike(object):
         return FSReluInputNeurons(self.K, alpha, self.signed_input)
 
     def create_neurons(self, tf_layer, pre_convert_output):
+        # If layer alphas have been calculated but
+        # this layer isn't included, give warning
+        pre_conv_alpha = pre_convert_output.layer_alpha
+        if len(pre_conv_alpha) > 0 and tf_layer not in pre_conv_alpha:
+            print("WARNING: FewSpike pre_convert has not provided "
+                  "an alpha value for '%s'" % tf_layer.name)
+            
         # Lookup optimised alpha value for neuron
-        alpha = (pre_convert_output.layer_alpha[tf_layer]
-                 if tf_layer in pre_convert_output.layer_alpha 
+        alpha = (pre_conv_alpha[tf_layer] if tf_layer in pre_conv_alpha
                  else self.alpha)
         return FSReluNeurons(self.K, alpha)
     
     def pre_convert(self, tf_model):
         # If any normalisation data was provided
         if self.norm_data is not None:
-            # Get weighted layers
-            weighted_layers = [l for l in tf_model.layers
-                               if len(l.get_weights()) > 0]
-
-            # Get output functions for weighted layers.
+            # Get output functions for all layers.
             get_outputs = tf.keras.backend.function(
-                tf_model.inputs, [l.output for l in weighted_layers])
+                tf_model.inputs, [l.output for l in tf_model.layers])
 
             # Get output given input data.
             outputs = get_outputs(self.norm_data)
 
             # Build dictionary of maximum activation in each layer
             layer_alpha = {l: np.max(out) / (1.0 - 2.0 ** -self.K)
-                           for l, out in zip(weighted_layers, outputs)}
+                           for l, out in zip(tf_model.layers, outputs)}
 
             # Use input data range to directly set maximum input
             if self.signed_input:
