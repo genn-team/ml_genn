@@ -280,26 +280,7 @@ class Model(object):
                 spike_i[i][j] = np.concatenate(spikes)
                 spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
 
-        return accuracy, spike_i, spike_t
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return accuracy, spike_i, spike_
 
 
     def evaluate(self, data, labels, time, save_samples=[]):
@@ -754,7 +735,8 @@ class Model(object):
                                     params={
                                         'pool_size': tf_layer.pool_size,
                                         'pool_strides': tf_layer.strides,
-                                        'pool_padding': tf_layer.padding},
+                                        'pool_padding': tf_layer.padding,
+                                        'connectivity_type': connectivity_type},
                                     source=in_config,
                                     weights=None))
                             elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
@@ -763,7 +745,8 @@ class Model(object):
                                     params={
                                         'pool_size': tf_layer.input_shape[1:3],
                                         'pool_strides': None,
-                                        'pool_padding': 'valid'},
+                                        'pool_padding': 'valid',
+                                        'connectivity_type': connectivity_type},
                                     source=in_config,
                                     weights=None))
 
@@ -799,7 +782,7 @@ class Model(object):
                             # configure Identity synapses
                             config.synapses.append(InSynConfig(
                                 type=IdentitySynapses,
-                                params={},
+                                params={'connectivity_type': connectivity_type},
                                 source=in_config,
                                 weights=None))
 
