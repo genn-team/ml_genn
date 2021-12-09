@@ -25,72 +25,6 @@ def model_compare_tf_and_mlg(tf_model, x, connectivity_type='procedural'):
     return mlg_model
 
 
-def model_input_0():
-    return np.array([
-        [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-        [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
-        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-        [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-    ], dtype=np.float64)
-
-
-def model_input_1():
-    return np.array([
-        [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
-        [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
-        [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    ], dtype=np.float64)
-
-
-def model_kernel_0_0():
-    return np.array([
-        [0, 0, 1],
-        [0, 1, 0],
-        [1, 0, 0],
-    ], dtype=np.float64)
-
-
-def model_kernel_1_0():
-    return np.array([
-        [1, 1, 0],
-        [0, 0, 1],
-        [1, 1, 0],
-    ], dtype=np.float64)
-
-
-def model_kernel_0_1():
-    return np.array([
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-    ], dtype=np.float64)
-
-
-def model_kernel_1_1():
-    return np.array([
-        [0, 1, 0],
-        [1, 0, 1],
-        [0, 1, 0],
-    ], dtype=np.float64)
-
-
 def test_conv2d_in_chan_1_out_chan_1_padding_valid():
     '''
     Test Conv2D with 1 input channel, 1 output channel and valid conv padding.
@@ -100,12 +34,10 @@ def test_conv2d_in_chan_1_out_chan_1_padding_valid():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 1), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-
+    x = np.random.randint(0, 2, size=(1, 12, 12, 1)).astype(np.float64)  
+   
     # Kernels
-    k = np.empty((3, 3, 1, 1), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
+    k = np.random.random_sample((3, 3, 1, 1))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -128,12 +60,10 @@ def test_conv2d_in_chan_1_out_chan_1_padding_valid_strides_2():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 1), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 1)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 1, 1), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
+    k = np.random.random_sample((3, 3, 1, 1))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -145,6 +75,30 @@ def test_conv2d_in_chan_1_out_chan_1_padding_valid_strides_2():
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
+def test_conv2d_in_chan_1_out_chan_1_padding_same_strides_2():
+    '''
+    Test Conv2D with 1 input channel, 1 output channel and same conv padding,
+    with stride of 2.
+    '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    # Inputs
+    x = np.random.randint(0, 2, size=(1, 12, 12, 1)).astype(np.float64)  
+
+    # Kernels
+    k = np.random.random_sample((3, 3, 1, 1))
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.Conv2D(1, 3, strides=2, name='output', padding='same',
+                               use_bias=False, input_shape=(12, 12, 1)),
+    ], name='test_conv2d_in_chan_1_out_chan_1_padding_same_strides_2')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, [x])
 
 def test_conv2d_in_chan_2_out_chan_1_padding_valid():
     '''
@@ -155,14 +109,10 @@ def test_conv2d_in_chan_2_out_chan_1_padding_valid():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 2)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 2, 1), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
-    k[:, :, 1, 0] = model_kernel_1_0()
+    k = np.random.random_sample((3, 3, 2, 1))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -184,13 +134,10 @@ def test_conv2d_in_chan_1_out_chan_2_padding_valid():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 1), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 1)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 1, 2), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
-    k[:, :, 0, 1] = model_kernel_0_1()
+    k = np.random.random_sample((3, 3, 1, 2))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -212,16 +159,10 @@ def test_conv2d_in_chan_2_out_chan_2_padding_valid():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 2)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 2, 2), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
-    k[:, :, 1, 0] = model_kernel_1_0()
-    k[:, :, 0, 1] = model_kernel_0_1()
-    k[:, :, 1, 1] = model_kernel_1_1()
+    k = np.random.random_sample((3, 3, 2, 2))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -243,16 +184,10 @@ def test_conv2d_in_chan_2_out_chan_2_padding_valid_sparse():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 2)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 2, 2), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
-    k[:, :, 1, 0] = model_kernel_1_0()
-    k[:, :, 0, 1] = model_kernel_0_1()
-    k[:, :, 1, 1] = model_kernel_1_1()
+    k = np.random.random_sample((3, 3, 2, 2))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
@@ -274,17 +209,11 @@ def test_conv2d_in_chan_2_out_chan_2_padding_same():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 2)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 2, 2), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
-    k[:, :, 1, 0] = model_kernel_1_0()
-    k[:, :, 0, 1] = model_kernel_0_1()
-    k[:, :, 1, 1] = model_kernel_1_1()
-
+    k = np.random.random_sample((3, 3, 2, 2))
+    
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(2, 3, name='output', padding='same',
@@ -305,16 +234,10 @@ def test_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # Inputs
-    x = np.empty((1, 12, 12, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
+    x = np.random.randint(0, 2, size=(1, 12, 12, 2)).astype(np.float64)  
 
     # Kernels
-    k = np.empty((3, 3, 2, 2), dtype=np.float64)
-    k[:, :, 0, 0] = model_kernel_0_0()
-    k[:, :, 1, 0] = model_kernel_1_0()
-    k[:, :, 0, 1] = model_kernel_0_1()
-    k[:, :, 1, 1] = model_kernel_1_1()
+    k = np.random.random_sample((3, 3, 2, 2))
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
