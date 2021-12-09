@@ -9,5 +9,5 @@ class Identity(Layer):
         self.connectivity_type = ConnectivityType(connectivity_type)
 
     def connect(self, sources):
-        synapses = [IdentitySynapses() for i in range(len(sources))]
+        synapses = [IdentitySynapses(self.connectivity_type) for i in range(len(sources))]
         super(Identity, self).connect(sources, synapses)
