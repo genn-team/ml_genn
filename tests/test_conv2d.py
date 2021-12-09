@@ -100,6 +100,31 @@ def test_conv2d_in_chan_1_out_chan_1_padding_same_strides_2():
     # Compare TensorFlow and ML GeNN models
     model_compare_tf_and_mlg(tf_model, [x])
 
+def test_conv2d_in_chan_1_out_chan_1_padding_same_strides_2():
+    '''
+    Test Conv2D with 1 input channel, 1 output channel and same conv padding,
+    with stride of 2.
+    '''
+
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    # Inputs
+    x = np.random.randint(0, 2, size=(1, 12, 12, 1)).astype(np.float64)  
+
+    # Kernels
+    k = np.random.random_sample((3, 3, 1, 1))
+
+    # Create TensorFlow model
+    tf_model = tf.keras.models.Sequential([
+        tf.keras.layers.Conv2D(1, 3, strides=2, name='output', padding='same',
+                               use_bias=False, input_shape=(12, 12, 1)),
+    ], name='test_conv2d_in_chan_1_out_chan_1_padding_same_strides_2')
+    tf_model.set_weights([k])
+
+    # Compare TensorFlow and ML GeNN models
+    model_compare_tf_and_mlg(tf_model, [x])
+
 def test_conv2d_in_chan_2_out_chan_1_padding_valid():
     '''
     Test Conv2D with 2 input channels, 1 output channel and valid conv padding.
@@ -253,6 +278,7 @@ def test_conv2d_in_chan_2_out_chan_2_padding_same_sparse():
 if __name__ == '__main__':
     test_conv2d_in_chan_1_out_chan_1_padding_valid()
     test_conv2d_in_chan_1_out_chan_1_padding_valid_strides_2()
+    test_conv2d_in_chan_1_out_chan_1_padding_same_strides_2()
     test_conv2d_in_chan_2_out_chan_1_padding_valid()
     test_conv2d_in_chan_1_out_chan_2_padding_valid()
     test_conv2d_in_chan_2_out_chan_2_padding_valid()
