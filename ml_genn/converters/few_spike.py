@@ -97,21 +97,24 @@ class FewSpike(object):
     
     def pre_convert(self, tf_model):
         # If any normalisation data was provided
-        if self.norm_data is not None:
+        if all(n is not None for n in self.norm_data):
             # Get output functions for all layers.
             get_outputs = tf.keras.backend.function(
                 tf_model.inputs, [l.output for l in tf_model.layers])
 
             # Get output given input data.
             outputs = get_outputs(self.norm_data)
-
+            """
+            for l, out in zip(tf_model.layers, outputs):
+                np.save("%s_ann.npy" % l.name, out)
+            """
             # Build dictionary of maximum activation in each layer
             layer_alpha = {l: np.max(out) / (1.0 - 2.0 ** -self.K)
                            for l, out in zip(tf_model.layers, outputs)}
 
             # Use input data range to directly set maximum input
             if self.signed_input:
-                input_alpha = np.amax(np.abs(self.norm_data)) / (1.0 - 2.0 ** (1 - self.K))
+                input_alpha = np.amax(np.abs(self.norm_data)) / (1.0 - 2.0 ** -self.K)
             else:
                 input_alpha = np.amax(self.norm_data) / (1.0 - 2.0 ** -self.K)
 

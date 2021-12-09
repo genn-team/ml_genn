@@ -32,11 +32,11 @@ fs_relu_input_model = create_custom_neuron_class(
 fs_relu_signed_input_model = create_custom_neuron_class(
     'fs_relu_signed_input',
     param_names=['K', 'alpha'],
-    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(-pars[0]//2))())],
+    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(-pars[0]))())],
     var_name_types=[('input', 'scalar', VarAccess_READ_ONLY_DUPLICATE), ('Vmem', 'scalar')],
     sim_code='''
     // Convert K to integer
-    const int halfK = (int)$(K) / 2;
+    const int kInt = (int)$(K);
 
     // Get timestep within presentation
     const int pipeTimestep = (int)($(t) / DT);
@@ -46,33 +46,27 @@ fs_relu_signed_input_model = create_custom_neuron_class(
         $(Vmem) = $(input);
     }
 
-    // Split timestep into interleaved positive and negative
-    const int halfPipetimestep = pipeTimestep / 2;
-    const bool positive = (pipeTimestep % 2) == 0;
-    const scalar hT = $(scale) * (1 << (halfK - (1 + halfPipetimestep)));
+    const scalar hT = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
+    
+    const bool spike = (fabs($(Vmem)) >= hT);
     ''',
     threshold_condition_code='''
-    (positive && $(Vmem) >= hT) || (!positive && $(Vmem) < -hT)
+    spike && $(input) > 0.0
     ''',
     reset_code='''
-    if(positive) {
-        $(Vmem) -= hT;
-    }
-    else {
-        $(Vmem) += hT;
-    }
+    $(Vmem) -= hT;
     ''',
     is_auto_refractory_required=False)
 
 class FSReluInputNeurons(InputNeurons):
-    def __init__(self, K=10, alpha=25, signed_input=False):
+    def __init__(self, K=10, alpha=25, signed_spikes=False):
         super(FSReluInputNeurons, self).__init__()
         self.K = K
         self.alpha = alpha
-        self.signed_input = signed_input
+        self.signed_spikes = signed_spikes
 
     def compile(self, mlg_model, layer):
-        model = (fs_relu_signed_input_model if self.signed_input 
+        model = (fs_relu_signed_input_model if self.signed_spikes 
                  else fs_relu_input_model)
         params = {'K' : self.K, 'alpha': self.alpha}
         vars = {'input': 0.0, 'Vmem': 0.0}

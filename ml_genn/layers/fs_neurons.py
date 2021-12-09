@@ -40,46 +40,6 @@ fs_relu_model = create_custom_neuron_class(
     ''',
     is_auto_refractory_required=False)
 
-# FS ReLU model where upstream neurons are FS signed input
-fs_relu_upstream_signed_input_model = create_custom_neuron_class(
-    'fs_relu_upstream_signed_input',
-    param_names=['K', 'alpha', 'upstreamAlpha'],
-    derived_params=[("scale", create_dpf_class(lambda pars, dt: pars[1] * 2**(-pars[0]))()),
-                    ("upstreamScale", create_dpf_class(lambda pars, dt: pars[2] * 2**(-pars[0]//2))())],
-    var_name_types=[('Fx', 'scalar'), ('Vmem', 'scalar')],
-    sim_code='''
-    // Convert K to integer
-    const int kInt = (int)$(K);
-
-    // Get timestep within presentation
-    const int pipeTimestep = (int)($(t) / DT);
-
-    // Calculate magic constants. For RelU hT=h=T
-    const scalar hT = $(scale) * (1 << (kInt - (1 + pipeTimestep)));
-    
-    // Split timestep into interleaved positive and negative
-    // **NOTE** sign is flipped compared to input model as we want sign of PREVIOUS timestep
-    const scalar dSign = ((pipeTimestep % 2) == 0) ? -1.0 : 1.0;
-    const scalar d = dSign * $(upstreamScale) * (1 << (((kInt - pipeTimestep) % kInt) / 2));
-    
-    // Accumulate input
-    // **NOTE** needs to be before applying input as spikes from LAST timestep must be processed
-    $(Fx) += ($(Isyn) * d);
-
-    // If this is the first timestep, apply input
-    if(pipeTimestep == 0) {
-        $(Vmem) = $(Fx);
-        $(Fx) = 0.0;
-    }
-    ''',
-    threshold_condition_code='''
-    $(Vmem) >= hT
-    ''',
-    reset_code='''
-    $(Vmem) -= hT;
-    ''',
-    is_auto_refractory_required=False)
-
 class FSReluNeurons(Neurons):
     pipelined = True
 
@@ -111,16 +71,7 @@ class FSReluNeurons(Neurons):
                     upstream_alpha = nrn.alpha
                 elif upstream_alpha != nrn.alpha:
                     raise ValueError("All upstream FS ReLU neurons must "
-                                     "have the same alpha parameter values")
-
-                # Check that all upstream neurons match signedness
-                nrn_signed = nrn.signed_input if upstream_relu_input else False
-                if upstream_signed is None:
-                    upstream_signed = nrn_signed
-                elif upstream_signed != nrn_signed:
-                    raise ValueError("All upstream FS ReLU input neurons "
-                                     "must  have the same signedness")
-                    
+                                     "have the same alpha parameter values")       
             # Otherwise, give error
             else:
                 raise ValueError("FS neurons can only be connected "
@@ -131,15 +82,11 @@ class FSReluNeurons(Neurons):
         if upstream_alpha is None:
             upstream_alpha = self.alpha
 
-        # Pick model based on whether upstream neurons are signed or not
-        model = (fs_relu_upstream_signed_input_model if upstream_signed == True
-                 else fs_relu_model)
-
         params = {'K': self.K, 'alpha': self.alpha, 
                   'upstreamAlpha': upstream_alpha}
         vars = {'Fx': 0.0, 'Vmem': 0}
 
-        super(FSReluNeurons, self).compile(mlg_model, layer, model,
+        super(FSReluNeurons, self).compile(mlg_model, layer, fs_relu_model,
                                            params, vars, {})
 
     def set_threshold(self, threshold):
