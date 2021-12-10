@@ -6,7 +6,7 @@ from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity,
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
-from ml_genn.layers.helper import _get_param_2d
+from ml_genn.layers.helper import _get_conv_same_padding, _get_param_2d
 
 class Conv2DSynapses(BaseSynapses):
 
@@ -54,17 +54,8 @@ class Conv2DSynapses(BaseSynapses):
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
-            # Calculate padding following approach described at
-            # https://github.com/tensorflow/tensorflow/blob/v2.7.0/tensorflow/python/ops/nn_ops.py#L48-L88
-            if (conv_ih % conv_sh == 0):
-                conv_padh = max(conv_kh - conv_sh, 0) // 2
-            else:
-                conv_padh = max(conv_kh - (conv_ih % conv_sh), 0) // 2
-            
-            if (conv_iw % conv_sw == 0):
-                conv_padw = max(conv_kw - conv_sw, 0) // 2
-            else:
-                conv_padw = max(conv_kw - (conv_iw % conv_sw), 0) // 2
+            conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
+            conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
 

@@ -8,7 +8,7 @@ from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
-from ml_genn.layers.helper import _get_param_2d
+from ml_genn.layers.helper import _get_conv_same_padding, _get_param_2d
 
 avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     'avepool2d_conv2d',
@@ -26,7 +26,7 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     ],
 
     calc_max_row_len_func=create_cmlf_class(
-        lambda num_pre, num_post, pars: (int(pars[9]) // int(pars[11])) * (int(pars[10]) // int(pars[12])) * int(pars[20]))(),
+        lambda num_pre, num_post, pars: int(ceil(pars[9] / pars[11])) * int(ceil(pars[10] / pars[12])) * int(pars[20]))(),
 
     calc_kernel_size_func=create_cksf_class(
         lambda pars: UnsignedIntVector([int(pars[9]), int(pars[10]), int(pars[17]), int(pars[20])]))(),
@@ -167,10 +167,8 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
-            conv_padh = (conv_kh - 1) // 2
-            conv_padw = (conv_kw - 1) // 2
-
-        
+            conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
+            conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
 
