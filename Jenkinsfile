@@ -93,73 +93,73 @@ for (b = 0; b < builderNodes.size(); b++) {
                 // Checkout ML GeNN
                 echo "Checking out ML GeNN";
                 sh "rm -rf ml_genn";
-		checkout scm
+                checkout scm
             }
 
-	    buildStage("Setup virtualenv (${NODE_NAME})") {
-		// Set up new virtualenv
-		echo "Creating virtualenv";
+            buildStage("Setup virtualenv (${NODE_NAME})") {
+                // Set up new virtualenv
+                echo "Creating virtualenv";
                 sh "rm -rf ${WORKSPACE}/venv";
                 sh "python3 -m venv ${WORKSPACE}/venv";
-		sh """
-                    . ${WORKSPACE}/venv/bin/activate
-                    pip install -U pip
-                    pip install numpy pytest pytest-cov
+                sh """
+                . ${WORKSPACE}/venv/bin/activate
+                pip install -U pip
+                pip install numpy pytest pytest-cov
                 """;
-	    }
+            }
 
             buildStage("Installing PyGeNN (${NODE_NAME})") {
-		// Checkout GeNN
-		echo "Checking out GeNN";
-		sh "rm -rf genn";
-		sh "git clone https://github.com/genn-team/genn.git";
+                // Checkout GeNN
+                echo "Checking out GeNN";
+                sh "rm -rf genn";
+                sh "git clone https://github.com/genn-team/genn.git";
 
-		dir("genn") {
-		    // Build dynamic LibGeNN
-		    echo "Building LibGeNN";
-		    def messages_libGeNN = "libgenn_${NODE_NAME}";
+                dir("genn") {
+                    // Build dynamic LibGeNN
+                    echo "Building LibGeNN";
+                    def messages_libGeNN = "libgenn_${NODE_NAME}";
                     sh "rm -f ${messages_libGeNN}";
-		    def commands_libGeNN = """
-                        make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messages_libGeNN}\" 2>&1
+                    def commands_libGeNN = """
+                    make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messages_libGeNN}\" 2>&1
                     """;
-		    def status_libGeNN = sh script:commands_libGeNN, returnStatus:true;
-		    archive messages_libGeNN;
-		    if (status_libGeNN != 0) {
-			setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
-		    }
+                    def status_libGeNN = sh script:commands_libGeNN, returnStatus:true;
+                    archive messages_libGeNN;
+                    if (status_libGeNN != 0) {
+                        setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
+                    }
 
-		    // Build PyGeNN module
-		    echo "Building and installing PyGeNN";
-		    def messages_PyGeNN = "pygenn_${NODE_NAME}";
+                    // Build PyGeNN module
+                    echo "Building and installing PyGeNN";
+                    def messages_PyGeNN = "pygenn_${NODE_NAME}";
                     sh "rm -f ${messages_PyGeNN}";
-		    def commands_PyGeNN = """
-                        . ${WORKSPACE}/venv/bin/activate
-                        python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
-                        python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
+                    def commands_PyGeNN = """
+                    . ${WORKSPACE}/venv/bin/activate
+                    python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
+                    python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
                     """;
-		    def status_PyGeNN = sh script:commands_PyGeNN, returnStatus:true;
-		    archive messages_PyGeNN;
-		    if (status_PyGeNN != 0) {
-			setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
-		    }
-		}
+                    def status_PyGeNN = sh script:commands_PyGeNN, returnStatus:true;
+                    archive messages_PyGeNN;
+                    if (status_PyGeNN != 0) {
+                        setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
+                    }
+                }
             }
 
             buildStage("Running tests (${NODE_NAME})") {
                 // Install ML GeNN
                 echo "Installing ML GeNN";
                 sh """
-                    . ${WORKSPACE}/venv/bin/activate
-                    pip install .
+                . ${WORKSPACE}/venv/bin/activate
+                pip install .
                 """;
 
-		dir("tests") {
+                dir("tests") {
                     // Run ML GeNN test suite
                     def messages_ML_GeNN = "mlgenn_${NODE_NAME}";
                     sh "rm -f ${messages_ML_GeNN}";
                     def commands_ML_GeNN = """
-                        . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --junitxml result_${NODE_NAME}.xml  1>>\"${messages_ML_GeNN}\" 2>&1
+                    . ${WORKSPACE}/venv/bin/activate
+                    pytest -v --junitxml result_${NODE_NAME}.xml  1>>\"${messages_ML_GeNN}\" 2>&1
                     """;
                     def status_ML_GeNN = sh script:commands_ML_GeNN, returnStatus:true;
                     archive messages_ML_GeNN;
@@ -167,7 +167,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                         setBuildStatus("Running tests (${NODE_NAME})", "FAILURE");
                     }
                 }
-	    }
+            }
 
             buildStage("Gathering test results (${NODE_NAME})") {
                 dir("tests") {
