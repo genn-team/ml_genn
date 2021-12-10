@@ -3,6 +3,7 @@ import sys
 import tensorflow as tf
 from copy import copy
 from collections import namedtuple
+from collections.abc import Iterator
 from six import iteritems
 
 from ml_genn.layers import FSReluNeurons
@@ -102,18 +103,33 @@ class FewSpike(object):
             get_outputs = tf.keras.backend.function(
                 tf_model.inputs, [l.output for l in tf_model.layers])
 
-            # Get output given input data.
-            outputs = get_outputs(self.norm_data)
+            if isinstance(self.norm_data[0], Iterator):
+                layer_alpha = {l:0.0 for l in tf_model.layers}
+                input_alpha = 0.0
+                for d,_ in self.norm_data[0]:
+                    # Get output given input data.
+                    output = get_outputs(d[np.newaxis,:])
+                    for l, out in zip(tf_model.layers, output):
+                        layer_alpha[l] = max(layer_alpha[l], np.amax(out) / (1.0 - 2.0 ** -self.K))
 
-            # Build dictionary of maximum activation in each layer
-            layer_alpha = {l: np.max(out) / (1.0 - 2.0 ** -self.K)
-                           for l, out in zip(tf_model.layers, outputs)}
-
-            # Use input data range to directly set maximum input
-            if self.signed_input:
-                input_alpha = np.amax(np.abs(self.norm_data)) / (1.0 - 2.0 ** (1 - self.K))
+                    # Use input data range to directly set maximum input
+                    if self.signed_input:
+                        input_alpha = max(input_alpha, np.amax(np.abs(d)) / (1.0 - 2.0 ** (1 - self.K)))
+                    else:
+                        input_alpha = max(input_alpha, np.amax(d) / (1.0 - 2.0 ** -self.K))
             else:
-                input_alpha = np.amax(self.norm_data) / (1.0 - 2.0 ** -self.K)
+                 # Get output given input data.
+                 outputs = get_outputs(self.norm_data)
+
+                 # Build dictionary of maximum activation in each layer
+                 layer_alpha = {l: np.max(out) / (1.0 - 2.0 ** -self.K)
+                            for l, out in zip(tf_model.layers, outputs)}
+
+                 # Use input data range to directly set maximum input
+                 if self.signed_input:
+                     input_alpha = np.amax(np.abs(self.norm_data)) / (1.0 - 2.0 ** (1 - self.K))
+                 else:
+                     input_alpha = np.amax(self.norm_data) / (1.0 - 2.0 ** -self.K)
 
             # Return results of normalisation in tuple
             return PreCompileOutput(layer_alpha=layer_alpha,
