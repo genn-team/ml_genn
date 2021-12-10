@@ -54,8 +54,17 @@ class Conv2DSynapses(BaseSynapses):
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
-            conv_padh = (conv_kh - 1) // 2
-            conv_padw = (conv_kw - 1) // 2
+            # Calculate padding following approach described at
+            # https://github.com/tensorflow/tensorflow/blob/v2.7.0/tensorflow/python/ops/nn_ops.py#L48-L88
+            if (conv_ih % conv_sh == 0):
+                conv_padh = max(conv_kh - conv_sh, 0) // 2
+            else:
+                conv_padh = max(conv_kh - (conv_ih % conv_sh), 0) // 2
+            
+            if (conv_iw % conv_sw == 0):
+                conv_padw = max(conv_kw - conv_sw, 0) // 2
+            else:
+                conv_padw = max(conv_kw - (conv_iw % conv_sw), 0) // 2
 
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
 
