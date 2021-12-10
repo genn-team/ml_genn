@@ -173,10 +173,8 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
 
         scaled_weights = self.weights.flatten() / (pool_kh * pool_kw)
-        if self.connectivity_type == ConnectivityType.TOEPLITZ:
-            assert pool_padh == 0 and pool_padw == 0
-            assert conv_sh == 1 and conv_sw == 1
-
+        if (self.connectivity_type == ConnectivityType.TOEPLITZ
+                and pool_padh == 0 and pool_padw == 0 and conv_sh == 1 and conv_sw == 1):
             conn_init = init_toeplitz_connectivity('AvgPoolConv2D', {
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
                 #'conv_sh': conv_sh, 'conv_sw': conv_sw,
@@ -205,6 +203,9 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                 wu_var = {'g': init_var('Kernel', {})}
                 wu_var_egp = {'g': {'kernel': scaled_weights}}
             else:
+                if self.connectivity_type == ConnectivityType.TOEPLITZ:
+                    print("WARNING: falling back to procedural connectivity for "
+                          "AvgPool_Conv2D connectivity with unsupported parameters")
                 conn = 'PROCEDURAL_KERNELG'
                 wu_var = {'g': scaled_weights}
                 wu_var_egp = {}
