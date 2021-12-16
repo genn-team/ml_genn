@@ -61,10 +61,11 @@ class SpikeNorm(object):
             if not config.is_output:
                 raise NotImplementedError(
                     'Spike-Norm converter: only output layers may use softmax')
-
-        elif isinstance(tf_layer, (
-                tf.keras.layers.AveragePooling2D,
-                tf.keras.layers.GlobalAveragePooling2D)):
+        
+        elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
+            # global average pooling allowed
+            pass
+        elif isinstance(tf_layer, f.keras.layers.AveragePooling2D):
             if tf_layer.padding != 'valid':
                 raise NotImplementedError(
                     'Spike-Norm converter: only valid padding is supported for pooling layers')
