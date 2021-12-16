@@ -65,8 +65,9 @@ class SpikeNorm(object):
         elif isinstance(tf_layer, (
                 tf.keras.layers.AveragePooling2D,
                 tf.keras.layers.GlobalAveragePooling2D)):
-            # average pooling allowed
-            pass
+            if tf_layer.padding != 'valid':
+                raise NotImplementedError(
+                    'Spike-Norm converter: only valid padding is supported for pooling layers')
 
         else:
             # no other layers allowed

@@ -735,7 +735,6 @@ class Model(object):
                                     params={
                                         'pool_size': tf_layer.pool_size,
                                         'pool_strides': tf_layer.strides,
-                                        'pool_padding': tf_layer.padding,
                                         'connectivity_type': connectivity_type},
                                     source=in_config,
                                     weights=None))
@@ -745,7 +744,6 @@ class Model(object):
                                     params={
                                         'pool_size': tf_layer.input_shape[1:3],
                                         'pool_strides': None,
-                                        'pool_padding': 'valid',
                                         'connectivity_type': connectivity_type},
                                     source=in_config,
                                     weights=None))

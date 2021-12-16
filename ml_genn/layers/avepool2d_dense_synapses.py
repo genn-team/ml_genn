@@ -14,7 +14,6 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
     param_names=[
         'pool_kh', 'pool_kw',
         'pool_sh', 'pool_sw',
-        'pool_padh', 'pool_padw',
         'pool_ih', 'pool_iw', 'pool_ic',
         'dense_ih', 'dense_iw', 'dense_ic',
         'dense_units',
@@ -27,7 +26,6 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
     var_init_code='''
     const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
     const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-    const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
     const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
 
     // Convert presynaptic neuron ID to row, column and channel in pool input
@@ -36,12 +34,10 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
     const int poolInChan = $(id_pre) % pool_ic;
 
     // Calculate corresponding pool output
-    const int poolOutRow = (poolInRow + pool_padh) / pool_sh;
-    const int poolStrideRow = poolOutRow * pool_sh - pool_padh;
-    const int poolCropKH = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
-    const int poolOutCol = (poolInCol + pool_padw) / pool_sw;
-    const int poolStrideCol = poolOutCol * pool_sw - pool_padw;
-    const int poolCropKW = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
+    const int poolOutRow = poolInRow / pool_sh;
+    const int poolStrideRow = poolOutRow * pool_sh;
+    const int poolOutCol = poolInCol / pool_sw;
+    const int poolStrideCol = poolOutCol * pool_sw;
 
     $(value) = 0.0;
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
@@ -55,7 +51,7 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
         $(value) = $(weights)[
             dense_in_unit * (dense_units) +
             dense_out_unit
-        ] / (poolCropKH * poolCropKW);
+        ]
     }
     ''',
 )
@@ -63,12 +59,11 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
 class AvePool2DDenseSynapses(BaseSynapses):
 
     def __init__(self, units, pool_size, pool_strides=None, 
-                 pool_padding='valid', connectivity_type='procedural'):
+                 connectivity_type='procedural'):
         super(AvePool2DDenseSynapses, self).__init__()
         self.units = units
         self.pool_size = _get_param_2d('pool_size', pool_size)
         self.pool_strides = _get_param_2d('pool_strides', pool_strides, default=self.pool_size)
-        self.pool_padding = PadMode(pool_padding)
         self.pool_output_shape = None
         self.connectivity_type = ConnectivityType(connectivity_type)
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
@@ -128,7 +123,7 @@ class AvePool2DDenseSynapses(BaseSynapses):
                 else 'DENSE_INDIVIDUALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
-        wu_var_egp = {'g': {'weights': self.weights.flatten()}}
+        wu_var_egp = {'g': {'weights': self.weights.flatten() / (pool_kh * pool_kw)}}
 
         super(AvePool2DDenseSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                     {}, {}, 'DeltaCurr', {}, {}, None, wu_var_egp)

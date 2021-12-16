@@ -129,56 +129,6 @@ def test_avepool2d_dense_in_chan_2_padding_valid_sparse():
     model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
 
 
-def test_avepool2d_dense_in_chan_2_padding_same():
-    '''
-    Test AvePool2DDense with 2 input channels, 2 output channels and same pool padding.
-    '''
-
-    for gpu in tf.config.experimental.list_physical_devices('GPU'):
-        tf.config.experimental.set_memory_growth(gpu, True)
-
-    # Inputs
-    x = np.empty((1, 10, 10, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
-
-    # Create TensorFlow model
-    tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, padding='same', input_shape=(10, 10, 2)),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_2_padding_same')
-    tf_model.set_weights([np.array(range(1, 1025)).reshape(32, 32)])
-
-    # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, [x])
-
-
-def test_avepool2d_dense_in_chan_2_padding_same_sparse():
-    '''
-    Test AvePool2DDense with 2 input channels, 2 output channels and same pool padding (SPARSE connectivity).
-    '''
-
-    for gpu in tf.config.experimental.list_physical_devices('GPU'):
-        tf.config.experimental.set_memory_growth(gpu, True)
-
-    # Inputs
-    x = np.empty((1, 10, 10, 2), dtype=np.float64)
-    x[0, :, :, 0] = model_input_0()
-    x[0, :, :, 1] = model_input_1()
-
-    # Create TensorFlow model
-    tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.AveragePooling2D(3, padding='same', input_shape=(10, 10, 2)),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, use_bias=False),
-    ], name='test_avepool2d_dense_in_chan_2_padding_same_sparse')
-    tf_model.set_weights([np.array(range(1, 1025)).reshape(32, 32)])
-
-    # Compare TensorFlow and ML GeNN models
-    model_compare_tf_and_mlg(tf_model, [x], connectivity_type='sparse')
-
-
 def test_avepool2d_dense_inputs_2():
     '''
     Test AvePool2DDense with 2 input layers.
@@ -285,8 +235,6 @@ if __name__ == '__main__':
     test_avepool2d_dense_in_chan_1_padding_valid()
     test_avepool2d_dense_in_chan_2_padding_valid()
     test_avepool2d_dense_in_chan_2_padding_valid_sparse()
-    test_avepool2d_dense_in_chan_2_padding_same()
-    test_avepool2d_dense_in_chan_2_padding_same_sparse()
     test_avepool2d_dense_inputs_2()
     test_global_avepool2d_dense_in_chan_1()
     test_global_avepool2d_dense_in_chan_2()

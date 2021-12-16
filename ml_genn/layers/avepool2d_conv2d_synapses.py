@@ -16,7 +16,6 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     param_names=[
         'pool_kh', 'pool_kw',
         'pool_sh', 'pool_sw',
-        'pool_padh', 'pool_padw',
         'pool_ih', 'pool_iw', 'pool_ic',
         'conv_kh', 'conv_kw',
         'conv_sh', 'conv_sw',
@@ -26,10 +25,10 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     ],
 
     calc_max_row_len_func=create_cmlf_class(
-        lambda num_pre, num_post, pars: int(ceil(pars[9] / pars[11])) * int(ceil(pars[10] / pars[12])) * int(pars[20]))(),
+        lambda num_pre, num_post, pars: int(ceil(pars[7] / pars[9])) * int(ceil(pars[8] / pars[10])) * int(pars[18]))(),
 
     calc_kernel_size_func=create_cksf_class(
-        lambda pars: UnsignedIntVector([int(pars[9]), int(pars[10]), int(pars[17]), int(pars[20])]))(),
+        lambda pars: UnsignedIntVector([int(pars[7]), int(pars[8]), int(pars[15]), int(pars[18])]))(),
 
     row_build_code='''
     // Stash all parameters in registers
@@ -37,7 +36,6 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     // **NOTE** if they're actually constant, compiler is still likely to treat them as constants rather than allocating registers
     const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
     const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-    const int pool_padh = $(pool_padh), pool_padw = $(pool_padw);
     const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
     const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
     const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
@@ -50,13 +48,12 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     const int poolInChan = $(id_pre) % pool_ic;
 
     // Calculate corresponding pool output
-    const int poolOutRow = (poolInRow + pool_padh) / pool_sh;
-    const int poolStrideRow = poolOutRow * pool_sh - pool_padh;
-    const int poolOutCol = (poolInCol + pool_padw) / pool_sw;
-    const int poolStrideCol = poolOutCol * pool_sw - pool_padw;
+    const int poolOutRow = poolInRow  / pool_sh;
+    const int poolStrideRow = poolOutRow * pool_sh;
+    const int poolOutCol = poolInCol / pool_sw;
+    const int poolStrideCol = poolOutCol * pool_sw;
 
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-
         // Calculate range of output rows and columns which this pool output connects to
         const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
         const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
@@ -89,15 +86,13 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
 class AvePool2DConv2DSynapses(BaseSynapses):
 
     def __init__(self, filters, pool_size, conv_size, pool_strides=None, 
-                 conv_strides=None, pool_padding='valid', 
-                 conv_padding='valid', connectivity_type='procedural'):
+                 conv_strides=None, conv_padding='valid', connectivity_type='procedural'):
         super(AvePool2DConv2DSynapses, self).__init__()
         self.filters = filters
         self.pool_size = _get_param_2d('pool_size', pool_size)
         self.conv_size = _get_param_2d('conv_size', conv_size)
         self.pool_strides = _get_param_2d('pool_strides', pool_strides, default=self.pool_size)
         self.conv_strides = _get_param_2d('conv_strides', conv_strides, default=(1, 1))
-        self.pool_padding = PadMode(pool_padding)
         self.conv_padding = PadMode(conv_padding)
         self.pool_output_shape = None
         self.connectivity_type = ConnectivityType(connectivity_type)
@@ -110,18 +105,11 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
-        if self.pool_padding == PadMode.VALID:
-            self.pool_output_shape = (
-                ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-                ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-                pool_ic,
-            )
-        elif self.pool_padding == PadMode.SAME:
-            self.pool_output_shape = (
-                ceil(float(pool_ih) / float(pool_sh)),
-                ceil(float(pool_iw) / float(pool_sw)),
-                pool_ic,
-            )
+        self.pool_output_shape = (
+            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
+            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+            pool_ic,
+        )
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -150,13 +138,6 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
-        if self.pool_padding == PadMode.VALID:
-            pool_padh = 0
-            pool_padw = 0
-        elif self.pool_padding == PadMode.SAME:
-            pool_padh = (pool_kh - 1) // 2
-            pool_padw = (pool_kw - 1) // 2
-
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
@@ -188,7 +169,6 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             conn_init = init_connectivity(avepool2d_conv2d_init, {
                 'pool_kh': pool_kh, 'pool_kw': pool_kw,
                 'pool_sh': pool_sh, 'pool_sw': pool_sw,
-                'pool_padh': pool_padh, 'pool_padw': pool_padw,
                 'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
                 'conv_sh': conv_sh, 'conv_sw': conv_sw,
