@@ -52,10 +52,8 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     // Calculate corresponding pool output
     const int poolOutRow = (poolInRow + pool_padh) / pool_sh;
     const int poolStrideRow = poolOutRow * pool_sh - pool_padh;
-    const int poolCropKH = min(poolStrideRow + pool_kh, pool_ih) - max(poolStrideRow, 0);
     const int poolOutCol = (poolInCol + pool_padw) / pool_sw;
     const int poolStrideCol = poolOutCol * pool_sw - pool_padw;
-    const int poolCropKW = min(poolStrideCol + pool_kw, pool_iw) - max(poolStrideCol, 0);
 
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
 
