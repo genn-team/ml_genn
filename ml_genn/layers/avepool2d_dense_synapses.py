@@ -50,8 +50,7 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
 
         $(value) = $(weights)[
             dense_in_unit * (dense_units) +
-            dense_out_unit
-        ]
+            dense_out_unit];
     }
     ''',
 )
@@ -104,8 +103,8 @@ class AvePool2DDenseSynapses(BaseSynapses):
             'dense_units': self.units,
         })
 
-        conn = ('DENSE_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL 
-                else 'DENSE_INDIVIDUALG')
+        conn = ('DENSE_INDIVIDUALG' if self.connectivity_type == ConnectivityType.SPARSE 
+                else 'DENSE_PROCEDURALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten() / (pool_kh * pool_kw)}}
