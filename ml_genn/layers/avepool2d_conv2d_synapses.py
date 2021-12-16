@@ -153,7 +153,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
 
         scaled_weights = self.weights.flatten() / (pool_kh * pool_kw)
         if (self.connectivity_type == ConnectivityType.TOEPLITZ
-                and pool_padh == 0 and pool_padw == 0 and conv_sh == 1 and conv_sw == 1):
+                and conv_sh == 1 and conv_sw == 1):
             conn_init = init_toeplitz_connectivity('AvgPoolConv2D', {
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
                 #'conv_sh': conv_sh, 'conv_sw': conv_sw,
