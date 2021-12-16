@@ -75,19 +75,11 @@ class AvePool2DDenseSynapses(BaseSynapses):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
-        if self.pool_padding == PadMode.VALID:
-            self.pool_output_shape = (
-                ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-                ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-                pool_ic,
-            )
-        elif self.pool_padding == PadMode.SAME:
-            self.pool_output_shape = (
-                ceil(float(pool_ih) / float(pool_sh)),
-                ceil(float(pool_iw) / float(pool_sw)),
-                pool_ic,
-            )
-
+        self.pool_output_shape = (
+            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
+            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+            pool_ic,
+        )
         output_shape = (self.units, )
 
         if target.shape is None:
@@ -101,19 +93,12 @@ class AvePool2DDenseSynapses(BaseSynapses):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
-        if self.pool_padding == PadMode.VALID:
-            pool_padh = 0
-            pool_padw = 0
-        elif self.pool_padding == PadMode.SAME:
-            pool_padh = (pool_kh - 1) // 2
-            pool_padw = (pool_kw - 1) // 2
-
+        
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
         wu_var_init = init_var(avepool2d_dense_init, {
             'pool_kh': pool_kh, 'pool_kw': pool_kw,
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
-            'pool_padh': pool_padh, 'pool_padw': pool_padw,
             'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
             'dense_ih': dense_ih, 'dense_iw': dense_iw, 'dense_ic': dense_ic,
             'dense_units': self.units,
