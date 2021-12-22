@@ -264,7 +264,6 @@ with tf.device('/CPU:0'):
     # Evaluate ML GeNN model
     time = 10 if args.converter == 'few-spike' else 2500
     mlg_eval_start_time = perf_counter()
-    #acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
     acc, spk_i, spk_t = mlg_model.evaluate_iterator(mlg_validate_ds, args.n_test_samples, time, save_samples=args.save_samples)
     print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
 

@@ -12,8 +12,7 @@ from ml_genn.utils import parse_arguments, raster_plot
 from transforms import *
 
 
-data_path = os.path.expanduser('~/../shared/data/imagenet')
-
+data_path = os.path.expanduser('/mnt/data0/imagenet')
 train_path = os.path.join(data_path, 'train')
 validate_path = os.path.join(data_path, 'validation')
 checkpoint_path = './resnet34_imagenet_checkpoints'
@@ -118,7 +117,11 @@ def parse_buffer(buffer):
     return image, label
 
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
+with tf.device('/CPU:0'):
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     args = parse_arguments('ResNet34 classifier')
     print('arguments: ' + str(vars(args)))
 
@@ -163,7 +166,33 @@ if __name__ == '__main__':
     validate_ds = validate_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
     tf_validate_ds = validate_ds.batch(batch_size)
     tf_validate_ds = tf_validate_ds.prefetch(tf.data.AUTOTUNE)
-    
+
+    # ML GeNN norm dataset
+    mlg_norm_ds = tf.data.Dataset.list_files(os.path.join(train_path, 'train*'))
+    mlg_norm_ds = mlg_norm_ds.shuffle(buffer_size=len(mlg_norm_ds))
+    mlg_norm_ds = mlg_norm_ds.interleave(tf.data.TFRecordDataset, cycle_length=8, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.shuffle(buffer_size=8192)
+    mlg_norm_ds = mlg_norm_ds.map(parse_buffer, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.map(scale_small_edge_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.map(center_crop_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.take(args.n_norm_samples).as_numpy_iterator()
+    norm_x = np.array([d[0] for d in mlg_norm_ds])
+
+    # ML GeNN validation dataset
+    if args.n_test_samples is None:
+        args.n_test_samples = 50000
+    mlg_validate_ds = tf.data.Dataset.list_files(os.path.join(validate_path, 'validation*'), shuffle=False)
+    mlg_validate_ds = mlg_validate_ds.interleave(tf.data.TFRecordDataset, cycle_length=8, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(parse_buffer, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(scale_small_edge_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(center_crop_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
+    mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
+    mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
+
     # If there are any existing checkpoints
     existing_checkpoints = list(sorted(glob.glob(os.path.join(checkpoint_path, '*.h5'))))
     if len(existing_checkpoints) > 0:
@@ -208,8 +237,9 @@ if __name__ == '__main__':
         wd_schedule = 0.0001 * 0.001
 
     # Create and compile TF model
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
+    #strategy = tf.distribute.MirroredStrategy()
+    #with strategy.scope():
+    if True:
         tf_model = resnet34()
         optimizer = SGDW(learning_rate=lr_schedule, momentum=0.9, nesterov=True, weight_decay=wd_schedule)
         tf_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -238,37 +268,19 @@ if __name__ == '__main__':
     tf_model.evaluate(tf_validate_ds)
     print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 
-
-
-
-
-
-
-    exit(0)
-
-
-
-
-
-    # prepare data for ML GeNN
-    train_x = (train_x - imagenet_mean) / imagenet_std
-    train_y = train_y[:, 0]
-    validate_x = (validate_x - x_mean) / x_std
-    validate_y = validate_y[:, 0]
-    norm_x = train_x[np.random.choice(train_x.shape[0], args.n_norm_samples, replace=False)]
-
     # Create a suitable converter to convert TF model to ML GeNN
     converter = args.build_converter(norm_x, signed_input=True, K=10, norm_time=2500)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
         tf_model, converter=converter, connectivity_type=args.connectivity_type,
-        input_type=args.input_type, dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed,
+        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed,
         kernel_profiling=args.kernel_profiling)
 
+    # Evaluate ML GeNN model
     time = 10 if args.converter == 'few-spike' else 2500
     mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate_iterator(mlg_validate_ds, args.n_test_samples, time, save_samples=args.save_samples)
     print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
 
     if args.kernel_profiling:
@@ -277,7 +289,7 @@ if __name__ == '__main__':
             print("\t%s: %fs" % (n, t))
 
     # Report ML GeNN model results
-    print('Accuracy of ResNet34 GeNN model: {}%'.format(acc[0]))
+    print(f'Accuracy of ResNet34 GeNN model: {acc[0]}%')
     if args.plot:
         neurons = [l.neurons.nrn for l in mlg_model.layers]
         raster_plot(spk_i, spk_t, neurons, time=time)
