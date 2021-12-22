@@ -17,8 +17,6 @@ def parse_arguments(model_description='ML GeNN model'):
 
     parser = ArgumentParser(description=model_description)
 
-    parser.add_argument('--shard', type=int)
-
     # compilation options
     parser.add_argument('--dt', type=float, default=1.0)
     parser.add_argument('--rng-seed', type=int, default=0)
