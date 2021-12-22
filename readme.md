@@ -8,7 +8,7 @@ A library for deep learning with Spiking Neural Networks (SNN)powered by [GeNN](
  3. Install with setuptools using ``python setup.py develop`` command
 
 ## Usage
-The following is an example illustrating how to convert an ANN model, defined in Keras to an SNN using the few-spike conversion method:
+The following example illustrates how to convert an ANN model, defined in Keras, to an SNN using the few-spike ([Stöckl & Maass, 2021](http://dx.doi.org/10.1038/s42256-021-00311-4)) conversion method:
 ```python
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import *
