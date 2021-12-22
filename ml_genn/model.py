@@ -280,7 +280,7 @@ class Model(object):
                 spike_i[i][j] = np.concatenate(spikes)
                 spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
 
-        return accuracy, spike_i, spike_
+        return accuracy, spike_i, spike_t
 
 
     def evaluate(self, data, labels, time, save_samples=[]):
