@@ -12,9 +12,7 @@ from ml_genn.utils import parse_arguments, raster_plot
 from transforms import *
 
 
-#data_path = os.path.expanduser('~/../shared/data/imagenet')
 data_path = os.path.expanduser('/mnt/data0/imagenet')
-
 train_path = os.path.join(data_path, 'train')
 validate_path = os.path.join(data_path, 'validation')
 checkpoint_path = './vgg16_imagenet_checkpoints'
@@ -103,14 +101,14 @@ def parse_buffer(buffer):
     return image, label
 
 
-for gpu in tf.config.experimental.list_physical_devices('GPU'):
-    tf.config.experimental.set_memory_growth(gpu, True)
-
 #if __name__ == '__main__':
 with tf.device('/CPU:0'):
+    for gpu in tf.config.experimental.list_physical_devices('GPU'):
+        tf.config.experimental.set_memory_growth(gpu, True)
+
     args = parse_arguments('VGG16 classifier')
     print('arguments: ' + str(vars(args)))
-    
+
     # load ImageNet 2012 data
     imagenet_mean = np.array([0.485, 0.456, 0.406], dtype='float32')
     imagenet_std = np.array([0.229, 0.224, 0.225], dtype='float32')
@@ -153,34 +151,31 @@ with tf.device('/CPU:0'):
     tf_validate_ds = validate_ds.batch(batch_size)
     tf_validate_ds = tf_validate_ds.prefetch(tf.data.AUTOTUNE)
 
-    # Prepare data for ML GeNN
-    mlg_norm_ds = train_ds.take(args.n_norm_samples).as_numpy_iterator()
+    # ML GeNN norm dataset
+    mlg_norm_ds = tf.data.Dataset.list_files(os.path.join(train_path, 'train*'))
+    mlg_norm_ds = mlg_norm_ds.shuffle(buffer_size=len(mlg_norm_ds))
+    mlg_norm_ds = mlg_norm_ds.interleave(tf.data.TFRecordDataset, cycle_length=8, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.shuffle(buffer_size=8192)
+    mlg_norm_ds = mlg_norm_ds.map(parse_buffer, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.map(scale_small_edge_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.map(center_crop_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_norm_ds = mlg_norm_ds.take(args.n_norm_samples).as_numpy_iterator()
     norm_x = np.array([d[0] for d in mlg_norm_ds])
 
-
-    #for x, y in validate_ds.take(1):
-    #    print('ddddddddddd', y)
-    #exit(0)
-
-
-    # if args.n_test_samples is None:
-    #     args.n_test_samples = 50000
-    # mlg_validate_ds = validate_ds.take(args.n_test_samples)
-    # mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
-    # validate_x, validate_y = zip(*mlg_validate_ds)
-    # validate_x = np.array(validate_x)
-    # validate_y = np.array(validate_y)
-
-
+    # ML GeNN validation dataset
     if args.n_test_samples is None:
         args.n_test_samples = 50000
-    mlg_validate_ds = validate_ds.take(args.n_test_samples)
+    mlg_validate_ds = tf.data.Dataset.list_files(os.path.join(validate_path, 'validation*'), shuffle=False)
+    mlg_validate_ds = mlg_validate_ds.interleave(tf.data.TFRecordDataset, cycle_length=8, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(parse_buffer, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(scale_small_edge_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(center_crop_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
     mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
     mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
     mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
-
-
-
 
     # If there are any existing checkpoints
     existing_checkpoints = list(sorted(glob.glob(os.path.join(checkpoint_path, '*.h5'))))
@@ -252,10 +247,10 @@ with tf.device('/CPU:0'):
         # Save weights
         tf_model.save_weights('vgg16_imagenet_tf_weights.h5')
 
-    # # Evaluate TF model
-    # tf_eval_start_time = perf_counter()
-    # tf_model.evaluate(tf_validate_ds)
-    # print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
+    # Evaluate TF model
+    tf_eval_start_time = perf_counter()
+    tf_model.evaluate(tf_validate_ds)
+    print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
     converter = args.build_converter(norm_x, signed_input=True, K=10, norm_time=2500)
@@ -279,7 +274,7 @@ with tf.device('/CPU:0'):
             print("\t%s: %fs" % (n, t))
 
     # Report ML GeNN model results
-    print('Accuracy of VGG16 GeNN model: {}%'.format(acc[0]))
+    print(f'Accuracy of VGG16 GeNN model: {acc[0]}%')
     if args.plot:
         neurons = [l.neurons.nrn for l in mlg_model.layers]
         raster_plot(spk_i, spk_t, neurons, time=time)
