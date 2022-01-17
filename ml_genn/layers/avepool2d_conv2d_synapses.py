@@ -158,7 +158,7 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                 and conv_sh == 1 and conv_sw == 1):
             conn_init = init_toeplitz_connectivity('AvgPoolConv2D', {
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                #'conv_sh': conv_sh, 'conv_sw': conv_sw,
+                'conv_sh': conv_sh, 'conv_sw': conv_sw,
                 'pool_kh': pool_kh, 'pool_kw': pool_kw,
                 'pool_sh': pool_sh, 'pool_sw': pool_sw,
                 'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
