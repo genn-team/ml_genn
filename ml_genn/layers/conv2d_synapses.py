@@ -63,7 +63,6 @@ class Conv2DSynapses(BaseSynapses):
                 and conv_sh == 1 and conv_sw == 1):
             conn_init = init_toeplitz_connectivity('Conv2D', {
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                #'conv_sh': conv_sh, 'conv_sw': conv_sw,
                 'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
                 'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
             conn = 'TOEPLITZ_KERNELG'

@@ -14,6 +14,7 @@ from ml_genn.layers.fs_input_neurons import FSReluInputNeurons
 from ml_genn.layers.identity_synapses import IdentitySynapses
 from ml_genn.layers.dense_synapses import DenseSynapses
 from ml_genn.layers.conv2d_synapses import Conv2DSynapses
+from ml_genn.layers.convtranspose2d_synapses import ConvTranspose2DSynapses
 from ml_genn.layers.avepool2d_synapses import AvePool2DSynapses
 from ml_genn.layers.avepool2d_dense_synapses import AvePool2DDenseSynapses
 from ml_genn.layers.avepool2d_conv2d_synapses import AvePool2DConv2DSynapses
@@ -22,6 +23,7 @@ from ml_genn.layers.layer import Layer
 from ml_genn.layers.identity import Identity
 from ml_genn.layers.dense import Dense
 from ml_genn.layers.conv2d import Conv2D
+from ml_genn.layers.convtranspose2d import ConvTranspose2D
 from ml_genn.layers.avepool2d import AvePool2D
 from ml_genn.layers.avepool2d_dense import AvePool2DDense
 from ml_genn.layers.avepool2d_conv2d import AvePool2DConv2D
