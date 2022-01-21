@@ -49,7 +49,6 @@ def test_convtranspose2d(in_size, in_chan, out_chan, kern_size, stride, pad, con
 
     # Run ML GeNN model
     mlg_input = mlg.layers.InputLayer('input', (in_size, in_size, in_chan), mlg.layers.SpikeInputNeurons())
-
     mlg_output = mlg.layers.ConvTranspose2D(
         'output', out_chan, kern_size, conv_strides=stride, conv_padding=pad,
         connectivity_type=connect, neurons=mlg.layers.IFNeurons())
