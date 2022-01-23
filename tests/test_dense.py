@@ -25,7 +25,7 @@ def test_dense(in_size, out_size, which_on, request):
     else: # 'random'
         x = np.random.randint(0, 2, size=(1, in_size)).astype(np.float64)
 
-    # Generate random weights
+    # Generate weights
     w = np.random.random_sample((in_size, out_size))
 
     # Create TensorFlow model

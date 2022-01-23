@@ -30,10 +30,10 @@ def test_convtranspose2d(in_size, in_chan, out_chan, kern_size, stride, pad, con
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
 
-    # Generate random input tensor
+    # Generate input tensor
     x = np.random.randint(0, 2, size=(1, in_size, in_size, in_chan)).astype(np.float64)  
 
-    # Generate random kernel
+    # Generate kernels
     k = np.random.random_sample((kern_size, kern_size, out_chan, in_chan))
 
     # Create TensorFlow model
@@ -57,10 +57,10 @@ def test_convtranspose2d(in_size, in_chan, out_chan, kern_size, stride, pad, con
 
     mlg_model = mlg.Model([mlg_input], [mlg_output], name=request.keywords.node.name)
     mlg_model.compile()
-
     mlg_model.outputs[0].neurons.set_threshold(np.float64(np.inf))
     mlg_model.set_input_batch([x])
     mlg_model.step_time(2)
+
     nrn = mlg_model.outputs[0].neurons.nrn
     nrn.pull_var_from_device('Vmem')
     mlg_y = nrn.vars['Vmem'].view.reshape(tf_y.shape)
