@@ -35,15 +35,16 @@ def test_conv2d(in_size, in_chan, out_chan, kern_size, stride, pad, connect, req
     # Generate input tensor
     x = np.random.randint(0, 2, size=(1, in_size, in_size, in_chan)).astype(np.float64)  
     
-    # Generate kernels
-    k = np.random.random_sample((kern_size, kern_size, in_chan, out_chan))
-    
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.Conv2D(out_chan, kern_size, name='output', strides=stride, padding=pad,
-                               use_bias=False, input_shape=(in_size, in_size, in_chan)),
+        tf.keras.layers.Conv2D(
+            out_chan, kern_size, name='output', strides=stride, padding=pad,
+            use_bias=False, input_shape=(in_size, in_size, in_chan)),
     ], name=request.keywords.node.name)
-    tf_model.set_weights([k])
+
+    # Generate and set weights
+    w = np.random.random_sample((kern_size, kern_size, in_chan, out_chan))
+    tf_model.set_weights([w])
 
     # Run TensorFlow model
     tf_y = tf_model([x]).numpy()

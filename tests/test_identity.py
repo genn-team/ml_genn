@@ -28,7 +28,10 @@ def test_identity(in_size, which_on, request):
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Dense(in_size, name='output', use_bias=False, input_shape=(in_size,)),
     ], name=request.keywords.node.name)
-    tf_model.set_weights([np.identity(in_size, dtype=np.float64)])
+
+    # Generate and set weights
+    w = np.identity(in_size, dtype=np.float64)
+    tf_model.set_weights([w])
 
     # Run TensorFlow model
     tf_y = tf_model([x]).numpy()

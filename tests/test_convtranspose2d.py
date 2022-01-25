@@ -33,16 +33,16 @@ def test_convtranspose2d(in_size, in_chan, out_chan, kern_size, stride, pad, con
     # Generate input tensor
     x = np.random.randint(0, 2, size=(1, in_size, in_size, in_chan)).astype(np.float64)  
 
-    # Generate kernels
-    k = np.random.random_sample((kern_size, kern_size, out_chan, in_chan))
-
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2DTranspose(
             out_chan, kern_size, name='output', strides=stride, padding=pad,
             use_bias=False, input_shape=(in_size, in_size, in_chan)),
     ], name=request.keywords.node.name)
-    tf_model.set_weights([k])
+
+    # Generate and set weights
+    w = np.random.random_sample((kern_size, kern_size, out_chan, in_chan))
+    tf_model.set_weights([w])
 
     # Run TensorFlow model
     tf_y = tf_model([x]).numpy()
@@ -53,7 +53,7 @@ def test_convtranspose2d(in_size, in_chan, out_chan, kern_size, stride, pad, con
         'output', out_chan, kern_size, conv_strides=stride, conv_padding=pad,
         connectivity_type=connect, neurons=mlg.layers.IFNeurons())
     mlg_output.connect([mlg_input])
-    mlg_output.set_weights([k])
+    mlg_output.set_weights([w])
 
     mlg_model = mlg.Model([mlg_input], [mlg_output], name=request.keywords.node.name)
     mlg_model.compile()

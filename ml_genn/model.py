@@ -218,16 +218,6 @@ class Model(object):
                 assert(batch_data[0].shape[0] == batch_end - batch_start)
                 assert(batch_labels[0].shape[0] == batch_end - batch_start)
 
-                # batch_data = []
-                # batch_labels = []
-                # for batch_i in range(batch_end - batch_start):
-                #     next_data, next_label = next(data_iterator)
-                #     batch_data.append(next_data)
-                #     batch_labels.append(next_label)
-                # batch_data = [np.array(batch_data)]
-                # batch_labels = [np.array(batch_labels)]
-                # batch_labels_queue.put(batch_labels, block=False)
-
                 save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
 
                 # Set new input
@@ -252,11 +242,13 @@ class Model(object):
                         all_spikes[k][l].append(np.copy(
                             nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
                             else nrn.current_spikes))
+
             # If first input in batch has passed through
             if batch_start >= (pipeline_depth * self.g_model.batch_size):
                 pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
                 pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
                 batch_labels = batch_labels_queue.popleft()
+
                 # Compute accuracy
                 for output_i in range(len(self.outputs)):
                     predictions = self.outputs[output_i].neurons.get_predictions(

@@ -3,7 +3,7 @@ from math import ceil
 from pygenn.genn_model import create_custom_init_var_snippet_class
 from pygenn.genn_model import init_var
 
-from ml_genn.layers import ConnectivityType, PadMode
+from ml_genn.layers import ConnectivityType
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
 from ml_genn.layers.helper import _get_param_2d
@@ -41,16 +41,17 @@ avepool2d_dense_init = create_custom_init_var_snippet_class(
 
     $(value) = 0.0;
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-
-        const int dense_iw = $(dense_iw), dense_ic = $(dense_ic);
+        const int dense_ih = $(dense_ih), dense_iw = $(dense_iw), dense_ic = $(dense_ic);
         const int dense_units = $(dense_units);
 
-        const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
-        const int dense_out_unit = $(id_post);
+        if ((poolOutRow < dense_ih) && (poolOutCol < dense_iw)) {
+            const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
+            const int dense_out_unit = $(id_post);
 
-        $(value) = $(weights)[
-            dense_in_unit * (dense_units) +
-            dense_out_unit];
+            $(value) = $(weights)[
+                dense_in_unit * (dense_units) +
+                dense_out_unit];
+        }
     }
     ''',
 )
