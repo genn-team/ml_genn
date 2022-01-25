@@ -17,6 +17,7 @@ avepool2d_init = create_custom_sparse_connect_init_snippet_class(
         'pool_ih', 'pool_iw', 'pool_ic',
         'pool_oh', 'pool_ow', 'pool_oc',
     ],
+
     calc_max_row_len_func=create_cmlf_class(
         lambda num_pre, num_post, pars: int(ceil(pars[0] / pars[2])) * int(ceil(pars[1] / pars[3])) * int(pars[9]))(),
 
@@ -27,7 +28,7 @@ avepool2d_init = create_custom_sparse_connect_init_snippet_class(
     const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
     const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
     const int pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-    const int pool_ow = $(pool_ow), pool_oc = $(pool_oc);
+    const int pool_oh = $(pool_oh), pool_ow = $(pool_ow), pool_oc = $(pool_oc);
     
     // Convert presynaptic neuron ID to row, column and channel in pool input
     const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
@@ -41,11 +42,13 @@ avepool2d_init = create_custom_sparse_connect_init_snippet_class(
     const int poolStrideCol = poolOutCol * pool_sw;
 
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-        // Calculate postsynaptic index and add synapse
-        const int idPost = ((poolOutRow * pool_ow * pool_oc) +
-                            (poolOutCol * pool_oc) +
-                             poolInChan);
-        $(addSynapse, idPost);
+        if ((poolOutRow < pool_oh) && (poolOutCol < pool_ow)) {
+            // Calculate postsynaptic index and add synapse
+            const int idPost = ((poolOutRow * pool_ow * pool_oc) +
+                                (poolOutCol * pool_oc) +
+                                 poolInChan);
+            $(addSynapse, idPost);
+        }
     }
     // End the row
     $(endRow);

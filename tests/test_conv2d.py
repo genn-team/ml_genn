@@ -5,29 +5,31 @@ import pytest
 from converter import Converter
 
 @pytest.mark.parametrize(
-    'in_size, in_chan, out_chan, kern_size, stride, pad, connect', [
-        (12, 1, 1, 3, 1, 'valid', 'procedural'),
+    'in_size, in_chan, out_chan, conv_size, conv_strides, pad, connect', [
         (12, 1, 1, 3, 1, 'valid', 'sparse'),
+        (12, 1, 1, 3, 1, 'valid', 'procedural'),
         (12, 1, 1, 3, 1, 'valid', 'toeplitz'),
-        (12, 1, 1, 3, 1, 'same', 'procedural'),
         (12, 1, 1, 3, 1, 'same', 'sparse'),
+        (12, 1, 1, 3, 1, 'same', 'procedural'),
         (12, 1, 1, 3, 1, 'same', 'toeplitz'),
-        (12, 2, 1, 3, 1, 'valid', 'procedural'),
         (12, 2, 1, 3, 1, 'valid', 'sparse'),
+        (12, 2, 1, 3, 1, 'valid', 'procedural'),
         (12, 2, 1, 3, 1, 'valid', 'toeplitz'),
-        (12, 1, 2, 3, 1, 'valid', 'procedural'),
         (12, 1, 2, 3, 1, 'valid', 'sparse'),
+        (12, 1, 2, 3, 1, 'valid', 'procedural'),
         (12, 1, 2, 3, 1, 'valid', 'toeplitz'),
-        (12, 2, 2, 3, 1, 'valid', 'procedural'),
         (12, 2, 2, 3, 1, 'valid', 'sparse'),
+        (12, 2, 2, 3, 1, 'valid', 'procedural'),
         (12, 2, 2, 3, 1, 'valid', 'toeplitz'),
-        (12, 1, 1, 3, 2, 'valid', 'procedural'),
         (12, 1, 1, 3, 2, 'valid', 'sparse'),
-        (12, 1, 1, 3, 2, 'same', 'procedural'),
+        (12, 1, 1, 3, 2, 'valid', 'procedural'),
+        (12, 1, 1, 3, 2, 'valid', 'toeplitz'),
         (12, 1, 1, 3, 2, 'same', 'sparse'),
+        (12, 1, 1, 3, 2, 'same', 'procedural'),
+        (12, 1, 1, 3, 2, 'same', 'toeplitz'),
     ])
 
-def test_conv2d(in_size, in_chan, out_chan, kern_size, stride, pad, connect, request):
+def test_conv2d(in_size, in_chan, out_chan, conv_size, conv_strides, pad, connect, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -38,12 +40,12 @@ def test_conv2d(in_size, in_chan, out_chan, kern_size, stride, pad, connect, req
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(
-            out_chan, kern_size, name='output', strides=stride, padding=pad,
+            out_chan, conv_size, name='output', strides=conv_strides, padding=pad,
             use_bias=False, input_shape=(in_size, in_size, in_chan)),
     ], name=request.keywords.node.name)
 
     # Generate and set weights
-    w = np.random.random_sample((kern_size, kern_size, in_chan, out_chan))
+    w = np.random.random_sample((conv_size, conv_size, in_chan, out_chan))
     tf_model.set_weights([w])
 
     # Run TensorFlow model

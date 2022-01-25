@@ -6,18 +6,18 @@ from converter import Converter
 
 @pytest.mark.parametrize(
     'in_size, in_chan, out_size, pool_size, pool_strides, connect', [
-        (10, 1, 18, 3, 3, 'sparse'),
-        (10, 1, 18, 3, 3, 'procedural'),
-        (10, 1, 18, 3, 3, 'toeplitz'),
-        (10, 2, 18, 3, 3, 'sparse'),
-        (10, 2, 18, 3, 3, 'procedural'),
-        (10, 2, 18, 3, 3, 'toeplitz'),
-        (10, 1, 18, 4, 4, 'sparse'),
-        (10, 1, 18, 4, 4, 'procedural'),
-        (10, 1, 18, 4, 4, 'toeplitz'),
-        (20, 1, 18, 4, 5, 'sparse'),
-        (20, 1, 18, 4, 5, 'procedural'),
-        (20, 1, 18, 4, 5, 'toeplitz'),
+        (10, 1, 10, 2, 2, 'sparse'),
+        (10, 1, 10, 2, 2, 'procedural'),
+        (10, 1, 10, 2, 2, 'toeplitz'),
+        (10, 2, 10, 2, 2, 'sparse'),
+        (10, 2, 10, 2, 2, 'procedural'),
+        (10, 2, 10, 2, 2, 'toeplitz'),
+        (10, 1, 10, 3, 3, 'sparse'),
+        (10, 1, 10, 3, 3, 'procedural'),
+        (10, 1, 10, 3, 3, 'toeplitz'),
+        (20, 1, 10, 2, 3, 'sparse'),
+        (20, 1, 10, 2, 3, 'procedural'),
+        (20, 1, 10, 2, 3, 'toeplitz'),
     ])
 
 def test_avepool2d_dense(in_size, in_chan, out_size, pool_size, pool_strides, connect, request):

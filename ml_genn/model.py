@@ -163,14 +163,6 @@ class Model(object):
         self.g_model.t = 0.0
 
 
-
-
-
-
-
-
-
-
     def evaluate_iterator(self, data_iterator, n_samples, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
