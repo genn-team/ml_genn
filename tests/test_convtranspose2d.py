@@ -4,7 +4,7 @@ import ml_genn as mlg
 import pytest
 
 @pytest.mark.parametrize(
-    'in_size, in_chan, out_chan, conv_size, conv_strides, pad, connect', [
+    'in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, connect', [
         (12, 1, 1, 3, 1, 'valid', 'sparse'),
         (12, 1, 1, 3, 1, 'valid', 'procedural'),
         (12, 1, 1, 3, 1, 'same', 'sparse'),
@@ -25,7 +25,7 @@ import pytest
         (12, 1, 1, 3, 2, 'same', 'procedural'),
     ])
 
-def test_convtranspose2d(in_size, in_chan, out_chan, conv_size, conv_strides, pad, connect, request):
+def test_convtranspose2d(in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, connect, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -36,7 +36,7 @@ def test_convtranspose2d(in_size, in_chan, out_chan, conv_size, conv_strides, pa
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2DTranspose(
-            out_chan, conv_size, name='output', strides=conv_strides, padding=pad,
+            out_chan, conv_size, strides=conv_strides, padding=conv_padding,
             use_bias=False, input_shape=(in_size, in_size, in_chan)),
     ], name=request.keywords.node.name)
 
@@ -50,7 +50,7 @@ def test_convtranspose2d(in_size, in_chan, out_chan, conv_size, conv_strides, pa
     # Run ML GeNN model
     mlg_input = mlg.layers.InputLayer('input', (in_size, in_size, in_chan), mlg.layers.SpikeInputNeurons())
     mlg_output = mlg.layers.ConvTranspose2D(
-        'output', out_chan, conv_size, conv_strides=conv_strides, conv_padding=pad,
+        'output', out_chan, conv_size, conv_strides=conv_strides, conv_padding=conv_padding,
         connectivity_type=connect, neurons=mlg.layers.IFNeurons())
     mlg_output.connect([mlg_input])
     mlg_output.set_weights([w])

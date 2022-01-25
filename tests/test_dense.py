@@ -27,7 +27,8 @@ def test_dense(in_size, out_size, which_on, request):
 
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(out_size, name='output', use_bias=False, input_shape=(in_size,)),
+        tf.keras.layers.Dense(
+            out_size, use_bias=False, input_shape=(in_size,)),
     ], name=request.keywords.node.name)
 
     # Generate and set weights

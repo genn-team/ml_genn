@@ -5,7 +5,7 @@ import pytest
 from converter import Converter
 
 @pytest.mark.parametrize(
-    'in_size, in_chan, out_chan, conv_size, conv_strides, pad, connect', [
+    'in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, connect', [
         (12, 1, 1, 3, 1, 'valid', 'sparse'),
         (12, 1, 1, 3, 1, 'valid', 'procedural'),
         (12, 1, 1, 3, 1, 'valid', 'toeplitz'),
@@ -29,7 +29,9 @@ from converter import Converter
         (12, 1, 1, 3, 2, 'same', 'toeplitz'),
     ])
 
-def test_conv2d(in_size, in_chan, out_chan, conv_size, conv_strides, pad, connect, request):
+def test_conv2d(
+        in_size, in_chan, out_chan, conv_size, conv_strides,
+        conv_padding, connect, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -40,8 +42,8 @@ def test_conv2d(in_size, in_chan, out_chan, conv_size, conv_strides, pad, connec
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(
-            out_chan, conv_size, name='output', strides=conv_strides, padding=pad,
-            use_bias=False, input_shape=(in_size, in_size, in_chan)),
+            out_chan, conv_size, strides=conv_strides, padding=conv_padding, use_bias=False,
+            input_shape=(in_size, in_size, in_chan)),
     ], name=request.keywords.node.name)
 
     # Generate and set weights

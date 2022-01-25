@@ -6,21 +6,23 @@ from converter import Converter
 
 @pytest.mark.parametrize(
     'in_size, in_chan, out_size, pool_size, pool_strides, connect', [
-        (10, 1, 10, 2, 2, 'sparse'),
-        (10, 1, 10, 2, 2, 'procedural'),
-        (10, 1, 10, 2, 2, 'toeplitz'),
-        (10, 2, 10, 2, 2, 'sparse'),
-        (10, 2, 10, 2, 2, 'procedural'),
-        (10, 2, 10, 2, 2, 'toeplitz'),
-        (10, 1, 10, 3, 3, 'sparse'),
-        (10, 1, 10, 3, 3, 'procedural'),
-        (10, 1, 10, 3, 3, 'toeplitz'),
+        (20, 1, 10, 2, 2, 'sparse'),
+        (20, 1, 10, 2, 2, 'procedural'),
+        (20, 1, 10, 2, 2, 'toeplitz'),
+        (20, 2, 10, 2, 2, 'sparse'),
+        (20, 2, 10, 2, 2, 'procedural'),
+        (20, 2, 10, 2, 2, 'toeplitz'),
+        (20, 1, 10, 3, 3, 'sparse'),
+        (20, 1, 10, 3, 3, 'procedural'),
+        (20, 1, 10, 3, 3, 'toeplitz'),
         (20, 1, 10, 2, 3, 'sparse'),
         (20, 1, 10, 2, 3, 'procedural'),
         (20, 1, 10, 2, 3, 'toeplitz'),
     ])
 
-def test_avepool2d_dense(in_size, in_chan, out_size, pool_size, pool_strides, connect, request):
+def test_avepool2d_dense(
+        in_size, in_chan, out_size, pool_size,
+        pool_strides, connect, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -31,7 +33,8 @@ def test_avepool2d_dense(in_size, in_chan, out_size, pool_size, pool_strides, co
     # Create TensorFlow model
     tf_model = tf.keras.models.Sequential([
         tf.keras.layers.AveragePooling2D(
-            pool_size, padding='valid', input_shape=(in_size, in_size, in_chan)),
+            pool_size, strides=pool_strides, padding='valid',
+            input_shape=(in_size, in_size, in_chan)),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(out_size, use_bias=False),
     ], name=request.keywords.node.name)

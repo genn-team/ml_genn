@@ -48,31 +48,35 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     const int poolInChan = $(id_pre) % pool_ic;
 
     // Calculate corresponding pool output
-    const int poolOutRow = poolInRow  / pool_sh;
+    const int poolOutRow = poolInRow / pool_sh;
     const int poolStrideRow = poolOutRow * pool_sh;
     const int poolOutCol = poolInCol / pool_sw;
     const int poolStrideCol = poolOutCol * pool_sw;
 
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-        // Calculate range of output rows and columns which this pool output connects to
-        const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
-        const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
-        const int minOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw - conv_kw) / conv_sw)));
-        const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
+        const int conv_ih = $(conv_ih), conv_iw = $(conv_iw), conv_ic = $(conv_ic);
 
-        // Loop through output rows, columns and channels
-        for(int convOutRow = minOutRow; convOutRow < maxOutRow; convOutRow++) {
-            const int strideRow = (convOutRow * conv_sh) - conv_padh;
-            const int kernRow = poolOutRow - strideRow;
-            for(int convOutCol = minOutCol; convOutCol < maxOutCol; convOutCol++) {
-                const int strideCol = (convOutCol * conv_sw) - conv_padw;
-                const int kernCol = poolOutCol - strideCol;
-                for(int outChan = 0; outChan < conv_oc; outChan++) {
-                    // Calculate postsynaptic index and add synapse
-                    const int idPost = ((convOutRow * conv_ow * conv_oc) +
-                                        (convOutCol * conv_oc) +
-                                        outChan);
-                    $(addSynapse, idPost, kernRow, kernCol, poolInChan, outChan);
+        if ((poolOutRow < conv_ih) && (poolOutCol < conv_iw)) {
+            // Calculate range of output rows and columns which this pool output connects to
+            const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
+            const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
+            const int minOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw - conv_kw) / conv_sw)));
+            const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
+
+            // Loop through output rows, columns and channels
+            for(int convOutRow = minOutRow; convOutRow < maxOutRow; convOutRow++) {
+                const int strideRow = (convOutRow * conv_sh) - conv_padh;
+                const int kernRow = poolOutRow - strideRow;
+                for(int convOutCol = minOutCol; convOutCol < maxOutCol; convOutCol++) {
+                    const int strideCol = (convOutCol * conv_sw) - conv_padw;
+                    const int kernCol = poolOutCol - strideCol;
+                    for(int outChan = 0; outChan < conv_oc; outChan++) {
+                        // Calculate postsynaptic index and add synapse
+                        const int idPost = ((convOutRow * conv_ow * conv_oc) +
+                                            (convOutCol * conv_oc) +
+                                            outChan);
+                        $(addSynapse, idPost, kernRow, kernCol, poolInChan, outChan);
+                    }
                 }
             }
         }
@@ -158,7 +162,6 @@ class AvePool2DConv2DSynapses(BaseSynapses):
                 and conv_sh == 1 and conv_sw == 1):
             conn_init = init_toeplitz_connectivity('AvgPoolConv2D', {
                 'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                'conv_sh': conv_sh, 'conv_sw': conv_sw,
                 'pool_kh': pool_kh, 'pool_kw': pool_kw,
                 'pool_sh': pool_sh, 'pool_sw': pool_sw,
                 'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
