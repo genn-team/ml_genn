@@ -108,9 +108,9 @@ class AvePool2DDenseSynapses(BaseSynapses):
             conn = 'DENSE_INDIVIDUALG'
         elif self.connectivity_type is ConnectivityType.PROCEDURAL:
             conn = 'DENSE_PROCEDURALG'
-        else:
-            raise NotImplementedError(
-                f'AvePool2DDenseSynapses do not support connectivity type {self.connectivitytype}')
+        elif self.connectivity_type == ConnectivityType.TOEPLITZ:
+            print("WARNING: falling back to procedural connectivity for AvePool2DDenseSynapses")
+            conn = 'DENSE_PROCEDURALG'
 
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
