@@ -90,16 +90,23 @@ class AvePool2DSynapses(BaseSynapses):
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
         pool_oh, pool_ow, pool_oc = self.target().shape
-        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
-        wu_var = {'g': 1.0 / (pool_kh * pool_kw)}
-        
+
         conn_init = init_connectivity(avepool2d_init, {
             'pool_kh': pool_kh, 'pool_kw': pool_kw,
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
             'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
             'pool_oh': pool_oh, 'pool_ow': pool_ow, 'pool_oc': pool_oc})
 
-        conn = 'SPARSE_GLOBALG' if self.connectivity_type == ConnectivityType.SPARSE else 'PROCEDURAL_GLOBALG'
+        if self.connectivity_type is ConnectivityType.SPARSE:
+            conn = 'SPARSE_GLOBALG'
+        elif self.connectivity_type is ConnectivityType.PROCEDURAL:
+            conn = 'PROCEDURAL_GLOBALG'
+        elif self.connectivity_type is ConnectivityType.TOEPLITZ:
+            print("WARNING: falling back to procedural connectivity for AvePool2DSynapses")
+            conn = 'PROCEDURAL_GLOBALG'
+
+        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
+        wu_var = {'g': 1.0 / (pool_kh * pool_kw)}
 
         super(AvePool2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                                {}, {}, 'DeltaCurr', {}, {}, conn_init, {})

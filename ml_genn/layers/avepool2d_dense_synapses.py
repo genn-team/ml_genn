@@ -93,7 +93,6 @@ class AvePool2DDenseSynapses(BaseSynapses):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
-        
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
         wu_var_init = init_var(avepool2d_dense_init, {
@@ -101,14 +100,13 @@ class AvePool2DDenseSynapses(BaseSynapses):
             'pool_sh': pool_sh, 'pool_sw': pool_sw,
             'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
             'dense_ih': dense_ih, 'dense_iw': dense_iw, 'dense_ic': dense_ic,
-            'dense_units': self.units,
-        })
+            'dense_units': self.units})
 
         if self.connectivity_type is ConnectivityType.SPARSE:
             conn = 'DENSE_INDIVIDUALG'
         elif self.connectivity_type is ConnectivityType.PROCEDURAL:
             conn = 'DENSE_PROCEDURALG'
-        elif self.connectivity_type == ConnectivityType.TOEPLITZ:
+        elif self.connectivity_type is ConnectivityType.TOEPLITZ:
             print("WARNING: falling back to procedural connectivity for AvePool2DDenseSynapses")
             conn = 'DENSE_PROCEDURALG'
 

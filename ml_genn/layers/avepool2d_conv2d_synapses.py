@@ -40,7 +40,8 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
     const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
     const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
-    const int conv_ow = $(conv_ow), conv_oh = $(conv_oh), conv_oc = $(conv_oc);
+    const int conv_ih = $(conv_ih), conv_iw = $(conv_iw), conv_ic = $(conv_ic);
+    const int conv_oh = $(conv_oh), conv_ow = $(conv_ow), conv_oc = $(conv_oc);
 
     // Convert presynaptic neuron ID to row, column and channel in pool input
     const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
@@ -54,8 +55,6 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     const int poolStrideCol = poolOutCol * pool_sw;
 
     if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-        const int conv_ih = $(conv_ih), conv_iw = $(conv_iw), conv_ic = $(conv_ic);
-
         if ((poolOutRow < conv_ih) && (poolOutCol < conv_iw)) {
             // Calculate range of output rows and columns which this pool output connects to
             const int minOutRow = min((int) $(conv_oh), max(0, 1 + (int) floor((poolOutRow + $(conv_padh) - $(conv_kh)) / $(conv_sh))));
