@@ -8,16 +8,12 @@ from converter import Converter
     'in_size, in_chan, out_size, pool_size, pool_strides, connect', [
         (20, 1, 10, 2, 2, 'sparse'),
         (20, 1, 10, 2, 2, 'procedural'),
-        (20, 1, 10, 2, 2, 'toeplitz'),
         (20, 2, 10, 2, 2, 'sparse'),
         (20, 2, 10, 2, 2, 'procedural'),
-        (20, 2, 10, 2, 2, 'toeplitz'),
         (20, 1, 10, 3, 3, 'sparse'),
         (20, 1, 10, 3, 3, 'procedural'),
-        (20, 1, 10, 3, 3, 'toeplitz'),
         (20, 1, 10, 2, 3, 'sparse'),
         (20, 1, 10, 2, 3, 'procedural'),
-        (20, 1, 10, 2, 3, 'toeplitz'),
     ])
 
 def test_avepool2d_dense(

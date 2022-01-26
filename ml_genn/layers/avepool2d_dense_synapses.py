@@ -104,8 +104,14 @@ class AvePool2DDenseSynapses(BaseSynapses):
             'dense_units': self.units,
         })
 
-        conn = ('DENSE_INDIVIDUALG' if self.connectivity_type == ConnectivityType.SPARSE 
-                else 'DENSE_PROCEDURALG')
+        if self.connectivity_type is ConnectivityType.SPARSE:
+            conn = 'DENSE_INDIVIDUALG'
+        elif self.connectivity_type is ConnectivityType.PROCEDURAL:
+            conn = 'DENSE_PROCEDURALG'
+        else:
+            raise NotImplementedError(
+                f'AvePool2DDenseSynapses do not support connectivity type {self.connectivitytype}')
+
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
         wu_var = {'g': wu_var_init}
         wu_var_egp = {'g': {'weights': self.weights.flatten() / (pool_kh * pool_kw)}}
