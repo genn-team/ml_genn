@@ -58,9 +58,9 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
 
         if ((poolOutRow < conv_ih) && (poolOutCol < conv_iw)) {
             // Calculate range of output rows and columns which this pool output connects to
-            const int minOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh - conv_kh) / conv_sh)));
+            const int minOutRow = min((int) $(conv_oh), max(0, 1 + (int) floor((poolOutRow + $(conv_padh) - $(conv_kh)) / $(conv_sh))));
             const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
-            const int minOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw - conv_kw) / conv_sw)));
+            const int minOutCol = min((int) $(conv_ow), max(0, 1 + (int) floor((poolOutCol + $(conv_padw) - $(conv_kw)) / $(conv_sw))));
             const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
 
             // Loop through output rows, columns and channels
