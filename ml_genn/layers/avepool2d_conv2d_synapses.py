@@ -101,8 +101,13 @@ class AvePool2DConv2DSynapses(BaseSynapses):
         self.connectivity_type = ConnectivityType(connectivity_type)
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
             raise NotImplementedError('pool stride < pool size is not supported')
-        if any(conv_stride != 1 for conv_stride in self.conv_strides):
+        if self.conv_strides[0] != 1 or self.conv_strides[1] != 1:
             raise NotImplementedError('conv stride != 1 is not supported')
+        if self.connectivity_type is ConnectivityType.TOEPLITZ:
+            if self.conv_padding is PadMode.SAME:
+                if (self.conv_size[0] % 2) == 0 or (self.conv_size[1] % 2) == 0:
+                    raise NotImplementedError(
+                        'Toeplitz with same conv_padding and even conv_size is not supported')
 
     def connect(self, source, target):
         super(AvePool2DConv2DSynapses, self).connect(source, target)
