@@ -101,7 +101,7 @@ if __name__ == '__main__':
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
 
-    # load CIFAR-10 data
+    # Load CIFAR-10 data
     data = tf.keras.datasets.cifar10.load_data()
     cifar10_mean = np.array([125.3, 123.0, 113.9], dtype='float32')
     cifar10_std = np.array([63.0, 62.1, 66.7], dtype='float32')
@@ -153,11 +153,15 @@ if __name__ == '__main__':
     print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 
     # Prepare data for ML GeNN
-    train_x = (train_x - cifar10_mean) / cifar10_std
-    train_y = train_y[:, 0]
-    validate_x = (validate_x - cifar10_mean) / cifar10_std
-    validate_y = validate_y[:, 0]
-    norm_x = train_x[np.random.choice(train_x.shape[0], args.n_norm_samples, replace=False)]
+    if args.n_test_samples is None:
+        args.n_test_samples = 10000
+    mlg_norm_ds = train_ds.take(args.n_norm_samples).as_numpy_iterator()
+    norm_x = np.array([d[0] for d in mlg_norm_ds])
+    mlg_validate_ds = tf.data.Dataset.from_tensor_slices((validate_x, validate_y))
+    mlg_validate_ds = mlg_validate_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(lambda x, y: (x, y[0]), num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
+    mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
 
     # Create a suitable converter to convert TF model to ML GeNN
     K = 8
@@ -173,8 +177,10 @@ if __name__ == '__main__':
     # Evaluate ML GeNN model
     time = K if args.converter == 'few-spike' else T
     mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate_iterator(
+        mlg_validate_ds, args.n_test_samples, time, save_samples=args.save_samples)
     print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
+
     if len(args.save_samples) > 0:
         num_spikes = 0
         for sample_spikes in spk_i:

@@ -100,6 +100,8 @@ if __name__ == '__main__':
     (train_x, train_y), (validate_x, validate_y) = data
     train_x = train_x.astype('float32')
     validate_x = validate_x.astype('float32')
+    validate_x = validate_x[:args.n_test_samples]
+    validate_y = validate_y[:args.n_test_samples]
 
     color_normalize_fn = color_normalize(cifar10_mean, cifar10_std)
     random_crop_fn = random_crop(32, 4)
@@ -150,27 +152,13 @@ if __name__ == '__main__':
     mlg_validate_ds = tf.data.Dataset.from_tensor_slices((validate_x, validate_y))
     mlg_validate_ds = mlg_validate_ds.map(color_normalize_fn, num_parallel_calls=tf.data.AUTOTUNE)
     mlg_validate_ds = mlg_validate_ds.map(lambda x, y: (x, y[0]), num_parallel_calls=tf.data.AUTOTUNE)
-    #mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
     mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
-    #mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
     mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
 
-
-    # for ii in range(100):
-    #     d, l = next(mlg_validate_ds)
-    #     print(ii)
-    # exit(0)
-
-
-    #validate_x, validate_y = zip(*mlg_validate_ds)
-    #validate_x = np.array(validate_x)
-    #validate_y = np.array(validate_y)[:, 0]
-
-
-
-
     # Create a suitable converter to convert TF model to ML GeNN
-    converter = args.build_converter(norm_x, signed_input=True, K=10, norm_time=2500)
+    K = 8
+    T = 1000
+    converter = args.build_converter(norm_x, signed_input=True, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
@@ -179,11 +167,18 @@ if __name__ == '__main__':
         kernel_profiling=args.kernel_profiling)
     
     # Evaluate ML GeNN model
-    time = 10 if args.converter == 'few-spike' else 2500
+    time = K if args.converter == 'few-spike' else T
     mlg_eval_start_time = perf_counter()
-    #acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
-    acc, spk_i, spk_t = mlg_model.evaluate_iterator(mlg_validate_ds, args.n_test_samples, time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate_iterator(
+        mlg_validate_ds, args.n_test_samples, time, save_samples=args.save_samples)
     print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
+
+    if len(args.save_samples) > 0:
+        num_spikes = 0
+        for sample_spikes in spk_i:
+            for layer_spikes in sample_spikes:
+               num_spikes += len(layer_spikes)
+        print("Mean spikes per sample: %f" % (num_spikes / len(args.save_samples)))
 
     if args.kernel_profiling:
         print("Kernel profiling:")
