@@ -14,7 +14,7 @@ epochs = 200
 learning_rate = 0.05
 momentum = 0.9
 
-steps_per_epoch = 50000 // batch_size
+steps_per_epoch = 50000 // epochs
 learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     [81 * steps_per_epoch, 122 * steps_per_epoch],
     [learning_rate, learning_rate / 10.0, learning_rate / 100.0])

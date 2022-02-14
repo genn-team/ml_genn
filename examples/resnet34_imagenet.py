@@ -207,7 +207,7 @@ with tf.device('/CPU:0'):
         newest_checkpoint_file = None
         initial_epoch = 0
 
-    steps_per_epoch = 1281167 // batch_size
+    steps_per_epoch = 1281167 // epochs
     if initial_epoch < 30:
         steps = [(30 - initial_epoch) * steps_per_epoch, 
                  (60 - initial_epoch) * steps_per_epoch,
