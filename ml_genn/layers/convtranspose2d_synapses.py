@@ -125,8 +125,11 @@ class ConvTranspose2DSynapses(BaseSynapses):
             wu_var = {'g': self.weights.flatten()}
             wu_var_egp = {}
         elif self.connectivity_type is ConnectivityType.TOEPLITZ:
-            raise NotImplementedError(
-                'toeplitz connectivity not supported in ConvTranspose2DSynapses')
+            print('WARNING: falling back to procedural connectivity '
+                  'for ConvTranspose2DSynapses')
+            conn = 'PROCEDURAL_KERNELG'
+            wu_var = {'g': self.weights.flatten()}
+            wu_var_egp = {}
 
         super(ConvTranspose2DSynapses, self).compile(
             mlg_model, name, conn, wu_model, {}, wu_var, {}, {}, 'DeltaCurr', {}, {},
