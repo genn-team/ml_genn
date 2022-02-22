@@ -156,8 +156,8 @@ if __name__ == '__main__':
     mlg_validate_ds = mlg_validate_ds.as_numpy_iterator()
 
     # Create a suitable converter to convert TF model to ML GeNN
-    K = 8
-    T = 1000
+    K = 10
+    T = 2500
     converter = args.build_converter(norm_x, signed_input=True, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
