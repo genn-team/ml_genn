@@ -1,11 +1,12 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import init_connectivity, init_var
+from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity,
+                               init_var)
 
 from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
-from ml_genn.layers.helper import _get_param_2d
+from ml_genn.layers.helper import _get_conv_same_padding, _get_param_2d
 
 class Conv2DSynapses(BaseSynapses):
 
@@ -53,21 +54,41 @@ class Conv2DSynapses(BaseSynapses):
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
-            conv_padh = (conv_kh - 1) // 2
-            conv_padw = (conv_kw - 1) // 2
+            conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
+            conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        conn_init = init_connectivity('Conv2D', {
-            'conv_kh': conv_kh, 'conv_kw': conv_kw,
-            'conv_sh': conv_sh, 'conv_sw': conv_sw,
-            'conv_padh': conv_padh, 'conv_padw': conv_padw,
-            'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
-            'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
-
-        conn = ('PROCEDURAL_PROCEDURALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                else 'SPARSE_INDIVIDUALG')
         wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
-        wu_var = {'g': init_var('Kernel', {})}
-        wu_var_egp = {'g': {'kernel': self.weights.flatten()}}
+
+        if (self.connectivity_type == ConnectivityType.TOEPLITZ 
+                and conv_sh == 1 and conv_sw == 1):
+            conn_init = init_toeplitz_connectivity('Conv2D', {
+                'conv_kh': conv_kh, 'conv_kw': conv_kw,
+                'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
+            conn = 'TOEPLITZ_KERNELG'
+            wu_var = {'g': self.weights.flatten()}
+            wu_var_egp = {}
+        else:
+            conn_init = init_connectivity('Conv2D', {
+                'conv_kh': conv_kh, 'conv_kw': conv_kw,
+                'conv_sh': conv_sh, 'conv_sw': conv_sw,
+                'conv_padh': conv_padh, 'conv_padw': conv_padw,
+                'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
+                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
+
+            if self.connectivity_type == ConnectivityType.SPARSE:
+                conn = 'SPARSE_INDIVIDUALG'
+                wu_var = {'g': init_var('Kernel', {})}
+                wu_var_egp = {'g': {'kernel': self.weights.flatten()}}
+            else:
+                if self.connectivity_type == ConnectivityType.TOEPLITZ:
+                    print("WARNING: falling back to procedural connectivity "
+                          "for Conv2D connectivity with unsupported parameters")
+                  
+                conn = 'PROCEDURAL_KERNELG'
+                wu_var = {'g': self.weights.flatten()}
+                wu_var_egp = {}
+                
 
         super(Conv2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
                                             {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)

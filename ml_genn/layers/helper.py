@@ -1,4 +1,11 @@
-
+def _get_conv_same_padding(in_size, conv_size, stride):
+    # Calculate padding following approach described at
+    # https://github.com/tensorflow/tensorflow/blob/v2.7.0/tensorflow/python/ops/nn_ops.py#L48-L88
+    if (in_size % stride == 0):
+        return max(conv_size - stride, 0) // 2
+    else:
+        return max(conv_size - (in_size % stride), 0) // 2
+    
 def _get_param_2d(name, param, default=None):
 
     if param is None:

@@ -22,7 +22,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
-from collections import namedtuple
+from collections import namedtuple, deque
 
 from pygenn.genn_model import GeNNModel
 
@@ -163,6 +163,119 @@ class Model(object):
         self.g_model.t = 0.0
 
 
+    def evaluate_batched(self, data, time, save_samples=[]):
+        """Evaluate the accuracy of a GeNN model
+
+        Args:
+        data          --  an (x, y) batch dataset
+        time          --  sample presentation time (msec)
+
+        Keyword args:
+        save_samples  --  list of sample indices to save spikes for (default: [])
+
+        Returns:
+        accuracy      --  percentage of correctly classified results
+        spike_i       --  list of spike indices for each sample index in save_samples
+        spike_t       --  list of spike times for each sample index in save_samples
+        """
+
+        n_correct = [0] * len(self.outputs)
+        accuracy = [0] * len(self.outputs)
+        all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
+
+        data_iter = iter(data)
+        batch_data, batch_labels = next(data_iter)
+        batch_i = 0
+
+        batch_labels_queue = deque()
+
+        # Pad number of samples so pipeline can be flushed
+        pipeline_depth = self.calc_pipeline_depth()
+        pipeline_flush = False
+        pipeline_remaining = pipeline_depth
+
+        progress = tqdm()
+        while not pipeline_flush or pipeline_remaining > 0:
+
+            if not pipeline_flush:
+                batch_data = [np.array(batch_data)]
+                batch_data_size = batch_data[0].shape[0]
+                batch_start = batch_i * self.g_model.batch_size
+                batch_end = batch_start + batch_data_size
+                save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+
+                # Queue labels for pipelining
+                batch_labels = [np.array(batch_labels)]
+                assert(batch_data_size == batch_labels[0].shape[0])
+                batch_labels_queue.append(batch_labels)
+
+                # Set new input
+                self.set_input_batch(batch_data)
+
+            # Reset timesteps etc
+            self.reset()
+
+            # Main simulation loop
+            while self.g_model.t < time:
+
+                # Step time
+                self.step_time()
+
+                # Save spikes
+                for i in save_samples_in_batch:
+                    k = save_samples.index(i)
+                    batch_i = i - batch_start
+                    for l, layer in enumerate(self.layers):
+                        nrn = layer.neurons.nrn
+                        nrn.pull_current_spikes_from_device()
+                        all_spikes[k][l].append(np.copy(
+                            nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
+                            else nrn.current_spikes))
+
+            # If input has passed through pipeline
+            if batch_i >= pipeline_depth:
+                pipe_batch_i = batch_i - pipeline_depth
+
+                pipe_batch_labels = batch_labels_queue.popleft()
+                pipe_batch_labels_size = pipe_batch_labels[0].shape[0]
+                pipe_batch_start = pipe_batch_i * self.g_model.batch_size
+                pipe_batch_end = pipe_batch_start + pipe_batch_labels_size
+
+                # Compute accuracy
+                for output_i in range(len(self.outputs)):
+                    predictions = self.outputs[output_i].neurons.get_predictions(pipe_batch_labels_size)
+                    if pipe_batch_labels[output_i].shape != predictions.shape:
+                        pipe_batch_labels[output_i] = [np.argmax(i) for i in pipe_batch_labels[output_i]]
+                    n_correct[output_i] += np.sum(predictions == pipe_batch_labels[output_i])
+                    accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
+
+                if pipeline_flush:
+                    pipeline_remaining -= 1
+
+                progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
+                progress.update(pipe_batch_labels_size)
+
+            try:
+                batch_data, batch_labels = next(data_iter)
+            except StopIteration:
+                pipeline_flush = True
+            batch_i += 1
+
+        progress.close()
+        assert(len(batch_labels_queue) == 0)
+
+        # Create spike index and time lists
+        spike_i = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
+        spike_t = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
+        for i in range(len(save_samples)):
+            for j in range(len(self.layers)):
+                spikes = all_spikes[i][j]
+                spike_i[i][j] = np.concatenate(spikes)
+                spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
+
+        return accuracy, spike_i, spike_t
+
+
     def evaluate(self, data, labels, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
@@ -203,6 +316,7 @@ class Model(object):
         # Process batches
         progress = tqdm(total=n_samples)
         for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
+
             # If any elements of this batch have data (rather than being entirely pipeline padding)
             if batch_start < n_samples:
                 batch_end = min(batch_start + self.g_model.batch_size, n_samples)
@@ -218,6 +332,7 @@ class Model(object):
 
             # Main simulation loop
             while self.g_model.t < time:
+
                 # Step time
                 self.step_time()
 
@@ -262,6 +377,7 @@ class Model(object):
                 spike_t[i][j] = np.concatenate([np.ones_like(s) * i * self.g_model.dT for i, s in enumerate(spikes)])
 
         return accuracy, spike_i, spike_t
+
 
     def calc_pipeline_depth(self):
         # If none of the layers have the pipelined attribute, return 0
@@ -336,7 +452,8 @@ class Model(object):
 
         tf_activation_layers = (
             tf.keras.layers.Activation,
-            tf.keras.layers.ReLU)
+            tf.keras.layers.ReLU,
+            tf.keras.layers.Softmax)
 
         tf_ignored_layers = (
             tf.keras.layers.Flatten,
@@ -399,6 +516,7 @@ class Model(object):
             assert(len(tf_in_layers) == 1)
             tf_out_layers = [n.outbound_layer for n in tf_in_layers[0].outbound_nodes
                              if n in tf_model_nodes]
+            tf_in_layers_all[tf_in_layers[0]] = []
             tf_out_layers_all[tf_in_layers[0]] = tf_out_layers
 
         else:
@@ -610,7 +728,7 @@ class Model(object):
                                     params={
                                         'pool_size': tf_layer.pool_size,
                                         'pool_strides': tf_layer.strides,
-                                        'pool_padding': tf_layer.padding},
+                                        'connectivity_type': connectivity_type},
                                     source=in_config,
                                     weights=None))
                             elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
@@ -619,7 +737,7 @@ class Model(object):
                                     params={
                                         'pool_size': tf_layer.input_shape[1:3],
                                         'pool_strides': None,
-                                        'pool_padding': 'valid'},
+                                        'connectivity_type': connectivity_type},
                                     source=in_config,
                                     weights=None))
 
@@ -655,7 +773,7 @@ class Model(object):
                             # configure Identity synapses
                             config.synapses.append(InSynConfig(
                                 type=IdentitySynapses,
-                                params={},
+                                params={'connectivity_type': connectivity_type},
                                 source=in_config,
                                 weights=None))
 

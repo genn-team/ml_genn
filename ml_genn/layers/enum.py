@@ -8,6 +8,7 @@ class InputType(Enum):
 class ConnectivityType(Enum):
     PROCEDURAL = 'procedural'
     SPARSE = 'sparse'
+    TOEPLITZ = 'toeplitz'
 
 class PadMode(Enum):
     VALID = 'valid'
