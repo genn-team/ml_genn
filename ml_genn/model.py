@@ -163,12 +163,11 @@ class Model(object):
         self.g_model.t = 0.0
 
 
-    def evaluate_iterator(self, data_iterator, n_samples, time, save_samples=[]):
+    def evaluate_batched(self, data, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
         Args:
-        data_iterator --  an (x, y) iterator
-        n_samples     --  number of samples in data_iterator
+        data          --  an (x, y) batch dataset
         time          --  sample presentation time (msec)
 
         Keyword args:
@@ -180,37 +179,35 @@ class Model(object):
         spike_t       --  list of spike times for each sample index in save_samples
         """
 
-        # Input sanity check
-        save_samples = list(set(save_samples))
-        if any(i < 0 or i >= n_samples for i in save_samples):
-            raise ValueError('one or more invalid save_samples value')
-
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
 
-        # Pad number of samples so pipeline can be flushed
-        pipeline_depth = self.calc_pipeline_depth()
-        padded_n_samples = n_samples + (pipeline_depth * self.g_model.batch_size)
+        data_iter = iter(data)
+        batch_data, batch_labels = next(data_iter)
+        batch_i = 0
 
         batch_labels_queue = deque()
 
-        # Process batches
-        progress = tqdm(total=n_samples)
-        for batch_start in range(0, padded_n_samples, self.g_model.batch_size):
+        # Pad number of samples so pipeline can be flushed
+        pipeline_depth = self.calc_pipeline_depth()
+        pipeline_flush = False
+        pipeline_remaining = pipeline_depth
 
-            # If any elements of this batch have data (rather than being entirely pipeline padding)
-            if batch_start < n_samples:
-                batch_end = min(batch_start + self.g_model.batch_size, n_samples)
-                batch_data, batch_labels = next(data_iterator)
-                batch_data = [batch_data]
-                batch_labels = [batch_labels]
-                batch_labels_queue.append(batch_labels)
+        progress = tqdm()
+        while not pipeline_flush or pipeline_remaining > 0:
 
-                assert(batch_data[0].shape[0] == batch_end - batch_start)
-                assert(batch_labels[0].shape[0] == batch_end - batch_start)
-
+            if not pipeline_flush:
+                batch_data = [np.array(batch_data)]
+                batch_data_size = batch_data[0].shape[0]
+                batch_start = batch_i * self.g_model.batch_size
+                batch_end = batch_start + batch_data_size
                 save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+
+                # Queue labels for pipelining
+                batch_labels = [np.array(batch_labels)]
+                assert(batch_data_size == batch_labels[0].shape[0])
+                batch_labels_queue.append(batch_labels)
 
                 # Set new input
                 self.set_input_batch(batch_data)
@@ -235,25 +232,37 @@ class Model(object):
                             nrn.current_spikes[batch_i] if self.g_model.batch_size > 1
                             else nrn.current_spikes))
 
-            # If first input in batch has passed through
-            if batch_start >= (pipeline_depth * self.g_model.batch_size):
-                pipe_batch_start = batch_start - (pipeline_depth * self.g_model.batch_size)
-                pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
-                batch_labels = batch_labels_queue.popleft()
+            # If input has passed through pipeline
+            if batch_i >= pipeline_depth:
+                pipe_batch_i = batch_i - pipeline_depth
+
+                pipe_batch_labels = batch_labels_queue.popleft()
+                pipe_batch_labels_size = pipe_batch_labels[0].shape[0]
+                pipe_batch_start = pipe_batch_i * self.g_model.batch_size
+                pipe_batch_end = pipe_batch_start + pipe_batch_labels_size
 
                 # Compute accuracy
                 for output_i in range(len(self.outputs)):
-                    predictions = self.outputs[output_i].neurons.get_predictions(
-                        pipe_batch_end - pipe_batch_start)
-                    if batch_labels[output_i].shape != predictions.shape:
-                        batch_labels[output_i] = [np.argmax(i) for i in batch_labels[output_i]]
-                    n_correct[output_i] += np.sum(predictions == batch_labels[output_i])
+                    predictions = self.outputs[output_i].neurons.get_predictions(pipe_batch_labels_size)
+                    if pipe_batch_labels[output_i].shape != predictions.shape:
+                        pipe_batch_labels[output_i] = [np.argmax(i) for i in pipe_batch_labels[output_i]]
+                    n_correct[output_i] += np.sum(predictions == pipe_batch_labels[output_i])
                     accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
 
+                if pipeline_flush:
+                    pipeline_remaining -= 1
+
                 progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
-                progress.update(pipe_batch_end - pipe_batch_start)
+                progress.update(pipe_batch_labels_size)
+
+            try:
+                batch_data, batch_labels = next(data_iter)
+            except StopIteration:
+                pipeline_flush = True
+            batch_i += 1
 
         progress.close()
+        assert(len(batch_labels_queue) == 0)
 
         # Create spike index and time lists
         spike_i = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
