@@ -95,7 +95,6 @@ class SpikeNorm(object):
 
     def post_compile(self, mlg_model):
         g_model = mlg_model.g_model
-        n_samples = self.norm_data[0].shape[0]
 
         # Don't allow models with multiple input layers
         if len(mlg_model.inputs) != 1:
@@ -121,21 +120,21 @@ class SpikeNorm(object):
             if len(layer.downstream_synapses) > 1:
                 break
 
+            norm_data_iter = iter(self.norm_data[0])
+
             threshold = np.float64(0.0)
 
             # For each sample presentation
-            progress = tqdm(total=n_samples)
-            for batch_start in range(0, n_samples, g_model.batch_size):
+            progress = tqdm(leave=False)
+            for batch_data, _ in norm_data_iter:
                 progress.set_description(f'layer <{layer.name}>')
 
-                batch_end = min(batch_start + g_model.batch_size, n_samples)
-                batch_n = batch_end - batch_start
-                batch_data = [x[batch_start:batch_end]
-                              for x in self.norm_data]
+                batch_data = np.array(batch_data)
+                batch_size = batch_data.shape[0]
 
                 # Set new input
                 mlg_model.reset()
-                mlg_model.set_input_batch(batch_data)
+                mlg_model.set_input_batch([batch_data])
 
                 # Main simulation loop
                 while g_model.t < self.norm_time:
@@ -148,12 +147,12 @@ class SpikeNorm(object):
                     if nrn.vars['Vmem'].view.ndim == 1:
                         output_view = nrn.vars['Vmem'].view[np.newaxis]
                     else:
-                        output_view = nrn.vars['Vmem'].view[:batch_n]
+                        output_view = nrn.vars['Vmem'].view[:batch_size]
                     threshold = np.max([threshold, output_view.max()])
                     output_view[:] = np.float64(0.0)
                     nrn.push_var_to_device('Vmem')
 
-                progress.update(batch_n)
+                progress.update(batch_size)
 
             progress.close()
 

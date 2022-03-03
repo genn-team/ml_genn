@@ -171,10 +171,19 @@ class DataNorm(object):
             if len(tf_out_layers) > 1:
                 break
 
+            # If layer is weighted, compute max activation and weight
             if len(tf_layer.get_weights()) > 0:
-                # Layer is weighted, so compute max activation and weight
+                norm_data_iter = iter(self.norm_data[0])
+
+                # Get output function for layer
                 layer_out_fn = tf.keras.backend.function(tf_model.inputs, tf_layer.output)
-                max_activation = np.max(layer_out_fn(self.norm_data))
+
+                max_activation = 0
+                for d, _ in norm_data_iter:
+                    # Get max output given norm data batch.
+                    activation = layer_out_fn(d)
+                    max_activation = np.maximum(max_activation, np.max(activation))
+
                 max_weight = np.max(tf_layer.get_weights()[0])
                 scale_factor = np.maximum(max_activation, max_weight)
                 threshold = scale_factor / scale_factors[tf_in_layers[0]]

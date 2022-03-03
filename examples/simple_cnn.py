@@ -20,7 +20,20 @@ if __name__ == '__main__':
     train_y = train_y[:args.n_train_samples]
     validate_x = validate_x[:args.n_test_samples].reshape((-1, 28, 28, 1)) / 255.0
     validate_y = validate_y[:args.n_test_samples]
-    norm_x = train_x[np.random.choice(train_x.shape[0], args.n_norm_samples, replace=False)]
+
+    # ML GeNN norm dataset
+    norm_i = np.random.choice(train_x.shape[0], args.n_norm_samples, replace=False)
+    mlg_norm_ds = tf.data.Dataset.from_tensor_slices((train_x[norm_i], train_y[norm_i]))
+    mlg_norm_ds = mlg_norm_ds.batch(args.batch_size)
+    mlg_norm_ds = mlg_norm_ds.prefetch(tf.data.AUTOTUNE)
+
+    # ML GeNN validation dataset
+    if args.n_test_samples is None:
+        args.n_test_samples = 10000
+    mlg_validate_ds = tf.data.Dataset.from_tensor_slices((validate_x, validate_y))
+    mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
+    mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
+    mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
 
     # Create and compile TF model
     tf_model = models.Sequential([
@@ -52,7 +65,9 @@ if __name__ == '__main__':
     print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 
     # Create a suitable converter to convert TF model to ML GeNN
-    converter = args.build_converter(norm_x, signed_input=False, K=8, norm_time=500)
+    K = 8
+    T = 500
+    converter = args.build_converter(mlg_norm_ds, signed_input=False, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
     mlg_model = Model.convert_tf_model(
@@ -61,10 +76,18 @@ if __name__ == '__main__':
         kernel_profiling=args.kernel_profiling)
 
     # Evaluate ML GeNN model
-    time = 8 if args.converter == 'few-spike' else 500
+    time = K if args.converter == 'few-spike' else T
     mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate([validate_x], [validate_y], time, save_samples=args.save_samples)
+    acc, spk_i, spk_t = mlg_model.evaluate_batched(
+        mlg_validate_ds, time, save_samples=args.save_samples)
     print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
+
+    if len(args.save_samples) > 0:
+        num_spikes = 0
+        for sample_spikes in spk_i:
+            for layer_spikes in sample_spikes:
+               num_spikes += len(layer_spikes)
+        print("Mean spikes per sample: %f" % (num_spikes / len(args.save_samples)))
 
     if args.kernel_profiling:
         print("Kernel profiling:")
@@ -72,7 +95,7 @@ if __name__ == '__main__':
             print("\t%s: %fs" % (n, t))
 
     # Report ML GeNN model results
-    print('Accuracy of SimpleCNN GeNN model: {}%'.format(acc[0]))
+    print(f'Accuracy of SimpleCNN GeNN model: {acc[0]}%')
     if args.plot:
         neurons = [l.neurons.nrn for l in mlg_model.layers]
         raster_plot(spk_i, spk_t, neurons, time=time)
