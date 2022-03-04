@@ -4,6 +4,8 @@ from . import Initializer
 
 class Uniform(Initializer):
     def __init__(self, min: float=0.0, max: float=1.0):
+        super(Uniform, self).__init__()
+
         self.min = min
         self.max = max
     

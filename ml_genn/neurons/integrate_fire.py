@@ -21,6 +21,7 @@ genn_model = {
 class IntegrateFire(Neuron):
     def __init__(self, threshold=1.0, v=0.0):
         super(IntegrateFire, self).__init__()
+
         self.threshold = Value(threshold)
         self.v = Value(v)
 
