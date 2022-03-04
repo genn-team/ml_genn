@@ -1,9 +1,10 @@
 from . import Connectivity
+from ..utils import InitValue, Value
 
 class Identity(Connectivity):
 
-    def __init__(self):
-        super(Identity, self).__init__()
+    def __init__(self, weight:InitValue, delay:InitValue=0):
+        super(Identity, self).__init__(weight, delay)
 
     def connect(self, source, target):
         super(IdentitySynapses, self).connect(source, target)

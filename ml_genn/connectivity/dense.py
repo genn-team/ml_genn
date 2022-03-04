@@ -1,10 +1,11 @@
 import numpy as np
 
 from . import Connectivity
+from ..utils import InitValue, Value
 
 class Dense(Connectivity):
-    def __init__(self):
-        super(Connectivity, self).__init__()
+    def __init__(self, weight:InitValue, delay:InitValue=0):
+        super(Dense, self).__init__(weight, delay)
 
     def connect(self, source_pop, target_pop):
         super(Dense, self).connect(source_pop, target_pop)

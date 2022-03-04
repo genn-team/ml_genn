@@ -2,13 +2,14 @@ import numpy as np
 from math import ceil
 
 from . import Connectivity
+from ..utils import InitValue, Value
 
 from .helper import _get_conv_same_padding, _get_param_2d
 
 class Conv2D(Connectivity):
-    def __init__(self, filters, conv_size, conv_strides=None,
-                 conv_padding='valid'):
-        super(Conv2D, self).__init__()
+    def __init__(self, weight:InitValue, filters, conv_size, conv_strides=None,
+                 conv_padding='valid', delay:InitValue=0):
+        super(Conv2D, self).__init__(weight, delay)
 
         self.filters = filters
         self.conv_size = _get_param_2d('conv_size', conv_size)

@@ -1,7 +1,7 @@
 from . import neurons
 
 from typing import Sequence, Union
-from . import Model
+from .model import Model
 from .neurons import Neuron
 
 from .utils.model import get_module_models, get_model
@@ -19,13 +19,15 @@ def _get_shape(shape):
                            "unspecified with None or specified as an "
                            "integer or a sequence")
 
+Shape = Union[None, int, Sequence[int]]
+
 class Population:
-    def __init__(self, neuron: Neuron, shape: Union[None, int, Sequence[int]]=None):
-        
+    def __init__(self, neuron: Neuron, shape: Shape=None, add_to_model=True):
         self.neuron = get_model(neuron, Neuron, "Neuron", _neuron_models)
         self.shape = _get_shape(shape)
         self.incoming_connections = []
         self.outgoing_connections = []
 
         # Add population to model
-        Model.add_population(self)
+        if add_to_model:
+            Model.add_population(self)

@@ -28,4 +28,5 @@ class Model:
         Model._context = self
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
+        assert Model._context is not None
         Model._context = None
