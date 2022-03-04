@@ -7,7 +7,7 @@ from ..initializers import Initializer
 
 InitValue = Union[Number, Sequence[Number], Initializer]
 
-class Value(object):
+class Value:
     def __init__(self, value: InitValue):
         self.value = value
         

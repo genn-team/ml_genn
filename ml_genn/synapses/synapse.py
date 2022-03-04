@@ -1,2 +1,2 @@
-class Synapse(object):
+class Synapse:
     pass

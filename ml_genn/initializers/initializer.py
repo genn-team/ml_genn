@@ -1,2 +1,2 @@
-class Initializer(object):
+class Initializer:
     pass

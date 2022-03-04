@@ -1,2 +1,2 @@
-class Neuron(object):
+class Neuron:
     pass
