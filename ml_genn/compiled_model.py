@@ -1,15 +1,27 @@
-
-
-    def set_network(self, inputs, outputs, name='mlg_model'):
-        """Construct an ML GeNN Model from a graph of Layers
-
-        Args:
-        inputs   --  list of network input layers
-        outputs  --  list of network output layers
+class CompiledModel:
+    def __init__(self, model, compiler):
+        # Use the specified compiler to build model
+        self.model, self.neuron_populations, self.synapse_populations =\
+            compiler.compiler(model)
+        
+    def step_time(self, iterations=1):
+        """Iterate the GeNN model a given number of steps
 
         Keyword args:
-        name     --  name of the network (default: 'mlg_model')
+        iterations  --  number of iterations (default: 1)
         """
+
+        for i in range(iterations):
+            self.model.step_time()
+            
+    def reset_time(self):
+        """Reset the GeNN model"""
+
+        self.model.timestep = 0
+        self.model.t = 0.0
+
+
+"""
 
         self.name = name
         self.layers = []
@@ -34,91 +46,6 @@
         if not all(output in self.layers for output in self.outputs):
             raise ValueError('output layers unreachable from input layers')
 
-
-    def compile(self, dt=1.0, batch_size=1, rng_seed=0, reuse_genn_model=False,
-                kernel_profiling=False, **genn_kwargs):
-        """Compile this ML GeNN model into a GeNN model
-
-        Keyword args:
-        dt                --  model integration time step (default: 1.0)
-        batch_size        --  number of models to run concurrently (default: 1)
-        rng_seed          --  GeNN RNG seed (default: 0, meaning seed will be randomised at runtime)
-        reuse_genn_model  --  Reuse existing compiled GeNN model (default: False)
-        kernel_profiling  --  Build model with kernel profiling code (default: False)
-        """
-
-        # Define GeNN model
-        self.g_model = GeNNModel('float', self.name, **genn_kwargs)
-        self.g_model.dT = dt
-        self.g_model.batch_size = batch_size
-        self.g_model._model.set_seed(rng_seed)
-        self.g_model.timing_enabled = kernel_profiling
-
-        # Prepare each layer
-        for layer in self.layers:
-            layer.compile_neurons(self)
-        for layer in self.layers:
-            layer.compile_synapses(self)
-
-        # Build and load GeNN model
-        if os.name == 'nt':
-            model_exists = os.path.isfile("./runner_Release.dll")
-        else:
-            model_exists = os.path.isfile('./' + self.name + '_CODE/librunner.so')
-        if not reuse_genn_model or not model_exists:
-            self.g_model.build()
-        self.g_model.load()
-
-
-    def set_input_batch(self, data_batch):
-        """Set model input with a new batch of data
-
-        Args:
-        data_batch  --  list of data batches for each input layer
-        """
-
-        # Input sanity check
-        if len(data_batch) != len(self.inputs):
-            raise ValueError('data batch list length and input layer list length mismatch')
-
-        for i in range(len(self.inputs)):
-            self.inputs[i].set_input_batch(data_batch[i])
-
-
-    def step_time(self, iterations=1):
-        """Iterate the GeNN model a given number of steps
-
-        Keyword args:
-        iterations  --  number of iterations (default: 1)
-        """
-
-        for i in range(iterations):
-            self.g_model.step_time()
-
-
-    def reset(self):
-        """Reset the GeNN model"""
-
-        self.g_model.timestep = 0
-        self.g_model.t = 0.0
-
-
-    def evaluate_iterator(self, data_iterator, n_samples, time, save_samples=[]):
-        """Evaluate the accuracy of a GeNN model
-
-        Args:
-        data_iterator --  an (x, y) iterator
-        n_samples     --  number of samples in data_iterator
-        time          --  sample presentation time (msec)
-
-        Keyword args:
-        save_samples  --  list of sample indices to save spikes for (default: [])
-
-        Returns:
-        accuracy      --  percentage of correctly classified results
-        spike_i       --  list of spike indices for each sample index in save_samples
-        spike_t       --  list of spike times for each sample index in save_samples
-        """
 
         # Input sanity check
         save_samples = list(set(save_samples))
@@ -208,21 +135,6 @@
 
 
     def evaluate(self, data, labels, time, save_samples=[]):
-        """Evaluate the accuracy of a GeNN model
-
-        Args:
-        data          --  list of data for each input layer
-        labels        --  list of labels for each output layer
-        time          --  sample presentation time (msec)
-
-        Keyword args:
-        save_samples  --  list of sample indices to save spikes for (default: [])
-
-        Returns:
-        accuracy      --  percentage of correctly classified results
-        spike_i       --  list of spike indices for each sample index in save_samples
-        spike_t       --  list of spike times for each sample index in save_samples
-        """
 
         # Input sanity check
         n_samples = data[0].shape[0]
@@ -341,14 +253,4 @@
         # **NOTE** in pipelined networks, delay should have been balanced
         return calc_delay(self.inputs[0].downstream_synapses[0], self.outputs[0])
 
-    def get_kernel_times(self):
-        """Get total kernel run times"""
-
-        return {
-            'init_time': self.g_model.init_time,
-            'init_sparse_time': self.g_model.init_sparse_time,
-            'neuron_update_time': self.g_model.neuron_update_time,
-            'presynaptic_update_time': self.g_model.presynaptic_update_time,
-            'postsynaptic_update_time': self.g_model.postsynaptic_update_time,
-            'synapse_dynamics_time': self.g_model.synapse_dynamics_time,
-        }
+    """

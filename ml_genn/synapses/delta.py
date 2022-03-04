@@ -8,9 +8,9 @@ class Delta(Synapse):
         return "DeltaCurr"
 
     @property
-    def params(self):
+    def param_vals(self):
         return {}
 
     @property
-    def vars(self):
+    def var_vals(self):
         return {}

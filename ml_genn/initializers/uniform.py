@@ -19,7 +19,7 @@ class Uniform(Initializer):
         return "Uniform"
     
     @property
-    def params(self):
+    def param_vals(self):
         return {"min": self.min, "max": self.max}
     
     def __repr__(self):

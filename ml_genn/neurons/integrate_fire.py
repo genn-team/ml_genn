@@ -2,8 +2,8 @@ from . import Neuron
 from ..utils import InitValue, Value
 
 genn_model = {
-    "vars": [("V", "scalar")],
-    "params": [("Vthr", "scalar")],
+    "var_name_types": [("V", "scalar")],
+    "param_name_types": [("Vthr", "scalar")],
     "sim_code":
         """
         $(V) += $(Isyn);
@@ -29,9 +29,9 @@ class IntegrateFire(Neuron):
         return genn_model
                     
     @property
-    def params(self):
+    def param_vals(self):
         return {"Vthr": self.threshold}
     
     @property
-    def vars(self):
+    def var_vals(self):
         return {"V": self.v}
