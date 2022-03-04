@@ -31,3 +31,5 @@ class Population:
         # Add population to model
         if add_to_model:
             Model.add_population(self)
+    
+    # **TODO** shape setter which validate shape with neuron parameters etc

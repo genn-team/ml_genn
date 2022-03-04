@@ -7,17 +7,15 @@ class Dense(Connectivity):
     def __init__(self, weight:InitValue, delay:InitValue=0):
         super(Dense, self).__init__(weight, delay)
 
-    def connect(self, source_pop, target_pop):
-        super(Dense, self).connect(source_pop, target_pop)
-
+    def connect(self, source, target):
+        """
         output_shape = (self.units, )
 
         if target.shape is None:
             target.shape = output_shape
         elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
-
-        self.weights = np.empty((np.prod(source.shape), self.units), dtype=np.float64)
+        """
 
     def compile(self, mlg_model, name):
         conn = 'DENSE_INDIVIDUALG'

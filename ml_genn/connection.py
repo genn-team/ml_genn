@@ -25,6 +25,10 @@ class Connection:
         source.outgoing_connections.append(proxy(self))
         target.incoming_connections.append(proxy(self))
 
+        # Run connectivity-specific connection logic
+        # e.g. automatically-calculating population sizes
+        self.connectivity.connect(source, target)
+
         # Add connection to model
         if add_to_model:
             Model.add_connection(self)

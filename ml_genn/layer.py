@@ -1,15 +1,15 @@
 from weakref import ref
 from .connection import Connection
-from .population import Population
+from .population import Population, Shape
 from .sequential_model import SequentialModel
 from .connectivity import Connectivity
 from .neurons import Neuron
 from .synapses import Synapse
 
 class Layer:
-    def __init__(self, connectivity: Connectivity, neuron: Neuron, synapse="delta"):
+    def __init__(self, connectivity: Connectivity, neuron: Neuron, shape=None, synapse="delta"):
         # Create population and store weak reference in class
-        population = Population(neuron, add_to_model=False)
+        population = Population(neuron, shape=shape, add_to_model=False)
         self.population = ref(population)
         
         # If there are any preceding layers, also create  

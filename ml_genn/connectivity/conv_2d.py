@@ -16,9 +16,7 @@ class Conv2D(Connectivity):
         self.conv_strides = _get_param_2d('conv_strides', conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
 
-    def connect(self, source_pop, target_pop):
-        super(Conv2D, self).connect(source_pop, target_pop)
-
+    def connect(self, source, target):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = source.shape
