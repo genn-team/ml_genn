@@ -1,6 +1,6 @@
 import numpy as np
 
-from typing import sequence
+from typing import Sequence
 from ..utils import InitValue, Value
 
 class Connectivity:
