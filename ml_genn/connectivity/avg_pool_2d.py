@@ -1,12 +1,9 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
-from pygenn.genn_model import init_connectivity, create_cmlf_class
 
-from ml_genn.layers import ConnectivityType, PadMode
-from ml_genn.layers.base_synapses import BaseSynapses
-from ml_genn.layers.weight_update_models import signed_static_pulse
-from ml_genn.layers.helper import _get_param_2d
+from . import Connectivity
+
+from .helper import _get_conv_same_padding, _get_param_2d
 
 avepool2d_init = create_custom_sparse_connect_init_snippet_class(
     'avepool2d',

@@ -1,16 +1,13 @@
 import numpy as np
 
-from ml_genn.layers.base_synapses import BaseSynapses
-from ml_genn.layers.weight_update_models import signed_static_pulse
+from . import Connectivity
 
-class DenseSynapses(BaseSynapses):
+class Dense(Connectivity):
+    def __init__(self):
+        super(Connectivity, self).__init__()
 
-    def __init__(self, units):
-        super(DenseSynapses, self).__init__()
-        self.units = units
-
-    def connect(self, source, target):
-        super(DenseSynapses, self).connect(source, target)
+    def connect(self, source_pop, target_pop):
+        super(Dense, self).connect(source_pop, target_pop)
 
         output_shape = (self.units, )
 

@@ -1,14 +1,9 @@
-import numpy as np
-from pygenn.genn_model import init_connectivity
+from . import Connectivity
 
-from ml_genn.layers import ConnectivityType
-from ml_genn.layers.base_synapses import BaseSynapses
+class Identity(Connectivity):
 
-class IdentitySynapses(BaseSynapses):
-
-    def __init__(self, connectivity_type='procedural'):
-        super(IdentitySynapses, self).__init__()
-        self.connectivity_type = ConnectivityType(connectivity_type)
+    def __init__(self):
+        super(Identity, self).__init__()
 
     def connect(self, source, target):
         super(IdentitySynapses, self).connect(source, target)

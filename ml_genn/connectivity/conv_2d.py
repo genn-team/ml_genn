@@ -1,26 +1,22 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity,
-                               init_var)
 
-from ml_genn.layers import ConnectivityType, PadMode
-from ml_genn.layers.base_synapses import BaseSynapses
-from ml_genn.layers.weight_update_models import signed_static_pulse
-from ml_genn.layers.helper import _get_conv_same_padding, _get_param_2d
+from . import Connectivity
 
-class Conv2DSynapses(BaseSynapses):
+from .helper import _get_conv_same_padding, _get_param_2d
 
+class Conv2D(Connectivity):
     def __init__(self, filters, conv_size, conv_strides=None,
-                 conv_padding='valid', connectivity_type='procedural'):
-        super(Conv2DSynapses, self).__init__()
+                 conv_padding='valid'):
+        super(Conv2D, self).__init__()
+
         self.filters = filters
         self.conv_size = _get_param_2d('conv_size', conv_size)
         self.conv_strides = _get_param_2d('conv_strides', conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
-        self.connectivity_type = ConnectivityType(connectivity_type)
 
-    def connect(self, source, target):
-        super(Conv2DSynapses, self).connect(source, target)
+    def connect(self, source_pop, target_pop):
+        super(Conv2D, self).connect(source_pop, target_pop)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
