@@ -1,7 +1,5 @@
-import numpy as np
-from pygenn.genn_model import create_dpf_class, create_custom_neuron_class
-from ml_genn.layers.fs_input_neurons import FSReluInputNeurons
-from ml_genn.layers.neurons import Neurons
+from . import Neuron
+from ..utils import InitValue, Value
 
 # Standard FS ReLU model where upstream neurons are FS ReLU or FS unsigned input
 fs_relu_model = create_custom_neuron_class(

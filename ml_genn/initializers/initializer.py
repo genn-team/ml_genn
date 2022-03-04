@@ -1,0 +1,2 @@
+class Initializer(object):
+    pass

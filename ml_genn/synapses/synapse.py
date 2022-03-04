@@ -1,0 +1,2 @@
+class Synapse(object):
+    pass
