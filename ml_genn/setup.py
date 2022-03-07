@@ -6,7 +6,6 @@ setup(
     packages=find_packages(),
 
     install_requires = [
-        'tensorflow>=2.0',
         'pygenn>=4.7.0',
         'enum-compat',
         'six',
