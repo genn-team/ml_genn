@@ -2,6 +2,7 @@ import numpy as np
 from math import ceil
 
 from . import Connectivity
+from .helper import PadMode
 from ..utils import InitValue, Value
 
 from .helper import _get_conv_same_padding, _get_param_2d
@@ -38,7 +39,12 @@ class Conv2D(Connectivity):
         elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
 
-        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
+        # Check shape of weights matches kernels
+        weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
+        if (isinstance(self.weight, (Sequence, np.ndarray)) 
+                and self.weights.shape != weight_shape):
+            raise RuntimeError("If weights are specified as arrays, they "
+                               "should  match shape of Conv2D kernel")
 
     def compile(self, mlg_model, name):
         conv_kh, conv_kw = self.conv_size

@@ -1,3 +1,9 @@
+from enum import Enum
+
+class PadMode(Enum):
+    VALID = 'valid'
+    SAME = 'same'
+
 def _get_conv_same_padding(in_size, conv_size, stride):
     # Calculate padding following approach described at
     # https://github.com/tensorflow/tensorflow/blob/v2.7.0/tensorflow/python/ops/nn_ops.py#L48-L88
