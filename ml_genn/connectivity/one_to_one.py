@@ -1,9 +1,9 @@
 from . import Connectivity
 from ..utils import InitValue, Value
 
-class Identity(Connectivity):
+class OneToOne(Connectivity):
     def __init__(self, weight:InitValue, delay:InitValue=0):
-        super(Identity, self).__init__(weight, delay)
+        super(OneToOne, self).__init__(weight, delay)
 
     def connect(self, source, target):
         output_shape = source.shape

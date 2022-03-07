@@ -27,11 +27,10 @@ class IntegrateFire(Neuron):
 
     def get_model(self, population):
         return genn_model
-                    
-    @property
-    def param_vals(self):
+
+    def get_param_vals(self, dt):
         return {"Vthr": self.threshold}
-    
+
     @property
     def var_vals(self):
         return {"V": self.v}

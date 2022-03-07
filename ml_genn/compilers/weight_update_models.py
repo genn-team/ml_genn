@@ -1,16 +1,35 @@
-from pygenn.genn_model import create_custom_weight_update_class
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
+static_pulse_model = {
+    "param_name_types": [("g", "scalar")],
+    "sim_code":
+        """
+        $(addToInSyn, $(g));
+        """}
 
-signed_static_pulse = create_custom_weight_update_class(
-    'signed_static_pulse',
-    var_name_types=[("g", "scalar", VarAccess_READ_ONLY)],
-    sim_code='''
-    $(addToInSyn, $(g));
-    ''',
-    event_code='''
-    $(addToInSyn, -$(g));
-    ''',
-    event_threshold_condition_code='''
-    $(input_pre) < 0.0 && spike
-    '''
-)
+static_pulse_delay_model = {
+    "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
+    "sim_code":
+        """
+        $(addToInSynDelay, $(g), $(d));
+        """}
+        
+signed_static_pulse_model = {
+    "param_name_types": [("g", "scalar")],
+    "sim_code":
+        """
+        $(addToInSyn, $(g));
+        """,
+    "event_code":
+        """
+        $(addToInSyn, -$(g));
+        """}
+
+signed_static_pulse_delay_model = {
+    "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
+    "sim_code":
+        """
+        $(addToInSynDelay, $(g), $(d));
+        """,
+    "event_code":
+        """
+        $(addToInSynDelay, $(g), -$(d));
+        """}
