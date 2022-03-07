@@ -7,8 +7,5 @@ setup(
 
     install_requires = [
         'tensorflow>=2.0',
-        'pygenn>=4.7.0',
-        'enum-compat',
-        'six',
-        'tqdm']
+        'ml_genn>=2.0.0']
 )
