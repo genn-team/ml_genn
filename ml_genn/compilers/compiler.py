@@ -23,9 +23,9 @@ class Compiler:
         self.kernel_profiling = kernel_profiling
         self.genn_kwargs = genn_kwargs
     
-    def build_model(model: dict, param_vals: dict, var_vals: dict):
+    def build_model(model):
         # Make copy of model
-        model_copy = deepcopy(model)
+        model_copy = deepcopy(model.model)
         
         # Remove param names and types from copy of model (those that will "
         # be implemented as GeNN parameters will live in param_names)
@@ -34,7 +34,7 @@ class Compiler:
         
         # Convert any initializers to GeNN
         var_vals_copy = {}
-        for name, val in var_vals.items():
+        for name, val in model.var_vals.items():
             if isinstance(val.value, Initializer):
                 var_vals_copy[name] = init_var(val.value.snippet, 
                                                val.value.param_vals)
@@ -46,7 +46,7 @@ class Compiler:
         constant_param_vals = {}
         for name, ptype in param_name_types:
             # Get value
-            val = param_vals[name].value
+            val = model.param_vals[name].value
             
             # If value isn't a plain number so can't be expressed 
             # as a GeNN parameter, turn it into a (read-only) variable
@@ -66,11 +66,10 @@ class Compiler:
         # Return modified model and; params and var values
         return model_copy, constant_param_vals, var_vals_copy
 
-    def build_neuron_model(self, model: dict, param_vals: dict,
-                           var_vals: dict):
+    def build_neuron_model(self, model):
         # Build model customised for parameters and values
-        model_copy, constant_param_vals, var_vals_copy = build_model(
-            model, param_vals, var_vals)
+        model_copy, constant_param_vals, var_vals_copy =\
+            build_model(model)
         
         # Delete negative threshold condition if there is one
         # (this gets incorporated into weight update model)
@@ -83,11 +82,10 @@ class Compiler:
         # Return model and modified param and var values
         return genn_neuron_model, constant_param_vals, var_vals_copy
     
-    def build_postsynaptic_model(self, model: dict, param_vals: dict,
-                                 var_vals: dict):
+    def build_postsynaptic_model(self, model):
         # Build model customised for parameters and values
-        model_copy, constant_param_vals, var_vals_copy = build_model(
-            model, param_vals, var_vals)
+        model_copy, constant_param_vals, var_vals_copy =\
+            build_model(model)
 
         # Create custom postsynaptic model
         genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
@@ -95,7 +93,7 @@ class Compiler:
 
         # Return model and modified param and var values
         return genn_psm, constant_param_vals, var_vals_copy
-        
+    """
     def build_weight_update_model(self, connection, weights, delays):
         # Build parameter values
         param_vals = {"g": weights}
@@ -126,7 +124,7 @@ class Compiler:
                                                      **model_copy)
         # Return model and modified param and var values
         return genn_wum, constant_param_vals, var_vals_copy
-
+    """
     def compile(self, model: Model, name):
         genn_model = GeNNModel("float", name, **self.genn_kwargs)
         
@@ -139,9 +137,8 @@ class Compiler:
         for i, pop in enumerate(model.populations):
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
-            neuron_model, param_vals, var_vals = self.build_neuron_model(
-                neuron.get_model(pop), neuron.get_param_vals(self.dt), 
-                neuron.var_vals)
+            neuron_model, param_vals, var_vals =\
+                self.build_neuron_model(neuron.get_model(pop, self.dt))
             
             genn_model.add_neuron_population(f"Pop{i}", np.prod(pop.shape),
                                              neuron_model, param_vals, 
@@ -152,12 +149,12 @@ class Compiler:
             # Build postsynaptic model
             syn = conn.synapse
             connect = conn.connectivity
-            psm, psm_param_vals, psm_var_vals = self.build_postsynaptic_model(
-                syn.get_model(pop), syn.get_param_vals(self.dt), syn_var_vals)
+            psm, psm_param_vals, psm_var_vals =\
+                self.build_postsynaptic_model(syn.get_model(pop, self.dt))
 
             # Build weight update model
-            wum, wum_param_vals, wum_var_vals = self.build_weight_update_model(
-                conn, connect.weight, connect.delay)
+            #wum, wum_param_vals, wum_var_vals = self.build_weight_update_model(
+            #    conn, connect.weight, connect.delay)
             
             # If delays are constant, use as axonal delay otherwise, disable
             axonal_delay = (connect.delay.value if connect.delay.is_constant

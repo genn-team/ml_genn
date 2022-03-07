@@ -1,4 +1,4 @@
-from . import Neuron
+from .neuron import Model, Neuron
 from ..utils import InitValue, Value
 
 genn_model = {
@@ -25,12 +25,5 @@ class IntegrateFire(Neuron):
         self.threshold = Value(threshold)
         self.v = Value(v)
 
-    def get_model(self, population):
-        return genn_model
-
-    def get_param_vals(self, dt):
-        return {"Vthr": self.threshold}
-
-    @property
-    def var_vals(self):
-        return {"V": self.v}
+    def get_model(self, population, dt):
+        return Model(genn_model, {"Vthr": self.threshold}, {"V": self.v})
