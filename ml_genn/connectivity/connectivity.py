@@ -3,6 +3,10 @@ import numpy as np
 from typing import Sequence
 from ..utils import InitValue, Value
 
+from collections import namedtuple
+
+Snippet = namedtuple("Snippet", ["conn_init", "matrix_connectivity"])
+
 class Connectivity:
     def __init__(self, weight: [InitValue], delay: [InitValue]):
         self.weight = Value(weight)

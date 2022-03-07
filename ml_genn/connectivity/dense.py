@@ -1,6 +1,7 @@
 import numpy as np
 
-from . import Connectivity
+from pygenn.genn_wrapper import SynapseMatrixConnectivity_DENSE
+from . import Connectivity, Snippet
 from ..utils import InitValue, Value
 
 class Dense(Connectivity):
@@ -16,11 +17,7 @@ class Dense(Connectivity):
         elif output_shape != target.shape:
             raise RuntimeError('target layer shape mismatch')
         """
-
-    def compile(self, mlg_model, name):
-        conn = 'DENSE_INDIVIDUALG'
-        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
-        wu_var = {'g': self.weights.flatten()}
-
-        super(DenseSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
-                                           {}, {}, 'DeltaCurr', {}, {}, None, {})
+    
+    def get_snippet(self, prefer_in_memory):
+        return Snippet(conn_init=None, 
+                       matrix_connectivity=SynapseMatrixConnectivity_DENSE)

@@ -16,11 +16,14 @@ from .weight_update_models import (static_pulse_model, static_pulse_delay_model,
                                    signed_static_pulse_delay_model)
 
 class Compiler:
-    def __init__(self, dt:float=1.0, batch_size:int=1, rng_seed:int=0, kernel_profiling:bool=False, **genn_kwargs):
+    def __init__(self, dt:float=1.0, batch_size:int=1, rng_seed:int=0,
+                 kernel_profiling:bool=False, prefer_in_memory_connect=True,
+                 **genn_kwargs):
         self.dt = dt
         self.batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
+        self.prefer_in_memory_connect = True
         self.genn_kwargs = genn_kwargs
     
     def build_model(model):
@@ -134,28 +137,48 @@ class Compiler:
         genn_model.timing_enabled = self.kernel_profiling
         
         # Loop through populations
+        neuron_populations = {}
         for i, pop in enumerate(model.populations):
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
             neuron_model, param_vals, var_vals =\
                 self.build_neuron_model(neuron.get_model(pop, self.dt))
             
-            genn_model.add_neuron_population(f"Pop{i}", np.prod(pop.shape),
-                                             neuron_model, param_vals, 
-                                             var_vals)
+            # Add neuron population
+            genn_pop = genn_model.add_neuron_population(
+                f"Pop{i}", np.prod(pop.shape), 
+                neuron_model, param_vals, var_vals)
+
+            # Add to neuron populations dictionary
+            neuron_populations[pop] = genn_pop
 
         # Loop through connections
+        synapse_populations = {}
         for i, conn in enumerate(model.connections):
             # Build postsynaptic model
             syn = conn.synapse
             connect = conn.connectivity
             psm, psm_param_vals, psm_var_vals =\
                 self.build_postsynaptic_model(syn.get_model(pop, self.dt))
+            
+            # Get connectivity init snippet
+            connect_snippet =\
+                connect.get_snippet(self.prefer_in_memory_connect)
 
             # Build weight update model
             #wum, wum_param_vals, wum_var_vals = self.build_weight_update_model(
-            #    conn, connect.weight, connect.delay)
+            #    conn, connect.weight, connect.delay, connect_snippet.matrix_mode)
             
             # If delays are constant, use as axonal delay otherwise, disable
             axonal_delay = (connect.delay.value if connect.delay.is_constant
                             else 0)
+            
+            genn_pop = genn_model.add_synapse_population(
+                self, f"Syn{i}", matrix_type, axonal_delay, 
+                neuron_populations[source], neuron_populations[target]
+                wum, wum_param_vals, wum_var_vals, wum_pre_var_vals, wum_post_var_vals, 
+                psm, psm_param_vals, psm_var_vals,
+                connectivity_initialiser=connect_snippet.conn_init):
+            
+            # Add to synapse populations dictionary
+            synapse_populations[conn] = genn_pop

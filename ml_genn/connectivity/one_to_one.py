@@ -1,3 +1,5 @@
+from pygenn.genn_wrapper import (SynapseMatrixConnectivity_PROCEDURAL,
+                                 SynapseMatrixConnectivity_SPARSE)
 from . import Connectivity
 from ..utils import InitValue, Value
 
@@ -13,12 +15,8 @@ class OneToOne(Connectivity):
         elif output_shape != target.shape:
             raise RuntimeError("Target population shape mismatch")
 
-    def compile(self, mlg_model, name):
-        conn_init = init_connectivity('OneToOne', {})
-        conn = ('PROCEDURAL_GLOBALG' if self.connectivity_type == ConnectivityType.PROCEDURAL
-                else 'SPARSE_GLOBALG')
-        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
-        wu_var = {'g': 1.0}
-
-        super(IdentitySynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
-                                              {}, {}, 'DeltaCurr', {}, {}, conn_init, {})
+    def get_snippet(self, prefer_in_memory):
+        matrix_connectivity = (SynapseMatrixConnectivity_PROCEDURAL if prefer_in_memory
+                               else SynapseMatrixConnectivity_SPARSE)
+        return Snippet(conn_init=None, 
+                       matrix_connectivity=matrix_connectivity)
