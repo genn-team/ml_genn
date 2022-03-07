@@ -1,4 +1,6 @@
 class CompiledModel:
+    _context = None
+
     def __init__(self, model, compiler):
         # Use the specified compiler to build model
         self.model, self.neuron_populations, self.synapse_populations =\
@@ -21,6 +23,18 @@ class CompiledModel:
         self.model.t = 0.0
 
 
+    def __enter__(self):
+        if CompiledModel._context is not None:
+            raise RuntimeError("Nested compiled models are "
+                               "not currently supported")
+
+        CompiledModel._context = self
+        self.model.build()
+        self.model.load()
+
+    def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
+        assert CompiledModel._context is not None
+        CompiledModel._context = None
 """
 
         self.name = name

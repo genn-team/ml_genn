@@ -1,10 +1,10 @@
 import numpy as np
 from math import ceil
 
-from pygenn.genn_wrapper import (SynapseMatrixConnectivity_PROCEDURAL,
-                                 SynapseMatrixConnectivity_SPARSE,
-                                 SynapseMatrixConnectivity_TOEPLITZ)
-from . import Connectivity
+from pygenn.genn_wrapper import (SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
+from .connectivity import Connectivity, KernelInit
 from .helper import PadMode
 from ..utils import InitValue, Value
 
@@ -66,8 +66,10 @@ class Conv2D(Connectivity):
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
-            return Snippet(conn_init=conn_init, 
-                           matrix_connectivity=SynapseMatrixConnectivity_TOEPLITZ)
+            
+            return Snippet(snippet=conn_init, 
+                           matrix_type=SynapseMatrixType_TOEPLITZ_KERNELG,
+                           weight=self.weight, delay=self.delay)
         else:
             conn_init = init_connectivity("Conv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
@@ -77,11 +79,19 @@ class Conv2D(Connectivity):
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
             if prefer_in_memory:
-                return Snippet(conn_init=conn_init, 
-                               matrix_connectivity=SynapseMatrixConnectivity_PROCEDURAL)
+                return Snippet(snippet=conn_init, 
+                               matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                               weight=self.weight, delay=self.delay)
                 
             else:
-                return Snippet(conn_init=conn_init, 
-                               matrix_connectivity=SynapseMatrixConnectivity_SPARSE)
+                # If weights/delays are arrays, use kernel initializer
+                # to initialize, otherwise use as is
+                weight = Value(KernelInit(self.weight.value) if self.weight.is_array
+                               else self.weight)
+                delay = Value(KernelInit(self.delay.value) if self.delay.is_array
+                              else self.delay)
+                return Snippet(snippet=conn_init, 
+                               matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                               weight=weight, delay=delay)
                 
         

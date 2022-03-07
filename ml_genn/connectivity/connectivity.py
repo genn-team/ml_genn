@@ -1,12 +1,23 @@
 import numpy as np
 
 from typing import Sequence
+from ..initializers import Initializer
 from ..utils import InitValue, Value
 
 from collections import namedtuple
 
-Snippet = namedtuple("Snippet", ["conn_init", "matrix_connectivity"])
+Snippet = namedtuple("Snippet", ["snippet", "matrix_type", 
+                                 "weight", "delay"])
 
+class KernelInit(Initializer):
+    def __init__(self, kernel):
+        super(KernelInit, self).__init__()
+        
+        self.kernel = kernel
+    
+    def get_snippet(self):
+        return Snippet("Kernel", {}, {"kernel": self.kernel})
+    
 class Connectivity:
     def __init__(self, weight: [InitValue], delay: [InitValue]):
         self.weight = Value(weight)

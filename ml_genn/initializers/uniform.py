@@ -1,6 +1,6 @@
 from numbers import Number
 
-from . import Initializer
+from .initializer import Initializer, Snippet
 
 class Uniform(Initializer):
     def __init__(self, min: float=0.0, max: float=1.0):
@@ -14,13 +14,8 @@ class Uniform(Initializer):
         if not(isinstance(self.max, Number)):
             raise RuntimeError("'max' parameter must be a number")
     
-    @property
-    def snippet(self):
-        return "Uniform"
-    
-    @property
-    def param_vals(self):
-        return {"min": self.min, "max": self.max}
+    def get_snippet(self):
+        return Snippet("Uniform", {"min": self.min, "max": self.max}, {})
     
     def __repr__(self):
         return f"(Uniform) Min: {self.min}, Max: {self.max}"

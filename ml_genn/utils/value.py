@@ -10,7 +10,7 @@ from .model import get_module_models
 # Use Keras-style trick to get dictionary containing default neuron models
 _initializers = get_module_models(initializers, Initializer)
 
-InitValue = Union[Number, Sequence[Number], Initializer]
+InitValue = Union[Number, Sequence[Number], np.ndarray, Initializer]
 
 def _get_value(value):
     # **NOTE** strings are checked first as strings ARE sequences
@@ -33,6 +33,14 @@ class Value:
     @property
     def is_constant(self):
         return isinstance(self.value, Number)
-
+    
+    @property
+    def is_array(self):
+        return isinstance(self.value, (Sequence, np.ndarray))
+    
+    @property
+    def is_initializer(self):
+        return isinstance(self.value, Initializer)
+    
     def __repr__(self):
         return repr(self.value) 

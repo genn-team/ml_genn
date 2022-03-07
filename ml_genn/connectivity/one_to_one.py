@@ -1,9 +1,9 @@
 from pygenn.genn_wrapper import (SynapseMatrixConnectivity_PROCEDURAL,
                                  SynapseMatrixConnectivity_SPARSE)
-from . import Connectivity
+from .sparse_base import SparseBase
 from ..utils import InitValue, Value
 
-class OneToOne(Connectivity):
+class OneToOne(SparseBase):
     def __init__(self, weight:InitValue, delay:InitValue=0):
         super(OneToOne, self).__init__(weight, delay)
 
@@ -16,7 +16,5 @@ class OneToOne(Connectivity):
             raise RuntimeError("Target population shape mismatch")
 
     def get_snippet(self, prefer_in_memory):
-        matrix_connectivity = (SynapseMatrixConnectivity_PROCEDURAL if prefer_in_memory
-                               else SynapseMatrixConnectivity_SPARSE)
-        return Snippet(conn_init=None, 
-                       matrix_connectivity=matrix_connectivity)
+        return super(OneToOne, self)._get_snippet(prefer_in_memory, 
+                                                  "OneToOne")
