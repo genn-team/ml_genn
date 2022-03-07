@@ -21,6 +21,8 @@ def _get_value(value):
             raise RuntimeError(f"Initializer '{value}' unknown")
     elif isinstance(value, (Number, Initializer, Sequence, np.ndarray)):
         return value
+    elif value is None:
+        return None
     else:
         raise RuntimeError(f"Initializers should be specified either as a "
                             "string, a number, a sequence of numbers "
