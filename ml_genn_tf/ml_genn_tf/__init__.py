@@ -177,8 +177,8 @@ def convert(tf_model, converter=Simple()):
 
                     else:
                         for i in range(len(in_config.synapses)):
-                            if in_config.synapses[i].type is AvePool2DSynapses:
-                                # configure AvePool2D -> Dense synapses
+                            if in_config.synapses[i].type is AvgPool2D:
+                                # configure AvgPool2D -> Dense synapses
                                 config.synapses.append(
                                     InSynConfig(
                                         type=AvePool2DDenseSynapses,
@@ -233,8 +233,8 @@ def convert(tf_model, converter=Simple()):
 
                     else:
                         for i in range(len(in_config.synapses)):
-                            if in_config.synapses[i].type is AvePool2DSynapses:
-                                # configure AvePool2D -> Conv2D synapses
+                            if in_config.synapses[i].type is AvgPool2D:
+                                # configure AvgPool2D -> Conv2D synapses
                                 config.synapses.append(
                                     InSynConfig(
                                         type=AvePool2DConv2DSynapses,
@@ -284,22 +284,20 @@ def convert(tf_model, converter=Simple()):
                 for in_config in in_configs:
 
                     if in_config.has_activation:
-                        # configure AvePool2D synapses
+                        # configure AvgPool2D synapses
                         if isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
                             config.synapses.append(
                                 InSynConfig(
-                                    type=AvePool2DSynapses,
-                                    params={
-                                        'pool_size': tf_layer.pool_size,
-                                        'pool_strides': tf_layer.strides},
+                                    type=AvgPool2D,
+                                    params={'pool_size': tf_layer.pool_size,
+                                            'pool_strides': tf_layer.strides},
                                     source=in_config))
                         elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
                             config.synapses.append(
                                 InSynConfig(
-                                    type=AvePool2DSynapses,
-                                    params={
-                                        'pool_size': tf_layer.input_shape[1:3],
-                                        'pool_strides': None},
+                                    type=AvgPool2D,
+                                    params={'pool_size': tf_layer.input_shape[1:3],
+                                            'pool_strides': None},
                                     source=in_config))
 
                     else:
@@ -329,7 +327,6 @@ def convert(tf_model, converter=Simple()):
 
                 # configure synapses
                 for in_config in in_configs:
-
                     if in_config.has_activation:
                         # configure Identity synapses
                         config.synapses.append(
