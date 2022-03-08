@@ -44,8 +44,7 @@ class Conv2D(Connectivity):
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
-        if (isinstance(self.weight, (Sequence, np.ndarray)) 
-                and self.weights.shape != weight_shape):
+        if self.weight.is_array and self.weights.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of Conv2D kernel")
     
@@ -61,7 +60,7 @@ class Conv2D(Connectivity):
             conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        if prefer_in_memory and conv_sh == 1 and conv_sw == 1:
+        if not prefer_in_memory and conv_sh == 1 and conv_sw == 1:
             conn_init = init_toeplitz_connectivity("Conv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
@@ -79,11 +78,6 @@ class Conv2D(Connectivity):
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
             if prefer_in_memory:
-                return Snippet(snippet=conn_init, 
-                               matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
-                               weight=self.weight, delay=self.delay)
-                
-            else:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
                 weight = Value(KernelInit(self.weight.value) if self.weight.is_array
@@ -93,5 +87,8 @@ class Conv2D(Connectivity):
                 return Snippet(snippet=conn_init, 
                                matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
                                weight=weight, delay=delay)
+            else:
+                return Snippet(snippet=conn_init, 
+                               matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                               weight=self.weight, delay=self.delay)
                 
-        

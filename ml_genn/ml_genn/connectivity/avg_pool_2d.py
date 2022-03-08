@@ -13,7 +13,7 @@ from pygenn.genn_model import (create_cmlf_class,
 from .helper import _get_conv_same_padding, _get_param_2d
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
-    "avepool2d",
+    "avg_pool_2d",
 
     param_names=[
         "pool_kh", "pool_kw",
@@ -25,39 +25,39 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
     calc_max_row_len_func=create_cmlf_class(
         lambda num_pre, num_post, pars: int(ceil(pars[0] / pars[2])) * int(ceil(pars[1] / pars[3])) * int(pars[9]))(),
 
-    row_build_code="""
-    // Stash all parameters in registers
-    // **NOTE** this means parameters from group structure only get converted from float->int once
-    // **NOTE** if they"re actually constant, compiler is still likely to treat them as constants rather than allocating registers
-    const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
-    const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-    const int pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-    const int pool_oh = $(pool_oh), pool_ow = $(pool_ow), pool_oc = $(pool_oc);
-    
-    // Convert presynaptic neuron ID to row, column and channel in pool input
-    const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
-    const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
-    const int poolInChan = $(id_pre) % pool_ic;
-    
-    // Calculate corresponding pool output
-    const int poolOutRow = poolInRow / pool_sh;
-    const int poolStrideRow = poolOutRow * pool_sh;
-    const int poolOutCol = poolInCol / pool_sw;
-    const int poolStrideCol = poolOutCol * pool_sw;
+    row_build_code=
+        """
+        // Stash all parameters in registers
+        // **NOTE** this means parameters from group structure only get converted from float->int once
+        // **NOTE** if they"re actually constant, compiler is still likely to treat them as constants rather than allocating registers
+        const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
+        const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
+        const int pool_iw = $(pool_iw), pool_ic = $(pool_ic);
+        const int pool_oh = $(pool_oh), pool_ow = $(pool_ow), pool_oc = $(pool_oc);
+        
+        // Convert presynaptic neuron ID to row, column and channel in pool input
+        const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
+        const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
+        const int poolInChan = $(id_pre) % pool_ic;
+        
+        // Calculate corresponding pool output
+        const int poolOutRow = poolInRow / pool_sh;
+        const int poolStrideRow = poolOutRow * pool_sh;
+        const int poolOutCol = poolInCol / pool_sw;
+        const int poolStrideCol = poolOutCol * pool_sw;
 
-    if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-        if ((poolOutRow < pool_oh) && (poolOutCol < pool_ow)) {
-            // Calculate postsynaptic index and add synapse
-            const int idPost = ((poolOutRow * pool_ow * pool_oc) +
-                                (poolOutCol * pool_oc) +
-                                 poolInChan);
-            $(addSynapse, idPost);
+        if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
+            if ((poolOutRow < pool_oh) && (poolOutCol < pool_ow)) {
+                // Calculate postsynaptic index and add synapse
+                const int idPost = ((poolOutRow * pool_ow * pool_oc) +
+                                    (poolOutCol * pool_oc) +
+                                    poolInChan);
+                $(addSynapse, idPost);
+            }
         }
-    }
-    // End the row
-    $(endRow);
-    """,
-)
+        // End the row
+        $(endRow);
+        """)
 
 class AvgPool2D(Connectivity):
     def __init__(self, pool_size, pool_strides=None, delay:InitValue=0):
@@ -100,9 +100,10 @@ class AvgPool2D(Connectivity):
         
         if prefer_in_memory:
             return Snippet(snippet=conn_init, 
-                            matrix_type=SynapseMatrixType_PROCEDURAL_GLOBALG,
+                            matrix_type=SynapseMatrixType_SPARSE_GLOBALG,
                             weight=self.weight, delay=self.delay)
         else:
             return Snippet(snippet=conn_init, 
-                            matrix_type=SynapseMatrixType_SPARSE_GLOBALG,
+                            matrix_type=SynapseMatrixType_PROCEDURAL_GLOBALG,
                             weight=self.weight, delay=self.delay)
+            

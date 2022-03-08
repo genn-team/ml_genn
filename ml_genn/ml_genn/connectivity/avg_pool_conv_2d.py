@@ -1,27 +1,32 @@
 import numpy as np
 from math import ceil
-from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
-from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity,
-                               init_var, create_cmlf_class, create_cksf_class)
+
+from pygenn.genn_wrapper import (SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
+from .connectivity import Connectivity, KernelInit
+from .helper import PadMode
+from ..utils import InitValue, Value
+
+from pygenn.genn_model import (create_cmlf_class, create_cksf_class,
+                               create_custom_sparse_connect_init_snippet_class, 
+                               init_connectivity, init_toeplitz_connectivity,
+                               init_var)
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
+from .helper import _get_conv_same_padding, _get_param_2d
 
-from ml_genn.layers import ConnectivityType, PadMode
-from ml_genn.layers.base_synapses import BaseSynapses
-from ml_genn.layers.weight_update_models import signed_static_pulse
-from ml_genn.layers.helper import _get_conv_same_padding, _get_param_2d
-
-avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
-    'avepool2d_conv2d',
+genn_snippet = create_custom_sparse_connect_init_snippet_class(
+    "avg_pool_conv_2d",
 
     param_names=[
-        'pool_kh', 'pool_kw',
-        'pool_sh', 'pool_sw',
-        'pool_ih', 'pool_iw', 'pool_ic',
-        'conv_kh', 'conv_kw',
-        'conv_sh', 'conv_sw',
-        'conv_padh', 'conv_padw',
-        'conv_ih', 'conv_iw', 'conv_ic',
-        'conv_oh', 'conv_ow', 'conv_oc',
+        "pool_kh", "pool_kw",
+        "pool_sh", "pool_sw",
+        "pool_ih", "pool_iw", "pool_ic",
+        "conv_kh", "conv_kw",
+        "conv_sh", "conv_sw",
+        "conv_padh", "conv_padw",
+        "conv_ih", "conv_iw", "conv_ic",
+        "conv_oh", "conv_ow", "conv_oc",
     ],
 
     calc_max_row_len_func=create_cmlf_class(
@@ -30,96 +35,88 @@ avepool2d_conv2d_init = create_custom_sparse_connect_init_snippet_class(
     calc_kernel_size_func=create_cksf_class(
         lambda pars: UnsignedIntVector([int(pars[7]), int(pars[8]), int(pars[15]), int(pars[18])]))(),
 
-    row_build_code='''
-    // Stash all parameters in registers
-    // **NOTE** this means parameters from group structure only get converted from float->int once
-    // **NOTE** if they're actually constant, compiler is still likely to treat them as constants rather than allocating registers
-    const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
-    const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-    const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-    const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
-    const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
-    const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
-    const int conv_ih = $(conv_ih), conv_iw = $(conv_iw), conv_ic = $(conv_ic);
-    const int conv_oh = $(conv_oh), conv_ow = $(conv_ow), conv_oc = $(conv_oc);
+        row_build_code=
+        """
+        // Stash all parameters in registers
+        // **NOTE** this means parameters from group structure only get converted from float->int once
+        // **NOTE** if they"re actually constant, compiler is still likely to treat them as constants rather than allocating registers
+        const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
+        const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
+        const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
+        const int conv_kh = $(conv_kh), conv_kw = $(conv_kw);
+        const int conv_sh = $(conv_sh), conv_sw = $(conv_sw);
+        const int conv_padh = $(conv_padh), conv_padw = $(conv_padw);
+        const int conv_ih = $(conv_ih), conv_iw = $(conv_iw), conv_ic = $(conv_ic);
+        const int conv_oh = $(conv_oh), conv_ow = $(conv_ow), conv_oc = $(conv_oc);
 
-    // Convert presynaptic neuron ID to row, column and channel in pool input
-    const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
-    const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
-    const int poolInChan = $(id_pre) % pool_ic;
+        // Convert presynaptic neuron ID to row, column and channel in pool input
+        const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
+        const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
+        const int poolInChan = $(id_pre) % pool_ic;
 
-    // Calculate corresponding pool output
-    const int poolOutRow = poolInRow / pool_sh;
-    const int poolStrideRow = poolOutRow * pool_sh;
-    const int poolOutCol = poolInCol / pool_sw;
-    const int poolStrideCol = poolOutCol * pool_sw;
+        // Calculate corresponding pool output
+        const int poolOutRow = poolInRow / pool_sh;
+        const int poolStrideRow = poolOutRow * pool_sh;
+        const int poolOutCol = poolInCol / pool_sw;
+        const int poolStrideCol = poolOutCol * pool_sw;
 
-    if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-        if ((poolOutRow < conv_ih) && (poolOutCol < conv_iw)) {
-            // Calculate range of output rows and columns which this pool output connects to
-            const int minOutRow = min((int) $(conv_oh), max(0, 1 + (int) floor((poolOutRow + $(conv_padh) - $(conv_kh)) / $(conv_sh))));
-            const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
-            const int minOutCol = min((int) $(conv_ow), max(0, 1 + (int) floor((poolOutCol + $(conv_padw) - $(conv_kw)) / $(conv_sw))));
-            const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
+        if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
+            if ((poolOutRow < conv_ih) && (poolOutCol < conv_iw)) {
+                // Calculate range of output rows and columns which this pool output connects to
+                const int minOutRow = min((int) $(conv_oh), max(0, 1 + (int) floor((poolOutRow + $(conv_padh) - $(conv_kh)) / $(conv_sh))));
+                const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
+                const int minOutCol = min((int) $(conv_ow), max(0, 1 + (int) floor((poolOutCol + $(conv_padw) - $(conv_kw)) / $(conv_sw))));
+                const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
 
-            // Loop through output rows, columns and channels
-            for(int convOutRow = minOutRow; convOutRow < maxOutRow; convOutRow++) {
-                const int strideRow = (convOutRow * conv_sh) - conv_padh;
-                const int kernRow = poolOutRow - strideRow;
-                for(int convOutCol = minOutCol; convOutCol < maxOutCol; convOutCol++) {
-                    const int strideCol = (convOutCol * conv_sw) - conv_padw;
-                    const int kernCol = poolOutCol - strideCol;
-                    for(int outChan = 0; outChan < conv_oc; outChan++) {
-                        // Calculate postsynaptic index and add synapse
-                        const int idPost = ((convOutRow * conv_ow * conv_oc) +
-                                            (convOutCol * conv_oc) +
-                                            outChan);
-                        $(addSynapse, idPost, kernRow, kernCol, poolInChan, outChan);
+                // Loop through output rows, columns and channels
+                for(int convOutRow = minOutRow; convOutRow < maxOutRow; convOutRow++) {
+                    const int strideRow = (convOutRow * conv_sh) - conv_padh;
+                    const int kernRow = poolOutRow - strideRow;
+                    for(int convOutCol = minOutCol; convOutCol < maxOutCol; convOutCol++) {
+                        const int strideCol = (convOutCol * conv_sw) - conv_padw;
+                        const int kernCol = poolOutCol - strideCol;
+                        for(int outChan = 0; outChan < conv_oc; outChan++) {
+                            // Calculate postsynaptic index and add synapse
+                            const int idPost = ((convOutRow * conv_ow * conv_oc) +
+                                                (convOutCol * conv_oc) +
+                                                outChan);
+                            $(addSynapse, idPost, kernRow, kernCol, poolInChan, outChan);
+                        }
                     }
                 }
             }
         }
-    }
 
-    // End the row
-    $(endRow);
-    ''',
-)
+        // End the row
+        $(endRow);
+        """)
 
-class AvePool2DConv2DSynapses(BaseSynapses):
+class AvgPoolConv2D(Connectivity):
 
-    def __init__(self, filters, pool_size, conv_size, pool_strides=None, 
-                 conv_strides=None, conv_padding='valid', connectivity_type='procedural'):
-        super(AvePool2DConv2DSynapses, self).__init__()
+    def __init__(self, weight:InitValue, filters, pool_size, conv_size, pool_strides=None, 
+                 conv_strides=None, conv_padding="valid", delay:InitValue=0):
+        super(AvgPoolConv2D, self).__init__(weight, delay)
         self.filters = filters
-        self.pool_size = _get_param_2d('pool_size', pool_size)
-        self.conv_size = _get_param_2d('conv_size', conv_size)
-        self.pool_strides = _get_param_2d('pool_strides', pool_strides, default=self.pool_size)
-        self.conv_strides = _get_param_2d('conv_strides', conv_strides, default=(1, 1))
+        self.pool_size = _get_param_2d("pool_size", pool_size)
+        self.conv_size = _get_param_2d("conv_size", conv_size)
+        self.pool_strides = _get_param_2d("pool_strides", pool_strides, default=self.pool_size)
+        self.conv_strides = _get_param_2d("conv_strides", conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
         self.pool_output_shape = None
-        self.connectivity_type = ConnectivityType(connectivity_type)
+        
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
-            raise NotImplementedError('pool stride < pool size is not supported')
+            raise NotImplementedError("pool stride < pool size is not supported")
         if self.conv_strides[0] != 1 or self.conv_strides[1] != 1:
-            raise NotImplementedError('conv stride != 1 is not supported')
-        if self.connectivity_type is ConnectivityType.TOEPLITZ:
-            if self.conv_padding is PadMode.SAME:
-                if (self.conv_size[0] % 2) == 0 or (self.conv_size[1] % 2) == 0:
-                    raise NotImplementedError(
-                        'Toeplitz with same conv_padding and even conv_size is not supported')
+            raise NotImplementedError("conv stride != 1 is not supported")
 
     def connect(self, source, target):
-        super(AvePool2DConv2DSynapses, self).connect(source, target)
-
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
         self.pool_output_shape = (
             ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
             ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-            pool_ic,
-        )
+            pool_ic)
 
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -128,23 +125,25 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             output_shape = (
                 ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
                 ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
-                self.filters,
-            )
+                self.filters)
         elif self.conv_padding == PadMode.SAME:
             output_shape = (
                 ceil(float(conv_ih) / float(conv_sh)),
                 ceil(float(conv_iw) / float(conv_sw)),
-                self.filters,
-            )
+                self.filters)
 
         if target.shape is None:
             target.shape = output_shape
         elif output_shape != target.shape:
-            raise RuntimeError('target layer shape mismatch')
+            raise RuntimeError("target layer shape mismatch")
 
-        self.weights = np.empty((conv_kh, conv_kw, conv_ic, self.filters), dtype=np.float64)
+        # Check shape of weights matches kernels
+        weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
+        if self.weight.is_array and self.weights.shape != weight_shape:
+            raise RuntimeError("If weights are specified as arrays, they "
+                               "should  match shape of AvgPoolConv2D kernel")
 
-    def compile(self, mlg_model, name):
+    def get_snippet(self, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = self.source().shape
@@ -159,43 +158,45 @@ class AvePool2DConv2DSynapses(BaseSynapses):
             conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        wu_model = signed_static_pulse if self.source().neurons.signed_spikes else 'StaticPulse'
+        scaled_weights = self.weights.value.flatten() / (pool_kh * pool_kw)
+                
+        if (not prefer_in_memory and conv_sh == 1 and conv_sw == 1 
+            and (self.conv_padding is not PadMode.SAME 
+                 or ((self.conv_size[0] % 2) != 0 
+                     and (self.conv_size[1] % 2) != 0))):
+            conn_init = init_toeplitz_connectivity("AvgPoolConv2D", {
+                "conv_kh": conv_kh, "conv_kw": conv_kw,
+                "pool_kh": pool_kh, "pool_kw": pool_kw,
+                "pool_sh": pool_sh, "pool_sw": pool_sw,
+                "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
+                "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-        scaled_weights = self.weights.flatten() / (pool_kh * pool_kw)
-        if (self.connectivity_type == ConnectivityType.TOEPLITZ
-                and conv_sh == 1 and conv_sw == 1):
-            conn_init = init_toeplitz_connectivity('AvgPoolConv2D', {
-                'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                'pool_kh': pool_kh, 'pool_kw': pool_kw,
-                'pool_sh': pool_sh, 'pool_sw': pool_sw,
-                'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
-
-            conn = 'TOEPLITZ_KERNELG'
-            wu_var = {'g': scaled_weights}
-            wu_var_egp = {}
+            return Snippet(snippet=conn_init, 
+                           matrix_type=SynapseMatrixType_TOEPLITZ_KERNELG,
+                           weight=scaled_weights, delay=self.delay)
         else:
-            conn_init = init_connectivity(avepool2d_conv2d_init, {
-                'pool_kh': pool_kh, 'pool_kw': pool_kw,
-                'pool_sh': pool_sh, 'pool_sw': pool_sw,
-                'pool_ih': pool_ih, 'pool_iw': pool_iw, 'pool_ic': pool_ic,
-                'conv_kh': conv_kh, 'conv_kw': conv_kw,
-                'conv_sh': conv_sh, 'conv_sw': conv_sw,
-                'conv_padh': conv_padh, 'conv_padw': conv_padw,
-                'conv_ih': conv_ih, 'conv_iw': conv_iw, 'conv_ic': conv_ic,
-                'conv_oh': conv_oh, 'conv_ow': conv_ow, 'conv_oc': conv_oc})
-
-            if self.connectivity_type == ConnectivityType.SPARSE:
-                conn = 'SPARSE_INDIVIDUALG'
-                wu_var = {'g': init_var('Kernel', {})}
-                wu_var_egp = {'g': {'kernel': scaled_weights}}
+            conn_init = init_connectivity(genn_snippet, {
+                "pool_kh": pool_kh, "pool_kw": pool_kw,
+                "pool_sh": pool_sh, "pool_sw": pool_sw,
+                "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
+                "conv_kh": conv_kh, "conv_kw": conv_kw,
+                "conv_sh": conv_sh, "conv_sw": conv_sw,
+                "conv_padh": conv_padh, "conv_padw": conv_padw,
+                "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
+                "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
+            
+            if prefer_in_memory:
+                return Snippet(snippet=conn_init, 
+                               matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                               weight=scaled_weights, delay=self.delay)
+                
             else:
-                if self.connectivity_type == ConnectivityType.TOEPLITZ:
-                    print("WARNING: falling back to procedural connectivity for "
-                          "AvgPool_Conv2D connectivity with unsupported parameters")
-                conn = 'PROCEDURAL_KERNELG'
-                wu_var = {'g': scaled_weights}
-                wu_var_egp = {}
-
-        super(AvePool2DConv2DSynapses, self).compile(mlg_model, name, conn, wu_model, {}, wu_var,
-                                                     {}, {}, 'DeltaCurr', {}, {}, conn_init, wu_var_egp)
+                # If weights/delays are arrays, use kernel initializer
+                # to initialize, otherwise use as is
+                weight = Value(KernelInit(scaled_weights) if self.weight.is_array
+                               else scaled_weights)
+                delay = Value(KernelInit(self.delay.value) if self.delay.is_array
+                              else self.delay)
+                return Snippet(snippet=conn_init, 
+                               matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                               weight=weight, delay=delay)
