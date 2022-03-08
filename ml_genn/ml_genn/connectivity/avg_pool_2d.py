@@ -1,10 +1,8 @@
 import numpy as np
 from math import ceil
 
-from pygenn.genn_wrapper import (SynapseMatrixType_PROCEDURAL_GLOBALG,
-                                 SynapseMatrixType_SPARSE_GLOBALG)
-from .connectivity import Connectivity, KernelInit
-from .helper import PadMode
+from .connectivity import Connectivity
+from .helper import PadMode, KernelInit
 from ..utils import InitValue, Value
 
 from pygenn.genn_model import (create_cmlf_class,
@@ -89,8 +87,8 @@ class AvgPool2D(Connectivity):
     def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = connection.source.shape
-        pool_oh, pool_ow, pool_oc = connection.target.shape
+        pool_ih, pool_iw, pool_ic = connection.source().shape
+        pool_oh, pool_ow, pool_oc = connection.target().shape
 
         conn_init = init_connectivity(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,
@@ -100,10 +98,10 @@ class AvgPool2D(Connectivity):
         
         if prefer_in_memory:
             return Snippet(snippet=conn_init, 
-                            matrix_type=SynapseMatrixType_SPARSE_GLOBALG,
+                            matrix_type="SPARSE_GLOBALG",
                             weight=self.weight, delay=self.delay)
         else:
             return Snippet(snippet=conn_init, 
-                            matrix_type=SynapseMatrixType_PROCEDURAL_GLOBALG,
+                            matrix_type="PROCEDURAL_GLOBALG",
                             weight=self.weight, delay=self.delay)
             

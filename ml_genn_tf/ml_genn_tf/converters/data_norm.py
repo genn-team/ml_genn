@@ -2,8 +2,8 @@ import tensorflow as tf
 import numpy as np
 
 from collections import namedtuple
-from ml_genn.encoders import BinarySpike, IntegrateFire, Poisson
-from ml_genn.neurons import IntegrateFire as IntegrateFireNeurons
+from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
+                             IntegrateFireInput, PoissonInput)
 from .enum import InputType
 
 # Because we want the converter class to be reusable, we don't want the
@@ -82,15 +82,15 @@ class DataNorm(object):
 
     def create_input_neurons(self, pre_convert_output):
         if self.input_type == InputType.SPIKE:
-            return BinarySpike(signed_spikes=self.signed_input)
+            return BinarySpikeInput(signed_spikes=self.signed_input)
         elif self.input_type == InputType.POISSON:
-            return Poisson(signed_spikes=self.signed_input)
+            return PoissonInput(signed_spikes=self.signed_input)
         elif self.input_type == InputType.IF:
-            return IntegrateFire()
+            return IntegrateFireInput()
 
     def create_neurons(self, tf_layer, pre_convert_output):
         threshold = pre_convert_output.thresholds[tf_layer]
-        return IntegrateFireNeurons(threshold=threshold)
+        return IntegrateFire(threshold=threshold)
 
     def pre_convert(self, tf_model):
         # NOTE: Data-Norm only normalises an initial sequential portion of

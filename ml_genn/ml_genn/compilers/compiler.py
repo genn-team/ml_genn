@@ -1,5 +1,6 @@
 import numpy as np
 
+from collections import namedtuple
 from numbers import Number
 from typing import Sequence, Union
 from pygenn import GeNNModel
@@ -19,6 +20,8 @@ from .weight_update_models import (static_pulse_model, static_pulse_delay_model,
                                    signed_static_pulse_model, 
                                    signed_static_pulse_delay_model)
 
+WeightUpdateModel = namedtuple("WeightUpdateModel", ["model", "param_vals", "var_vals"])
+
 def set_egps(var_egps, var_dict):
     for var, var_egp in var_egps.items():
         for p, value in var_egp.items():
@@ -34,8 +37,12 @@ def build_model(model):
         param_name_types = model_copy["param_name_types"]
         del model_copy["param_name_types"]
     else:
-        param_name_types = {}
-    
+        param_name_types = []
+
+    # If there aren't any variables already, add dictionary
+    if not "var_name_types" in model_copy:
+        model_copy["var_name_types"] = []
+
     # Convert any initializers to GeNN
     var_vals_copy = {}
     var_egp = {}
@@ -61,8 +68,10 @@ def build_model(model):
             model_copy["var_name_types"].append((name, ptype, 
                                                  VarAccess_READ_ONLY))
             if isinstance(val, Initializer):
-                var_vals_copy[name] = init_var(val.snippet,
-                                               val.param_vals)
+                snippet = val.get_snippet()
+                var_vals_copy[name] = init_var(snippet.snippet,
+                                               snippet.param_vals)
+                var_egp[name] = snippet.egp_vals
             else:
                 var_vals_copy[name] = val
         # Otherwise, add it's name to parameter names
@@ -119,24 +128,30 @@ class Compiler:
         het_delay = not connect_snippet.delay.is_constant
         if het_delay:
             param_vals["d"] = connect_snippet.delay
-
+        
         # If source neuron model defines a negative threshold condition
-        src_pop = connection.source
-        src_neuron_model = src_pop.neuron.get_model(src_pop)
+        src_pop = connection.source()
+        src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt)
         if "negative_threshold_condition_code" in src_neuron_model:
+            wum = WeightUpdateModel(
+                (signed_static_pulse_delay_model if het_delay
+                 else signed_static_pulse_model), param_vals, {})
+            
             # Build model customised for parameters and values
             model_copy, constant_param_vals, var_vals_copy, var_egp =\
-                build_model((signed_static_pulse_delay_model if het_delay
-                             else signed_static_pulse_model), param_vals, {})
+                build_model(wum)
             
             # Insert negative threshold condition code from neuron model
             model_copy["event_threshold_condition_code"] =\
                 src_neuron_model["negative_threshold_condition_code"]
         else:
+            wum = WeightUpdateModel(
+                (static_pulse_delay_model if het_delay
+                 else static_pulse_model), param_vals, {})
+                 
             # Build model customised for parameters and values
             model_copy, constant_param_vals, var_vals_copy, var_egp =\
-                build_model((static_pulse_delay_model if het_delay 
-                             else static_pulse_model), param_vals, {})
+                build_model(wum)
         
         # Create custom weight update model
         genn_wum = create_custom_weight_update_class("WeightUpdateModel",
@@ -175,30 +190,6 @@ class Compiler:
             
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
-            
-        # Loop through inputs
-        input_populations = {}
-        for i, input in enumerate(model.inputs):
-            # Check population has shape
-            if input.shape is None:
-                raise RuntimeError("All inputs need to have "
-                                   "a shape before compiling model")
-                                   
-            # Build GeNN neuron model, parameters and values
-            encoder = input.encoder
-            neuron_model, param_vals, var_vals, var_vals_egp =\
-                self.build_neuron_model(encoder.get_model(input, self.dt))
-            
-            # Add neuron population
-            genn_pop = genn_model.add_neuron_population(
-                f"Input{i}", np.prod(input.shape), 
-                neuron_model, param_vals, var_vals)
-            
-            # Configure EGPs
-            set_egps(var_vals_egp, genn_pop.vars)
-            
-            # Add to neuron populations dictionary
-            neuron_populations[input] = genn_pop
 
         # Loop through connections
         connection_populations = {}
@@ -212,19 +203,20 @@ class Compiler:
             connect_snippet =\
                 conn.connectivity.get_snippet(conn, 
                                               self.prefer_in_memory_connect)
-
             # Build weight update model
-            wum, wum_param_vals, wum_var_vals, wum_pre_var_vals, wum_post_var_vals, wum_var_egp =\
+            (wum, wum_param_vals, wum_var_vals, 
+             wum_pre_var_vals, wum_post_var_vals, wum_var_egp) =\
                 self.build_weight_update_model(conn, connect_snippet)
         
             # If delays are constant, use as axonal delay otherwise, disable
-            axonal_delay = (connect.delay.value if connect.delay.is_constant
+            delay = conn.connectivity.delay
+            axonal_delay = (delay.value if delay.is_constant
                             else 0)
             
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
-                self, f"Syn{i}", connect_snippet.matrix_type, axonal_delay, 
-                neuron_populations[source], neuron_populations[target],
+                f"Syn{i}", connect_snippet.matrix_type, axonal_delay, 
+                neuron_populations[conn.source()], neuron_populations[conn.target()],
                 wum, wum_param_vals, wum_var_vals, wum_pre_var_vals, wum_post_var_vals, 
                 psm, psm_param_vals, psm_var_vals,
                 connectivity_initialiser=connect_snippet.snippet)
@@ -236,5 +228,4 @@ class Compiler:
             # Add to synapse populations dictionary
             connection_populations[conn] = genn_pop
         
-        return (genn_model, neuron_populations, input_populations, 
-                connection_populations)
+        return (genn_model, neuron_populations, connection_populations)

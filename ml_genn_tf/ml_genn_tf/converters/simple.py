@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from ml_genn.encoders import BinarySpike, IntegrateFire, Poisson
-from ml_genn.neurons import IntegrateFire as IntegrateFireNeurons
+from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
+                             IntegrateFireInput, PoissonInput)
 from .enum import InputType
 
 class Simple(object):
@@ -66,14 +66,14 @@ class Simple(object):
 
     def create_input_neurons(self, pre_compile_output):
         if self.input_type == InputType.SPIKE:
-            return BinarySpike(signed_spikes=self.signed_input)
+            return BinarySpikeInput(signed_spikes=self.signed_input)
         elif self.input_type == InputType.POISSON:
-            return Poisson(signed_spikes=self.signed_input)
+            return PoissonInput(signed_spikes=self.signed_input)
         elif self.input_type == InputType.IF:
-            return IntegrateFire()
+            return IntegrateFireInput()
 
     def create_neurons(self, tf_layer, pre_compile_output):
-        return IntegrateFireNeurons(threshold=1.0)
+        return IntegrateFire(threshold=1.0)
 
     def pre_convert(self, tf_model):
         pass

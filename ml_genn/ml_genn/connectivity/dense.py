@@ -1,6 +1,5 @@
 import numpy as np
 
-from pygenn.genn_wrapper import SynapseMatrixType_DENSE_INDIVIDUALG
 from .connectivity import Connectivity, Snippet
 from ..utils import InitValue, Value
 
@@ -20,6 +19,6 @@ class Dense(Connectivity):
     
     def get_snippet(self, connection, prefer_in_memory):
         return Snippet(snippet=None, 
-                       matrix_type=SynapseMatrixType_DENSE_INDIVIDUALG,
+                       matrix_type="DENSE_INDIVIDUALG",
                        weight=self.weight, delay=self.delay)
         

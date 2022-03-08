@@ -1,9 +1,20 @@
 from enum import Enum
+from ..initializers import Initializer, Snippet
 
 class PadMode(Enum):
     VALID = 'valid'
     SAME = 'same'
 
+
+class KernelInit(Initializer):
+    def __init__(self, kernel):
+        super(KernelInit, self).__init__()
+        
+        self.kernel = kernel
+    
+    def get_snippet(self):
+        return Snippet("Kernel", {}, {"kernel": self.kernel})
+        
 def _get_conv_same_padding(in_size, conv_size, stride):
     # Calculate padding following approach described at
     # https://github.com/tensorflow/tensorflow/blob/v2.7.0/tensorflow/python/ops/nn_ops.py#L48-L88

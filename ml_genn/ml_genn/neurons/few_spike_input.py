@@ -1,9 +1,11 @@
-from .encoder import Encoder, Model
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from .neuron import Neuron, Model
 from ..utils import InitValue, Value
 
 genn_model = {
     "param_name_types": ["K", "Scale"],    
-    "var_name_types": [("Input", "scalar"), ("V", "scalar")],
+    "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE), 
+                       ("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
@@ -66,9 +68,9 @@ genn_model_signed = {
     "is_auto_refractory_required": False}
     
 
-class FewSpike(Encoder):
+class FewSpikeInput(Neuron):
     def __init__(self, k=10, alpha=25, signed_input=False):
-        super(FewSpike, self).__init__()
+        super(FewSpikeInput, self).__init__()
         self.k = Value(k)
         self.alpha = Value(alpha)
         self.signed_input = signed_input

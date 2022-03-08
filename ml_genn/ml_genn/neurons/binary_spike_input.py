@@ -1,15 +1,16 @@
-from .encoder import Encoder, Model
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from .neuron import Neuron, Model
 from ..utils import Value
 
-class BinarySpike(Encoder):
+class BinarySpikeInput(Neuron):
     def __init__(self, signed_spikes=False):
-        super(BinarySpike, self).__init__()
+        super(BinarySpikeInput, self).__init__()
 
         self.signed_spikes = signed_spikes
 
     def get_model(self, population, dt):
         genn_model = {
-            "var_name_types": [("Input", "scalar")],
+            "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE)],
             "sim_code": 
                 """
                 const bool spike = $(Input) != 0.0;

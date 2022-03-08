@@ -1,11 +1,8 @@
 import numpy as np
 from math import ceil
 
-from pygenn.genn_wrapper import (SynapseMatrixType_PROCEDURAL_KERNELG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                 SynapseMatrixType_TOEPLITZ_KERNELG)
-from .connectivity import Connectivity, KernelInit
-from .helper import PadMode
+from .connectivity import Connectivity, Snippet
+from .helper import PadMode, KernelInit
 from ..utils import InitValue, Value
 
 from pygenn.genn_model import (create_cmlf_class, create_cksf_class,
@@ -146,11 +143,11 @@ class AvgPoolConv2D(Connectivity):
     def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = connection.source.shape
+        pool_ih, pool_iw, pool_ic = connection.source().shape
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
-        conv_oh, conv_ow, conv_oc = connection.target.shape
+        conv_oh, conv_ow, conv_oc = connection.target().shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -158,7 +155,7 @@ class AvgPoolConv2D(Connectivity):
             conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        scaled_weights = self.weights.value.flatten() / (pool_kh * pool_kw)
+        scaled_weight = self.weight.value.flatten() / (pool_kh * pool_kw)
                 
         if (not prefer_in_memory and conv_sh == 1 and conv_sw == 1 
             and (self.conv_padding is not PadMode.SAME 
@@ -172,8 +169,8 @@ class AvgPoolConv2D(Connectivity):
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
             return Snippet(snippet=conn_init, 
-                           matrix_type=SynapseMatrixType_TOEPLITZ_KERNELG,
-                           weight=scaled_weights, delay=self.delay)
+                           matrix_type="TOEPLITZ_KERNELG",
+                           weight=Value(scaled_weight), delay=self.delay)
         else:
             conn_init = init_connectivity(genn_snippet, {
                 "pool_kh": pool_kh, "pool_kw": pool_kw,
@@ -187,16 +184,16 @@ class AvgPoolConv2D(Connectivity):
             
             if prefer_in_memory:
                 return Snippet(snippet=conn_init, 
-                               matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
-                               weight=scaled_weights, delay=self.delay)
+                               matrix_type="PROCEDURAL_KERNELG",
+                               weight=Value(scaled_weight), delay=self.delay)
                 
             else:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
-                weight = Value(KernelInit(scaled_weights) if self.weight.is_array
-                               else scaled_weights)
+                weight = Value(KernelInit(scaled_weight) if self.weight.is_array
+                               else scaled_weight)
                 delay = Value(KernelInit(self.delay.value) if self.delay.is_array
                               else self.delay)
                 return Snippet(snippet=conn_init, 
-                               matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                               matrix_type="SPARSE_INDIVIDUALG",
                                weight=weight, delay=delay)

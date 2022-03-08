@@ -1,8 +1,6 @@
 import numpy as np
 from math import ceil
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_DENSE_PROCEDURALG)
 from .connectivity import Connectivity, Snippet
 from .helper import PadMode
 from ..initializers import Wrapper
@@ -80,21 +78,21 @@ class AvgPoolDense2D(Connectivity):
     def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = connection.source.shape
+        pool_ih, pool_iw, pool_ic = connection.source().shape
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
-        conn = (SynapseMatrixType_DENSE_INDIVIDUALG if prefer_in_memory 
-                else SynapseMatrixType_DENSE_PROCEDURALG)
+        conn = ("DENSE_INDIVIDUALG" if prefer_in_memory 
+                else "DENSE_PROCEDURALG")
         
         wu_var_val = Wrapper(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,
             "pool_sh": pool_sh, "pool_sw": pool_sw,
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
-            "dense_units": np.prod(connection.target.shape)},
-            {"weights": self.weights.value.flatten() / (pool_kh * pool_kw)})
+            "dense_units": np.prod(connection.target().shape)},
+            {"weights": self.weight.value.flatten() / (pool_kh * pool_kw)})
 
         return Snippet(snippet=None, 
                        matrix_type=conn,
-                       weight=wu_var_val, delay=self.delay)
+                       weight=Value(wu_var_val), delay=self.delay)
 

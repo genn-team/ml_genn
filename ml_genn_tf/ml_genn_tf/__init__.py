@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from collections import namedtuple
-from ml_genn import Connection, Input, Model, Population
+from ml_genn import Connection, Model, Population
 from ml_genn.connectivity import (AvgPool2D, AvgPoolDense2D, AvgPoolConv2D, 
                                   Conv2D, Dense, OneToOne)
 from .converters import Simple
@@ -376,7 +376,7 @@ def convert(tf_model, converter=Simple()):
         for config in config_steps:
             if config.is_input:
                 # build layer
-                mlg_layer = Input(config.neurons, config.shape)
+                mlg_layer = Population(config.neurons, config.shape)
             else:
                 # build layer
                 mlg_layer = Population(config.neurons, config.shape)

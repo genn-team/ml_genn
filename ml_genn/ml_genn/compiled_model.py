@@ -3,8 +3,7 @@ class CompiledModel:
 
     def __init__(self, model, compiler, name):
         # Use the specified compiler to build model
-        (self.model, self.neuron_populations, 
-         self.input_populations, self.synapse_populations) =\
+        (self.model, self.neuron_populations, self.synapse_populations) =\
             compiler.compile(model, name)
         
     def step_time(self, iterations=1):

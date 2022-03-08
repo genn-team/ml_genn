@@ -1,15 +1,16 @@
-from .encoder import Encoder, Model
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from .neuron import Neuron, Model
 from ..utils import Value
 
-class Poisson(Encoder):
+class PoissonInput(Neuron):
     def __init__(self, signed_spikes=False):
-        super(Poisson, self).__init__()
+        super(PoissonInput, self).__init__()
 
         self.signed_spikes = signed_spikes
 
     def get_model(self, population, dt):
         genn_model = {
-            "var_name_types": [("Input", "scalar")],
+            "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE)],
             "sim_code": 
                 """
                 const bool spike = $(gennrand_uniform) >= exp(-fabs($(Input)) * DT);
