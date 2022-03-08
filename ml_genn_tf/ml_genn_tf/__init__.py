@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from ml_genn import Connection, Model, Population
+from ml_genn import Connection, Input, Model, Population
 from ml_genn.connectivity import Conv2D, Dense, OneToOne
 from .converters import Simple
 
@@ -368,7 +368,6 @@ def convert(tf_model, converter=Simple()):
 
     # execute model build process
     mlg_layer_lookup = {}
-    mlg_model_inputs = []
     mlg_model_outputs = []
 
     mlg_model = Model()
@@ -377,10 +376,7 @@ def convert(tf_model, converter=Simple()):
         for config in config_steps:
             if config.is_input:
                 # build layer
-                mlg_layer = Population(config.neurons, config.shape)
-
-                mlg_model_inputs.append(mlg_layer)
-
+                mlg_layer = Input(config.neurons, config.shape)
             else:
                 # build layer
                 mlg_layer = Population(config.neurons)
@@ -401,4 +397,4 @@ def convert(tf_model, converter=Simple()):
     # Perform any pre-compilation tasks
     converter.pre_compile(mlg_model)
     
-    return mlg_model
+    return mlg_model, mlg_model_outputs
