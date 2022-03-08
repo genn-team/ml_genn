@@ -2,7 +2,8 @@ import tensorflow as tf
 
 from collections import namedtuple
 from ml_genn import Connection, Input, Model, Population
-from ml_genn.connectivity import Conv2D, Dense, OneToOne
+from ml_genn.connectivity import (AvgPool2D, AvgPoolDense2D, AvgPoolConv2D, 
+                                  Conv2D, Dense, OneToOne)
 from .converters import Simple
 
 def convert(tf_model, converter=Simple()):
@@ -181,7 +182,7 @@ def convert(tf_model, converter=Simple()):
                                 # configure AvgPool2D -> Dense synapses
                                 config.synapses.append(
                                     InSynConfig(
-                                        type=AvePool2DDenseSynapses,
+                                        type=AvgPoolDense2D,
                                         params=in_config.synapses[i].params.copy(),
                                         source=in_config.synapses[i].source))
                                 config.synapses[-1].params.update({
@@ -237,7 +238,7 @@ def convert(tf_model, converter=Simple()):
                                 # configure AvgPool2D -> Conv2D synapses
                                 config.synapses.append(
                                     InSynConfig(
-                                        type=AvePool2DConv2DSynapses,
+                                        type=AvgPoolConv2D,
                                         params=in_config.synapses[i].params.copy(),
                                         source=in_config.synapses[i].source))
                                 config.synapses[-1].params.update({

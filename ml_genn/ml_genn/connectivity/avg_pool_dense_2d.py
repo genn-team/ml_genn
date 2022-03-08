@@ -57,7 +57,7 @@ genn_snippet = create_custom_init_var_snippet_class(
         """)
 
     
-class AvgPool2DDense(BaseSynapses):
+class AvgPoolDense2D(BaseSynapses):
     def __init__(self, weight:InitValue, pool_size, pool_strides=None, delay:InitValue=0):
         super(AvgPool2DDense, self).__init__(weight, delay)
         self.pool_size = _get_param_2d("pool_size", pool_size)
