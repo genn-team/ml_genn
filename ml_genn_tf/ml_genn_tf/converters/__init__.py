@@ -1,4 +1,4 @@
-#from ml_genn.converters.enum import ConverterType
+from .enum import ConverterType, InputType
 from .simple import Simple
 #from .few_spike import FewSpike
 from .data_norm import DataNorm

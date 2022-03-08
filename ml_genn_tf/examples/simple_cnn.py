@@ -1,9 +1,12 @@
 import tensorflow as tf
-from tensorflow.keras import models, layers, datasets
-from ml_genn import Model
-from ml_genn.utils import parse_arguments, raster_plot
 import numpy as np
-from six import iteritems
+
+from tensorflow.keras import models, layers, datasets
+from ml_genn import CompiledModel
+from ml_genn.compilers import Compiler
+from ml_genn_tf import convert
+
+from arguments import parse_arguments
 from time import perf_counter
 
 
@@ -70,17 +73,20 @@ if __name__ == '__main__':
     converter = args.build_converter(mlg_norm_ds, signed_input=False, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
-    mlg_model = Model.convert_tf_model(
-        tf_model, converter=converter, connectivity_type=args.connectivity_type,
-        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-        kernel_profiling=args.kernel_profiling)
-
-    # Evaluate ML GeNN model
-    time = K if args.converter == 'few-spike' else T
-    mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate_batched(
-        mlg_validate_ds, time, save_samples=args.save_samples)
-    print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
+    mlg_model = convert(tf_model, converter=converter)
+    
+    compiler = Compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
+                        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
+                        kernel_profiling=args.kernel_profiling)
+    
+    compiled_model = CompiledModel(mlg_model, compiler)
+    with compiled_model:
+        # Evaluate ML GeNN model
+        time = K if args.converter == 'few-spike' else T
+        mlg_eval_start_time = perf_counter()
+        acc, spk_i, spk_t = mlg_model.evaluate_batched(
+            mlg_validate_ds, time, save_samples=args.save_samples)
+        print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
 
     if len(args.save_samples) > 0:
         num_spikes = 0

@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+from collections import namedtuple
 from ml_genn import Connection, Input, Model, Population
 from ml_genn.connectivity import Conv2D, Dense, OneToOne
 from .converters import Simple
@@ -176,12 +177,13 @@ def convert(tf_model, converter=Simple()):
 
                     else:
                         for i in range(len(in_config.synapses)):
-                            if in_config.synapses[i].type is :
+                            if in_config.synapses[i].type is AvePool2DSynapses:
                                 # configure AvePool2D -> Dense synapses
-                                config.synapses.append(InSynConfig(
-                                    type=AvePool2DDenseSynapses,
-                                    params=in_config.synapses[i].params.copy(),
-                                    source=in_config.synapses[i].source))
+                                config.synapses.append(
+                                    InSynConfig(
+                                        type=AvePool2DDenseSynapses,
+                                        params=in_config.synapses[i].params.copy(),
+                                        source=in_config.synapses[i].source))
                                 config.synapses[-1].params.update({
                                     'weight': tf_layer.get_weights()[0]})
 
