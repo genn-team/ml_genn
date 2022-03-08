@@ -19,10 +19,14 @@ def _get_value(value):
             return _initializers[value]
         else:
             raise RuntimeError(f"Initializer '{value}' unknown")
-    elif isinstance(value, (Number, Initializer, Sequence, np.ndarray)):
+    elif isinstance(value, (Sequence, np.ndarray)):
+        return np.asarray(value)
+    elif isinstance(value, (Number, Initializer)):
         return value
     elif value is None:
         return None
+    elif isinstance(value, Value):
+        return value.value
     else:
         raise RuntimeError(f"Initializers should be specified either as a "
                             "string, a number, a sequence of numbers "

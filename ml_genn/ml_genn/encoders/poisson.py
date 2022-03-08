@@ -1,4 +1,5 @@
 from .encoder import Encoder, Model
+from ..utils import Value
 
 class Poisson(Encoder):
     def __init__(self, signed_spikes=False):
@@ -17,7 +18,7 @@ class Poisson(Encoder):
                 """
                 $(Input) > 0.0 && spike
                 """,
-            is_auto_refractory_required:False}
+            "is_auto_refractory_required":False}
         
         # If signed spikes are enabled, add negative threshold condition
         if self.signed_spikes:
@@ -26,4 +27,4 @@ class Poisson(Encoder):
                 $(Input_pre) < 0.0 && spike
                 """
         
-        return Model(genn_model, {}, {"Input": 0.0})
+        return Model(genn_model, {}, {"Input": Value(0.0)})

@@ -15,6 +15,6 @@ class OneToOne(SparseBase):
         elif output_shape != target.shape:
             raise RuntimeError("Target population shape mismatch")
 
-    def get_snippet(self, prefer_in_memory):
+    def get_snippet(self, connection, prefer_in_memory):
         return super(OneToOne, self)._get_snippet(prefer_in_memory, 
                                                   "OneToOne")

@@ -57,13 +57,14 @@ genn_snippet = create_custom_init_var_snippet_class(
         """)
 
     
-class AvgPoolDense2D(BaseSynapses):
+class AvgPoolDense2D(Connectivity):
     def __init__(self, weight:InitValue, pool_size, pool_strides=None, delay:InitValue=0):
-        super(AvgPool2DDense, self).__init__(weight, delay)
+        super(AvgPoolDense2D, self).__init__(weight, delay)
+
         self.pool_size = _get_param_2d("pool_size", pool_size)
         self.pool_strides = _get_param_2d("pool_strides", pool_strides, default=self.pool_size)
         self.pool_output_shape = None
-        self.connectivity_type = ConnectivityType(connectivity_type)
+
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
             raise NotImplementedError("pool stride < pool size is not supported")
 
@@ -76,10 +77,10 @@ class AvgPoolDense2D(BaseSynapses):
             ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
             pool_ic)
 
-    def get_snippet(self, prefer_in_memory):
+    def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source().shape
+        pool_ih, pool_iw, pool_ic = connection.source.shape
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
         conn = (SynapseMatrixType_DENSE_INDIVIDUALG if prefer_in_memory 
@@ -90,7 +91,7 @@ class AvgPoolDense2D(BaseSynapses):
             "pool_sh": pool_sh, "pool_sw": pool_sw,
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
-            "dense_units": self.units},
+            "dense_units": np.prod(connection.target.shape)},
             {"weights": self.weights.value.flatten() / (pool_kh * pool_kw)})
 
         return Snippet(snippet=None, 

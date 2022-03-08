@@ -139,18 +139,18 @@ class AvgPoolConv2D(Connectivity):
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
-        if self.weight.is_array and self.weights.shape != weight_shape:
+        if self.weight.is_array and self.weight.value.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of AvgPoolConv2D kernel")
 
-    def get_snippet(self, prefer_in_memory):
+    def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source().shape
+        pool_ih, pool_iw, pool_ic = connection.source.shape
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
-        conv_oh, conv_ow, conv_oc = self.target().shape
+        conv_oh, conv_ow, conv_oc = connection.target.shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0

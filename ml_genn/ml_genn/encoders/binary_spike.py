@@ -1,4 +1,5 @@
 from .encoder import Encoder, Model
+from ..utils import Value
 
 class BinarySpike(Encoder):
     def __init__(self, signed_spikes=False):
@@ -26,4 +27,4 @@ class BinarySpike(Encoder):
                 $(Input_pre) < 0.0 && spike
                 """
         
-        return Model(genn_model, {}, {"Input": 0.0})
+        return Model(genn_model, {}, {"Input": Value(0.0)})

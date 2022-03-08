@@ -73,13 +73,13 @@ if __name__ == '__main__':
     converter = args.build_converter(mlg_norm_ds, signed_input=False, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
-    mlg_model = convert(tf_model, converter=converter)
+    mlg_model, mlg_model_outputs = convert(tf_model, converter=converter)
     
     compiler = Compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                         dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                         kernel_profiling=args.kernel_profiling)
     
-    compiled_model = CompiledModel(mlg_model, compiler)
+    compiled_model = CompiledModel(mlg_model, compiler, "simple_cnn")
     with compiled_model:
         # Evaluate ML GeNN model
         time = K if args.converter == 'few-spike' else T

@@ -86,4 +86,5 @@ class FewSpike(Encoder):
             scale = self.alpha * pars[1] * 2**(-pars[0])
         
         return Model(genn_model_signed if self.signed_input else genn_model, 
-                     {"K": self.k, "Scale": scale}, {"Input": 0.0, "V": self.v})
+                     {"K": self.k, "Scale": scale}, 
+                     {"Input": Value(0.0), "V": self.v})

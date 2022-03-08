@@ -172,7 +172,7 @@ def convert(tf_model, converter=Simple()):
                         # configure Dense synapses
                         config.synapses.append(
                             InSynConfig(
-                                type=DenseSynapses,
+                                type=Dense,
                                 params={'weight': tf_layer.get_weights()[0]},
                                 source=in_config))
 
@@ -379,12 +379,12 @@ def convert(tf_model, converter=Simple()):
                 mlg_layer = Input(config.neurons, config.shape)
             else:
                 # build layer
-                mlg_layer = Population(config.neurons)
+                mlg_layer = Population(config.neurons, config.shape)
 
                 # build connections
                 for s in config.synapses:
                     source = mlg_layer_lookup[s.source]
-                    synapse = s.type(**s.params)
+                    connectivity = s.type(**s.params)
                     
                     Connection(source, mlg_layer, connectivity)
 

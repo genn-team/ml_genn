@@ -86,11 +86,11 @@ class AvgPool2D(Connectivity):
         elif output_shape != target.shape:
             raise RuntimeError("target layer shape mismatch")
 
-    def get_snippet(self, prefer_in_memory):
+    def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
-        pool_ih, pool_iw, pool_ic = self.source().shape
-        pool_oh, pool_ow, pool_oc = self.target().shape
+        pool_ih, pool_iw, pool_ic = connection.source.shape
+        pool_oh, pool_ow, pool_oc = connection.target.shape
 
         conn_init = init_connectivity(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,

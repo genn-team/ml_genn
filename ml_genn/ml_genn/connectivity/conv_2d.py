@@ -4,7 +4,7 @@ from math import ceil
 from pygenn.genn_wrapper import (SynapseMatrixType_PROCEDURAL_KERNELG,
                                  SynapseMatrixType_SPARSE_INDIVIDUALG,
                                  SynapseMatrixType_TOEPLITZ_KERNELG)
-from .connectivity import Connectivity, KernelInit
+from .connectivity import Connectivity, KernelInit, Snippet
 from .helper import PadMode
 from ..utils import InitValue, Value
 
@@ -44,15 +44,15 @@ class Conv2D(Connectivity):
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
-        if self.weight.is_array and self.weights.shape != weight_shape:
+        if self.weight.is_array and self.weight.value.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of Conv2D kernel")
     
-    def get_snippet(self, prefer_in_memory):
+    def get_snippet(self, connection, prefer_in_memory):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source().shape
-        conv_oh, conv_ow, conv_oc = self.target().shape
+        conv_ih, conv_iw, conv_ic = connection.source.shape
+        conv_oh, conv_ow, conv_oc = connection.target.shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
