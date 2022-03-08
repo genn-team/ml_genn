@@ -165,9 +165,28 @@ class Compiler:
             
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
+            
+        # Loop through inputs
+        input_populations = {}
+        for i, pop in enumerate(model.inputs):
+            # Build GeNN neuron model, parameters and values
+            encoder = pop.encoder
+            neuron_model, param_vals, var_vals, var_vals_egp =\
+                self.build_neuron_model(encoder.get_model(pop, self.dt))
+            
+            # Add neuron population
+            genn_pop = genn_model.add_neuron_population(
+                f"Input{i}", np.prod(pop.shape), 
+                neuron_model, param_vals, var_vals)
+            
+            # Configure EGPs
+            _set_egps(var_vals_egp, genn_pop.vars)
+            
+            # Add to neuron populations dictionary
+            neuron_populations[pop] = genn_pop
 
         # Loop through connections
-        synapse_populations = {}
+        connection_populations = {}
         for i, conn in enumerate(model.connections):
             # Build postsynaptic model
             syn = conn.synapse
@@ -199,6 +218,7 @@ class Compiler:
             _set_egps(psm_var_egp, genn_pop.psm_vars)
             
             # Add to synapse populations dictionary
-            synapse_populations[conn] = genn_pop
+            connection_populations[conn] = genn_pop
         
-        return genn_model, neuron_populations, synapse_populations
+        return (genn_model, neuron_populations, input_populations, 
+                connection_populations)

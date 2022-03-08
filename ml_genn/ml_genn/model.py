@@ -5,6 +5,7 @@ class Model:
 
     def __init__(self):
         self.populations = []
+        self.inputs = []
         self.connections = []
 
     @staticmethod
@@ -13,6 +14,13 @@ class Model:
             raise RuntimeError("Population must be created "
                                "inside a ``with model:`` block")
         Model._context.populations.append(pop)
+    
+    @staticmethod
+    def add_input(input):
+        if Model._context is None:
+            raise RuntimeError("Input must be created "
+                               "inside a ``with model:`` block")
+        Model._context.inputs.append(input)
 
     @staticmethod
     def add_connection(conn):

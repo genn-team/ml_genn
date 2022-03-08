@@ -1,8 +1,11 @@
 from . import synapses
 
+from typing import Sequence, Union
 from weakref import proxy
 from .connectivity import Connectivity
+from .encoders import Encoder
 from .model import Model
+from .population import Population
 from .synapses import Synapse
 
 from .utils.model import get_module_models, get_model
@@ -11,8 +14,8 @@ from .utils.model import get_module_models, get_model
 _synapse_models = get_module_models(synapses, Synapse)
 
 class Connection:
-    def __init__(self, source, target, connectivity: Connectivity, 
-                 synapse="delta", add_to_model=True):
+    def __init__(self, source: Union[Encoder, Population], target: Population,
+                 connectivity: Connectivity, synapse="delta", add_to_model=True):
         # Store weak references to source and target in class
         self.source = proxy(source)
         self.target = proxy(target)
