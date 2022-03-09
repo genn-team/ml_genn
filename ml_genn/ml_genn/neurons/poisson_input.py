@@ -1,8 +1,9 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from .input_base import InputBase
 from .neuron import Neuron, Model
 from ..utils import Value
 
-class PoissonInput(Neuron):
+class PoissonInput(Neuron, InputBase):
     def __init__(self, signed_spikes=False):
         super(PoissonInput, self).__init__()
 

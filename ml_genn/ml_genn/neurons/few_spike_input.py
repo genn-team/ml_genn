@@ -1,11 +1,11 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from .input_base import InputBase
 from .neuron import Neuron, Model
 from ..utils import InitValue, Value
 
 genn_model = {
-    "param_name_types": ["K", "Scale"],    
-    "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE), 
-                       ("V", "scalar")],
+    "param_name_types": ["K", "Scale"],
+    "var_name_types": [("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
@@ -14,11 +14,6 @@ genn_model = {
         // Get timestep within presentation
         const int pipeTimestep = (int)($(t) / DT);
 
-        // If this is the first timestep, apply input
-        if(pipeTimestep == 0) {
-            $(V) = $(Input);
-        }
-        
         const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
         """,
     "threshold_condition_code":
@@ -33,7 +28,7 @@ genn_model = {
 
 genn_model_signed = {
     "param_name_types": ["K", "Scale"],    
-    "var_name_types": [("Input", "scalar"), ("V", "scalar")],
+    "var_name_types": [("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
@@ -41,11 +36,6 @@ genn_model_signed = {
 
         // Get timestep within presentation
         const int pipeTimestep = (int)($(t) / DT);
-
-        // If this is the first timestep, apply input
-        if(pipeTimestep == 0) {
-            $(V) = $(Input);
-        }
 
         // Split timestep into interleaved positive and negative
         const int halfPipetimestep = pipeTimestep / 2;
@@ -68,9 +58,10 @@ genn_model_signed = {
     "is_auto_refractory_required": False}
     
 
-class FewSpikeInput(Neuron):
+class FewSpikeInput(Neuron, InputBase):
     def __init__(self, k=10, alpha=25, signed_input=False):
-        super(FewSpikeInput, self).__init__()
+        super(FewSpikeInput, self).__init__(var_name="V")
+
         self.k = Value(k)
         self.alpha = Value(alpha)
         self.signed_input = signed_input

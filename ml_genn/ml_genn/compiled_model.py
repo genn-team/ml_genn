@@ -5,23 +5,29 @@ class CompiledModel:
         # Use the specified compiler to build model
         (self.model, self.neuron_populations, self.synapse_populations) =\
             compiler.compile(model, name)
-        
+
+    def set_input(self, inputs: dict):
+        # Loop through inputs
+        for pop, input in inputs.items():
+            # Find corresponding GeNN population
+            genn_pop = self.neuron_populations[pop]
+            
+            # Set input
+            pop.neuron.set_input(genn_pop, pop.shape, input)
+
     def step_time(self, iterations=1):
         """Iterate the GeNN model a given number of steps
 
         Keyword args:
         iterations  --  number of iterations (default: 1)
         """
-
         for i in range(iterations):
             self.model.step_time()
-            
+
     def reset_time(self):
         """Reset the GeNN model"""
-
         self.model.timestep = 0
         self.model.t = 0.0
-
 
     def __enter__(self):
         if CompiledModel._context is not None:
