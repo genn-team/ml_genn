@@ -43,7 +43,7 @@ class Value:
     @property
     def is_array(self):
         return isinstance(self.value, (Sequence, np.ndarray))
-    
+
     @property
     def is_initializer(self):
         return isinstance(self.value, Initializer)

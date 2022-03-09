@@ -25,7 +25,10 @@ WeightUpdateModel = namedtuple("WeightUpdateModel", ["model", "param_vals", "var
 def set_egps(var_egps, var_dict):
     for var, var_egp in var_egps.items():
         for p, value in var_egp.items():
-            var_dict[var].set_extra_global_init_param(p, value)
+            if isinstance(value, np.ndarray):
+                var_dict[var].set_extra_global_init_param(p, value.flatten())
+            else:
+                var_dict[var].set_extra_global_init_param(p, value)
 
 def build_model(model):
     # Make copy of model
@@ -47,11 +50,13 @@ def build_model(model):
     var_vals_copy = {}
     var_egp = {}
     for name, val in model.var_vals.items():
-        if isinstance(val.value, Initializer):
+        if val.is_initializer:
             snippet = val.value.get_snippet()
             var_vals_copy[name] = init_var(snippet.snippet, 
                                            snippet.param_vals)
             var_egp[name] = snippet.egp_vals
+        elif val.is_array:
+            var_vals_copy[name] = val.value.flatten()
         else:
             var_vals_copy[name] = val.value
     
@@ -60,25 +65,26 @@ def build_model(model):
     constant_param_vals = {}
     for name, ptype in param_name_types:
         # Get value
-        val = model.param_vals[name].value
+        val = model.param_vals[name]
         
-        # If value isn't a plain number so can't be expressed 
-        # as a GeNN parameter, turn it into a (read-only) variable
-        if not isinstance(val, Number):
+        # If value is a plain number, add it's name to parameter names
+        if val.is_constant:
+            model_copy["param_names"].append(name)
+            constant_param_vals[name] = val.value
+        # Otherwise, turn it into a (read-only) variable
+        else:
             model_copy["var_name_types"].append((name, ptype, 
                                                  VarAccess_READ_ONLY))
-            if isinstance(val, Initializer):
-                snippet = val.get_snippet()
+            if val.is_initializer:
+                snippet = val.value.get_snippet()
                 var_vals_copy[name] = init_var(snippet.snippet,
                                                snippet.param_vals)
                 var_egp[name] = snippet.egp_vals
+            elif val.is_array:
+                var_vals_copy[name] = val.value.flatten()
             else:
                 var_vals_copy[name] = val
-        # Otherwise, add it's name to parameter names
-        else:
-            model_copy["param_names"].append(name)
-            constant_param_vals[name] = val
-    
+
     # Return modified model and; params and var values
     return model_copy, constant_param_vals, var_vals_copy, var_egp
     
