@@ -133,34 +133,37 @@ class FewSpike(object):
         
         # Loop through layers
         for l in mlg_model.layers:
+
             # If layer has upstream synaptic connections
             if len(l.upstream_synapses) > 0:
+
                 # Calculate max delay from upstream synapses
-                max_delay = max(delay_to_layers[s.source()]
-                                for s in l.upstream_synapses)
-                
-                # Delay to this layer is one more than this
-                delay_to_layers[l] = 1 + max_delay
-                
+                max_presyn_delay = max(delay_to_layers[s.source()]
+                                       for s in l.upstream_synapses)
+
                 # Determine the maximum alpha value upstream layers
-                max_alpha = max(s.source().neurons.alpha
-                                for s in l.upstream_synapses)
+                max_presyn_alpha = max(s.source().neurons.alpha
+                                       for s in l.upstream_synapses)
+
+                # Delay to this layer is one more than this
+                delay_to_layers[l] = 1 + max_presyn_delay
+                l.pipeline_depth = max_presyn_delay
 
                 # Loop through upstream synapses
                 for s in l.upstream_synapses:
                     # Set delay to balance
-                    s.delay = (max_delay - delay_to_layers[s.source()]) * self.K
+                    s.delay = (max_presyn_delay - delay_to_layers[s.source()]) * self.K
 
                     # Set alpha to maximum
-                    s.source().neurons.alpha = max_alpha
+                    s.source().neurons.alpha = max_presyn_alpha
 
             # Otherwise (layer is an input layer), set this layer's delay as zero
             else:
                 delay_to_layers[l] = 0
-    
+                l.pipeline_depth = 0
 
     def post_compile(self, mlg_model):
-        # do not allow multiple input or output layers
-        if len(mlg_model.inputs) > 1 or len(mlg_model.outputs) > 1:
+        # do not allow multiple input layers
+        if len(mlg_model.inputs) > 1:
             raise NotImplementedError(
-                'multiple input or output layers not supported for Few Spike conversion')
+                'multiple input layers not supported for Few Spike conversion')
