@@ -6,27 +6,30 @@ from ..utils import InitValue, Value
 genn_model = {
     "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE), 
                        ("V", "scalar")],
-    "param_name_types": [("Vthr", "scalar")],
+    "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar")],
     "sim_code":
         """
-        $(V) += $(Input) * DT;
+        $(V) += $(Input);
         """,
     "threshold_condition_code":
         """
-        $(V) >= 1.0
+        $(V) >= $(Vthresh)
         """,
     "reset_code":
         """
-        $(V) = 0.0;
+        $(V) = $(Vreset);
         """,
     "is_auto_refractory_required": False}
 
 class IntegrateFireInput(Neuron, InputBase):
-    def __init__(self, threshold=1.0, v=0.0):
+    def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0):
         super(IntegrateFireInput, self).__init__()
         
-        self.threshold = Value(threshold)
+        self.v_thresh = Value(v_thresh)
+        self.v_reset = Value(v_reset)
         self.v = Value(v)
 
     def get_model(self, population, dt):
-        return Model(genn_model, {"Vthr": self.threshold}, {"V": self.v})
+        return Model(genn_model, 
+                     {"Vthresh": self.v_thresh, "Vreset": self.v_reset}, 
+                     {"V": self.v})

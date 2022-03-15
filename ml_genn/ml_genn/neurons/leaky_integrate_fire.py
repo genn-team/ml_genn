@@ -2,11 +2,12 @@ from .neuron import Model, Neuron
 from ..utils import InitValue, Value
 
 class LeakyIntegrateFire(Neuron):
-    def __init__(self, threshold=1.0, v=0.0, tau_mem=20.0, tau_refrac=None, 
+    def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0, tau_mem=20.0, tau_refrac=None, 
                  relative_reset=True, integrate_during_refrac=True):
         super(LeakyIntegrateFire, self).__init__()
         
-        self.threshold = Value(threshold)
+        self.v_thresh = Value(v_thresh)
+        self.v_reset = Value(v_reset)
         self.v = Value(v)
         self.tau_mem = Value(tau_mem)
         self.tau_refrac = Value(tau_refrac)
@@ -22,10 +23,12 @@ class LeakyIntegrateFire(Neuron):
         # Build basic model    
         genn_model = {
             "var_name_types": [("V", "scalar")],
-            "param_name_types": [("Vthr", "scalar"), ("Alpha", "scalar")],
-            "threshold_condition_code": "$(V) >= $(Vthr)",
+            "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar"),
+                                 ("Alpha", "scalar")],
+            "threshold_condition_code": "$(V) >= $(Vthresh)",
             "is_auto_refractory_required": False}
-        param_vals = {"Vthr": self.threshold, "Alpha": Value(np.exp(-dt / self.tau_mem.value))}
+        param_vals = {"Vthresh": self.v_thresh, "Vreset": self.v_reset, 
+                      "Alpha": Value(np.exp(-dt / self.tau_mem.value))}
         var_vals = {"V": self.v}
         
         # Build reset code depending on whether 
@@ -38,7 +41,7 @@ class LeakyIntegrateFire(Neuron):
         else:
             genn_model["reset_code"] =\
                 """
-                $(V) = 0.0;
+                $(V) = $(Vreset);
                 """
 
         # If neuron has refractory period
