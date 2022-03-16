@@ -6,24 +6,17 @@ from ml_genn.compilers import Compiler
 from ml_genn.neurons import IntegrateFire, IntegrateFireInput
 from ml_genn.connectivity import Dense
 
-# Load weights
-weights = []
-while True:
-    filename = "weights_%u_%u.npy" % (len(weights), len(weights) + 1)
-    if path.exists(filename):
-        weights.append(np.load(filename))
-    else:
-        break
-
 # Create sequential model
 model = SequentialModel()
 with model:
     input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784)
-    for w in weights:
-        Layer(Dense(weight=w), IntegrateFire(v_thresh=5.0))
+    Layer(Dense(weight=np.load("weights_0_1.npy")), 
+          IntegrateFire(v_thresh=5.0))
+    Layer(Dense(weight=np.load("weights_1_2.npy")), 
+          IntegrateFire(v_thresh=5.0, output="spike_count"))
 
-compiler = Compiler(dt=0.1, prefer_in_memory_connect=True)
-compiled_model = compiler.compile(model, "brunel")
+compiler = Compiler(dt=1.0)
+compiled_model = compiler.compile(model, "simple_mnist")
 
 # Load testing data
 testing_images = np.load("testing_images.npy")
@@ -33,7 +26,10 @@ with compiled_model:
     # Loop through testing images
     for i in range(testing_images.shape[0]):
         # **TODO** handle weak ref
-        compiled_model.set_input({input.population(): testing_images[i] * 0.01})
+        #compiled_model.reset_trial()
+        compiled_model.set_input({input: testing_images[i] * 0.01})
         
         for t in range(100):
             compiled_model.step_time()
+        
+        #output = compiled_model.get_output(model.layers[-1])

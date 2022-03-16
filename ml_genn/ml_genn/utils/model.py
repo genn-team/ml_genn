@@ -19,8 +19,8 @@ def get_module_models(module, base_class):
             # Inspect class constructor to get parameters
             ctr_params = signature(cls.__init__).parameters
   
-            # If all of the parameters (aside from self) have 
-            # a default value or are variable args, class is default constructable
+            # If all of the parameters (aside from self) have a default
+            # value or are variable args, class is default constructable
             default_constructable = all((p.kind == Parameter.VAR_POSITIONAL
                                          or p.kind == Parameter.VAR_KEYWORD
                                          or p.default is not Parameter.empty)

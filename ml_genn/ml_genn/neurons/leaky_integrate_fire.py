@@ -5,7 +5,7 @@ from ..utils import InitValue, Value
 
 class LeakyIntegrateFire(Neuron):
     def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0, tau_mem=20.0, tau_refrac=None, 
-                 relative_reset=True, integrate_during_refrac=True):
+                 relative_reset=True, integrate_during_refrac=True, output=None):
         super(LeakyIntegrateFire, self).__init__()
         
         self.v_thresh = Value(v_thresh)
@@ -93,4 +93,5 @@ class LeakyIntegrateFire(Neuron):
                 """
             
         # Return model
-        return Model(genn_model, param_vals, var_vals)
+        return self.add_output_logic(Model(genn_model, param_vals, var_vals),
+                                     "V")

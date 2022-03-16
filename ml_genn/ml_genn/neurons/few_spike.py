@@ -81,8 +81,8 @@ fs_relu_upstream_signed_input_model = create_custom_neuron_class(
 class FSReluNeurons(Neurons):
     pipelined = True
 
-    def __init__(self, K=10, alpha=25):
-        super(FSReluNeurons, self).__init__()
+    def __init__(self, K=10, alpha=25, output=None):
+        super(FSReluNeurons, self).__init__(output)
         self.K = K
         self.alpha = alpha
 

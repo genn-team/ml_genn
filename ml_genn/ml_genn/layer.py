@@ -13,7 +13,7 @@ class InputLayer:
         self.population = ref(population)
         
         SequentialModel.add_input_layer(self, population)
-        
+
 class Layer:
     def __init__(self, connectivity: Connectivity, neuron: Neuron, shape=None, synapse="delta"):
         # Create population and store weak reference in class

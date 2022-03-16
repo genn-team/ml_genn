@@ -19,14 +19,15 @@ genn_model = {
     "is_auto_refractory_required": False}
 
 class IntegrateFire(Neuron):
-    def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0):
-        super(IntegrateFire, self).__init__()
+    def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0, output=None):
+        super(IntegrateFire, self).__init__(output)
 
         self.v_thresh = Value(v_thresh)
         self.v_reset = Value(v_reset)
         self.v = Value(v)
 
     def get_model(self, population, dt):
-        return Model(genn_model, 
-                     {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
-                     {"V": self.v})
+        return self.add_output_logic(
+            Model(genn_model, 
+                  {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
+                  {"V": self.v}), "V")
