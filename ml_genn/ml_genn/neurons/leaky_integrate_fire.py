@@ -1,3 +1,5 @@
+import numpy as np
+
 from .neuron import Model, Neuron
 from ..utils import InitValue, Value
 
@@ -33,10 +35,10 @@ class LeakyIntegrateFire(Neuron):
         
         # Build reset code depending on whether 
         # reset should be relative or not
-        if self.relative_refrac:
+        if self.relative_reset:
             genn_model["reset_code"] =\
                 """
-                $(V) -= $(Vthresh);
+                $(V) -= $(Vreset);
                 """
         else:
             genn_model["reset_code"] =\

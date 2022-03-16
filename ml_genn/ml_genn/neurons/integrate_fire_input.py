@@ -32,4 +32,4 @@ class IntegrateFireInput(Neuron, InputBase):
     def get_model(self, population, dt):
         return Model(genn_model, 
                      {"Vthresh": self.v_thresh, "Vreset": self.v_reset}, 
-                     {"V": self.v})
+                     {"V": self.v, "Input": Value(0.0)})

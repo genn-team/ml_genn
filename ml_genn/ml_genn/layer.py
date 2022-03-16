@@ -6,6 +6,14 @@ from .connectivity import Connectivity
 from .neurons import Neuron
 from .synapses import Synapse
 
+class InputLayer:
+    def __init__(self, neuron: Neuron, shape=None):
+        # Create population and store weak reference in class
+        population = Population(neuron, shape=shape, add_to_model=False)
+        self.population = ref(population)
+        
+        SequentialModel.add_input_layer(self, population)
+        
 class Layer:
     def __init__(self, connectivity: Connectivity, neuron: Neuron, shape=None, synapse="delta"):
         # Create population and store weak reference in class

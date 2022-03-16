@@ -9,14 +9,21 @@ class SequentialModel(Model):
         self.layers = []
 
     @staticmethod
+    def add_input_layer(layer, population):
+        if SequentialModel._context is None:
+            raise RuntimeError("InputLayer must be created "
+                               "inside a ``with sequential_model:`` block")
+        SequentialModel._context.layers.append(layer)
+        SequentialModel._context.populations.append(population)
+
+    @staticmethod
     def add_layer(layer, population, connection):
         if SequentialModel._context is None:
             raise RuntimeError("Layer must be created "
                                "inside a ``with sequential_model:`` block")
         SequentialModel._context.layers.append(layer)
         SequentialModel._context.populations.append(population)
-        if connection is not None:
-            SequentialModel._context.connections.append(connection)
+        SequentialModel._context.connections.append(connection)
     
     @staticmethod
     def get_prev_layer():

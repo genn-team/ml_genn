@@ -1,6 +1,8 @@
 from .sparse_base import SparseBase
 from ..utils import InitValue
 
+from pygenn.genn_model import init_connectivity
+
 class FixedProbability(SparseBase):
     def __init__(self, p: float, weight:InitValue, allow_self_connections=False, delay:InitValue=0):
         super(FixedProbability, self).__init__(weight, delay)
@@ -14,7 +16,7 @@ class FixedProbability(SparseBase):
     def get_snippet(self, connection, prefer_in_memory):
         # No autapse model should be used if self-connections are disallowed
         # and we're connecting the same population to itself
-        no_autapse = (not allow_self_connections 
+        no_autapse = (not self.allow_self_connections 
                       and connection.source() == connection.target())
         snippet = ("FixedProbabilityNoAutapse" if no_autapse 
                    else "FixedProbability")

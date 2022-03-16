@@ -8,14 +8,24 @@ class Dense(Connectivity):
         super(Dense, self).__init__(weight, delay)
 
     def connect(self, source, target):
-        """
-        output_shape = (self.units, )
+        # If weights are specified as 2D array
+        if self.weight.is_array and self.weight.value.ndim == 2:
+            source_size, target_size = self.weight.value.shape
+            
+            # Set/check target shape
+            if target.shape is None:
+                target.shape = (target_size,)
+            elif target.shape != (target_size,):
+                raise RuntimeError("target population shape "
+                                   "doesn't match weights")
 
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError('target layer shape mismatch')
-        """
+            # Set/check source shape
+            if source.shape is None:
+                source.shape = (source_size,)
+            elif source.shape != (source_size,):
+                raise RuntimeError("source population shape "
+                                   "doesn't match weights")
+        # **TODO** should we do something sensible with 1D arrays too
     
     def get_snippet(self, connection, prefer_in_memory):
         return Snippet(snippet=None, 

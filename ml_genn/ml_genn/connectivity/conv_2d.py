@@ -37,7 +37,7 @@ class Conv2D(Connectivity):
         if target.shape is None:
             target.shape = output_shape
         elif output_shape != target.shape:
-            raise RuntimeError("target layer shape mismatch")
+            raise RuntimeError("target population shape mismatch")
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
