@@ -1,4 +1,5 @@
 from ml_genn import Connection, Model, Population
+from ml_genn.compilers import Compiler
 from ml_genn.neurons import LeakyIntegrateFire
 from ml_genn.connectivity import FixedProbability
 
@@ -15,3 +16,6 @@ with model:
     ei = Connection(e, i, e_conn)
     ii = Connection(i, i, i_conn)
     ie = Connection(i, e, i_conn)
+
+compiler = Compiler(dt=0.1, prefer_in_memory_connect=True)
+compiled_model = compiler.compile(model, "brunel")
