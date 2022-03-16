@@ -15,12 +15,15 @@ def get_module_models(module, base_class):
         cls = getattr(module, name)
         if (isclass(cls) and issubclass(cls, base_class) 
                 and cls != base_class):
+            
             # Inspect class constructor to get parameters
             ctr_params = signature(cls.__init__).parameters
-            
+  
             # If all of the parameters (aside from self) have 
-            # a default value,class is default constructable
-            default_constructable = all(p.default is not Parameter.empty 
+            # a default value or are variable args, class is default constructable
+            default_constructable = all((p.kind == Parameter.VAR_POSITIONAL
+                                         or p.kind == Parameter.VAR_KEYWORD
+                                         or p.default is not Parameter.empty)
                                         for n, p in ctr_params.items() 
                                         if n != "self")
             # If this is true, convert class's name 
@@ -31,13 +34,15 @@ def get_module_models(module, base_class):
     return target_dict
 
 def get_model(model, base_class, description, dictionary):
-    if isinstance(model, base_class):
+    if model is None:
+        return model
+    elif isinstance(model, base_class):
         return model
     elif isinstance(model, str):
         if model in dictionary:
             return dictionary[model]
         else:
-            raise RuntimeError(f"{description} model '{neuron}' unknown")
+            raise RuntimeError(f"{description} model '{model}' unknown")
     else:
         raise RuntimeError(f"{description} models should be specified "
                             "either as a string or a {description} object")
