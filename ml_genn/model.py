@@ -167,7 +167,7 @@ class Model(object):
         """Evaluate the accuracy of a GeNN model
 
         Args:
-        data          --  an [[in_1, ..., in_n], [out_1, ..., out_n]] batch dataset
+        data          --  an [[x_1, ..., x_m], [y_1, ..., y_n]] batch dataset
         time          --  sample presentation time (msec)
 
         Keyword args:
@@ -182,35 +182,48 @@ class Model(object):
         n_complete = [0] * len(self.outputs)
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
+
+        save_samples = list(set(save_samples))
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
 
+        # Pipeline queues (for each output layer)
+        pipeline_depth = [l.pipeline_depth if hasattr(l, 'pipeline_depth') else 0 for l in self.outputs]
+        pipeline_y_queue = [deque(maxlen=depth + 1) for depth in pipeline_depth]
+
+        # Get batch iterator
         data_remaining = True
         data_iter = iter(data)
-        batch_data, batch_labels = next(data_iter)
+        batch_x, batch_y = next(data_iter)
+        if not isinstance(batch_x, tuple):
+            batch_x = (batch_x, )
+        if not isinstance(batch_y, tuple):
+            batch_y = (batch_y, )
         batch_i = 0
 
-        # Pipeline queues
-        pipeline_depth = [l.pipeline_depth if hasattr(l, 'pipeline_depth') else 0 for l in self.outputs]
-        pipeline_labels_queue = [deque(maxlen=depth + 1) for depth in pipeline_depth]
+        # Check number of x and y elements match number of inputs and outputs
+        if len(batch_x) != len(self.inputs):
+            raise ValueError('input layer and x count mismatch')
+        if len(batch_y) != len(self.outputs):
+            raise ValueError('output layer and y count mismatch')
 
         # Process batches
         progress = tqdm()
-        while data_remaining or any(len(q) > 0 for q in pipeline_labels_queue):
+        while data_remaining or any(len(q) > 0 for q in pipeline_y_queue):
 
             if data_remaining:
-                batch_data = [np.array(d) for d in batch_data]
-                batch_data_size = batch_data[0].shape[0]
-                batch_start = batch_i * self.g_model.batch_size
-                batch_end = batch_start + batch_data_size
-                save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
+                batch_x = [np.asarray(d) for d in batch_x]
+                batch_x_size = batch_x[0].shape[0]
+                batch_x_start = batch_i * self.g_model.batch_size
+                batch_x_end = batch_x_start + batch_x_size
+                save_samples_in_batch = [i for i in save_samples if batch_x_start <= i < batch_x_end]
 
                 # Queue labels for pipelining
-                batch_labels = [np.array(l) for l in batch_labels]
+                batch_y = [np.asarray(l) for l in batch_y]
                 for output_i in range(len(self.outputs)):
-                    pipeline_labels_queue[output_i].append(batch_labels[output_i])
+                    pipeline_y_queue[output_i].append(batch_y[output_i])
 
                 # Set new input
-                self.set_input_batch(batch_data)
+                self.set_input_batch(batch_x)
 
             # Reset timesteps etc
             self.reset()
@@ -224,7 +237,7 @@ class Model(object):
                 # Save spikes
                 for i in save_samples_in_batch:
                     k = save_samples.index(i)
-                    batch_i = i - batch_start
+                    batch_i = i - batch_x_start
                     for l, layer in enumerate(self.layers):
                         nrn = layer.neurons.nrn
                         nrn.pull_current_spikes_from_device()
@@ -234,35 +247,40 @@ class Model(object):
 
             for output_i in range(len(self.outputs)):
                 # If input has passed through pipeline to this output
-                if batch_i >= pipeline_depth[output_i] and len(pipeline_labels_queue[output_i]) > 0:
+                if batch_i >= pipeline_depth[output_i] and len(pipeline_y_queue[output_i]) > 0:
                     pipe_batch_i = batch_i - pipeline_depth[output_i]
-                    pipe_batch_labels = pipeline_labels_queue[output_i].popleft()
-                    pipe_batch_labels_size = pipe_batch_labels.shape[0]
-                    pipe_batch_start = pipe_batch_i * self.g_model.batch_size
-                    pipe_batch_end = pipe_batch_start + pipe_batch_labels_size
+                    pipe_batch_y = pipeline_y_queue[output_i].popleft()
+                    pipe_batch_y_size = pipe_batch_y.shape[0]
+                    pipe_batch_y_start = pipe_batch_i * self.g_model.batch_size
+                    pipe_batch_y_end = pipe_batch_y_start + pipe_batch_y_size
 
                     # Compute accuracy
-                    predictions = self.outputs[output_i].neurons.get_predictions(pipe_batch_labels_size)
-                    if pipe_batch_labels.shape != predictions.shape:
-                        pipe_batch_labels = [np.argmax(i) for i in pipe_batch_labels]
+                    predictions = self.outputs[output_i].neurons.get_predictions(pipe_batch_y_size)
+                    if pipe_batch_y.shape != predictions.shape:
+                        pipe_batch_y = [np.argmax(i) for i in pipe_batch_y]
 
-                    n_complete[output_i] += pipe_batch_labels_size
-                    n_correct[output_i] += np.sum(predictions == pipe_batch_labels)
-                    accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
+                    n_complete[output_i] += pipe_batch_y_size
+                    n_correct[output_i] += np.sum(predictions == pipe_batch_y)
+                    accuracy[output_i] = (n_correct[output_i] / pipe_batch_y_end) * 100
 
             if pipeline_depth[output_i] == max(pipeline_depth):
                 progress.set_postfix_str('accuracy: {:2.2f}'.format(np.mean(accuracy)))
                 progress.update(min(n_complete))
 
             try:
-                batch_data, batch_labels = next(data_iter)
+                batch_x, batch_y = next(data_iter)
+                batch_x, batch_y = next(data_iter)
+                if not isinstance(batch_x, tuple):
+                    batch_x = (batch_x, )
+                if not isinstance(batch_y, tuple):
+                    batch_y = (batch_y, )
             except StopIteration:
                 data_remaining = False
 
             batch_i += 1
 
         progress.close()
-        assert all(len(q) == 0 for q in pipeline_labels_queue)
+        assert all(len(q) == 0 for q in pipeline_y_queue)
 
         # Create spike index and time lists
         spike_i = [[None for i,_ in enumerate(self.layers)] for s in save_samples]
@@ -276,12 +294,12 @@ class Model(object):
         return accuracy, spike_i, spike_t
 
 
-    def evaluate(self, data, labels, time, save_samples=[]):
+    def evaluate(self, x, y, time, save_samples=[]):
         """Evaluate the accuracy of a GeNN model
 
         Args:
-        data          --  list of data for each input layer
-        labels        --  list of labels for each output layer
+        x             --  tuple of data for each input layer
+        y             --  tuple of labels for each output layer
         time          --  sample presentation time (msec)
 
         Keyword args:
@@ -293,22 +311,31 @@ class Model(object):
         spike_t       --  list of spike times for each sample index in save_samples
         """
 
-        # Input sanity check
-        n_samples = data[0].shape[0]
-        save_samples = list(set(save_samples))
-        if len(data) != len(self.inputs):
-            raise ValueError('data list length and input layer list length mismatch')
-        if len(labels) != len(self.outputs):
-            raise ValueError('label list length and output layer list length mismatch')
-        if not all(x.shape[0] == n_samples for x in data + labels):
-            raise ValueError('sample count mismatch in data and labels arrays')
-        if any(i < 0 or i >= n_samples for i in save_samples):
-            raise ValueError('one or more invalid save_samples value')
-
+        n_samples = x[0].shape[0]
         n_complete = [0] * len(self.outputs)
         n_correct = [0] * len(self.outputs)
         accuracy = [0] * len(self.outputs)
+
+        save_samples = list(set(save_samples))
         all_spikes = [[[] for i,_ in enumerate(self.layers)] for s in save_samples]
+
+        # Wrap single input/output data and labels in 1-tuples
+        if not isinstance(x, tuple):
+            x = (x, )
+        if not isinstance(y, tuple):
+            y = (y, )
+
+        # Check number of x and y elements match number of inputs and outputs
+        if len(x) != len(self.inputs):
+            raise ValueError('input layer and x count mismatch')
+        if len(y) != len(self.outputs):
+            raise ValueError('output layer and y count mismatch')
+
+        # Input sanity check
+        if not all(data.shape[0] == n_samples for data in x + y):
+            raise ValueError('length mismatch in one or more of x and y')
+        if any(i < 0 or i >= n_samples for i in save_samples):
+            raise ValueError('one or more invalid save_samples value')
 
         # Pad number of samples so pipeline can be flushed
         pipeline_depth = [l.pipeline_depth if hasattr(l, 'pipeline_depth') else 0 for l in self.outputs]
@@ -321,11 +348,11 @@ class Model(object):
             # If any elements of this batch have data (rather than being entirely pipeline padding)
             if batch_start < n_samples:
                 batch_end = min(batch_start + self.g_model.batch_size, n_samples)
-                batch_data = [x[batch_start:batch_end] for x in data]
+                batch_x = [xx[batch_start:batch_end] for xx in x]
                 save_samples_in_batch = [i for i in save_samples if batch_start <= i < batch_end]
 
                 # Set new input
-                self.set_input_batch(batch_data)
+                self.set_input_batch(batch_x)
 
             # Reset timesteps etc
             self.reset()
@@ -353,15 +380,15 @@ class Model(object):
                     batch_start < padded_n_samples[output_i]):
                     pipe_batch_start = batch_start - (pipeline_depth[output_i] * self.g_model.batch_size)
                     pipe_batch_end = min(pipe_batch_start + self.g_model.batch_size, n_samples)
-                    batch_labels = labels[output_i][pipe_batch_start:pipe_batch_end]
+                    batch_y = y[output_i][pipe_batch_start:pipe_batch_end]
 
                     # Compute accuracy
                     predictions = self.outputs[output_i].neurons.get_predictions(pipe_batch_end - pipe_batch_start)
-                    if batch_labels.shape != predictions.shape:
-                        batch_labels = [np.argmax(i) for i in batch_labels]
+                    if batch_y.shape != predictions.shape:
+                        batch_y = [np.argmax(i) for i in batch_y]
 
                     n_complete[output_i] += pipe_batch_end - pipe_batch_start
-                    n_correct[output_i] += np.sum(predictions == batch_labels)
+                    n_correct[output_i] += np.sum(predictions == batch_y)
                     accuracy[output_i] = (n_correct[output_i] / pipe_batch_end) * 100
 
             if pipeline_depth[output_i] == max(pipeline_depth):

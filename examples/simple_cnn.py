@@ -30,7 +30,7 @@ if __name__ == '__main__':
     # ML GeNN validation dataset
     if args.n_test_samples is None:
         args.n_test_samples = 10000
-    mlg_validate_ds = tf.data.Dataset.from_tensor_slices(((validate_x,), (validate_y,)))
+    mlg_validate_ds = tf.data.Dataset.from_tensor_slices((validate_x, validate_y))
     mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
     mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
     mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)

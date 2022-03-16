@@ -88,7 +88,7 @@ if __name__ == '__main__':
     if args.n_test_samples is None:
         args.n_test_samples = 10000
     mlg_validate_ds = validate_ds.take(args.n_test_samples)
-    mlg_validate_ds = mlg_validate_ds.map(lambda x, y: ((x,), (y[0],)), num_parallel_calls=tf.data.AUTOTUNE)
+    mlg_validate_ds = mlg_validate_ds.map(lambda x, y: (x, y[0]), num_parallel_calls=tf.data.AUTOTUNE)
     mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
     mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
 
