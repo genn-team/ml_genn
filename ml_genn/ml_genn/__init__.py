@@ -1,4 +1,3 @@
-from .compiled_model import CompiledModel
 from .connection import Connection
 from .layer import Layer
 from .model import Model

@@ -1,10 +1,10 @@
 class CompiledModel:
     _context = None
 
-    def __init__(self, model, compiler, name):
-        # Use the specified compiler to build model
-        (self.model, self.neuron_populations, self.synapse_populations) =\
-            compiler.compile(model, name)
+    def __init__(self, genn_model, neuron_populations, connection_populations):
+        self.genn_model = genn_model
+        self.neuron_populations = neuron_populations
+        self.connection_populations = connection_populations
 
     def set_input(self, inputs: dict):
         # Loop through inputs
@@ -15,19 +15,15 @@ class CompiledModel:
             # Set input
             pop.neuron.set_input(genn_pop, pop.shape, input)
 
-    def step_time(self, iterations=1):
-        """Iterate the GeNN model a given number of steps
-
-        Keyword args:
-        iterations  --  number of iterations (default: 1)
+    def step_time(self):
+        """Step the GeNN model
         """
-        for i in range(iterations):
-            self.model.step_time()
+        self.genn_model.step_time()
 
     def reset_time(self):
         """Reset the GeNN model"""
-        self.model.timestep = 0
-        self.model.t = 0.0
+        self.genn_model.timestep = 0
+        self.genn_model.t = 0.0
 
     def __enter__(self):
         if CompiledModel._context is not None:
@@ -35,8 +31,8 @@ class CompiledModel:
                                "not currently supported")
 
         CompiledModel._context = self
-        self.model.build()
-        self.model.load()
+        self.genn_model.build()
+        self.genn_model.load()
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
         assert CompiledModel._context is not None

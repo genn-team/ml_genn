@@ -8,6 +8,7 @@ from pygenn.genn_wrapper import (SynapseMatrixConnectivity_PROCEDURAL,
                                  SynapseMatrixConnectivity_SPARSE,
                                  SynapseMatrixConnectivity_TOEPLITZ)
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
+from .compiled_model import CompiledModel
 from ..initializers import Initializer
 from ..model import Model
 
@@ -234,4 +235,5 @@ class Compiler:
             # Add to synapse populations dictionary
             connection_populations[conn] = genn_pop
         
-        return (genn_model, neuron_populations, connection_populations)
+        return CompiledModel(genn_model, neuron_populations, 
+                             connection_populations)
