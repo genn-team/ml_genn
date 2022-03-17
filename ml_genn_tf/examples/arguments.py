@@ -17,7 +17,7 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--input-type', default='poisson',
                         choices=[i.value for i in InputType])
-    parser.add_argument('--prefer-in-memory-connect', type=bool, default=True)
+    parser.add_argument('--prefer-in-memory-connect', type=bool, default=False)
     parser.add_argument('--kernel-profiling', action='store_true')
 
     # ANN conversion options

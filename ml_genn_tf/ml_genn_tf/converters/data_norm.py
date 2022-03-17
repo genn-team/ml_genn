@@ -90,6 +90,8 @@ class DataNorm(object):
 
     def create_neurons(self, tf_layer, pre_convert_output, is_output):
         threshold = pre_convert_output.thresholds[tf_layer]
+        print(f"layer {tf_layer.name}: threshold={threshold}")
+              
         return IntegrateFire(v_thresh=threshold,
                              output="spike_count" if is_output else None)
 
@@ -197,8 +199,8 @@ class DataNorm(object):
                 scale_factor = np.maximum(max_activation, max_weight)
                 threshold = scale_factor / scale_factors[tf_in_layers[0]]
                 print(f"layer {tf_layer.name}:"
-                       "max activation={max_activation}, "
-                       "max weight={max_weight}")
+                      f"max activation={max_activation}, "
+                      f"max weight={max_weight}")
 
             else:
                 # If layer is not weighted (like ReLU or Flatten),
