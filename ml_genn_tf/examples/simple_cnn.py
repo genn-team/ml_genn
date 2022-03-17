@@ -2,8 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from tensorflow.keras import models, layers, datasets
-from ml_genn import CompiledModel
-from ml_genn.compilers import Compiler
+from ml_genn.compilers import InferenceCompiler
 from ml_genn_tf import convert
 
 from arguments import parse_arguments
@@ -75,11 +74,11 @@ if __name__ == '__main__':
     # Convert and compile ML GeNN model
     mlg_model, mlg_model_outputs = convert(tf_model, converter=converter)
     
-    compiler = Compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
-                        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-                        kernel_profiling=args.kernel_profiling)
-    
-    compiled_model = CompiledModel(mlg_model, compiler, "simple_cnn")
+    compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
+                                 dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
+                                 kernel_profiling=args.kernel_profiling)
+
+    compiled_model = compiler.compile(mlg_model, "simple_cnn")
     with compiled_model:
         # Evaluate ML GeNN model
         time = K if args.converter == 'few-spike' else T
