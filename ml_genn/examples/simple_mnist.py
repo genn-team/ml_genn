@@ -36,7 +36,7 @@ with compiled_model:
     num_correct = 0
     start_time = perf_counter()
     for image_batch, label_batch in zip(testing_images, testing_labels):
-        batch_size = len(label_batch)
+        batch_count = len(label_batch)
         compiled_model.custom_update("Reset")
         compiled_model.set_input({input: image_batch * 0.01})
         
@@ -44,7 +44,7 @@ with compiled_model:
             compiled_model.step_time()
 
         output = compiled_model.get_output(model.layers[-1])
-        num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == label_batch)
+        num_correct += np.sum(np.argmax(output[:batch_count], axis=1) == label_batch)
             
     end_time = perf_counter()
     print(f"Accuracy = {(100.0 * num_correct) / num_images}%")

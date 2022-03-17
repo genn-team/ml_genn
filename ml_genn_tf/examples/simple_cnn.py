@@ -83,15 +83,15 @@ if __name__ == '__main__':
         num_correct = 0
         start_time = perf_counter()
         for x_batch, y_batch in zip(validate_x, validate_y):
-            batch_size = len(y_batch)
+            batch_count = len(y_batch)
             compiled_model.custom_update("Reset")
             compiled_model.set_input({mlg_model_inputs[0]: x_batch * 0.01})
             
-            for t in range(100):
+            for t in range(T):
                 compiled_model.step_time()
 
             output = compiled_model.get_output(mlg_model_outputs[0])
-            num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == y_batch)
+            num_correct += np.sum(np.argmax(output[:batch_count], axis=1) == y_batch)
                 
         end_time = perf_counter()
         print(f"Accuracy = {(100.0 * num_correct) / num_images}%")
