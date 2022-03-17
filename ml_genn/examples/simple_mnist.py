@@ -25,14 +25,14 @@ with compiled_model:
     # Loop through testing images
     num_correct = 0
     for i in range(testing_images.shape[0]):
-        #compiled_model.reset_trial()
+        compiled_model.custom_update("Reset")
         compiled_model.set_input({input: testing_images[i] * 0.01})
         
         for t in range(100):
             compiled_model.step_time()
         
         output = compiled_model.get_output(model.layers[-1])
-        
+        print(output)
         if np.argmax(output) == testing_labels[i]:
             num_correct += 1
     print(f"{num_correct}/{testing_images.shape[0]}")

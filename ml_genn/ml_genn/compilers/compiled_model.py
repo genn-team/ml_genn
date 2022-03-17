@@ -35,6 +35,10 @@ class CompiledModel:
         else:
             return self._get_output(outputs)
 
+    def custom_update(self, name):
+        """Perform custom update"""
+        self.genn_model.custom_update(name)
+
     def step_time(self):
         """Step the GeNN model
         """

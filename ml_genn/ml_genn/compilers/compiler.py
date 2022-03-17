@@ -240,6 +240,7 @@ class Compiler:
             # Add to synapse populations dictionary
             connection_populations[conn] = genn_pop
         
+        # Loop through custom updates added to model
         i = 0
         for cu_group, cu_list in custom_updates.items():
             for model, param_vals, var_vals, var_vals_egp, var_refs in cu_list:
@@ -250,7 +251,6 @@ class Compiler:
                 # Create variable references
                 var_refs = {n: fn(neuron_populations, connection_populations)
                             for n, fn in var_refs.items()}
-                print(model["var_refs"])
                 # Add custom update
                 genn_cu = genn_model.add_custom_update(f"CU{i}", cu_group, genn_cum,
                                                        param_vals, var_vals, var_refs)
