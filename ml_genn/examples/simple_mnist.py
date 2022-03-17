@@ -24,6 +24,7 @@ testing_labels = np.load("testing_labels.npy")
 
 with compiled_model:
     # Loop through testing images
+    num_correct = 0
     for i in range(testing_images.shape[0]):
         # **TODO** handle weak ref
         #compiled_model.reset_trial()
@@ -32,4 +33,8 @@ with compiled_model:
         for t in range(100):
             compiled_model.step_time()
         
-        #output = compiled_model.get_output(model.layers[-1])
+        output = compiled_model.get_output(model.layers[-1])
+        
+        if np.argmax(output) == testing_labels[i]:
+            num_correct += 1
+    print(f"{num_correct}/{testing_images.shape[0]}")

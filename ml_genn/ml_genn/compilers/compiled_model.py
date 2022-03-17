@@ -1,5 +1,16 @@
+from typing import Sequence, Union
 from ..population import Population
 from ..layer import InputLayer, Layer
+
+def _get_underlying_pop(obj):
+    # Get underling population from object
+    if isinstance(obj, Population):
+        return obj
+    elif isinstance(obj, (InputLayer, Layer)):
+        return obj.population()
+    else:
+        raise RuntimeError(f"{obj} is not a valid Population, "
+                           f"InputLayer or Layer object")
 
 class CompiledModel:
     _context = None
@@ -10,20 +21,19 @@ class CompiledModel:
         self.connection_populations = connection_populations
 
     def set_input(self, inputs: dict):
-        # Loop through inputs
-        for obj, input in inputs.items():
-            # Find corresponding GeNN population
-            if isinstance(obj, Population):
-                pop = obj
-            elif isinstance(obj, (InputLayer, Layer)):
-                pop = obj.population()
-            else:
-                raise RuntimeError(f"{obj} is not a valid Population, "
-                                   f"InputLayer or Layer object")
-
-            # Set input
-            genn_pop = self.neuron_populations[pop]
-            pop.neuron.set_input(genn_pop, pop.shape, input)
+        # Loop through populations
+        for pop, input in inputs.items():
+            # Find corresponding GeNN population and set input
+            pop = _get_underlying_pop(pop)
+            pop.neuron.set_input(self.neuron_populations[pop], 
+                                 pop.shape, input)
+    
+    def get_output(self, outputs: Union[Sequence, Population, 
+                                        InputLayer, Layer]):
+        if isinstance(outputs, Sequence):
+            return [self._get_output(p) for p in outputs]
+        else:
+            return self._get_output(outputs)
 
     def step_time(self):
         """Step the GeNN model
@@ -47,6 +57,10 @@ class CompiledModel:
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
         assert CompiledModel._context is not None
         CompiledModel._context = None
+    
+    def _get_output(self, pop):
+        pop = _get_underlying_pop(pop)
+        return pop.neuron.get_output(self.neuron_populations[pop], pop.shape)
 """
 
         self.name = name

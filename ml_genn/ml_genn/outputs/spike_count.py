@@ -30,3 +30,10 @@ class SpikeCount(Output):
         model_copy.var_vals["Scount"] = Value(0)
         
         return model_copy
+    
+    def get_output(self, genn_pop, shape):
+        # Pull spike count from genn
+        genn_pop.pull_var_from_device("Scount")
+        
+        # Return contents, reshaped as desired
+        return genn_pop.vars["Scount"].view.reshape(shape)

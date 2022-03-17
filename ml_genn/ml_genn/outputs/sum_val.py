@@ -5,6 +5,8 @@ from copy import deepcopy
 
 class SumVal(Output):
     def __call__(self, model, output_var_name=None):
+        self.output_var_name = self.output_var_name
+        
         if not "var_name_types" in model.model:
             raise RuntimeError("SumVal output can only be used "
                                "with models with state variables")
@@ -31,7 +33,7 @@ class SumVal(Output):
             model_copy.model["sim_code"] = ""
 
         # Determine name of sum variable
-        sum_var_name = output_var_name + "sum"
+        sum_var_name = output_var_name + "Sum"
 
         # Add code to update sum variable
         model_copy.model["sim_code"] += f"\n$({sum_var_name}) += $({output_var_name});\n"
@@ -43,3 +45,12 @@ class SumVal(Output):
         model_copy.var_vals[sum_var_name] = Value(0)
         
         return model_copy
+
+    def get_output(self, genn_pop, shape):
+        sum_var_name = self.output_var_name + "Sum"
+        
+        # Pull variable from genn
+        genn_pop.pull_var_from_device(sum_var_name)
+        
+        # Return contents, reshaped as desired
+        return genn_pop.vars[sum_var_name].reshape(shape)
