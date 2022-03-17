@@ -1,6 +1,6 @@
 import numpy as np
 
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from numbers import Number
 from typing import Sequence, Union
 from pygenn import GeNNModel
@@ -13,7 +13,8 @@ from ..initializers import Initializer
 from ..model import Model
 
 from copy import deepcopy
-from pygenn.genn_model import (create_custom_neuron_class,
+from pygenn.genn_model import (create_custom_custom_update_class,
+                               create_custom_neuron_class,
                                create_custom_postsynaptic_class,
                                create_custom_weight_update_class, 
                                init_var)
@@ -100,7 +101,7 @@ class Compiler:
         self.prefer_in_memory_connect = True
         self.genn_kwargs = genn_kwargs
 
-    def build_neuron_model(self, model):
+    def build_neuron_model(self, pop, model, custom_updates):
         # Build model customised for parameters and values
         model_copy, constant_param_vals, var_vals_copy, var_egp =\
             build_model(model)
@@ -113,7 +114,7 @@ class Compiler:
         # Return model and modified param and var values
         return model_copy, constant_param_vals, var_vals_copy, var_egp
     
-    def build_postsynaptic_model(self, model):
+    def build_synapse_model(self, conn, model, custom_updates):
         # Build model customised for parameters and values
         model_copy, constant_param_vals, var_vals_copy, var_egp =\
             build_model(model)
@@ -121,7 +122,8 @@ class Compiler:
         # Return model and modified param and var values
         return model_copy, constant_param_vals, var_vals_copy, var_egp
 
-    def build_weight_update_model(self, connection, connect_snippet):
+    def build_weight_update_model(self, connection, connect_snippet, 
+                                  custom_updates):
         # Build parameter values
         param_vals = {"g": connect_snippet.weight}
         het_delay = not connect_snippet.delay.is_constant
@@ -164,6 +166,7 @@ class Compiler:
         genn_model.timing_enabled = self.kernel_profiling
         
         # Loop through populations
+        custom_updates = defaultdict(list)
         neuron_populations = {}
         for i, pop in enumerate(model.populations):
             # Check population has shape
@@ -174,7 +177,8 @@ class Compiler:
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
             neuron_model, param_vals, var_vals, var_vals_egp =\
-                self.build_neuron_model(neuron.get_model(pop, self.dt))
+                self.build_neuron_model(pop, neuron.get_model(pop, self.dt), 
+                                        custom_updates)
             
             # Create custom neuron model
             genn_neuron_model = create_custom_neuron_class("NeuronModel",
@@ -196,7 +200,8 @@ class Compiler:
             # Build postsynaptic model
             syn = conn.synapse
             psm, psm_param_vals, psm_var_vals, psm_var_egp =\
-                self.build_postsynaptic_model(syn.get_model(pop, self.dt))
+                self.build_synapse_model(conn, syn.get_model(conn, self.dt),
+                                         custom_updates)
             
             # Create custom postsynaptic model
             genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
@@ -208,7 +213,8 @@ class Compiler:
             # Build weight update model
             (wum, wum_param_vals, wum_var_vals, 
              wum_pre_var_vals, wum_post_var_vals, wum_var_egp) =\
-                self.build_weight_update_model(conn, connect_snippet)
+                self.build_weight_update_model(conn, connect_snippet,
+                                               custom_updates)
             
              # Create custom weight update model
             genn_wum = create_custom_weight_update_class("WeightUpdateModel",
@@ -234,5 +240,26 @@ class Compiler:
             # Add to synapse populations dictionary
             connection_populations[conn] = genn_pop
         
+        i = 0
+        for cu_group, cu_list in custom_updates.items():
+            for model, param_vals, var_vals, var_vals_egp, var_refs in cu_list:
+                # Create customupdate model
+                genn_cum = create_custom_custom_update_class("CustomUpdate",
+                                                             **model)
+
+                # Create variable references
+                var_refs = {n: fn(neuron_populations, connection_populations)
+                            for n, fn in var_refs.items()}
+                print(model["var_refs"])
+                # Add custom update
+                genn_cu = genn_model.add_custom_update(f"CU{i}", cu_group, genn_cum,
+                                                       param_vals, var_vals, var_refs)
+
+                # Configure EGPs
+                set_egps(var_vals_egp, genn_cu.vars)
+
+                # Increment counter
+                i+=1
+
         return CompiledModel(genn_model, neuron_populations, 
                              connection_populations)

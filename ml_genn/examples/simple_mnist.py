@@ -1,7 +1,7 @@
 import numpy as np
 
 from ml_genn import InputLayer, Layer, SequentialModel
-from ml_genn.compilers import Compiler
+from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import IntegrateFire, IntegrateFireInput
 from ml_genn.connectivity import Dense
 
@@ -14,7 +14,7 @@ with model:
     Layer(Dense(weight=np.load("weights_1_2.npy")), 
           IntegrateFire(v_thresh=5.0, output="spike_count"))
 
-compiler = Compiler(dt=1.0)
+compiler = InferenceCompiler(dt=1.0)
 compiled_model = compiler.compile(model, "simple_mnist")
 
 # Load testing data

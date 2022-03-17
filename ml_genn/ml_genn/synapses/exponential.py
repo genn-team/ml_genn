@@ -25,7 +25,7 @@ class Exponential(Synapse):
                                       "currently support tau values specified"
                                       " using Initialiser objects")
 
-    def get_model(self, population, dt):
+    def get_model(self, connection, dt):
         return SynapseModel(genn_model, 
                             {"ExpDecay": Value(np.exp(-dt / self.tau.value))},
                             {})

@@ -15,5 +15,5 @@ class Delta(Synapse):
     def __init__(self):
         super(Delta, self).__init__()
 
-    def get_model(self, population, dt):
+    def get_model(self, connection, dt):
         return SynapseModel(genn_model, {}, {})
