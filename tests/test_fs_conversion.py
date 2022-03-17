@@ -57,7 +57,7 @@ def test_delay_balancing():
     mlg_model = mlg.Model.convert_tf_model(tf_model, converter=converter)
     
     # Loop through inputs, taking into account pipeline depth
-    pipeline_depth = mlg_model.calc_pipeline_depth()
+    pipeline_depth = mlg_model.outputs[0].pipeline_depth
     for i in range(len(x) + pipeline_depth):
         # If there are inputs to present, set them as input batches
         if i < len(x):

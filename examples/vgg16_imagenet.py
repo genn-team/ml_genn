@@ -32,6 +32,7 @@ if __name__ == '__main__':
         args.n_test_samples = 50000
     mlg_validate_ds = imagenet_dataset_validate(validate_path)
     mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
+    mlg_validate_ds = mlg_validate_ds.map(lambda x, y: (x, y), num_parallel_calls=tf.data.AUTOTUNE)
     mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
     mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
 
