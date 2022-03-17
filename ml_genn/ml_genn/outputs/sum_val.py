@@ -46,11 +46,11 @@ class SumVal(Output):
         
         return model_copy
 
-    def get_output(self, genn_pop, shape):
+    def get_output(self, genn_pop, batch_size, shape):
         sum_var_name = self.output_var_name + "Sum"
         
         # Pull variable from genn
         genn_pop.pull_var_from_device(sum_var_name)
         
         # Return contents, reshaped as desired
-        return genn_pop.vars[sum_var_name].reshape(shape)
+        return genn_pop.vars["Scount"].view.reshape((batch_size,) + shape)

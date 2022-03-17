@@ -19,6 +19,7 @@ class CompiledModel:
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
         self.connection_populations = connection_populations
+        self.num_recording_timesteps = None
 
     def set_input(self, inputs: dict):
         # Loop through populations
@@ -26,7 +27,7 @@ class CompiledModel:
             # Find corresponding GeNN population and set input
             pop = _get_underlying_pop(pop)
             pop.neuron.set_input(self.neuron_populations[pop], 
-                                 pop.shape, input)
+                                 self.genn_model.batch_size, pop.shape, input)
     
     def get_output(self, outputs: Union[Sequence, Population, 
                                         InputLayer, Layer]):
@@ -56,7 +57,7 @@ class CompiledModel:
 
         CompiledModel._context = self
         self.genn_model.build()
-        self.genn_model.load()
+        self.genn_model.load(num_recording_timesteps=self.num_recording_timesteps)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
         assert CompiledModel._context is not None
@@ -64,7 +65,8 @@ class CompiledModel:
     
     def _get_output(self, pop):
         pop = _get_underlying_pop(pop)
-        return pop.neuron.get_output(self.neuron_populations[pop], pop.shape)
+        return pop.neuron.get_output(self.neuron_populations[pop], 
+                                     self.genn_model.batch_size, pop.shape)
 """
 
         self.name = name

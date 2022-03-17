@@ -18,9 +18,9 @@ class Neuron:
         else:
             return model
     
-    def get_output(self, genn_pop, shape):
+    def get_output(self, genn_pop, batch_size, shape):
         if self.output is None:
             raise RuntimeError("Cannot get output from neuron "
                                "without output strategy")
         else:
-            return self.output.get_output(genn_pop, shape)
+            return self.output.get_output(genn_pop, batch_size, shape)
