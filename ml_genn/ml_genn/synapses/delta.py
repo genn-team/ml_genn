@@ -1,4 +1,5 @@
-from .synapse import Model, Synapse
+from .synapse import Synapse
+from ..utils import SynapseModel
 
 genn_model = {
     "apply_input_code":
@@ -15,4 +16,4 @@ class Delta(Synapse):
         super(Delta, self).__init__()
 
     def get_model(self, population, dt):
-        return Model(genn_model, {}, {})
+        return SynapseModel(genn_model, {}, {})

@@ -1,9 +1,9 @@
 import numpy as np
 from math import ceil
 
-from .connectivity import Connectivity, Snippet
+from .connectivity import Connectivity
 from .helper import PadMode, KernelInit
-from ..utils import InitValue, Value
+from ..utils import ConnectivitySnippet, InitValue, Value
 
 from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity, 
                                init_var)
@@ -63,9 +63,9 @@ class Conv2D(Connectivity):
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
             
-            return Snippet(snippet=conn_init, 
-                           matrix_type="TOEPLITZ_KERNELG",
-                           weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(snippet=conn_init, 
+                                       matrix_type="TOEPLITZ_KERNELG",
+                                       weight=self.weight, delay=self.delay)
         else:
             conn_init = init_connectivity("Conv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
@@ -81,11 +81,12 @@ class Conv2D(Connectivity):
                                else self.weight)
                 delay = Value(KernelInit(self.delay.value) if self.delay.is_array
                               else self.delay)
-                return Snippet(snippet=conn_init, 
-                               matrix_type="SPARSE_INDIVIDUALG",
-                               weight=weight, delay=delay)
+                return ConnectivitySnippet(snippet=conn_init, 
+                                           matrix_type="SPARSE_INDIVIDUALG",
+                                           weight=weight, delay=delay)
             else:
-                return Snippet(snippet=conn_init, 
-                               matrix_type="PROCEDURAL_KERNELG",
-                               weight=self.weight, delay=self.delay)
+                return ConnectivitySnippet(snippet=conn_init, 
+                                           matrix_type="PROCEDURAL_KERNELG",
+                                           weight=self.weight, 
+                                           delay=self.delay)
                 

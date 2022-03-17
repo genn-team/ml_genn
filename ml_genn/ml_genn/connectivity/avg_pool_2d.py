@@ -3,7 +3,7 @@ from math import ceil
 
 from .connectivity import Connectivity
 from .helper import PadMode, KernelInit
-from ..utils import InitValue, Value
+from ..utils import ConnectivitySnippet, InitValue, Value
 
 from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
@@ -97,11 +97,11 @@ class AvgPool2D(Connectivity):
             "pool_oh": pool_oh, "pool_ow": pool_ow, "pool_oc": pool_oc})
         
         if prefer_in_memory:
-            return Snippet(snippet=conn_init, 
-                            matrix_type="SPARSE_GLOBALG",
-                            weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(snippet=conn_init, 
+                                       matrix_type="SPARSE_GLOBALG",
+                                       weight=self.weight, delay=self.delay)
         else:
-            return Snippet(snippet=conn_init, 
-                            matrix_type="PROCEDURAL_GLOBALG",
-                            weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(snippet=conn_init, 
+                                       matrix_type="PROCEDURAL_GLOBALG",
+                                       weight=self.weight, delay=self.delay)
             

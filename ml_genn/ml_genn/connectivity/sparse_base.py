@@ -1,5 +1,5 @@
-from .connectivity import Connectivity, Snippet
-from ..utils import InitValue, Value
+from .connectivity import Connectivity
+from ..utils import ConnectivitySnippet, InitValue, Value
 
 class SparseBase(Connectivity):
     def _get_snippet(self, prefer_in_memory, snippet):
@@ -12,7 +12,7 @@ class SparseBase(Connectivity):
         # Otherwise, we can use PROCEDURAL_PROCEDURALG 
         # **NOTE** same as PROCEDURAL_GLOBALG for constant weights/delays
         else:
-            return Snippet(snippet=snippet, 
-                           matrix_type="PROCEDURAL_PROCEDURALG",
-                           weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(snippet=snippet, 
+                                       matrix_type="PROCEDURAL_PROCEDURALG",
+                                       weight=self.weight, delay=self.delay)
     

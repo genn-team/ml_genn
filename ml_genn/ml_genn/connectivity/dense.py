@@ -1,7 +1,7 @@
 import numpy as np
 
-from .connectivity import Connectivity, Snippet
-from ..utils import InitValue, Value
+from .connectivity import Connectivity
+from ..utils import ConnectivitySnippet, InitValue, Value
 
 class Dense(Connectivity):
     def __init__(self, weight:InitValue, delay:InitValue=0):
@@ -28,7 +28,7 @@ class Dense(Connectivity):
         # **TODO** should we do something sensible with 1D arrays too
     
     def get_snippet(self, connection, prefer_in_memory):
-        return Snippet(snippet=None, 
-                       matrix_type="DENSE_INDIVIDUALG",
-                       weight=self.weight, delay=self.delay)
+        return ConnectivitySnippet(snippet=None, 
+                                   matrix_type="DENSE_INDIVIDUALG",
+                                   weight=self.weight, delay=self.delay)
         

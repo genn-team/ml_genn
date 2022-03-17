@@ -1,10 +1,10 @@
 import numpy as np
 from math import ceil
 
-from .connectivity import Connectivity, Snippet
+from .connectivity import Connectivity
 from .helper import PadMode
 from ..initializers import Wrapper
-from ..utils import InitValue, Value
+from ..utils import ConnectivitySnippet, InitValue, Value
 
 from pygenn.genn_model import (create_custom_init_var_snippet_class)
 from .helper import _get_param_2d
@@ -92,7 +92,8 @@ class AvgPoolDense2D(Connectivity):
             "dense_units": int(np.prod(connection.target().shape))},
             {"weights": self.weight.value.flatten() / (pool_kh * pool_kw)})
 
-        return Snippet(snippet=None, 
-                       matrix_type=conn,
-                       weight=Value(wu_var_val), delay=self.delay)
+        return ConnectivitySnippet(snippet=None, 
+                                   matrix_type=conn,
+                                   weight=Value(wu_var_val), 
+                                   delay=self.delay)
 

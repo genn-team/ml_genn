@@ -1,5 +1,5 @@
 from . import Neuron
-from ..utils import InitValue, Value
+from ..utils import InitValue, NeuronModel, Value
 
 # Standard FS ReLU model where upstream neurons are FS ReLU or FS unsigned input
 fs_relu_model = create_custom_neuron_class(

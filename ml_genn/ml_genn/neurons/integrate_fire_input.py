@@ -1,7 +1,7 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input_base import InputBase
-from .neuron import Neuron, Model
-from ..utils import InitValue, Value
+from .neuron import Neuron
+from ..utils import InitValue, NeuronModel, Value
 
 genn_model = {
     "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE), 
@@ -30,6 +30,6 @@ class IntegrateFireInput(Neuron, InputBase):
         self.v = Value(v)
 
     def get_model(self, population, dt):
-        return Model(genn_model, 
-                     {"Vthresh": self.v_thresh, "Vreset": self.v_reset}, 
-                     {"V": self.v, "Input": Value(0.0)})
+        return NeuronModel(genn_model, 
+                           {"Vthresh": self.v_thresh, "Vreset": self.v_reset}, 
+                           {"V": self.v, "Input": Value(0.0)})

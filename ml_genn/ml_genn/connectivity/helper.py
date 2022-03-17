@@ -1,5 +1,6 @@
 from enum import Enum
-from ..initializers import Initializer, Snippet
+from ..initializers import Initializer
+from ..utils import InitializerSnippet
 
 class PadMode(Enum):
     VALID = 'valid'
@@ -13,7 +14,7 @@ class KernelInit(Initializer):
         self.kernel = kernel
     
     def get_snippet(self):
-        return Snippet("Kernel", {}, {"kernel": self.kernel})
+        return InitializerSnippet("Kernel", {}, {"kernel": self.kernel})
         
 def _get_conv_same_padding(in_size, conv_size, stride):
     # Calculate padding following approach described at

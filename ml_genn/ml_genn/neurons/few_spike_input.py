@@ -1,7 +1,7 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input_base import InputBase
-from .neuron import Neuron, Model
-from ..utils import InitValue, Value
+from .neuron import Neuron
+from ..utils import InitValue, NeuronModel, Value
 
 genn_model = {
     "param_name_types": ["K", "Scale"],
@@ -78,6 +78,6 @@ class FewSpikeInput(Neuron, InputBase):
         else:
             scale = self.alpha * pars[1] * 2**(-pars[0])
         
-        return Model(genn_model_signed if self.signed_input else genn_model, 
-                     {"K": self.k, "Scale": scale}, 
-                     {"Input": Value(0.0), "V": self.v})
+        model = genn_model_signed if self.signed_input else genn_model,
+        return NeuronModel(model, {"K": self.k, "Scale": scale},
+                           {"Input": Value(0.0), "V": self.v})

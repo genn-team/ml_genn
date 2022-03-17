@@ -1,4 +1,5 @@
-from .initializer import Initializer, Snippet
+from .initializer import Initializer
+from ..utils import InitializerSnippet
 
 class Wrapper(Initializer):
     def __init__(self, snippet, param_vals, egp_vals):
@@ -9,4 +10,5 @@ class Wrapper(Initializer):
         self.egp_vals = egp_vals
     
     def get_snippet(self):
-        return Snippet(self.snippet, self.param_vals, self.egp_vals)
+        return InitializerSnippet(self.snippet, self.param_vals, 
+                                  self.egp_vals)

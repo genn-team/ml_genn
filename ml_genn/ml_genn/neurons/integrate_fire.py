@@ -1,5 +1,5 @@
-from .neuron import Model, Neuron
-from ..utils import InitValue, Value
+from .neuron import Neuron
+from ..utils import InitValue, NeuronModel, Value
 
 genn_model = {
     "var_name_types": [("V", "scalar")],
@@ -28,6 +28,6 @@ class IntegrateFire(Neuron):
 
     def get_model(self, population, dt):
         return self.add_output_logic(
-            Model(genn_model, 
-                  {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
-                  {"V": self.v}), "V")
+            NeuronModel(genn_model, 
+                        {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
+                        {"V": self.v}), "V")

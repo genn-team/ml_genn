@@ -1,7 +1,7 @@
 import numpy as np
 
-from .synapse import Model, Synapse
-from ..utils import InitValue, Value
+from .synapse import Synapse
+from ..utils import InitValue, SynapseModel, Value
 
 genn_model = {
     "param_name_types": [("ExpDecay", "scalar")],
@@ -26,6 +26,6 @@ class Exponential(Synapse):
                                       " using Initialiser objects")
 
     def get_model(self, population, dt):
-        return Model(genn_model, 
-                     {"ExpDecay": Value(np.exp(-dt / self.tau.value))}, 
-                     {})
+        return SynapseModel(genn_model, 
+                            {"ExpDecay": Value(np.exp(-dt / self.tau.value))},
+                            {})

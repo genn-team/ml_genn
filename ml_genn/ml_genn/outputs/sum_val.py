@@ -1,10 +1,10 @@
 from .output import Output
-from ..utils import Value
+from ..utils import NeuronModel, Value
 
 from copy import deepcopy
 
 class SumVal(Output):
-    def __call__(self, model, output_var_name=None):
+    def __call__(self, model: NeuronModel, output_var_name=None):
         self.output_var_name = self.output_var_name
         
         if not "var_name_types" in model.model:

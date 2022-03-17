@@ -1,7 +1,7 @@
 import numpy as np
 
-from .neuron import Model, Neuron
-from ..utils import InitValue, Value
+from .neuron import Neuron
+from ..utils import InitValue, Value, NeuronModel
 
 class LeakyIntegrateFire(Neuron):
     def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0, tau_mem=20.0, tau_refrac=None, 
@@ -93,5 +93,5 @@ class LeakyIntegrateFire(Neuron):
                 """
             
         # Return model
-        return self.add_output_logic(Model(genn_model, param_vals, var_vals),
-                                     "V")
+        return self.add_output_logic(
+            NeuronModel(genn_model, param_vals, var_vals), "V")
