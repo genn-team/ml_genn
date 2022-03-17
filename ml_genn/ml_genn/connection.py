@@ -7,10 +7,10 @@ from .model import Model
 from .population import Population
 from .synapses import Synapse
 
-from .utils.model import get_module_models, get_model
+from .utils.module import get_module_classes, get_object
 
 # Use Keras-style trick to get dictionary containing default synapse models
-_synapse_models = get_module_models(synapses, Synapse)
+_synapse_models = get_module_classes(synapses, Synapse)
 
 class Connection:
     def __init__(self, source: Population, target: Population,
@@ -20,7 +20,7 @@ class Connection:
         self.target = ref(target)
 
         self.connectivity = connectivity
-        self.synapse = get_model(synapse, Synapse, "Synapse", _synapse_models)
+        self.synapse = get_object(synapse, Synapse, "Synapse", _synapse_models)
         
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists

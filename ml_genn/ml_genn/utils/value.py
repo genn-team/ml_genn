@@ -5,10 +5,10 @@ from numbers import Number
 from typing import Sequence, Union
 from ..initializers import Initializer
 
-from .model import get_module_models
+from .module import get_module_classes
 
 # Use Keras-style trick to get dictionary containing default neuron models
-_initializers = get_module_models(initializers, Initializer)
+_initializers = get_module_classes(initializers, Initializer)
 
 InitValue = Union[Number, Sequence[Number], np.ndarray, Initializer]
 

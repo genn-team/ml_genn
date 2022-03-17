@@ -6,7 +6,7 @@ from inspect import isclass, signature
 # Curtesy of https://stackoverflow.com/a/1176023/1476754
 camel_to_snake_pattern = compile(r"(?<!^)(?=[A-Z])")
 
-def get_module_models(module, base_class):
+def get_module_classes(module, base_class):
     # Loop through names of objects in module
     target_dict = {}
     for name in dir(module):
@@ -33,16 +33,16 @@ def get_module_models(module, base_class):
                 target_dict[snake_name] = cls()
     return target_dict
 
-def get_model(model, base_class, description, dictionary):
-    if model is None:
-        return model
-    elif isinstance(model, base_class):
-        return model
-    elif isinstance(model, str):
-        if model in dictionary:
-            return dictionary[model]
+def get_object(obj, base_class, description, dictionary):
+    if obj is None:
+        return obj
+    elif isinstance(obj, base_class):
+        return obj
+    elif isinstance(obj, str):
+        if obj in dictionary:
+            return dictionary[obj]
         else:
-            raise RuntimeError(f"{description} model '{model}' unknown")
+            raise RuntimeError(f"{description} object '{obj}' unknown")
     else:
-        raise RuntimeError(f"{description} models should be specified "
-                            "either as a string or a {description} object")
+        raise RuntimeError(f"{description} objects should be specified "
+                           f"either as a string or a {description} object")

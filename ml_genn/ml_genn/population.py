@@ -4,10 +4,10 @@ from typing import Sequence, Union
 from .model import Model
 from .neurons import Neuron
 
-from .utils.model import get_module_models, get_model
+from .utils.module import get_module_classes, get_object
 
 # Use Keras-style trick to get dictionary containing default neuron models
-_neuron_models = get_module_models(neurons, Neuron)
+_neuron_models = get_module_classes(neurons, Neuron)
 
 def _get_shape(shape):
     if shape is None or isinstance(shape, Sequence):
@@ -23,7 +23,7 @@ Shape = Union[None, int, Sequence[int]]
 
 class Population:
     def __init__(self, neuron: Neuron, shape: Shape=None, add_to_model=True):
-        self.neuron = get_model(neuron, Neuron, "Neuron", _neuron_models)
+        self.neuron = get_object(neuron, Neuron, "Neuron", _neuron_models)
         self.shape = _get_shape(shape)
         self.incoming_connections = []
         self.outgoing_connections = []

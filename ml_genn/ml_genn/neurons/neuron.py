@@ -3,17 +3,17 @@ from .. import outputs
 from collections import namedtuple
 from ..outputs import Output
 
-from ..utils.model import get_module_models, get_model
+from ..utils.module import get_module_classes, get_object
 
 # Use Keras-style trick to get dictionary containing default output strategies
-_output_strategies = get_module_models(outputs, Output)
+_output_strategies = get_module_classes(outputs, Output)
 
 Model = namedtuple("Model", ["model", "param_vals", "var_vals"])
 
 class Neuron:
     def __init__(self, output=None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
-        self.output = get_model(output, Output, "Output", _output_strategies)
+        self.output = get_object(output, Output, "Output", _output_strategies)
     
     def add_output_logic(self, model, output_var_name=None):
         if self.output is not None:
