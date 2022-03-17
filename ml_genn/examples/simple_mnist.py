@@ -26,26 +26,26 @@ compiled_model = compiler.compile(model, "simple_mnist")
 testing_images = np.load("testing_images.npy")
 testing_labels = np.load("testing_labels.npy")
 
-num_batches = int(np.ceil(testing_images.shape[0] / BATCH_SIZE))
+# Split into batches
+num_images = testing_images.shape[0]
+testing_images =  np.split(testing_images, range(BATCH_SIZE, num_images, BATCH_SIZE), axis=0)
+testing_labels =  np.split(testing_labels, range(BATCH_SIZE, num_images, BATCH_SIZE), axis=0)
 
 with compiled_model:
     # Loop through testing images
     num_correct = 0
     start_time = perf_counter()
-    for i in range(num_batches):
-        batch_start = i * BATCH_SIZE
-        batch_end = min(testing_images.shape[0], batch_start + BATCH_SIZE)
-        batch_size = batch_end - batch_start
-        
+    for image_batch, label_batch in zip(testing_images, testing_labels):
+        batch_size = len(label_batch)
         compiled_model.custom_update("Reset")
-        compiled_model.set_input({input: testing_images[batch_start:batch_end] * 0.01})
+        compiled_model.set_input({input: image_batch * 0.01})
         
         for t in range(100):
             compiled_model.step_time()
 
         output = compiled_model.get_output(model.layers[-1])
-        num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == testing_labels[batch_start:batch_end])
+        num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == label_batch)
             
     end_time = perf_counter()
-    print(f"Accuracy = {(100.0 * num_correct)/testing_images.shape[0]}%")
+    print(f"Accuracy = {(100.0 * num_correct) / num_images}%")
     print(f"Time = {end_time - start_time}s")
