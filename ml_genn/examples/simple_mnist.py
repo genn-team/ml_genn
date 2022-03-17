@@ -8,7 +8,7 @@ from ml_genn.connectivity import Dense
 
 from time import perf_counter
 
-BATCH_SIZE = 1
+BATCH_SIZE = 128
 
 # Create sequential model
 model = SequentialModel()
@@ -44,7 +44,6 @@ with compiled_model:
             compiled_model.step_time()
 
         output = compiled_model.get_output(model.layers[-1])
-        print(np.argmax(output[:batch_size], axis=1))
         num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == testing_labels[batch_start:batch_end])
             
     end_time = perf_counter()
