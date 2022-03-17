@@ -110,24 +110,16 @@ class Compiler:
         if "negative_threshold_condition_code" in model_copy:
             del model_copy["negative_threshold_condition_code"]
 
-        # Create custom neuron model
-        genn_neuron_model = create_custom_neuron_class("NeuronModel",
-                                                       **model_copy)
-
         # Return model and modified param and var values
-        return genn_neuron_model, constant_param_vals, var_vals_copy, var_egp
+        return model_copy, constant_param_vals, var_vals_copy, var_egp
     
     def build_postsynaptic_model(self, model):
         # Build model customised for parameters and values
         model_copy, constant_param_vals, var_vals_copy, var_egp =\
             build_model(model)
 
-        # Create custom postsynaptic model
-        genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
-                                                    **model_copy)
-
         # Return model and modified param and var values
-        return genn_psm, constant_param_vals, var_vals_copy, var_egp
+        return model_copy, constant_param_vals, var_vals_copy, var_egp
 
     def build_weight_update_model(self, connection, connect_snippet):
         # Build parameter values
@@ -159,12 +151,9 @@ class Compiler:
             # Build model customised for parameters and values
             model_copy, constant_param_vals, var_vals_copy, var_egp =\
                 build_model(wum)
-        
-        # Create custom weight update model
-        genn_wum = create_custom_weight_update_class("WeightUpdateModel",
-                                                     **model_copy)
+
         # Return model and modified param and var values
-        return genn_wum, constant_param_vals, var_vals_copy, {}, {}, var_egp
+        return model_copy, constant_param_vals, var_vals_copy, {}, {}, var_egp
 
     def compile(self, model: Model, name: str):
         genn_model = GeNNModel("float", name, **self.genn_kwargs)
@@ -186,11 +175,14 @@ class Compiler:
             neuron = pop.neuron
             neuron_model, param_vals, var_vals, var_vals_egp =\
                 self.build_neuron_model(neuron.get_model(pop, self.dt))
-
+            
+            # Create custom neuron model
+            genn_neuron_model = create_custom_neuron_class("NeuronModel",
+                                                           **neuron_model)
             # Add neuron population
             genn_pop = genn_model.add_neuron_population(
                 f"Pop{i}", np.prod(pop.shape), 
-                neuron_model, param_vals, var_vals)
+                genn_neuron_model, param_vals, var_vals)
             
             # Configure EGPs
             set_egps(var_vals_egp, genn_pop.vars)
@@ -206,6 +198,9 @@ class Compiler:
             psm, psm_param_vals, psm_var_vals, psm_var_egp =\
                 self.build_postsynaptic_model(syn.get_model(pop, self.dt))
             
+            # Create custom postsynaptic model
+            genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
+                                                        **psm)
             # Get connectivity init snippet
             connect_snippet =\
                 conn.connectivity.get_snippet(conn, 
@@ -214,7 +209,11 @@ class Compiler:
             (wum, wum_param_vals, wum_var_vals, 
              wum_pre_var_vals, wum_post_var_vals, wum_var_egp) =\
                 self.build_weight_update_model(conn, connect_snippet)
-        
+            
+             # Create custom weight update model
+            genn_wum = create_custom_weight_update_class("WeightUpdateModel",
+                                                         **wum)
+                                                     
             # If delays are constant, use as axonal delay otherwise, disable
             delay = conn.connectivity.delay
             axonal_delay = (delay.value if delay.is_constant
@@ -224,8 +223,8 @@ class Compiler:
             genn_pop = genn_model.add_synapse_population(
                 f"Syn{i}", connect_snippet.matrix_type, axonal_delay, 
                 neuron_populations[conn.source()], neuron_populations[conn.target()],
-                wum, wum_param_vals, wum_var_vals, wum_pre_var_vals, wum_post_var_vals, 
-                psm, psm_param_vals, psm_var_vals,
+                genn_wum, wum_param_vals, wum_var_vals, wum_pre_var_vals, wum_post_var_vals, 
+                genn_psm, psm_param_vals, psm_var_vals,
                 connectivity_initialiser=connect_snippet.snippet)
             
             # Configure EGPs
