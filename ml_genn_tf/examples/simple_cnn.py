@@ -64,21 +64,46 @@ if __name__ == '__main__':
     converter = args.build_converter(mlg_norm_ds, signed_input=False, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
-    mlg_model, mlg_model_outputs = convert(tf_model, converter=converter)
+    mlg_model, mlg_model_inputs, mlg_model_outputs = convert(tf_model, converter=converter)
     
     compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                  dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                  kernel_profiling=args.kernel_profiling)
+    
+    
+    # Split into batches
+    num_images = validate_x.shape[0]
+    validate_x =  np.split(validate_x, range(BATCH_SIZE, num_images, BATCH_SIZE), axis=0)
+    validate_y =  np.split(validate_y, range(BATCH_SIZE, num_images, BATCH_SIZE), axis=0)
 
     compiled_model = compiler.compile(mlg_model, "simple_cnn")
     with compiled_model:
+        # Loop through testing images
+        num_correct = 0
+        start_time = perf_counter()
+        for x_batch, y_batch in zip(validate_x, validate_y):
+            batch_size = len(y_batch)
+            compiled_model.custom_update("Reset")
+            compiled_model.set_input({mlg_model_inputs[0]: x_batch * 0.01})
+            
+            for t in range(100):
+                compiled_model.step_time()
+
+            output = compiled_model.get_output(model.layers[-1])
+            num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == y_batch)
+                
+        end_time = perf_counter()
+        print(f"Accuracy = {(100.0 * num_correct) / num_images}%")
+        print(f"Time = {end_time - start_time}s")
         # Evaluate ML GeNN model
+        """
         time = K if args.converter == 'few-spike' else T
         mlg_eval_start_time = perf_counter()
         acc, spk_i, spk_t = mlg_model.evaluate(
             validate_x, validate_y, time, save_samples=args.save_samples)
         print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
-
+        """
+    """
     if len(args.save_samples) > 0:
         num_spikes = 0
         for sample_spikes in spk_i:
@@ -96,3 +121,4 @@ if __name__ == '__main__':
     if args.plot:
         neurons = [l.neurons.nrn for l in mlg_model.layers]
         raster_plot(spk_i, spk_t, neurons, time=time)
+    """
