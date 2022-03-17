@@ -1,3 +1,6 @@
+from ..population import Population
+from ..layer import InputLayer, Layer
+
 class CompiledModel:
     _context = None
 
@@ -8,11 +11,18 @@ class CompiledModel:
 
     def set_input(self, inputs: dict):
         # Loop through inputs
-        for pop, input in inputs.items():
+        for obj, input in inputs.items():
             # Find corresponding GeNN population
-            genn_pop = self.neuron_populations[pop]
-            
+            if isinstance(obj, Population):
+                pop = obj
+            elif isinstance(obj, (InputLayer, Layer)):
+                pop = obj.population()
+            else:
+                raise RuntimeError(f"{obj} is not a valid Population, "
+                                   f"InputLayer or Layer object")
+
             # Set input
+            genn_pop = self.neuron_populations[pop]
             pop.neuron.set_input(genn_pop, pop.shape, input)
 
     def step_time(self):
