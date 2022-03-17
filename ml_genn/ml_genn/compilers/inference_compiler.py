@@ -3,6 +3,7 @@ from .compiler import Compiler
 from .compiled_model import CompiledModel
 from ..utils import CustomUpdateModel
 
+from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
 
@@ -38,9 +39,9 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
         model.model["param_name_types"].append((name + "Reset", type))
 
         # Add parameter value and function to create variable reference
+        # **NOTE** we use partial rather than a lambda so name is captured
         model.param_vals[name + "Reset"] = value
-        model.var_refs[name] =\
-            lambda nrn_pops, conn_pops: var_ref_creator(nrn_pops, conn_pops, name)
+        model.var_refs[name] = partial(var_ref_creator, name=name)
 
         # Add code to set var 
         model.model["update_code"] += f"$({name}) = $({name}Reset);\n"
