@@ -129,38 +129,41 @@ class FewSpike(object):
             return PreCompileOutput(layer_alpha={}, input_alpha=None)
 
     def pre_compile(self, mlg_model):
-        delay_to_layers = {}
-        
+        next_pipeline_depth = {}
+
         # Loop through layers
         for l in mlg_model.layers:
+
             # If layer has upstream synaptic connections
             if len(l.upstream_synapses) > 0:
-                # Calculate max delay from upstream synapses
-                max_delay = max(delay_to_layers[s.source()]
-                                for s in l.upstream_synapses)
-                
-                # Delay to this layer is one more than this
-                delay_to_layers[l] = 1 + max_delay
-                
+
                 # Determine the maximum alpha value upstream layers
-                max_alpha = max(s.source().neurons.alpha
-                                for s in l.upstream_synapses)
+                max_presyn_alpha = max(
+                    s.source().neurons.alpha for s in l.upstream_synapses)
+
+                # Determine the maximum pipeline depth from upstream synapses
+                l.pipeline_depth = max(
+                    next_pipeline_depth[s.source()] for s in l.upstream_synapses)
+
+                # Downstream layer pipeline depth is one more than this
+                next_pipeline_depth[l] = l.pipeline_depth + 1
 
                 # Loop through upstream synapses
                 for s in l.upstream_synapses:
-                    # Set delay to balance
-                    s.delay = (max_delay - delay_to_layers[s.source()]) * self.K
+                    # Set upstream delay so all spikes arrive at correct pipeline stage
+                    depth_difference = l.pipeline_depth - next_pipeline_depth[s.source()]
+                    s.delay = depth_difference * self.K
 
-                    # Set alpha to maximum
-                    s.source().neurons.alpha = max_alpha
+                    # Set presyn alpha to maximum alpha of all presyn layers
+                    s.source().neurons.alpha = max_presyn_alpha
 
             # Otherwise (layer is an input layer), set this layer's delay as zero
             else:
-                delay_to_layers[l] = 0
-    
+                l.pipeline_depth = 0
+                next_pipeline_depth[l] = 0
 
     def post_compile(self, mlg_model):
-        # do not allow multiple input or output layers
-        if len(mlg_model.inputs) > 1 or len(mlg_model.outputs) > 1:
+        # do not allow multiple input layers
+        if len(mlg_model.inputs) > 1:
             raise NotImplementedError(
-                'multiple input or output layers not supported for Few Spike conversion')
+                'multiple input layers not supported for Few Spike conversion')

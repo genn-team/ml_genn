@@ -29,14 +29,6 @@ if __name__ == '__main__':
     mlg_norm_ds = mlg_norm_ds.batch(args.batch_size)
     mlg_norm_ds = mlg_norm_ds.prefetch(tf.data.AUTOTUNE)
 
-    # ML GeNN validation dataset
-    if args.n_test_samples is None:
-        args.n_test_samples = 10000
-    mlg_validate_ds = tf.data.Dataset.from_tensor_slices((validate_x, validate_y))
-    mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
-    mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
-    mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
-
     # Create and compile TF model
     tf_model = models.Sequential([
         layers.Conv2D(16, 5, padding='valid', activation='relu', use_bias=False, input_shape=train_x.shape[1:]),
@@ -83,8 +75,8 @@ if __name__ == '__main__':
         # Evaluate ML GeNN model
         time = K if args.converter == 'few-spike' else T
         mlg_eval_start_time = perf_counter()
-        acc, spk_i, spk_t = mlg_model.evaluate_batched(
-            mlg_validate_ds, time, save_samples=args.save_samples)
+        acc, spk_i, spk_t = mlg_model.evaluate(
+            validate_x, validate_y, time, save_samples=args.save_samples)
         print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
 
     if len(args.save_samples) > 0:

@@ -46,17 +46,18 @@ def test_delay_balancing():
     
     # Define array of inputs and get TF model for them
     x = np.arange(0.0, 5.0).reshape((-1, 1))
-    tf_y = tf_model(x).numpy() 
+    norm_data = zip(x, np.full(x.shape, np.nan))
+    tf_y = tf_model(x).numpy()
     
     # Check model does indeed have unity gain
     assert np.array_equal(x, tf_y)
     
     # Convert model using few spike technique
-    converter = mlg.converters.FewSpike(K=8, alpha=8.0, norm_data=x)
+    converter = mlg.converters.FewSpike(K=8, alpha=8.0, norm_data=[norm_data])
     mlg_model = mlg.Model.convert_tf_model(tf_model, converter=converter)
     
     # Loop through inputs, taking into account pipeline depth
-    pipeline_depth = mlg_model.calc_pipeline_depth()
+    pipeline_depth = mlg_model.outputs[0].pipeline_depth
     for i in range(len(x) + pipeline_depth):
         # If there are inputs to present, set them as input batches
         if i < len(x):
