@@ -73,8 +73,9 @@ if __name__ == '__main__':
     
     # Split into batches
     num_images = validate_x.shape[0]
-    validate_x =  np.split(validate_x, range(BATCH_SIZE, num_images, BATCH_SIZE), axis=0)
-    validate_y =  np.split(validate_y, range(BATCH_SIZE, num_images, BATCH_SIZE), axis=0)
+
+    validate_x =  np.split(validate_x, range(args.batch_size, num_images, args.batch_size), axis=0)
+    validate_y =  np.split(validate_y, range(args.batch_size, num_images, args.batch_size), axis=0)
 
     compiled_model = compiler.compile(mlg_model, "simple_cnn")
     with compiled_model:
@@ -89,7 +90,7 @@ if __name__ == '__main__':
             for t in range(100):
                 compiled_model.step_time()
 
-            output = compiled_model.get_output(model.layers[-1])
+            output = compiled_model.get_output(mlg_model_outputs[0])
             num_correct += np.sum(np.argmax(output[:batch_size], axis=1) == y_batch)
                 
         end_time = perf_counter()

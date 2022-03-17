@@ -72,8 +72,9 @@ class Simple(object):
         elif self.input_type == InputType.IF:
             return IntegrateFireInput()
 
-    def create_neurons(self, tf_layer, pre_compile_output):
-        return IntegrateFire(threshold=1.0)
+    def create_neurons(self, tf_layer, pre_compile_output, is_output):
+        return IntegrateFire(v_thresh=1.0, 
+                             output="spike_count" if is_output else None)
 
     def pre_convert(self, tf_model):
         pass

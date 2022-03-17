@@ -157,11 +157,13 @@ def convert(tf_model, converter=Simple()):
                 in_configs = configs_lookups[tf_in_layer]
 
                 # configure layer
+                is_output = (len(tf_out_layers) == 0)
                 config = LayerConfig(
                     tf_layer.name, tf_layer.output_shape[1:],
-                    is_output=len(tf_out_layers) == 0,
+                    is_output=is_output,
                     has_activation=not tf_layer.activation is tf.keras.activations.linear,
-                    neurons=converter.create_neurons(tf_layer, pre_convert_output))
+                    neurons=converter.create_neurons(tf_layer, pre_convert_output, 
+                                                     is_output))
 
                 converter.validate_tf_layer(tf_layer, config)
 
@@ -208,11 +210,13 @@ def convert(tf_model, converter=Simple()):
                 in_configs = configs_lookups[tf_in_layer]
 
                 # configure layer
+                is_output = (len(tf_out_layers) == 0)
                 config = LayerConfig(
                     tf_layer.name, tf_layer.output_shape[1:],
-                    is_output=len(tf_out_layers) == 0,
+                    is_output=is_output,
                     has_activation=not tf_layer.activation is tf.keras.activations.linear,
-                    neurons=converter.create_neurons(tf_layer, pre_convert_output))
+                    neurons=converter.create_neurons(tf_layer, pre_convert_output,
+                                                     is_output))
 
                 converter.validate_tf_layer(tf_layer, config)
 
@@ -318,11 +322,13 @@ def convert(tf_model, converter=Simple()):
                 in_configs = configs_lookups[tf_in_layer]
 
                 # configure layer
+                is_output = (len(tf_out_layers) == 0)
                 config = LayerConfig(
                     tf_layer.name, tf_layer.output_shape[1:],
-                    is_output=len(tf_out_layers) == 0,
+                    is_output=is_output,
                     has_activation=True,
-                    neurons=converter.create_neurons(tf_layer, pre_convert_output))
+                    neurons=converter.create_neurons(tf_layer, pre_convert_output,
+                                                     is_output))
 
                 converter.validate_tf_layer(tf_layer, config)
 

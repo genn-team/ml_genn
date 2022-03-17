@@ -88,9 +88,10 @@ class DataNorm(object):
         elif self.input_type == InputType.IF:
             return IntegrateFireInput()
 
-    def create_neurons(self, tf_layer, pre_convert_output):
+    def create_neurons(self, tf_layer, pre_convert_output, is_output):
         threshold = pre_convert_output.thresholds[tf_layer]
-        return IntegrateFire(threshold=threshold)
+        return IntegrateFire(v_thresh=threshold,
+                             output="spike_count" if is_output else None)
 
     def pre_convert(self, tf_model):
         # NOTE: Data-Norm only normalises an initial sequential portion of

@@ -84,7 +84,7 @@ class FewSpike(object):
                  else pre_convert_output.input_alpha)
         return FSReluInputNeurons(self.K, alpha, self.signed_input)
 
-    def create_neurons(self, tf_layer, pre_convert_output):
+    def create_neurons(self, tf_layer, pre_convert_output, is_output):
         # If layer alphas have been calculated but
         # this layer isn't included, give warning
         pre_conv_alpha = pre_convert_output.layer_alpha
