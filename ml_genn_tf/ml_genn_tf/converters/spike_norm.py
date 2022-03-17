@@ -93,6 +93,8 @@ class SpikeNorm(object):
     def pre_compile(self, mlg_model):
         pass
 
+    """
+    TODO move to custom compiler
     def post_compile(self, mlg_model):
         g_model = mlg_model.g_model
 
@@ -168,3 +170,4 @@ class SpikeNorm(object):
             # Update this layer's threshold
             layer.neurons.set_threshold(final_thresholds[layer])
             print('layer <{}> threshold: {}'.format(layer.name, layer.neurons.threshold))
+    """

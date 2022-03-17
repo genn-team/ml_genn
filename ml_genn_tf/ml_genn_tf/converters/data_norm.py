@@ -220,11 +220,3 @@ class DataNorm(object):
     
     def pre_compile(self, mlg_model):
         pass
-
-    def post_compile(self, mlg_model):
-        # For each layer (these *should* be topologically sorted)
-        for layer in mlg_model.layers:
-            if layer in mlg_model.inputs:
-                continue
-
-            print(f"layer {layer.name}: threshold={layer.neurons.threshold}")

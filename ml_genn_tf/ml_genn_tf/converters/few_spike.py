@@ -161,9 +161,3 @@ class FewSpike(object):
             else:
                 l.pipeline_depth = 0
                 next_pipeline_depth[l] = 0
-
-    def post_compile(self, mlg_model):
-        # do not allow multiple input layers
-        if len(mlg_model.inputs) > 1:
-            raise NotImplementedError(
-                'multiple input layers not supported for Few Spike conversion')
