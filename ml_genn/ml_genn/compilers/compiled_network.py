@@ -2,15 +2,7 @@ from typing import Sequence, Union
 from ..population import Population
 from ..layer import InputLayer, Layer
 
-def _get_underlying_pop(obj: Union[InputLayer, Layer, Population]):
-    # Get underling population from object
-    if isinstance(obj, Population):
-        return obj
-    elif isinstance(obj, (InputLayer, Layer)):
-        return obj.population()
-    else:
-        raise RuntimeError(f"{obj} is not a valid Population, "
-                           f"InputLayer or Layer object")
+from ..utils.network import get_underlying_pop
 
 class CompiledNetwork:
     _context = None
@@ -28,7 +20,7 @@ class CompiledNetwork:
         # Loop through populations
         for pop, input in inputs.items():
             # Find corresponding GeNN population and set input
-            pop = _get_underlying_pop(pop)
+            pop = get_underlying_pop(pop)
             pop.neuron.set_input(self.neuron_populations[pop], 
                                  self.genn_model.batch_size, pop.shape, input)
     
@@ -67,7 +59,7 @@ class CompiledNetwork:
         CompiledNetwork._context = None
     
     def _get_output(self, pop):
-        pop = _get_underlying_pop(pop)
+        pop = get_underlying_pop(pop)
         return pop.neuron.get_output(self.neuron_populations[pop], 
                                      self.genn_model.batch_size, pop.shape)
 """
