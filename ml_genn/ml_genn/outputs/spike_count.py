@@ -1,3 +1,5 @@
+import numpy as np
+
 from .output import Output
 from ..utils import NeuronModel, Value
 
@@ -36,4 +38,5 @@ class SpikeCount(Output):
         genn_pop.pull_var_from_device("Scount")
         
         # Return contents, reshaped as desired
-        return genn_pop.vars["Scount"].view.reshape((batch_size,) + shape)
+        return np.reshape(genn_pop.vars["Scount"].view,
+                          (batch_size,) + shape)

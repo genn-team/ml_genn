@@ -1,3 +1,5 @@
+import numpy as np
+
 from .output import Output
 from ..utils import NeuronModel, Value
 
@@ -8,10 +10,10 @@ class SumVar(Output):
         self.output_var_name = self.output_var_name
         
         if not "var_name_types" in model.model:
-            raise RuntimeError("SumVal output can only be used "
+            raise RuntimeError("SumVar output can only be used "
                                "with models with state variables")
         if output_var_name is None:
-            raise RuntimeError("SumVal output requires that models "
+            raise RuntimeError("SumVar output requires that models "
                                "specify an output variable name")
         
         # Find output variable
@@ -53,4 +55,5 @@ class SumVar(Output):
         genn_pop.pull_var_from_device(sum_var_name)
         
         # Return contents, reshaped as desired
-        return genn_pop.vars[sum_var_name].view.reshape((batch_size,) + shape)
+        return np.reshape(genn_pop.vars[sum_var_name].view,
+                          (batch_size,) + shape)
