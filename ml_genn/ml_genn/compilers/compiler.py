@@ -156,6 +156,11 @@ class Compiler:
 
         # Return model and modified param and var values
         return model_copy, constant_param_vals, var_vals_copy, {}, {}, var_egp
+    
+    def create_compiled_model(self, genn_model, neuron_populations,
+                              connection_populations):
+        return CompiledModel(genn_model, neuron_populations, 
+                             connection_populations)
 
     def compile(self, model: Model, name: str):
         genn_model = GeNNModel("float", name, **self.genn_kwargs)
@@ -261,5 +266,5 @@ class Compiler:
                 # Increment counter
                 i+=1
 
-        return CompiledModel(genn_model, neuron_populations, 
-                             connection_populations)
+        return self.create_compiled_model(genn_model, neuron_populations,
+                                          connection_populations)

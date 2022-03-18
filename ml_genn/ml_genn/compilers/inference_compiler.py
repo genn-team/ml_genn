@@ -1,3 +1,6 @@
+import numpy as np
+
+from typing import Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_model import CompiledModel
@@ -7,8 +10,29 @@ from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
 
-#CompiledInferenceModel = type("CompiledInferenceModel", (CompiledModel, InferenceMixin), 
-#    dict(CompiledModel.__dict__))
+def _get_numpy_size(data):
+    sizes = [d.shape[0] for d in data.values()]
+    return sizes[0] if len(set(sizes)) <= 1 else None
+
+def _batch_numpy(data, batch_size, size):
+    # Determine splits to batch data
+    splits = range(batch_size, size, batch_size)
+    
+    # Perform split, resulting in {key: split data} dictionary
+    data = {k : np.split(v, splits, axis=0)
+            for k, v in data.items()}
+    
+    # Create list with dictionary for each split
+    data_list = [{} for _ in splits]
+    
+    # Loop through batches of data
+    for k, batches in data.items():
+        # Copy batches of data into dictionaries
+        for d, b in zip(data_list, batches):
+            d[k] = b
+    
+    return data_list
+
 
 def _build_reset_model(model, custom_updates, var_ref_creator):
     # If model has any state variables
@@ -51,15 +75,90 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
     
     # Add to list of custom updates to be applied in "Reset" group
     custom_updates["Reset"].append(custom_model + (model.var_refs,))
+
+class InferenceModelMixin:
+    def __init__(self, evaluate_timesteps:int, **kwargs):
+        super(InferenceModelMixin, self).__init__(**kwargs)
+        self.evaluate_timesteps = evaluate_timesteps
+
+    def evaluate_numpy(self, x: dict, y: dict):
+        """ Evaluate an input in numpy format against labels
+        accuracy --  dictionary containing accuracy of predictions 
+                     made by each output Population or Layer
+        """
+        # Determine the number of elements in x and y
+        x_size = _get_numpy_size(x)
+        y_size = _get_numpy_size(x)
+        
+        if x_size is None:
+            raise RuntimeError("Each input population must be "
+                               " provided with same number of inputs")
+        if y_size is None:
+            raise RuntimeError("Each output population must be "
+                               " provided with same number of labels")
+        if x_size != y_size:
+            raise RuntimeError("Number of inputs and labels must match")
+        
+        total_correct = {p: 0 for p in y.keys()}
+        
+        # Batch x and y
+        batch_size = self.genn_model.batch_size
+        x = _batch_numpy(x, batch_size, x_size)
+        y = _batch_numpy(y, batch_size, y_size)
+        
+        # Loop through batches
+        for x_batch, y_batch in zip(x, y):
+            # Get predictions from batch
+            correct = self.evaluate_batch(x_batch, y_batch)
+            
+            # Add to total correct
+            for p, c in correct.items():
+                total_correct[p] += c
+        
+        # Return dictionary containing correct count
+        return {p: c / x_size for p, c in total_correct.items()}
     
+    def evaluate_batch(self, x: dict, y: dict):
+        """ Evaluate a single batch of inputs against labels
+        Args:
+        x --        dict mapping input Population or InputLayer to 
+                    array containing one batch of inputs
+        y --        dict mapping output Population or Layer to
+                    array containing one batch of labels
+
+        Returns:
+        correct --  dictionary containing number of correct predictions 
+                    made by each output Population or Layer
+        """
+        self.custom_update("Reset")
+
+        # Apply inputs to model
+        self.set_input(x)
+        
+        for t in range(self.evaluate_timesteps):
+            self.step_time()
+
+        # Get predictions from model
+        y_star = self.get_output(list(y.keys()))
+        
+        # Return dictionaries of output population to number of correct
+        # **TODO** insert loss-function/other metric here
+        return {p : np.sum((np.argmax(o_y_star[:len(o_y)], axis=1) == o_y))
+                for (p, o_y), o_y_star in zip(y.items(), y_star)}
+        
+CompiledInferenceModel = type("CompiledInferenceModel", 
+                              (CompiledModel, InferenceModelMixin), {})
+
+
 class InferenceCompiler(Compiler):
-    def __init__(self, dt:float=1.0, batch_size:int=1, rng_seed:int=0,
+    def __init__(self, evaluate_timesteps:int, dt:float=1.0, batch_size:int=1, rng_seed:int=0,
                  kernel_profiling:bool=False, prefer_in_memory_connect=True,
                  **genn_kwargs):
         super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
                                                 kernel_profiling, 
                                                 prefer_in_memory_connect,
                                                 **genn_kwargs)
+        self.evaluate_timesteps = evaluate_timesteps
 
     def build_neuron_model(self, pop, model, custom_updates):
         _build_reset_model(model, custom_updates, 
@@ -75,3 +174,9 @@ class InferenceCompiler(Compiler):
     
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, custom_updates)
+    
+    def create_compiled_model(self, genn_model, neuron_populations,
+                              connection_populations):
+        return CompiledInferenceModel(genn_model, neuron_populations, 
+                                      connection_populations,
+                                      evaluate_timesteps=self.evaluate_timesteps)

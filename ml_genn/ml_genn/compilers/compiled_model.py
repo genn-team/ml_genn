@@ -2,7 +2,7 @@ from typing import Sequence, Union
 from ..population import Population
 from ..layer import InputLayer, Layer
 
-def _get_underlying_pop(obj):
+def _get_underlying_pop(obj: Union[InputLayer, Layer, Population]):
     # Get underling population from object
     if isinstance(obj, Population):
         return obj
@@ -15,7 +15,10 @@ def _get_underlying_pop(obj):
 class CompiledModel:
     _context = None
 
-    def __init__(self, genn_model, neuron_populations, connection_populations):
+    def __init__(self, genn_model, neuron_populations, 
+                 connection_populations, **kwargs):
+        super(CompiledModel, self).__init__(**kwargs)
+
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
         self.connection_populations = connection_populations
@@ -36,7 +39,7 @@ class CompiledModel:
         else:
             return self._get_output(outputs)
 
-    def custom_update(self, name):
+    def custom_update(self, name: str):
         """Perform custom update"""
         self.genn_model.custom_update(name)
 
