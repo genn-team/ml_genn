@@ -1,16 +1,16 @@
 import numpy as np
 from math import ceil
 
+from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from .connectivity import Connectivity
-from .helper import PadMode, KernelInit
 from ..utils import ConnectivitySnippet, InitValue, Value
+from ..utils.connectivity import PadMode, KernelInit
 
 from pygenn.genn_model import (create_cmlf_class, create_cksf_class,
                                create_custom_sparse_connect_init_snippet_class, 
                                init_connectivity, init_toeplitz_connectivity,
                                init_var)
-from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
-from .helper import _get_conv_same_padding, _get_param_2d
+from ..utils.connectivity import get_conv_same_padding, get_param_2d
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_conv_2d",
@@ -94,10 +94,10 @@ class AvgPoolConv2D(Connectivity):
                  conv_strides=None, conv_padding="valid", delay:InitValue=0):
         super(AvgPoolConv2D, self).__init__(weight, delay)
         self.filters = filters
-        self.pool_size = _get_param_2d("pool_size", pool_size)
-        self.conv_size = _get_param_2d("conv_size", conv_size)
-        self.pool_strides = _get_param_2d("pool_strides", pool_strides, default=self.pool_size)
-        self.conv_strides = _get_param_2d("conv_strides", conv_strides, default=(1, 1))
+        self.pool_size = get_param_2d("pool_size", pool_size)
+        self.conv_size = get_param_2d("conv_size", conv_size)
+        self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
+        self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
         self.pool_output_shape = None
         
@@ -152,8 +152,8 @@ class AvgPoolConv2D(Connectivity):
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
-            conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
-            conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
+            conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
+            conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
         scaled_weight = self.weight.value.flatten() / (pool_kh * pool_kw)
                 

@@ -2,12 +2,12 @@ import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
-from .helper import PadMode, KernelInit
 from ..utils import ConnectivitySnippet, InitValue, Value
+from ..utils.connectivity import PadMode, KernelInit
 
 from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity, 
                                init_var)
-from .helper import _get_conv_same_padding, _get_param_2d
+from ..utils.connectivity import get_conv_same_padding, get_param_2d
 
 class Conv2D(Connectivity):
     def __init__(self, weight:InitValue, filters, conv_size, conv_strides=None,
@@ -15,8 +15,8 @@ class Conv2D(Connectivity):
         super(Conv2D, self).__init__(weight, delay)
 
         self.filters = filters
-        self.conv_size = _get_param_2d("conv_size", conv_size)
-        self.conv_strides = _get_param_2d("conv_strides", conv_strides, default=(1, 1))
+        self.conv_size = get_param_2d("conv_size", conv_size)
+        self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
 
     def connect(self, source, target):
@@ -54,8 +54,8 @@ class Conv2D(Connectivity):
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
-            conv_padh = _get_conv_same_padding(conv_ih, conv_kh, conv_sh)
-            conv_padw = _get_conv_same_padding(conv_iw, conv_kw, conv_sw)
+            conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
+            conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
         if not prefer_in_memory and conv_sh == 1 and conv_sw == 1:
             conn_init = init_toeplitz_connectivity("Conv2D", {

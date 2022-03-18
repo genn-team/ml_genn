@@ -2,13 +2,13 @@ import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
-from .helper import PadMode, KernelInit
 from ..utils import ConnectivitySnippet, InitValue, Value
+from ..utils.connectivity import KernelInit
 
 from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
                                init_connectivity, init_var)
-from .helper import _get_conv_same_padding, _get_param_2d
+from ..utils.connectivity import get_param_2d
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_2d",
@@ -59,8 +59,8 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
 
 class AvgPool2D(Connectivity):
     def __init__(self, pool_size, pool_strides=None, delay:InitValue=0):
-        self.pool_size = _get_param_2d("pool_size", pool_size)
-        self.pool_strides = _get_param_2d("pool_strides", pool_strides, default=self.pool_size)
+        self.pool_size = get_param_2d("pool_size", pool_size)
+        self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
         
         super(AvgPool2D, self).__init__(1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
         

@@ -1,5 +1,3 @@
-from .helper import PadMode
-
 from .avg_pool_2d import AvgPool2D
 from .avg_pool_conv_2d import AvgPoolConv2D
 from .avg_pool_dense_2d import AvgPoolDense2D

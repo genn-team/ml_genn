@@ -2,12 +2,11 @@ import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
-from .helper import PadMode
 from ..initializers import Wrapper
 from ..utils import ConnectivitySnippet, InitValue, Value
 
-from pygenn.genn_model import (create_custom_init_var_snippet_class)
-from .helper import _get_param_2d
+from pygenn.genn_model import create_custom_init_var_snippet_class
+from ..utils.connectivity import get_param_2d
 
 genn_snippet = create_custom_init_var_snippet_class(
     "avepool2d_dense",
@@ -59,8 +58,8 @@ class AvgPoolDense2D(Connectivity):
     def __init__(self, weight:InitValue, pool_size, pool_strides=None, delay:InitValue=0):
         super(AvgPoolDense2D, self).__init__(weight, delay)
 
-        self.pool_size = _get_param_2d("pool_size", pool_size)
-        self.pool_strides = _get_param_2d("pool_strides", pool_strides, default=self.pool_size)
+        self.pool_size = get_param_2d("pool_size", pool_size)
+        self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
         self.pool_output_shape = None
 
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
