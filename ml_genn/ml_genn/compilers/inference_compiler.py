@@ -76,9 +76,12 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
     # Add to list of custom updates to be applied in "Reset" group
     custom_updates["Reset"].append(custom_model + (model.var_refs,))
 
-class InferenceMixin:
-    def __init__(self, evaluate_timesteps:int, **kwargs):
-        super(InferenceMixin, self).__init__(**kwargs)
+class CompiledInferenceNetwork(CompiledNetwork):
+    def __init__(self, genn_model, neuron_populations, 
+                 connection_populations, evaluate_timesteps:int):
+        super(CompiledInferenceNetwork, self).__init__(
+            genn_model, neuron_populations, connection_populations)
+    
         self.evaluate_timesteps = evaluate_timesteps
 
     def evaluate_numpy(self, x: dict, y: dict):
@@ -146,11 +149,6 @@ class InferenceMixin:
         return {p : np.sum((np.argmax(o_y_star[:len(o_y)], axis=1) == o_y))
                 for (p, o_y), o_y_star in zip(y.items(), y_star)}
 
-
-CompiledInferenceNetwork = type("CompiledInferenceNetwork", 
-                                (CompiledNetwork, InferenceMixin), {})
-
-
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps:int, dt:float=1.0, batch_size:int=1, rng_seed:int=0,
                  kernel_profiling:bool=False, prefer_in_memory_connect=True,
@@ -180,4 +178,4 @@ class InferenceCompiler(Compiler):
                                 connection_populations):
         return CompiledInferenceNetwork(genn_model, neuron_populations, 
                                         connection_populations,
-                                        evaluate_timesteps=self.evaluate_timesteps)
+                                        self.evaluate_timesteps)

@@ -8,8 +8,7 @@ class CompiledNetwork:
     _context = None
 
     def __init__(self, genn_model, neuron_populations, 
-                 connection_populations, **kwargs):
-        super(CompiledNetwork, self).__init__(**kwargs)
+                 connection_populations):
 
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
