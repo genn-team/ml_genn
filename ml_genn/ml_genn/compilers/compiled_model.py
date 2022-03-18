@@ -72,30 +72,7 @@ class CompiledModel:
                                      self.genn_model.batch_size, pop.shape)
 """
 
-        self.name = name
-        self.layers = []
-        self.inputs = inputs
-        self.outputs = outputs
-        self.g_model = None
-
-        # Construct topologically sorted list of layers (Kahn's algorithm as described here: https://en.wikipedia.org/wiki/Topological_sorting)
-        new_layers = set(inputs)
-        seen_synapses = set()
-        while new_layers:
-            layer = new_layers.pop()
-            self.layers.append(layer)
-
-            # Explore downstream layers whose upstream synapses have all been seen
-            for downstream_synapse in layer.downstream_synapses:
-                seen_synapses.add(downstream_synapse)
-                if seen_synapses.issuperset(downstream_synapse.target().upstream_synapses):
-                    new_layers.add(downstream_synapse.target())
-
-        # Check that output layers are reachable from input layers
-        if not all(output in self.layers for output in self.outputs):
-            raise ValueError('output layers unreachable from input layers')
-
-
+       
         # Input sanity check
         save_samples = list(set(save_samples))
         if any(i < 0 or i >= n_samples for i in save_samples):

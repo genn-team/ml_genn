@@ -145,7 +145,8 @@ class InferenceModelMixin:
         # **TODO** insert loss-function/other metric here
         return {p : np.sum((np.argmax(o_y_star[:len(o_y)], axis=1) == o_y))
                 for (p, o_y), o_y_star in zip(y.items(), y_star)}
-        
+
+
 CompiledInferenceModel = type("CompiledInferenceModel", 
                               (CompiledModel, InferenceModelMixin), {})
 
