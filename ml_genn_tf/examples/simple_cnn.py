@@ -68,58 +68,25 @@ if __name__ == '__main__':
 
     compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                  dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-                                 kernel_profiling=args.kernel_profiling)
-    
-    
-    # Split into batches
-    num_images = validate_x.shape[0]
-
-    validate_x =  np.split(validate_x, range(args.batch_size, num_images, args.batch_size), axis=0)
-    validate_y =  np.split(validate_y, range(args.batch_size, num_images, args.batch_size), axis=0)
+                                 kernel_profiling=args.kernel_profiling,
+                                 evaluate_timesteps=K if args.converter == 'few-spike' else T)
 
     compiled_model = compiler.compile(mlg_model, "simple_cnn")
+    compiled_model.genn_model.timing_enabled = args.kernel_profiling
+        
     with compiled_model:
-        # Loop through testing images
-        num_correct = 0
-        start_time = perf_counter()
-        for x_batch, y_batch in zip(validate_x, validate_y):
-            batch_count = len(y_batch)
-            compiled_model.custom_update("Reset")
-            compiled_model.set_input({mlg_model_inputs[0]: x_batch})
-            
-            for t in range(T):
-                compiled_model.step_time()
-
-            output = compiled_model.get_output(mlg_model_outputs[0])
-            num_correct += np.sum(np.argmax(output[:batch_count], axis=1) == y_batch)
-                
-        end_time = perf_counter()
-        print(f"Accuracy = {(100.0 * num_correct) / num_images}%")
-        print(f"Time = {end_time - start_time}s")
         # Evaluate ML GeNN model
-        """
-        time = K if args.converter == 'few-spike' else T
-        mlg_eval_start_time = perf_counter()
-        acc, spk_i, spk_t = mlg_model.evaluate(
-            validate_x, validate_y, time, save_samples=args.save_samples)
-        print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
-        """
-    """
-    if len(args.save_samples) > 0:
-        num_spikes = 0
-        for sample_spikes in spk_i:
-            for layer_spikes in sample_spikes:
-               num_spikes += len(layer_spikes)
-        print("Mean spikes per sample: %f" % (num_spikes / len(args.save_samples)))
-
-    if args.kernel_profiling:
-        print("Kernel profiling:")
-        for n, t in iteritems(mlg_model.get_kernel_times()):
-            print("\t%s: %fs" % (n, t))
-
-    # Report ML GeNN model results
-    print(f'Accuracy of SimpleCNN GeNN model: {acc[0]}%')
-    if args.plot:
-        neurons = [l.neurons.nrn for l in mlg_model.layers]
-        raster_plot(spk_i, spk_t, neurons, time=time)
-    """
+        start_time = perf_counter()
+        accuracy = compiled_model.evaluate_numpy({mlg_model_inputs[0]: validate_x},
+                                                 {mlg_model_outputs[0]: validate_y})
+        end_time = perf_counter()
+        print(f"Accuracy = {100.0 * accuracy[mlg_model_outputs[0]]}")
+        print(f"Time = {end_time - start_time} s")
+        
+        if args.kernel_profiling:
+            print(f"Kernel profiling:\n"
+                  f"\tinit_time: {compiled_model.genn_model.init_time} s\n"
+                  f"\tinit_sparse_time: {compiled_model.genn_model.init_sparse_time} s\n"
+                  f"\tneuron_update_time: {compiled_model.genn_model.neuron_update_time} s\n"
+                  f"\tpresynaptic_update_time: {compiled_model.genn_model.presynaptic_update_time} s\n"
+                  f"\tcustom_update_reset_time: {compiled_model.genn_model.customUpdateResetTime} s")

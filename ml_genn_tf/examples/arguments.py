@@ -31,8 +31,6 @@ def parse_arguments(model_description='ML GeNN model'):
     # evaluation options
     parser.add_argument('--n-train-samples', type=int, default=None)
     parser.add_argument('--n-test-samples', type=int, default=None)
-    parser.add_argument('--save-samples', type=int, default=[], nargs='+')
-    parser.add_argument('--plot', action='store_true')
 
     # TensorFlow options
     parser.add_argument('--reuse-tf-model', action='store_true')
