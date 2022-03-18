@@ -1,7 +1,7 @@
 from weakref import ref
 from .connection import Connection
 from .population import Population, Shape
-from .sequential_model import SequentialModel
+from .sequential_network import SequentialNetwork
 from .connectivity import Connectivity
 from .neurons import Neuron
 from .synapses import Synapse
@@ -12,7 +12,7 @@ class InputLayer:
         population = Population(neuron, shape=shape, add_to_model=False)
         self.population = ref(population)
         
-        SequentialModel.add_input_layer(self, population)
+        SequentialNetwork.add_input_layer(self, population)
 
 class Layer:
     def __init__(self, connectivity: Connectivity, neuron: Neuron, shape=None, synapse="delta"):
@@ -22,7 +22,7 @@ class Layer:
         
         # If there are any preceding layers, also create  
         # connection and store weak reference in class
-        prev_layer = SequentialModel.get_prev_layer()
+        prev_layer = SequentialNetwork.get_prev_layer()
         if prev_layer is not None:
             connection = Connection(prev_layer.population(), population, 
                                     connectivity=connectivity, synapse=synapse,
@@ -32,4 +32,4 @@ class Layer:
             connection = None
             self.connection = None
         
-        SequentialModel.add_layer(self, population, connection)
+        SequentialNetwork.add_layer(self, population, connection)

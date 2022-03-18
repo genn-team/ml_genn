@@ -223,5 +223,5 @@ class DataNorm(object):
 
         return PreCompileOutput(thresholds=thresholds)
     
-    def pre_compile(self, mlg_model):
+    def pre_compile(self, mlg_network):
         pass

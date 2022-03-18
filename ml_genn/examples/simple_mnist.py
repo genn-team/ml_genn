@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ml_genn import InputLayer, Layer, SequentialModel
+from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import IntegrateFire, IntegrateFireInput
 from ml_genn.connectivity import Dense
@@ -11,8 +11,8 @@ from time import perf_counter
 BATCH_SIZE = 128
 
 # Create sequential model
-model = SequentialModel()
-with model:
+network = SequentialNetwork()
+with network:
     input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784)
     Layer(Dense(weight=np.load("weights_0_1.npy")), 
           IntegrateFire(v_thresh=5.0))
@@ -21,18 +21,18 @@ with model:
 
 compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE, 
                              evaluate_timesteps=100)
-compiled_model = compiler.compile(model, "simple_mnist")
+compiled_net = compiler.compile(network, "simple_mnist")
 
 # Load testing data
 testing_images = np.load("testing_images.npy")
 testing_labels = np.load("testing_labels.npy")
 
-with compiled_model:
+with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
-    accuracy = compiled_model.evaluate_numpy({input: testing_images * 0.01},
-                                             {output: testing_labels})
+    accuracy = compiled_net.evaluate_numpy({input: testing_images * 0.01},
+                                           {output: testing_labels})
     end_time = perf_counter()
-    print(f"Accuracy = {100 * accuracy[model.layers[-1]]}%")
+    print(f"Accuracy = {100 * accuracy[output]}%")
     print(f"Time = {end_time - start_time}s")
     

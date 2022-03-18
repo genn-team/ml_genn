@@ -8,9 +8,9 @@ from pygenn.genn_wrapper import (SynapseMatrixConnectivity_PROCEDURAL,
                                  SynapseMatrixConnectivity_SPARSE,
                                  SynapseMatrixConnectivity_TOEPLITZ)
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
-from .compiled_model import CompiledModel
+from .compiled_network import CompiledNetwork
 from ..initializers import Initializer
-from ..model import Model
+from ..network import Network
 
 from copy import deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
@@ -157,12 +157,12 @@ class Compiler:
         # Return model and modified param and var values
         return model_copy, constant_param_vals, var_vals_copy, {}, {}, var_egp
     
-    def create_compiled_model(self, genn_model, neuron_populations,
-                              connection_populations):
-        return CompiledModel(genn_model, neuron_populations, 
-                             connection_populations)
+    def create_compiled_network(self, genn_model, neuron_populations,
+                                connection_populations):
+        return CompiledNetwork(genn_model, neuron_populations, 
+                               connection_populations)
 
-    def compile(self, model: Model, name: str):
+    def compile(self, network: Network, name: str):
         genn_model = GeNNModel("float", name, **self.genn_kwargs)
         
         genn_model.dT = self.dt
@@ -173,11 +173,11 @@ class Compiler:
         # Loop through populations
         custom_updates = defaultdict(list)
         neuron_populations = {}
-        for i, pop in enumerate(model.populations):
+        for i, pop in enumerate(network.populations):
             # Check population has shape
             if pop.shape is None:
                 raise RuntimeError("All populations need to have "
-                                   "a shape before compiling model")
+                                   "a shape before compiling network")
             
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
@@ -201,7 +201,7 @@ class Compiler:
 
         # Loop through connections
         connection_populations = {}
-        for i, conn in enumerate(model.connections):
+        for i, conn in enumerate(network.connections):
             # Build postsynaptic model
             syn = conn.synapse
             psm, psm_param_vals, psm_var_vals, psm_var_egp =\
@@ -266,5 +266,5 @@ class Compiler:
                 # Increment counter
                 i+=1
 
-        return self.create_compiled_model(genn_model, neuron_populations,
-                                          connection_populations)
+        return self.create_compiled_network(genn_model, neuron_populations,
+                                            connection_populations)

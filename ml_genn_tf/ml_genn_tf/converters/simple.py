@@ -79,8 +79,5 @@ class Simple(object):
     def pre_convert(self, tf_model):
         pass
     
-    def pre_compile(self, mlg_model):
-        pass
-
-    def post_compile(self, mlg_model):
+    def pre_compile(self, mlg_network):
         pass

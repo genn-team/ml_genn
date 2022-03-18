@@ -1,7 +1,7 @@
 from . import neurons
 
 from typing import Sequence, Union
-from .model import Model
+from .network import Network
 from .neurons import Neuron
 
 from .utils.module import get_module_classes, get_object
@@ -30,6 +30,6 @@ class Population:
 
         # Add population to model
         if add_to_model:
-            Model.add_population(self)
+            Network.add_population(self)
     
     # **TODO** shape setter which validate shape with neuron parameters etc

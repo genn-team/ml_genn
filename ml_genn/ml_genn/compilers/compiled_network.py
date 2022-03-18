@@ -12,12 +12,12 @@ def _get_underlying_pop(obj: Union[InputLayer, Layer, Population]):
         raise RuntimeError(f"{obj} is not a valid Population, "
                            f"InputLayer or Layer object")
 
-class CompiledModel:
+class CompiledNetwork:
     _context = None
 
     def __init__(self, genn_model, neuron_populations, 
                  connection_populations, **kwargs):
-        super(CompiledModel, self).__init__(**kwargs)
+        super(CompiledNetwork, self).__init__(**kwargs)
 
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
@@ -54,17 +54,17 @@ class CompiledModel:
         self.genn_model.t = 0.0
 
     def __enter__(self):
-        if CompiledModel._context is not None:
-            raise RuntimeError("Nested compiled models are "
+        if CompiledNetwork._context is not None:
+            raise RuntimeError("Nested compiled networks are "
                                "not currently supported")
 
-        CompiledModel._context = self
+        CompiledNetwork._context = self
         self.genn_model.build()
         self.genn_model.load(num_recording_timesteps=self.num_recording_timesteps)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
-        assert CompiledModel._context is not None
-        CompiledModel._context = None
+        assert CompiledNetwork._context is not None
+        CompiledNetwork._context = None
     
     def _get_output(self, pop):
         pop = _get_underlying_pop(pop)

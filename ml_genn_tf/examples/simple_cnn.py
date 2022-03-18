@@ -64,30 +64,30 @@ if __name__ == '__main__':
     converter = args.build_converter(mlg_norm_ds, signed_input=False, K=K, norm_time=T)
 
     # Convert and compile ML GeNN model
-    mlg_model, mlg_model_inputs, mlg_model_outputs = convert(tf_model, converter=converter)
+    mlg_net, mlg_net_inputs, mlg_net_outputs = convert(tf_model, converter=converter)
 
     compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                  dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                  kernel_profiling=args.kernel_profiling,
                                  evaluate_timesteps=K if args.converter == 'few-spike' else T)
 
-    compiled_model = compiler.compile(mlg_model, "simple_cnn")
-    compiled_model.genn_model.timing_enabled = args.kernel_profiling
+    compiled_net = compiler.compile(mlg_net, "simple_cnn")
+    compiled_net.genn_model.timing_enabled = args.kernel_profiling
         
-    with compiled_model:
+    with compiled_net:
         # Evaluate ML GeNN model
         start_time = perf_counter()
-        accuracy = compiled_model.evaluate_numpy({mlg_model_inputs[0]: validate_x},
-                                                 {mlg_model_outputs[0]: validate_y})
+        accuracy = compiled_net.evaluate_numpy({mlg_net_inputs[0]: validate_x},
+                                               {mlg_net_outputs[0]: validate_y})
         end_time = perf_counter()
-        print(f"Accuracy = {100.0 * accuracy[mlg_model_outputs[0]]}")
+        print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]]}")
         print(f"Time = {end_time - start_time} s")
         
         if args.kernel_profiling:
-            reset_time = compiled_model.genn_model.get_custom_update_time("Reset")
+            reset_time = compiled_net.genn_model.get_custom_update_time("Reset")
             print(f"Kernel profiling:\n"
-                  f"\tinit_time: {compiled_model.genn_model.init_time} s\n"
-                  f"\tinit_sparse_time: {compiled_model.genn_model.init_sparse_time} s\n"
-                  f"\tneuron_update_time: {compiled_model.genn_model.neuron_update_time} s\n"
-                  f"\tpresynaptic_update_time: {compiled_model.genn_model.presynaptic_update_time} s\n"
+                  f"\tinit_time: {compiled_net.genn_model.init_time} s\n"
+                  f"\tinit_sparse_time: {compiled_net.genn_model.init_sparse_time} s\n"
+                  f"\tneuron_update_time: {compiled_net.genn_model.neuron_update_time} s\n"
+                  f"\tpresynaptic_update_time: {compiled_net.genn_model.presynaptic_update_time} s\n"
                   f"\tcustom_update_reset_time: {reset_time} s")

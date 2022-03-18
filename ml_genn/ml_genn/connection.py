@@ -3,7 +3,7 @@ from . import synapses
 from typing import Sequence, Union
 from weakref import ref
 from .connectivity import Connectivity
-from .model import Model
+from .network import Network
 from .population import Population
 from .synapses import Synapse
 
@@ -33,4 +33,4 @@ class Connection:
 
         # Add connection to model
         if add_to_model:
-            Model.add_connection(self)
+            Network.add_connection(self)

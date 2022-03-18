@@ -1,5 +1,5 @@
 from .connection import Connection
 from .layer import InputLayer, Layer
-from .model import Model
+from .network import Network
 from .population import Population
-from .sequential_model import SequentialModel
+from .sequential_network import SequentialNetwork

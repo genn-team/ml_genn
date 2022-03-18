@@ -2,7 +2,7 @@ import logging
 import tensorflow as tf
 
 from collections import namedtuple
-from ml_genn import Connection, Model, Population
+from ml_genn import Connection, Network, Population
 from ml_genn.connectivity import (AvgPool2D, AvgPoolDense2D, AvgPoolConv2D, 
                                   Conv2D, Dense, OneToOne)
 from .converters import Simple
@@ -375,37 +375,37 @@ def convert(tf_model, converter=Simple()):
 
 
     # execute model build process
-    mlg_layer_lookup = {}
-    mlg_model_inputs = []
+    mlg_pop_lookup = {}
+    mlg_network_inputs = []
     mlg_model_outputs = []
 
-    mlg_model = Model()
-    with mlg_model:
+    mlg_network = Network()
+    with mlg_network:
         # for each build step
         for config in config_steps:
             if config.is_input:
-                # build layer
-                mlg_layer = Population(config.neurons, config.shape)
+                # build population
+                mlg_pop = Population(config.neurons, config.shape)
                 
-                mlg_model_inputs.append(mlg_layer)
+                mlg_network_inputs.append(mlg_pop)
             else:
                 # build layer
-                mlg_layer = Population(config.neurons, config.shape)
+                mlg_pop = Population(config.neurons, config.shape)
 
                 # build connections
                 for s in config.synapses:
-                    source = mlg_layer_lookup[s.source]
+                    source = mlg_pop_lookup[s.source]
                     connectivity = s.type(**s.params)
                     
-                    Connection(source, mlg_layer, connectivity)
+                    Connection(source, mlg_pop, connectivity)
 
                 if config.is_output:
-                    mlg_model_outputs.append(mlg_layer)
+                    mlg_model_outputs.append(mlg_pop)
 
-            mlg_layer_lookup[config] = mlg_layer
+            mlg_pop_lookup[config] = mlg_pop
 
     
     # Perform any pre-compilation tasks
-    converter.pre_compile(mlg_model)
+    converter.pre_compile(mlg_network)
     
-    return mlg_model, mlg_model_inputs, mlg_model_outputs
+    return mlg_network, mlg_network_inputs, mlg_model_outputs

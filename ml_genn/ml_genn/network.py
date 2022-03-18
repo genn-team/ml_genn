@@ -1,6 +1,6 @@
 from typing import Sequence, Union
 
-class Model:
+class Network:
     _context = None
 
     def __init__(self):
@@ -34,24 +34,24 @@ class Model:
 
     @staticmethod
     def add_population(pop):
-        if Model._context is None:
+        if Network._context is None:
             raise RuntimeError("Population must be created "
-                               "inside a ``with model:`` block")
-        Model._context.populations.append(pop)
+                               "inside a ``with network:`` block")
+        Network._context.populations.append(pop)
 
     @staticmethod
     def add_connection(conn):
-        if Model._context is None:
+        if Network._context is None:
             raise RuntimeError("Connection must be created "
-                               "inside a ``with model:`` block")
-        Model._context.connections.append(conn)
+                               "inside a ``with network:`` block")
+        Network._context.connections.append(conn)
 
     def __enter__(self):
-        if Model._context is not None:
-            raise RuntimeError("Nested models are not currently supported")
+        if Network._context is not None:
+            raise RuntimeError("Nested networks are not currently supported")
 
-        Model._context = self
+        Network._context = self
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
-        assert Model._context is not None
-        Model._context = None
+        assert Network._context is not None
+        Network._context = None

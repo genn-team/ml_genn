@@ -3,7 +3,7 @@ import numpy as np
 from typing import Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
-from .compiled_model import CompiledModel
+from .compiled_network import CompiledNetwork
 from ..utils import CustomUpdateModel
 
 from functools import partial
@@ -76,9 +76,9 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
     # Add to list of custom updates to be applied in "Reset" group
     custom_updates["Reset"].append(custom_model + (model.var_refs,))
 
-class InferenceModelMixin:
+class InferenceMixin:
     def __init__(self, evaluate_timesteps:int, **kwargs):
-        super(InferenceModelMixin, self).__init__(**kwargs)
+        super(InferenceMixin, self).__init__(**kwargs)
         self.evaluate_timesteps = evaluate_timesteps
 
     def evaluate_numpy(self, x: dict, y: dict):
@@ -147,8 +147,8 @@ class InferenceModelMixin:
                 for (p, o_y), o_y_star in zip(y.items(), y_star)}
 
 
-CompiledInferenceModel = type("CompiledInferenceModel", 
-                              (CompiledModel, InferenceModelMixin), {})
+CompiledInferenceNetwork = type("CompiledInferenceNetwork", 
+                                (CompiledNetwork, InferenceMixin), {})
 
 
 class InferenceCompiler(Compiler):
@@ -176,8 +176,8 @@ class InferenceCompiler(Compiler):
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, custom_updates)
     
-    def create_compiled_model(self, genn_model, neuron_populations,
-                              connection_populations):
-        return CompiledInferenceModel(genn_model, neuron_populations, 
-                                      connection_populations,
-                                      evaluate_timesteps=self.evaluate_timesteps)
+    def create_compiled_network(self, genn_model, neuron_populations,
+                                connection_populations):
+        return CompiledInferenceNetwork(genn_model, neuron_populations, 
+                                        connection_populations,
+                                        evaluate_timesteps=self.evaluate_timesteps)

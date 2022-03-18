@@ -1,4 +1,4 @@
-from ml_genn import Connection, Model, Population
+from ml_genn import Connection, Network, Population
 from ml_genn.compilers import Compiler
 from ml_genn.neurons import LeakyIntegrateFire
 from ml_genn.connectivity import FixedProbability
@@ -7,8 +7,8 @@ neuron = LeakyIntegrateFire(v_thresh=20.0, v_reset=10.0, tau_mem=20.0, tau_refra
 e_conn = FixedProbability(p=0.1, weight=0.1)
 i_conn = FixedProbability(p=0.1, weight=-0.5)
 
-model = Model()
-with model:
+network = Network()
+with network:
     e = Population(neuron, 7500)
     i = Population(neuron, 2500)
     
@@ -18,4 +18,4 @@ with model:
     ie = Connection(i, e, i_conn)
 
 compiler = Compiler(dt=0.1, prefer_in_memory_connect=True)
-compiled_model = compiler.compile(model, "brunel")
+compiled_network = compiler.compile(network, "brunel")

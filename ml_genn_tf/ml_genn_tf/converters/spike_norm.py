@@ -90,12 +90,12 @@ class SpikeNorm(object):
     def pre_convert(self, tf_model):
         pass
     
-    def pre_compile(self, mlg_model):
+    def pre_compile(self, mlg_network):
         pass
 
     """
     TODO move to custom compiler
-    def post_compile(self, mlg_model):
+    def post_compile(self, mlg_network):
         g_model = mlg_model.g_model
 
         # Don't allow models with multiple input layers
