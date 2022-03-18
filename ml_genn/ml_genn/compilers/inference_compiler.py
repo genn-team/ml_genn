@@ -9,30 +9,7 @@ from ..utils import CustomUpdateModel
 from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
-
-def _get_numpy_size(data):
-    sizes = [d.shape[0] for d in data.values()]
-    return sizes[0] if len(set(sizes)) <= 1 else None
-
-def _batch_numpy(data, batch_size, size):
-    # Determine splits to batch data
-    splits = range(batch_size, size, batch_size)
-    
-    # Perform split, resulting in {key: split data} dictionary
-    data = {k : np.split(v, splits, axis=0)
-            for k, v in data.items()}
-    
-    # Create list with dictionary for each split
-    data_list = [{} for _ in splits]
-    
-    # Loop through batches of data
-    for k, batches in data.items():
-        # Copy batches of data into dictionaries
-        for d, b in zip(data_list, batches):
-            d[k] = b
-    
-    return data_list
-
+from ..utils.data import batch_numpy, get_numpy_size
 
 def _build_reset_model(model, custom_updates, var_ref_creator):
     # If model has any state variables
@@ -90,8 +67,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
                      made by each output Population or Layer
         """
         # Determine the number of elements in x and y
-        x_size = _get_numpy_size(x)
-        y_size = _get_numpy_size(x)
+        x_size = get_numpy_size(x)
+        y_size = get_numpy_size(x)
         
         if x_size is None:
             raise RuntimeError("Each input population must be "
@@ -106,8 +83,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         
         # Batch x and y
         batch_size = self.genn_model.batch_size
-        x = _batch_numpy(x, batch_size, x_size)
-        y = _batch_numpy(y, batch_size, y_size)
+        x = batch_numpy(x, batch_size, x_size)
+        y = batch_numpy(y, batch_size, y_size)
         
         # Loop through batches
         for x_batch, y_batch in zip(x, y):
