@@ -4,7 +4,7 @@ from .neuron import Neuron
 from ..utils import InitValue, NeuronModel, Value
 
 genn_model = {
-    "param_name_types": ["K", "Scale"],
+    "param_name_types": [("K", "int"), ("Scale", "scalar")],
     "var_name_types": [("V", "scalar")],
     "sim_code":
         """
@@ -58,26 +58,26 @@ genn_model_signed = {
     "is_auto_refractory_required": False}
     
 
-class FewSpikeInput(Neuron, InputBase):
+class FewSpikeReluInput(Neuron, InputBase):
     def __init__(self, k=10, alpha=25, signed_input=False):
-        super(FewSpikeInput, self).__init__(var_name="V")
+        super(FewSpikeReluInput, self).__init__(var_name="V")
 
         self.k = Value(k)
         self.alpha = Value(alpha)
         self.signed_input = signed_input
         
         if self.k.is_initializer or self.alpha.is_initializer:
-            raise NotImplementedError("Few spike encoder model does not "
+            raise NotImplementedError("FewSpike ReLU input model does not "
                                       "currently support k or alpha values "
                                       "specified using Initialiser objects")
-        
+
     def get_model(self, population, dt):
         # Calculate scale
         if self.signed_input:
-            scale = self.alpha * 2**(-self.k // 2)
+            scale = self.alpha.value * 2**(-self.k.value // 2)
         else:
-            scale = self.alpha * pars[1] * 2**(-pars[0])
+            scale = self.alpha.value * pars[1] * 2**(-self.k.value)
         
         model = genn_model_signed if self.signed_input else genn_model,
-        return NeuronModel(model, {"K": self.k, "Scale": scale},
-                           {"Input": Value(0.0), "V": self.v})
+        return NeuronModel(model, {"K": self.k, "Scale": Value(scale)},
+                           {"Input": Value(0.0), "V": Value(0.0)})
