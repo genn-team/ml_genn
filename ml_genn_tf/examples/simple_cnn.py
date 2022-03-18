@@ -65,7 +65,7 @@ if __name__ == '__main__':
 
     # Convert and compile ML GeNN model
     mlg_model, mlg_model_inputs, mlg_model_outputs = convert(tf_model, converter=converter)
-    
+
     compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                  dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                  kernel_profiling=args.kernel_profiling)
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         for x_batch, y_batch in zip(validate_x, validate_y):
             batch_count = len(y_batch)
             compiled_model.custom_update("Reset")
-            compiled_model.set_input({mlg_model_inputs[0]: x_batch * 0.01})
+            compiled_model.set_input({mlg_model_inputs[0]: x_batch})
             
             for t in range(T):
                 compiled_model.step_time()
