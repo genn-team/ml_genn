@@ -84,9 +84,10 @@ if __name__ == '__main__':
         print(f"Time = {end_time - start_time} s")
         
         if args.kernel_profiling:
+            reset_time = compiled_model.genn_model.get_custom_update_time("Reset")
             print(f"Kernel profiling:\n"
                   f"\tinit_time: {compiled_model.genn_model.init_time} s\n"
                   f"\tinit_sparse_time: {compiled_model.genn_model.init_sparse_time} s\n"
                   f"\tneuron_update_time: {compiled_model.genn_model.neuron_update_time} s\n"
                   f"\tpresynaptic_update_time: {compiled_model.genn_model.presynaptic_update_time} s\n"
-                  f"\tcustom_update_reset_time: {compiled_model.genn_model.customUpdateResetTime} s")
+                  f"\tcustom_update_reset_time: {reset_time} s")
