@@ -406,6 +406,6 @@ def convert(tf_model, converter=Simple()):
 
     
     # Perform any pre-compilation tasks
-    converter.pre_compile(mlg_network)
+    converter.pre_compile(mlg_network, mlg_network_inputs, mlg_model_outputs)
     
     return mlg_network, mlg_network_inputs, mlg_model_outputs

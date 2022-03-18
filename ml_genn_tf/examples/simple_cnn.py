@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # Create a suitable converter to convert TF model to ML GeNN
     K = 8
     T = 500
-    converter = args.build_converter(mlg_norm_ds, signed_input=False, K=K, norm_time=T)
+    converter = args.build_converter(mlg_norm_ds, signed_input=False, k=K, norm_time=T)
 
     # Convert and compile ML GeNN model
     mlg_net, mlg_net_inputs, mlg_net_outputs = convert(tf_model, converter=converter)

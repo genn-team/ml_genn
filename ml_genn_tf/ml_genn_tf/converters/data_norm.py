@@ -5,83 +5,21 @@ import tensorflow as tf
 from collections import namedtuple
 from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
                              IntegrateFireInput, PoissonInput)
+from .converter import Converter
 from .enum import InputType
 
 logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
-PreCompileOutput = namedtuple('PreCompileOutput', ['thresholds'])
+PreConvertOutput = namedtuple('PreConvertOutput', ['thresholds'])
 
-class DataNorm(object):
+class DataNorm(Converter):
     def __init__(self, norm_data, signed_input=False, 
                  input_type=InputType.POISSON):
         self.norm_data = norm_data
         self.signed_input = signed_input
         self.input_type = InputType(input_type)
-
-    def validate_tf_layer(self, tf_layer, config):
-        if isinstance(tf_layer, (tf.keras.layers.Dense,
-                                 tf.keras.layers.Conv2D)):
-            if tf_layer.use_bias:
-                # no bias tensors allowed
-                raise NotImplementedError("Data-Norm converter: bias tensors "
-                                          "not supported")
-
-            if config.is_output:
-                # ReLU and softmax activation allowd in output layers
-                if (not tf_layer.activation is tf.keras.activations.relu and
-                    not tf_layer.activation is tf.keras.activations.softmax):
-                    raise NotImplementedError("Data-Norm converter: output "
-                                              "layer must have ReLU or "
-                                              "softmax activation")
-
-            elif config.has_activation:
-                # ReLU activation allowed everywhere
-                if not tf_layer.activation is tf.keras.activations.relu:
-                    raise NotImplementedError("Data-Norm converter: hidden "
-                                              "layers must have ReLU activation")
-
-        elif isinstance(tf_layer, tf.keras.layers.Activation):
-            if config.is_output:
-                # ReLU and softmax activation allowd in output layers
-                if (not tf_layer.activation is tf.keras.activations.relu and
-                    not tf_layer.activation is tf.keras.activations.softmax):
-                    raise NotImplementedError("Data-Norm converter: output "
-                                              "layer must have ReLU or "
-                                              "softmax activation")
-
-            else:
-                # ReLU activation allowed everywhere
-                if not tf_layer.activation is tf.keras.activations.relu:
-                    raise NotImplementedError("Data-Norm converter: hidden "
-                                              "layers must have ReLU "
-                                              "activation")
-
-        elif isinstance(tf_layer, tf.keras.layers.ReLU):
-            # ReLU activation allowed everywhere
-            pass
-
-        elif isinstance(tf_layer, tf.keras.layers.Softmax):
-            # softmax activation only allowed for output layers
-            if not config.is_output:
-                raise NotImplementedError("Data-Norm converter: only output "
-                                          "layers may use softmax")
-
-        elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
-            # global average pooling allowed
-            pass
-        elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-            if tf_layer.padding != 'valid':
-                raise NotImplementedError("Data-Norm converter: only valid "
-                                          "padding is supported for pooling "
-                                          "layers")
-
-        else:
-            # no other layers allowed
-            raise NotImplementedError(
-                'Data-Norm converter: {} layers are not supported'.format(
-                    tf_layer.__class__.__name__))
 
     def create_input_neurons(self, pre_convert_output):
         if self.input_type == InputType.SPIKE:
@@ -221,7 +159,7 @@ class DataNorm(object):
             # Outbound layer
             tf_layer = tf_out_layers[0]
 
-        return PreCompileOutput(thresholds=thresholds)
+        return PreConvertOutput(thresholds=thresholds)
     
-    def pre_compile(self, mlg_network):
+    def pre_compile(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
         pass

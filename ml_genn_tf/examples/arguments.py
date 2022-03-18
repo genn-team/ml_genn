@@ -1,7 +1,7 @@
 import logging
 
 from argparse import ArgumentParser
-from ml_genn_tf.converters import (ConverterType, DataNorm, 
+from ml_genn_tf.converters import (ConverterType, DataNorm, FewSpike, 
                                    InputType, Simple)
 
 from functools import partial
@@ -42,9 +42,9 @@ def parse_arguments(model_description='ML GeNN model'):
     # Configure logging
     logging.basicConfig(level=args.log_level.upper())
 
-    def build_converter(self, norm_data, signed_input=False, K=8, norm_time=500):
-        #if self.converter == 'few-spike':
-        #    return FewSpike(K=K, signed_input=signed_input, norm_data=[norm_data])
+    def build_converter(self, norm_data, signed_input=False, k=8, norm_time=500):
+        if self.converter == 'few-spike':
+            return FewSpike(k=k, signed_input=signed_input, norm_data=[norm_data])
         if args.converter == 'data-norm':
             return DataNorm(norm_data=[norm_data], signed_input=signed_input, 
                             input_type=self.input_type)

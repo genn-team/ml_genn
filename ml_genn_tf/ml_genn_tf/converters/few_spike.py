@@ -1,92 +1,32 @@
 import logging
 import numpy as np
-import sys
 import tensorflow as tf
 
-from copy import copy
 from collections import namedtuple
-from six import iteritems
+from ml_genn.neurons import FewSpikeRelu, FewSpikeReluInput
+from ml_genn.outputs import Var
+from .converter import Converter
 
-from ml_genn.layers import FSReluNeurons
-from ml_genn.layers import FSReluInputNeurons
+from copy import copy
+from ml_genn.utils.network import get_network_dag
 
 logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
-PreCompileOutput = namedtuple('PreCompileOutput', ['layer_alpha', 'input_alpha'])
+PreConvertOutput = namedtuple('PreCompileOutput', ['layer_alpha', 'input_alpha'])
 
-class FewSpike(object):
-    def __init__(self, K=10, alpha=25, signed_input=False, norm_data=None):
-        self.K = K
+class FewSpike(Converter):
+    def __init__(self, k: int=10, alpha: float=25, signed_input=False, norm_data=None):
+        self.k = k
         self.alpha = alpha
         self.signed_input = signed_input
         self.norm_data = norm_data
 
-    def validate_tf_layer(self, tf_layer, config):
-        if isinstance(tf_layer, (
-                tf.keras.layers.Dense,
-                tf.keras.layers.Conv2D)):
-
-            if tf_layer.use_bias:
-                # no bias tensors allowed
-                raise NotImplementedError('Few-Spike converter: bias tensors not supported')
-
-            if config.is_output:
-                # ReLU and softmax activation allowd in output layers
-                if (not tf_layer.activation is tf.keras.activations.relu and
-                    not tf_layer.activation is tf.keras.activations.softmax):
-                    raise NotImplementedError(
-                        'Few-Spike converter: output layer must have ReLU or softmax activation')
-
-            elif config.has_activation:
-                # ReLU activation allowed everywhere
-                if not tf_layer.activation is tf.keras.activations.relu:
-                    raise NotImplementedError(
-                        'Few-Spike converter: hidden layers must have ReLU activation')
-
-        elif isinstance(tf_layer, tf.keras.layers.Activation):
-            if config.is_output:
-                # ReLU and softmax activation allowd in output layers
-                if (not tf_layer.activation is tf.keras.activations.relu and
-                    not tf_layer.activation is tf.keras.activations.softmax):
-                    raise NotImplementedError(
-                        'Few-Spike converter: output layer must have ReLU or softmax activation')
-
-            else:
-                # ReLU activation allowed everywhere
-                if not tf_layer.activation is tf.keras.activations.relu:
-                    raise NotImplementedError(
-                        'Few-Spike converter: hidden layers must have ReLU activation')
-
-        elif isinstance(tf_layer, tf.keras.layers.ReLU):
-            # ReLU activation allowed everywhere
-            pass
-
-        elif isinstance(tf_layer, tf.keras.layers.Softmax):
-            # softmax activation only allowed for output layers
-            if not config.is_output:
-                raise NotImplementedError(
-                    'Few-Spike converter: only output layers may use softmax')
-
-        elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
-            # global average pooling allowed
-            pass
-        elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-            if tf_layer.padding != 'valid':
-                raise NotImplementedError(
-                    'Few-Spike converter: only valid padding is supported for pooling layers')
-
-        else:
-            # no other layers allowed
-            raise NotImplementedError(
-                'Few-Spike converter: {} layers are not supported'.format(
-                    tf_layer.__class__.__name__))
-
     def create_input_neurons(self, pre_convert_output):
         alpha = (self.alpha if pre_convert_output.input_alpha is None 
                  else pre_convert_output.input_alpha)
-        return FSReluInputNeurons(self.K, alpha, self.signed_input)
+        return FewSpikeReluInput(self.k, alpha, self.signed_input)
 
     def create_neurons(self, tf_layer, pre_convert_output, is_output):
         # If layer alphas have been calculated but
@@ -99,7 +39,8 @@ class FewSpike(object):
         # Lookup optimised alpha value for neuron
         alpha = (pre_conv_alpha[tf_layer] if tf_layer in pre_conv_alpha
                  else self.alpha)
-        return FSReluNeurons(self.K, alpha)
+        return FewSpikeRelu(self.k, alpha, 
+                            output="var" if is_output else None)
     
     def pre_convert(self, tf_model):
         # If any normalisation data was provided
@@ -116,38 +57,39 @@ class FewSpike(object):
                 # Get output given input data.
                 output = get_outputs(d)
                 for l, out in zip(tf_model.layers, output):
-                    layer_alpha[l] = max(layer_alpha[l], np.amax(out) / (1.0 - 2.0 ** -self.K))
+                    layer_alpha[l] = max(layer_alpha[l], np.amax(out) / (1.0 - 2.0 ** -self.k))
 
                 # Use input data range to directly set maximum input
                 if self.signed_input:
-                    input_alpha = max(input_alpha, np.amax(np.abs(d)) / (1.0 - 2.0 ** (1 - self.K)))
+                    input_alpha = max(input_alpha, np.amax(np.abs(d)) / (1.0 - 2.0 ** (1 - self.k)))
                 else:
-                    input_alpha = max(input_alpha, np.amax(d) / (1.0 - 2.0 ** -self.K))
+                    input_alpha = max(input_alpha, np.amax(d) / (1.0 - 2.0 ** -self.k))
 
             # Return results of normalisation in tuple
-            return PreCompileOutput(layer_alpha=layer_alpha,
+            return PreConvertOutput(layer_alpha=layer_alpha,
                                     input_alpha=input_alpha)
 
         # Otherwise, return empty normalisation output tuple
         else:
-            return PreCompileOutput(layer_alpha={}, input_alpha=None)
+            return PreConvertOutput(layer_alpha={}, input_alpha=None)
 
-    def pre_compile(self, mlg_model):
+    def pre_compile(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
+        # Get DAG of network
+        dag = get_network_dag(mlg_network_inputs, mlg_model_outputs)
+        
+        # Loop through populations
         next_pipeline_depth = {}
+        for p in dag:
+            # If layer has incoming connections
+            if len(p.incoming_connections) > 0:
 
-        # Loop through layers
-        for l in mlg_model.layers:
-
-            # If layer has upstream synaptic connections
-            if len(l.upstream_synapses) > 0:
-
-                # Determine the maximum alpha value upstream layers
-                max_presyn_alpha = max(
-                    s.source().neurons.alpha for s in l.upstream_synapses)
+                # Determine the maximum alpha value of presynaptic populations
+                max_presyn_alpha = max(c.source().neuron.alpha.value 
+                                       for c in p.incoming_connections)
 
                 # Determine the maximum pipeline depth from upstream synapses
-                l.pipeline_depth = max(
-                    next_pipeline_depth[s.source()] for s in l.upstream_synapses)
+                l.pipeline_depth = max(next_pipeline_depth[c.source()] 
+                                       for c in p.incoming_connections)
 
                 # Downstream layer pipeline depth is one more than this
                 next_pipeline_depth[l] = l.pipeline_depth + 1
@@ -159,7 +101,7 @@ class FewSpike(object):
                     s.delay = depth_difference * self.K
 
                     # Set presyn alpha to maximum alpha of all presyn layers
-                    s.source().neurons.alpha = max_presyn_alpha
+                    s.source().neuron.alpha.value = max_presyn_alpha
 
             # Otherwise (layer is an input layer), set this layer's delay as zero
             else:
