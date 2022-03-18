@@ -1,12 +1,16 @@
+import logging
 import numpy as np
 import sys
 import tensorflow as tf
+
 from copy import copy
 from collections import namedtuple
 from six import iteritems
 
 from ml_genn.layers import FSReluNeurons
 from ml_genn.layers import FSReluInputNeurons
+
+logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
@@ -89,8 +93,8 @@ class FewSpike(object):
         # this layer isn't included, give warning
         pre_conv_alpha = pre_convert_output.layer_alpha
         if len(pre_conv_alpha) > 0 and tf_layer not in pre_conv_alpha:
-            print("WARNING: FewSpike pre_convert has not provided "
-                  "an alpha value for '%s'" % tf_layer.name)
+            logger.warning(f"FewSpike pre_convert has not provided "
+                           f"an alpha value for '{tf_layer.name}'")
             
         # Lookup optimised alpha value for neuron
         alpha = (pre_conv_alpha[tf_layer] if tf_layer in pre_conv_alpha

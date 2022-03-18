@@ -1,4 +1,6 @@
+import logging
 import numpy as np
+
 from pygenn.genn_model import create_custom_sparse_connect_init_snippet_class
 from pygenn.genn_model import create_cmlf_class
 from pygenn.genn_model import create_cksf_class
@@ -10,6 +12,8 @@ from ml_genn.layers import ConnectivityType, PadMode
 from ml_genn.layers.base_synapses import BaseSynapses
 from ml_genn.layers.weight_update_models import signed_static_pulse
 from ml_genn.layers.helper import _get_conv_same_padding, _get_param_2d
+
+logger = logging.getLogger(__name__)
 
 convtranspose2d_init = create_custom_sparse_connect_init_snippet_class(
     'convtranspose2d',
@@ -125,9 +129,9 @@ class ConvTranspose2DSynapses(BaseSynapses):
             wu_var = {'g': self.weights.flatten()}
             wu_var_egp = {}
         elif self.connectivity_type is ConnectivityType.TOEPLITZ:
-            print('WARNING: falling back to procedural connectivity '
-                  'for ConvTranspose2DSynapses')
-            conn = 'PROCEDURAL_KERNELG'
+            logger.warning("Falling back to procedural connectivity "
+                           "for ConvTranspose2DSynapses")
+            conn = "PROCEDURAL_KERNELG"
             wu_var = {'g': self.weights.flatten()}
             wu_var_egp = {}
 

@@ -1,3 +1,4 @@
+import logging
 import tensorflow as tf
 
 from collections import namedtuple
@@ -5,6 +6,8 @@ from ml_genn import Connection, Model, Population
 from ml_genn.connectivity import (AvgPool2D, AvgPoolDense2D, AvgPoolConv2D, 
                                   Conv2D, Dense, OneToOne)
 from .converters import Simple
+
+logger = logging.getLogger(__name__)
 
 def convert(tf_model, converter=Simple()):
     """Create a ML GeNN model from a TensorFlow model
@@ -101,7 +104,7 @@ def convert(tf_model, converter=Simple()):
     # === Input Layers ===
     for tf_layer in tf_in_layers:
         new_tf_layers.add(tf_layer)
-        print('configuring Input layer <{}>'.format(tf_layer.name))
+        logger.debug(f"Configuring Input layer <{tf_layer.name}>")
 
         # configure layer
         config = LayerConfig(
@@ -129,9 +132,8 @@ def convert(tf_model, converter=Simple()):
                 continue
 
             new_tf_layers.add(tf_layer)
-            print('configuring {} layer <{}>'.format(
-                tf_layer.__class__.__name__, tf_layer.name))
-
+            logger.debug(f"Configuring {tf_layer.__class__.__name__} "
+                         f"layer <{tf_layer.name}>")
 
             # === Add Layers ===
             if isinstance(tf_layer, tf.keras.layers.Add):

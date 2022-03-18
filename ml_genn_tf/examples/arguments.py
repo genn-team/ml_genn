@@ -1,8 +1,10 @@
-from argparse import ArgumentParser
-from functools import partial
+import logging
 
+from argparse import ArgumentParser
 from ml_genn_tf.converters import (ConverterType, DataNorm, 
                                    InputType, Simple)
+
+from functools import partial
 
 def parse_arguments(model_description='ML GeNN model'):
     '''
@@ -12,6 +14,7 @@ def parse_arguments(model_description='ML GeNN model'):
     parser = ArgumentParser(description=model_description)
 
     # compilation options
+    parser.add_argument('--log-level', type=str, default="warning")
     parser.add_argument('--dt', type=float, default=1.0)
     parser.add_argument('--rng-seed', type=int, default=0)
     parser.add_argument('--batch-size', type=int, default=1)
@@ -37,6 +40,9 @@ def parse_arguments(model_description='ML GeNN model'):
     parser.add_argument('--augment-training', action='store_true')
 
     args = parser.parse_args()
+    
+    # Configure logging
+    logging.basicConfig(level=args.log_level.upper())
 
     def build_converter(self, norm_data, signed_input=False, K=8, norm_time=500):
         #if self.converter == 'few-spike':

@@ -1,10 +1,13 @@
-import tensorflow as tf
+import logging
 import numpy as np
+import tensorflow as tf
 
 from collections import namedtuple
 from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
                              IntegrateFireInput, PoissonInput)
 from .enum import InputType
+
+logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
@@ -90,7 +93,7 @@ class DataNorm(object):
 
     def create_neurons(self, tf_layer, pre_convert_output, is_output):
         threshold = pre_convert_output.thresholds[tf_layer]
-        print(f"layer {tf_layer.name}: threshold={threshold}")
+        logger.debug(f"layer {tf_layer.name}: threshold={threshold}")
               
         return IntegrateFire(v_thresh=threshold,
                              output="spike_count" if is_output else None)
@@ -198,9 +201,9 @@ class DataNorm(object):
                 max_weight = np.max(tf_layer.get_weights()[0])
                 scale_factor = np.maximum(max_activation, max_weight)
                 threshold = scale_factor / scale_factors[tf_in_layers[0]]
-                print(f"layer {tf_layer.name}:"
-                      f"max activation={max_activation}, "
-                      f"max weight={max_weight}")
+                logger.debug(f"layer {tf_layer.name}:"
+                             f"max activation={max_activation}, "
+                             f"max weight={max_weight}")
 
             else:
                 # If layer is not weighted (like ReLU or Flatten),
