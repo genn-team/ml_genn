@@ -3,7 +3,7 @@ from ..utils import NeuronModel, Value
 
 from copy import deepcopy
 
-class SumVal(Output):
+class SumVar(Output):
     def __call__(self, model: NeuronModel, output_var_name=None):
         self.output_var_name = self.output_var_name
         
@@ -53,4 +53,4 @@ class SumVal(Output):
         genn_pop.pull_var_from_device(sum_var_name)
         
         # Return contents, reshaped as desired
-        return genn_pop.vars["Scount"].view.reshape((batch_size,) + shape)
+        return genn_pop.vars[sum_var_name].view.reshape((batch_size,) + shape)
