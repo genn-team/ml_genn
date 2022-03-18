@@ -98,7 +98,7 @@ class Compiler:
         self.batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
-        self.prefer_in_memory_connect = True
+        self.prefer_in_memory_connect = prefer_in_memory_connect
         self.genn_kwargs = genn_kwargs
 
     def build_neuron_model(self, pop, model, custom_updates):
