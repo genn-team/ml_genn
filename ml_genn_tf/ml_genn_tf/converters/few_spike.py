@@ -72,38 +72,3 @@ class FewSpike(Converter):
         # Otherwise, return empty normalisation output tuple
         else:
             return PreConvertOutput(layer_alpha={}, input_alpha=None)
-
-    def pre_compile(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
-        # Get DAG of network
-        dag = get_network_dag(mlg_network_inputs, mlg_model_outputs)
-        
-        # Loop through populations
-        next_pipeline_depth = {}
-        for p in dag:
-            # If layer has incoming connections
-            if len(p.incoming_connections) > 0:
-
-                # Determine the maximum alpha value of presynaptic populations
-                max_presyn_alpha = max(c.source().neuron.alpha.value 
-                                       for c in p.incoming_connections)
-
-                # Determine the maximum pipeline depth from upstream synapses
-                l.pipeline_depth = max(next_pipeline_depth[c.source()] 
-                                       for c in p.incoming_connections)
-
-                # Downstream layer pipeline depth is one more than this
-                next_pipeline_depth[l] = l.pipeline_depth + 1
-
-                # Loop through upstream synapses
-                for s in l.upstream_synapses:
-                    # Set upstream delay so all spikes arrive at correct pipeline stage
-                    depth_difference = l.pipeline_depth - next_pipeline_depth[s.source()]
-                    s.delay = depth_difference * self.K
-
-                    # Set presyn alpha to maximum alpha of all presyn layers
-                    s.source().neuron.alpha.value = max_presyn_alpha
-
-            # Otherwise (layer is an input layer), set this layer's delay as zero
-            else:
-                l.pipeline_depth = 0
-                next_pipeline_depth[l] = 0

@@ -160,6 +160,3 @@ class DataNorm(Converter):
             tf_layer = tf_out_layers[0]
 
         return PreConvertOutput(thresholds=thresholds)
-    
-    def pre_compile(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
-        pass

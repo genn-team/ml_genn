@@ -3,7 +3,6 @@ import numpy as np
 
 from tensorflow.keras import models, layers, datasets
 from ml_genn.compilers import InferenceCompiler
-from ml_genn_tf import convert
 
 from arguments import parse_arguments
 from time import perf_counter
@@ -64,7 +63,7 @@ if __name__ == '__main__':
     converter = args.build_converter(mlg_norm_ds, signed_input=False, k=K, norm_time=T)
 
     # Convert and compile ML GeNN model
-    mlg_net, mlg_net_inputs, mlg_net_outputs = convert(tf_model, converter=converter)
+    mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
 
     compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                  dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
