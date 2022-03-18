@@ -8,6 +8,5 @@ setup(
     install_requires = [
         'pygenn>=4.7.0',
         'enum-compat',
-        'six',
         'tqdm']
 )
