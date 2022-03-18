@@ -90,10 +90,9 @@ class FewSpikeRelu(Neuron):
         self.k = Value(k)
         self.alpha = Value(alpha)
         
-        if self.k.is_initializer or self.alpha.is_initializer:
-            raise NotImplementedError("FewSpike ReLU model does not "
-                                      "currently support k or alpha values "
-                                      "specified using Initialiser objects")
+        if not self.k.is_constant or not self.alpha.is_constant:
+            raise NotImplementedError("FewSpike ReLU model currently requires"
+                                      " homogeneous k and alpha values")
     
     def get_model(self, population, dt):
          # Loop through incoming connections
@@ -146,8 +145,9 @@ class FewSpikeRelu(Neuron):
         source_scale = source_alpha.value * 2**(-self.k.value)
     
         model = genn_model_upstream_signed if source_signed else genn_model,
-        return NeuronModel(model, 
-                           {"K": self.k, "Scale": Value(scale), 
-                            "UpstreamScale": Value(source_scale)},
-                           {"Fx": Value(0.0), "V": Value(0.0)})
+        return self.add_output_logic(
+            NeuronModel(model, 
+                        {"K": self.k, "Scale": Value(scale), 
+                         "UpstreamScale": Value(source_scale)},
+                        {"Fx": Value(0.0), "V": Value(0.0)}), "Fx")
 

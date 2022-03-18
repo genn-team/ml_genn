@@ -66,10 +66,9 @@ class FewSpikeReluInput(Neuron, InputBase):
         self.alpha = Value(alpha)
         self.signed_input = signed_input
         
-        if self.k.is_initializer or self.alpha.is_initializer:
-            raise NotImplementedError("FewSpike ReLU input model does not "
-                                      "currently support k or alpha values "
-                                      "specified using Initialiser objects")
+        if not self.k.is_constant or not self.alpha.is_constant:
+            raise NotImplementedError("FewSpike ReLU model currently requires"
+                                      " homogeneous k and alpha values")
 
     def get_model(self, population, dt):
         # Calculate scale
