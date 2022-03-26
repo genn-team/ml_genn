@@ -7,7 +7,7 @@ from copy import deepcopy
 
 class Var(Output):
     def __call__(self, model: NeuronModel, output_var_name=None):
-        self.output_var_name = self.output_var_name
+        self.output_var_name = output_var_name
         
         if not "var_name_types" in model.model:
             raise RuntimeError("Var output can only be used "

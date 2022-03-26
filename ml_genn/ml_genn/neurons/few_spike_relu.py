@@ -100,22 +100,22 @@ class FewSpikeRelu(Neuron):
         source_signed = None
         for c in population.incoming_connections:
             # Get neuron object associated with the source layer
-            nrn = c.source().neuron
+            nrn = c().source().neuron
             
             # If the upstream neuron is some sort of FsRelu
             # **YUCK** is there a better way of accessing the FsReluNeurons type?
             source_relu = isinstance(nrn, type(self))
-            source_relu_input = isinstance(nrn, FewSpikeReLUInput)
-            if upstream_relu or upstream_relu_input:
+            source_relu_input = isinstance(nrn, FewSpikeReluInput)
+            if source_relu or source_relu_input:
                 # Check K parameters match
-                if nrn.k != self.k:
+                if nrn.k.value != self.k.value:
                     raise ValueError("K parameters of FewSpike ReLU neurons "
                                      "must match across whole model")
                 
                 # Check that all upstream neurons have the same alpha 
                 if source_alpha is None:
                     source_alpha = nrn.alpha
-                elif source_alpha != nrn.alpha:
+                elif source_alpha.value != nrn.alpha.value:
                     raise ValueError("All upstream FewSpike ReLU neurons "
                                      "must have the same alpha values")
 
@@ -144,10 +144,10 @@ class FewSpikeRelu(Neuron):
             scale =  self.alpha.value * 2**(-self.k.value)
         source_scale = source_alpha.value * 2**(-self.k.value)
     
-        model = genn_model_upstream_signed if source_signed else genn_model,
+        model = genn_model_upstream_signed if source_signed else genn_model
         return self.add_output_logic(
             NeuronModel(model, 
                         {"K": self.k, "Scale": Value(scale), 
-                         "UpstreamScale": Value(source_scale)},
+                         "SourceScale": Value(source_scale)},
                         {"Fx": Value(0.0), "V": Value(0.0)}), "Fx")
 

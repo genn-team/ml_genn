@@ -8,7 +8,6 @@ from ml_genn.outputs import Var
 from .converter import Converter
 
 from copy import copy
-from ml_genn.utils.network import get_network_dag
 
 logger = logging.getLogger(__name__)
 

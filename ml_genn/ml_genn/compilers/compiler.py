@@ -100,6 +100,9 @@ class Compiler:
         self.kernel_profiling = kernel_profiling
         self.prefer_in_memory_connect = prefer_in_memory_connect
         self.genn_kwargs = genn_kwargs
+    
+    def pre_compile(self, network):
+        pass
 
     def build_neuron_model(self, pop, model, custom_updates):
         # Build model customised for parameters and values
@@ -169,7 +172,10 @@ class Compiler:
         genn_model.batch_size = self.batch_size
         genn_model._model.set_seed(self.rng_seed)
         genn_model.timing_enabled = self.kernel_profiling
-        
+
+        # Run any pre-compilation logic
+        self.pre_compile(network)
+
         # Loop through populations
         custom_updates = defaultdict(list)
         neuron_populations = {}
@@ -226,6 +232,7 @@ class Compiler:
                                                          **wum)
                                                      
             # If delays are constant, use as axonal delay otherwise, disable
+            # **THINK** we should be using connect_snippet.delay here
             delay = conn.connectivity.delay
             axonal_delay = (delay.value if delay.is_constant
                             else 0)

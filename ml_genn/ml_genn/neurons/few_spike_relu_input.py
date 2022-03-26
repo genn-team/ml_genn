@@ -75,8 +75,8 @@ class FewSpikeReluInput(Neuron, InputBase):
         if self.signed_input:
             scale = self.alpha.value * 2**(-self.k.value // 2)
         else:
-            scale = self.alpha.value * pars[1] * 2**(-self.k.value)
+            scale = self.alpha.value * 2**(-self.k.value)
         
-        model = genn_model_signed if self.signed_input else genn_model,
+        model = genn_model_signed if self.signed_input else genn_model
         return NeuronModel(model, {"K": self.k, "Scale": Value(scale)},
-                           {"Input": Value(0.0), "V": Value(0.0)})
+                           {"V": Value(0.0)})
