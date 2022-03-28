@@ -72,7 +72,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 batch_y = next(y_iter)
             except StopIteration:
                 data_remaining = False
-                
+            
+            # Reset time to 0
+            # **YUCK** I don't REALLY like this
+            self.genn_model.timestep = 0
+            self.genn_model.t = 0.0
+            
+            # Launch reset kernel
             self.custom_update("Reset")
             
             # If there is any data remaining, 
