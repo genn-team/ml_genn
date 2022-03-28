@@ -71,10 +71,9 @@ mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
 
 compiler = FewSpikeCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                             dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-                            kernel_profiling=args.kernel_profiling,
-                            k=K, inputs=mlg_net_inputs, outputs=mlg_net_outputs)
+                            kernel_profiling=args.kernel_profiling, k=K)
 
-compiled_net = compiler.compile(mlg_net, "simple_cnn")
+compiled_net = compiler.compile(mlg_net, "simple_cnn", inputs=mlg_net_inputs, outputs=mlg_net_outputs)
 compiled_net.genn_model.timing_enabled = args.kernel_profiling
     
 with compiled_net:

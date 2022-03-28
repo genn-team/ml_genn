@@ -115,6 +115,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Apply inputs to model
         self.set_input(x)
         
+        # Simulate timesteps
         for t in range(self.evaluate_timesteps):
             self.step_time()
 
@@ -136,7 +137,8 @@ class InferenceCompiler(Compiler):
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
 
-    def build_neuron_model(self, pop, model, custom_updates):
+    def build_neuron_model(self, pop, model, custom_updates, 
+                           pre_compile_output):
         _build_reset_model(model, custom_updates, 
             lambda nrn_pops, _, name: create_var_ref(nrn_pops[pop], name))
     
@@ -144,7 +146,8 @@ class InferenceCompiler(Compiler):
         return super(InferenceCompiler, self).build_neuron_model(
             pop, model, custom_updates)
 
-    def build_synapse_model(self, conn, model, custom_updates):
+    def build_synapse_model(self, conn, model, custom_updates, 
+                            pre_compile_output):
         _build_reset_model(model, custom_updates, 
             lambda _, conn_pops, name: create_psm_var_ref(conn_pops[conn], name))
     
@@ -152,7 +155,7 @@ class InferenceCompiler(Compiler):
             conn, model, custom_updates)
     
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations):
+                                connection_populations, pre_compile_output):
         return CompiledInferenceNetwork(genn_model, neuron_populations, 
                                         connection_populations,
                                         self.evaluate_timesteps)

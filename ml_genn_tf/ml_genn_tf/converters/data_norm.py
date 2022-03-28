@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
-PreConvertOutput = namedtuple('PreConvertOutput', ['thresholds'])
+PreConvertOutput = namedtuple("PreConvertOutput", ["thresholds"])
 
 class DataNorm(Converter):
     def __init__(self, norm_data, signed_input=False, 

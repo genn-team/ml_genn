@@ -102,9 +102,10 @@ class Compiler:
         self.genn_kwargs = genn_kwargs
     
     def pre_compile(self, network):
-        pass
+        return None
 
-    def build_neuron_model(self, pop, model, custom_updates):
+    def build_neuron_model(self, pop, model, custom_updates, 
+                           pre_compile_output):
         # Build model customised for parameters and values
         model_copy, constant_param_vals, var_vals_copy, var_egp =\
             build_model(model)
@@ -117,7 +118,8 @@ class Compiler:
         # Return model and modified param and var values
         return model_copy, constant_param_vals, var_vals_copy, var_egp
     
-    def build_synapse_model(self, conn, model, custom_updates):
+    def build_synapse_model(self, conn, model, custom_updates, 
+                            pre_compile_output):
         # Build model customised for parameters and values
         model_copy, constant_param_vals, var_vals_copy, var_egp =\
             build_model(model)
@@ -126,7 +128,7 @@ class Compiler:
         return model_copy, constant_param_vals, var_vals_copy, var_egp
 
     def build_weight_update_model(self, connection, connect_snippet, 
-                                  custom_updates):
+                                  custom_updates, pre_compile_output):
         # Build parameter values
         param_vals = {"g": connect_snippet.weight}
         het_delay = not connect_snippet.delay.is_constant
@@ -161,11 +163,11 @@ class Compiler:
         return model_copy, constant_param_vals, var_vals_copy, {}, {}, var_egp
     
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations):
+                                connection_populations, pre_compile_output):
         return CompiledNetwork(genn_model, neuron_populations, 
                                connection_populations)
 
-    def compile(self, network: Network, name: str):
+    def compile(self, network: Network, name: str, **kwargs):
         genn_model = GeNNModel("float", name, **self.genn_kwargs)
         
         genn_model.dT = self.dt
@@ -174,7 +176,7 @@ class Compiler:
         genn_model.timing_enabled = self.kernel_profiling
 
         # Run any pre-compilation logic
-        self.pre_compile(network)
+        pre_compile_output = self.pre_compile(network, **kwargs)
 
         # Loop through populations
         custom_updates = defaultdict(list)
@@ -189,7 +191,7 @@ class Compiler:
             neuron = pop.neuron
             neuron_model, param_vals, var_vals, var_vals_egp =\
                 self.build_neuron_model(pop, neuron.get_model(pop, self.dt), 
-                                        custom_updates)
+                                        custom_updates, pre_compile_output)
             
             # Create custom neuron model
             genn_neuron_model = create_custom_neuron_class("NeuronModel",
@@ -212,7 +214,7 @@ class Compiler:
             syn = conn.synapse
             psm, psm_param_vals, psm_var_vals, psm_var_egp =\
                 self.build_synapse_model(conn, syn.get_model(conn, self.dt),
-                                         custom_updates)
+                                         custom_updates, pre_compile_output)
             
             # Create custom postsynaptic model
             genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
@@ -225,7 +227,8 @@ class Compiler:
             (wum, wum_param_vals, wum_var_vals, 
              wum_pre_var_vals, wum_post_var_vals, wum_var_egp) =\
                 self.build_weight_update_model(conn, connect_snippet,
-                                               custom_updates)
+                                               custom_updates, 
+                                               pre_compile_output)
             
              # Create custom weight update model
             genn_wum = create_custom_weight_update_class("WeightUpdateModel",
@@ -274,4 +277,5 @@ class Compiler:
                 i+=1
 
         return self.create_compiled_network(genn_model, neuron_populations,
-                                            connection_populations)
+                                            connection_populations, 
+                                            pre_compile_output)

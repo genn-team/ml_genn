@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
 # normalisation data to be a member, instead we encapsulate it in a tuple
-PreConvertOutput = namedtuple('PreCompileOutput', ['layer_alpha', 'input_alpha'])
+PreConvertOutput = namedtuple("PreConvertOutput", ["layer_alpha", "input_alpha"])
 
 class FewSpike(Converter):
     def __init__(self, k: int=10, alpha: float=25, signed_input=False, norm_data=None):
@@ -86,5 +86,5 @@ class FewSpike(Converter):
                 # Loop through incoming connections
                 for c in p.incoming_connections:
                     # Set presyn alpha to maximum alpha of all presyn layers
-                    # **TODO** this should be done in the converter - neurons already check this
+                    # **YUCK** property should be wrapped up somehow
                     c().source().neuron.alpha = Value(max_presyn_alpha)
