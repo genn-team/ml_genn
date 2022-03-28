@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from collections import namedtuple
 from ml_genn import Connection, Network, Population
+from ml_genn.compilers import InferenceCompiler
 from ml_genn.connectivity import (AvgPool2D, AvgPoolDense2D, AvgPoolConv2D, 
                                   Conv2D, Dense, OneToOne)
 
@@ -415,6 +416,9 @@ class Converter:
     
     def post_convert(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
         pass
+    
+    def create_compiler(self, **kwargs):
+        return InferenceCompiler(**kwargs)
 
     def validate_tf_layer(self, tf_layer, config):
         if isinstance(tf_layer, (tf.keras.layers.Dense,

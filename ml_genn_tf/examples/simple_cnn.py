@@ -64,15 +64,10 @@ converter = args.build_converter(mlg_norm_ds, signed_input=False, k=K, norm_time
 # Convert and compile ML GeNN model
 mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
 
-#compiler = InferenceCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
-#                             dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-#                             kernel_profiling=args.kernel_profiling,
-#                             evaluate_timesteps=K if args.converter == 'few-spike' else T)
-
-compiler = FewSpikeCompiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
-                            dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
-                            kernel_profiling=args.kernel_profiling, k=K)
-
+# Create suitable compiler for model
+compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
+                                     dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
+                                     kernel_profiling=args.kernel_profiling)
 compiled_net = compiler.compile(mlg_net, "simple_cnn", inputs=mlg_net_inputs, outputs=mlg_net_outputs)
 compiled_net.genn_model.timing_enabled = args.kernel_profiling
     

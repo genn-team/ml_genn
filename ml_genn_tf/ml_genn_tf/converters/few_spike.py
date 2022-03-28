@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from collections import namedtuple
+from ml_genn.compilers import FewSpikeCompiler
 from ml_genn.neurons import FewSpikeRelu, FewSpikeReluInput
 from ml_genn.outputs import Var
 from ml_genn.utils import Value
@@ -88,3 +89,6 @@ class FewSpike(Converter):
                     # Set presyn alpha to maximum alpha of all presyn layers
                     # **YUCK** property should be wrapped up somehow
                     c().source().neuron.alpha = Value(max_presyn_alpha)
+    
+    def create_compiler(self, **kwargs):
+        return FewSpikeCompiler(k=self.k, **kwargs)
