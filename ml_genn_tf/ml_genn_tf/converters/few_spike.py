@@ -5,6 +5,7 @@ import tensorflow as tf
 from collections import namedtuple
 from ml_genn.neurons import FewSpikeRelu, FewSpikeReluInput
 from ml_genn.outputs import Var
+from ml_genn.utils import Value
 from .converter import Converter
 
 from copy import copy
@@ -71,3 +72,19 @@ class FewSpike(Converter):
         # Otherwise, return empty normalisation output tuple
         else:
             return PreConvertOutput(layer_alpha={}, input_alpha=None)
+    
+    def post_convert(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
+        # Loop through populations
+        for p in mlg_network.populations:
+            # If population has incoming connections
+            if len(p.incoming_connections) > 0:
+                # Determine the maximum alpha value of presynaptic populations
+                # **TODO** this should be done in the converter - neurons already check this
+                max_presyn_alpha = max(c().source().neuron.alpha.value 
+                                       for c in p.incoming_connections)
+                
+                # Loop through incoming connections
+                for c in p.incoming_connections:
+                    # Set presyn alpha to maximum alpha of all presyn layers
+                    # **TODO** this should be done in the converter - neurons already check this
+                    c().source().neuron.alpha = Value(max_presyn_alpha)

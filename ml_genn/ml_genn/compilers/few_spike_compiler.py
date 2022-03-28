@@ -108,21 +108,15 @@ class FewSpikeCompiler(Compiler):
         # **YUCK** we want compilers to be re-usable
         self.con_delay = {}
         self.pop_pipeline_depth = {}
-        self.pop_alpha = {}
         
         # Loop through populations
         next_pipeline_depth = {}
         for p in dag:
-            # If layer has incoming connections
+            # If population has incoming connections
             if len(p.incoming_connections) > 0:
-                # Determine the maximum alpha value of presynaptic populations
-                # **TODO** this should be done in the converter - neurons already check this
-                max_presyn_alpha = max(c().source().neuron.alpha.value 
-                                       for c in p.incoming_connections)
-
                 # Determine the maximum pipeline depth from upstream synapses
                 pipeline_depth = max(next_pipeline_depth[c().source()] 
-                                       for c in p.incoming_connections)
+                                     for c in p.incoming_connections)
                 self.pop_pipeline_depth[p] = pipeline_depth
                 
                 # Downstream layer pipeline depth is one more than this
@@ -136,10 +130,6 @@ class FewSpikeCompiler(Compiler):
                     depth_difference = (pipeline_depth
                                         - next_pipeline_depth[source_pop])
                     self.con_delay[c] = depth_difference * self.k
-
-                    # Set presyn alpha to maximum alpha of all presyn layers
-                    # **TODO** this should be done in the converter - neurons already check this
-                    self.pop_alpha[source_pop] = max_presyn_alpha
 
             # Otherwise (layer is an input layer),
             # set this layer's delay as zero
@@ -173,11 +163,7 @@ class FewSpikeCompiler(Compiler):
             raise NotImplementedError(
                 "FewSpike models only support FewSpikeRelu "
                 "and FewSpikeReluInput neurons")
-        
-        #if pop in self.pop_alpha:
-        #     model.
-        print(model)
-        print(f"Pop alpha:{self.pop_alpha[pop]}")
+
         # Build neuron model
         return super(FewSpikeCompiler, self).build_neuron_model(
             pop, model, custom_updates)

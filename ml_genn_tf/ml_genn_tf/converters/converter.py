@@ -385,7 +385,7 @@ class Converter:
             # for each build step
             for config in config_steps:
                 if config.is_input:
-                    # build population
+                    # build pself, opulation
                     mlg_pop = Population(config.neurons, config.shape)
                     
                     mlg_network_inputs.append(mlg_pop)
@@ -404,9 +404,18 @@ class Converter:
                         mlg_model_outputs.append(mlg_pop)
 
                 mlg_pop_lookup[config] = mlg_pop
-
+        
+        # Perform any pre-conversion tasks
+        self.post_convert(mlg_network, mlg_network_inputs, mlg_model_outputs)
+            
         return mlg_network, mlg_network_inputs, mlg_model_outputs
- 
+    
+    def pre_convert(self, tf_model):
+        pass
+    
+    def post_convert(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
+        pass
+
     def validate_tf_layer(self, tf_layer, config):
         if isinstance(tf_layer, (tf.keras.layers.Dense,
                                  tf.keras.layers.Conv2D)):
