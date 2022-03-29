@@ -144,7 +144,7 @@ class InferenceCompiler(Compiler):
     
         # Build neuron model
         return super(InferenceCompiler, self).build_neuron_model(
-            pop, model, custom_updates)
+            pop, model, custom_updates, pre_compile_output)
 
     def build_synapse_model(self, conn, model, custom_updates, 
                             pre_compile_output):
@@ -152,7 +152,7 @@ class InferenceCompiler(Compiler):
             lambda _, conn_pops, name: create_psm_var_ref(conn_pops[conn], name))
     
         return super(InferenceCompiler, self).build_synapse_model(
-            conn, model, custom_updates)
+            conn, model, custom_updates, pre_compile_output)
     
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, pre_compile_output):

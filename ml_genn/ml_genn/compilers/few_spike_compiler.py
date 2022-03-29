@@ -129,8 +129,8 @@ class FewSpikeCompiler(Compiler):
                                                 **genn_kwargs)
         self.k = k
     
-    def pre_compile(self, network, inputs, outputs):
-        dag = get_network_dag(inputs,outputs)
+    def pre_compile(self, network, inputs, outputs, **kwargs):
+        dag = get_network_dag(inputs, outputs)
         
         # Loop through populations
         con_delay = {}

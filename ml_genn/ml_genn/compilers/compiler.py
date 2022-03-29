@@ -101,7 +101,7 @@ class Compiler:
         self.prefer_in_memory_connect = prefer_in_memory_connect
         self.genn_kwargs = genn_kwargs
     
-    def pre_compile(self, network):
+    def pre_compile(self, network, **kwargs):
         return None
 
     def build_neuron_model(self, pop, model, custom_updates, 

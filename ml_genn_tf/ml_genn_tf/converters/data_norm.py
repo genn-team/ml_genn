@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from collections import namedtuple
+from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
                              IntegrateFireInput, PoissonInput)
 from .converter import Converter
@@ -15,9 +16,10 @@ logger = logging.getLogger(__name__)
 PreConvertOutput = namedtuple("PreConvertOutput", ["thresholds"])
 
 class DataNorm(Converter):
-    def __init__(self, norm_data, signed_input=False, 
-                 input_type=InputType.POISSON):
+    def __init__(self, evaluate_timesteps, signed_input=False,
+                 norm_data=None, input_type=InputType.POISSON):
         self.norm_data = norm_data
+        self.evaluate_timesteps = evaluate_timesteps
         self.signed_input = signed_input
         self.input_type = InputType(input_type)
 
@@ -160,3 +162,7 @@ class DataNorm(Converter):
             tf_layer = tf_out_layers[0]
 
         return PreConvertOutput(thresholds=thresholds)
+
+    def create_compiler(self, **kwargs):
+        return InferenceCompiler(evaluate_timesteps=self.evaluate_timesteps,
+                                 **kwargs)

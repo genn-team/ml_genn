@@ -59,7 +59,8 @@ print("TF evaluation time: %f" % (perf_counter() - tf_eval_start_time))
 # Create a suitable converter to convert TF model to ML GeNN
 K = 8
 T = 500
-converter = args.build_converter(mlg_norm_ds, signed_input=False, k=K, norm_time=T)
+converter = args.build_converter(mlg_norm_ds, signed_input=False, 
+                                 k=K, evaluate_timesteps=T)
 
 # Convert and compile ML GeNN model
 mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
@@ -68,7 +69,8 @@ mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
 compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                      dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                      kernel_profiling=args.kernel_profiling)
-compiled_net = compiler.compile(mlg_net, "simple_cnn", inputs=mlg_net_inputs, outputs=mlg_net_outputs)
+compiled_net = compiler.compile(mlg_net, "simple_cnn", inputs=mlg_net_inputs, 
+                                outputs=mlg_net_outputs)
 compiled_net.genn_model.timing_enabled = args.kernel_profiling
     
 with compiled_net:
