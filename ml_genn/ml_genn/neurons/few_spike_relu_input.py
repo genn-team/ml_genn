@@ -27,7 +27,7 @@ genn_model = {
     "is_auto_refractory_required": False}
 
 genn_model_signed = {
-    "param_name_types": ["K", "Scale"],    
+    "param_name_types": [("K", "int"), ("Scale", "scalar")],
     "var_name_types": [("V", "scalar")],
     "sim_code":
         """
