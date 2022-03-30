@@ -80,6 +80,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # While there is data remaining or any y values left in queues
         data_remaining = True
         batch_i = 0
+        size = 0
         while data_remaining or any(len(q) > 0 
                                     for q in y_pipeline_queue.values()):
             # Attempt to get next batch of data, 
@@ -105,9 +106,12 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 else:
                     self.set_input({p: x for p, x in zip(inputs, batch_x)})
                 
-                # Add each y to correct queue
-                for p, y in zip(outputs, batch_y):
-                    y_pipeline_queue[p].append(y)
+                # Add each y to correct queue(s)
+                if len(outputs) == 1:
+                    y_pipeline_queue[outputs[0]].append(batch_y)
+                else:
+                    for p, y in zip(outputs, batch_y):
+                        y_pipeline_queue[p].append(y)
             
             # Simulate K timesteps
             for t in range(self.k):
@@ -119,19 +123,22 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 if batch_i >= y_pipeline_depth[o] and len(y_pipeline_queue[o]) > 0:
                     # Pop correct labels from queue
                     pipe_batch_y = y_pipeline_queue[o].popleft()
-                    print(pipe_batch_y.shape)
+
                     # Get predictions from model
                     batch_y_star = self.get_output(o)
                     
                     # Add number correct to total
                     # **TODO** insert loss-function/other metric here
                     total_correct[o] += np.sum((np.argmax(batch_y_star[:len(pipe_batch_y)], axis=1) == pipe_batch_y))
+                    
+                    # Add number of outputs in this batch to total
+                    size += len(pipe_batch_y)
 
             # Next batch
             batch_i += 1
         
         # Return dictionary containing correct count
-        return {p: c / x_size for p, c in total_correct.items()}
+        return {p: c / size for p, c in total_correct.items()}
 
 # Because we want the converter class to be reusable, we don't want 
 # the data to be a member, instead we encapsulate it in a tuple

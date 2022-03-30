@@ -161,8 +161,6 @@ if __name__ == '__main__':
     with compiled_net:
         # Evaluate ML GeNN model
         start_time = perf_counter()
-        #accuracy = compiled_net.evaluate_numpy({mlg_net_inputs[0]: validate_x},
-        #                                       {mlg_net_outputs[0]: validate_y})
         accuracy = compiled_net.evaluate_batch_iter(mlg_net_inputs, 
                                                     mlg_net_outputs,
                                                     iter(mlg_validate_ds))
