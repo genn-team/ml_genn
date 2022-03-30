@@ -103,6 +103,9 @@ class Compiler:
     
     def pre_compile(self, network, **kwargs):
         return None
+    
+    def calculate_delay(self, conn, delay, pre_compile_output):
+        return delay
 
     def build_neuron_model(self, pop, model, custom_updates, 
                            pre_compile_output):
@@ -127,13 +130,13 @@ class Compiler:
         # Return model and modified param and var values
         return model_copy, constant_param_vals, var_vals_copy, var_egp
 
-    def build_weight_update_model(self, connection, connect_snippet, 
+    def build_weight_update_model(self, connection, weight, delay, 
                                   custom_updates, pre_compile_output):
         # Build parameter values
-        param_vals = {"g": connect_snippet.weight}
-        het_delay = not connect_snippet.delay.is_constant
+        param_vals = {"g": weight}
+        het_delay = not delay.is_constant
         if het_delay:
-            param_vals["d"] = connect_snippet.delay
+            param_vals["d"] = delay
         
         # If source neuron model defines a negative threshold condition
         src_pop = connection.source()
@@ -223,11 +226,16 @@ class Compiler:
             connect_snippet =\
                 conn.connectivity.get_snippet(conn, 
                                               self.prefer_in_memory_connect)
+            
+            # Calculate delay
+            delay = self.calculate_delay(conn, connect_snippet.delay,
+                                         pre_compile_output)
+            
             # Build weight update model
             (wum, wum_param_vals, wum_var_vals, 
              wum_pre_var_vals, wum_post_var_vals, wum_var_egp) =\
-                self.build_weight_update_model(conn, connect_snippet,
-                                               custom_updates, 
+                self.build_weight_update_model(conn, connect_snippet.weight,
+                                               delay, custom_updates, 
                                                pre_compile_output)
             
              # Create custom weight update model
@@ -235,8 +243,6 @@ class Compiler:
                                                          **wum)
                                                      
             # If delays are constant, use as axonal delay otherwise, disable
-            # **THINK** we should be using connect_snippet.delay here
-            delay = conn.connectivity.delay
             axonal_delay = (delay.value if delay.is_constant
                             else 0)
             

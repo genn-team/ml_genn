@@ -1,13 +1,13 @@
 import numpy as np
 
 from collections import deque, namedtuple
-from typing import Sequence, Union
+from typing import Iterator, Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
-from ..utils import CustomUpdateModel
+from ..utils import CustomUpdateModel, Value
 from ..utils.data import batch_numpy, get_numpy_size
 
 from pygenn.genn_model import create_var_ref
@@ -42,24 +42,41 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         if x_size != y_size:
             raise RuntimeError("Number of inputs and labels must match")
         
-        total_correct = {p: 0 for p in y.keys()}
+        assert False
+        # Batch x and y and get iterators
+        batch_size = self.genn_model.batch_size
+        x_batched = batch_numpy(x, batch_size, x_size)
+        y_batched = batch_numpy(y, batch_size, y_size)
+
+        # Zip together and evaluate using iterator 
+        return evaluate_iter(x.keys(), y.keys(), 
+                             iter(zip(x_batched, y_batched)))
+
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator):
+        """ Evaluate an input in iterator format against labels
+        accuracy --  dictionary containing accuracy of predictions 
+                     made by each output Population or Layer
+        """
+        # Convert inputs and outputs to tuples
+        inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
+        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
+        
+        # Build empty dictionary of correct counts
+        # **NOTE** we use non-modified input keys
+        # so e.g. if layers go in, layers come out
+        total_correct = {o: 0 for o in outputs}
         
         # Get the pipeline depth of each output
-        y_pipeline_depth = {p: (self.pop_pipeline_depth[p] 
-                                if p in self.pop_pipeline_depth 
+        y_pipeline_depth = {o: (self.pop_pipeline_depth[get_underlying_pop(o)] 
+                                if get_underlying_pop(o) in self.pop_pipeline_depth 
                                 else 0)
-                            for p in y.keys()}
-        
+                            for o in outputs}
+
         # Build deque to hold y
         y_pipeline_queue = {p: deque(maxlen=d + 1) 
                             for p, d in y_pipeline_depth.items()}
+
         
-        # Batch x and y and get iterator
-        batch_size = self.genn_model.batch_size
-        x_iter = iter(batch_numpy(x, batch_size, x_size))
-        y_iter = iter(batch_numpy(y, batch_size, y_size))
-        
-        # **TODO** generic from here
         # While there is data remaining or any y values left in queues
         data_remaining = True
         batch_i = 0
@@ -68,8 +85,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # Attempt to get next batch of data, 
             # clear data remaining flag if none remains
             try:
-                batch_x = next(x_iter)
-                batch_y = next(y_iter)
+                batch_x, batch_y = next(data)
             except StopIteration:
                 data_remaining = False
             
@@ -84,30 +100,32 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # If there is any data remaining, 
             if data_remaining:
                 # Set x as input
-                self.set_input(batch_x)
+                if len(inputs) == 1:
+                    self.set_input({inputs[0]: batch_x})
+                else:
+                    self.set_input({p: x for p, x in zip(inputs, batch_x)})
                 
                 # Add each y to correct queue
-                for p, o_y in batch_y.items():
-                    y_pipeline_queue[p].append(o_y)
+                for p, y in zip(outputs, batch_y):
+                    y_pipeline_queue[p].append(y)
             
             # Simulate K timesteps
             for t in range(self.k):
                 self.step_time()
                 
-            
             # Loop through outputs
-            for p in y.keys():
+            for o in outputs:
                 # If there is output to read from this population
-                if batch_i >= y_pipeline_depth[p] and len(y_pipeline_queue[p]) > 0:
+                if batch_i >= y_pipeline_depth[o] and len(y_pipeline_queue[o]) > 0:
                     # Pop correct labels from queue
-                    pipe_batch_y = y_pipeline_queue[p].popleft()
-                    
+                    pipe_batch_y = y_pipeline_queue[o].popleft()
+                    print(pipe_batch_y.shape)
                     # Get predictions from model
-                    batch_y_star = self.get_output(p)
+                    batch_y_star = self.get_output(o)
                     
                     # Add number correct to total
                     # **TODO** insert loss-function/other metric here
-                    total_correct[p] += np.sum((np.argmax(batch_y_star[:len(pipe_batch_y)], axis=1) == pipe_batch_y))
+                    total_correct[o] += np.sum((np.argmax(batch_y_star[:len(pipe_batch_y)], axis=1) == pipe_batch_y))
 
             # Next batch
             batch_i += 1
@@ -154,17 +172,22 @@ class FewSpikeCompiler(Compiler):
                     source_pop = c().source()
                     depth_difference = (pipeline_depth
                                         - next_pipeline_depth[source_pop])
-                    con_delay[c] = depth_difference * self.k
+                    con_delay[c()] = depth_difference * self.k
 
             # Otherwise (layer is an input layer),
             # set this layer's delay as zero
             else:
                 pop_pipeline_depth[p] = 0
                 next_pipeline_depth[p] = 0
-        
-        assert all(d == 0 for d in con_delay.values())
-        return PreCompileOutput(con_delay=con_delay, pop_pipeline_depth=pop_pipeline_depth)
 
+        return PreCompileOutput(con_delay=con_delay, pop_pipeline_depth=pop_pipeline_depth)
+    
+    def calculate_delay(self, conn, delay, pre_compile_output):
+        # Check that no delay is already set
+        assert delay.is_constant and delay.value == 0
+        
+        return Value(pre_compile_output.con_delay[conn])
+    
     def build_neuron_model(self, pop, model, custom_updates, 
                            pre_compile_output):
         if isinstance(pop.neuron, FewSpikeRelu):
