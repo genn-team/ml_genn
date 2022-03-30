@@ -41,16 +41,17 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                " provided with same number of labels")
         if x_size != y_size:
             raise RuntimeError("Number of inputs and labels must match")
-        
-        assert False
-        # Batch x and y and get iterators
-        batch_size = self.genn_model.batch_size
-        x_batched = batch_numpy(x, batch_size, x_size)
-        y_batched = batch_numpy(y, batch_size, y_size)
+
+        # Batch x and y
+        # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
+        splits = range(self.genn_model.batch_size, x_size, 
+                       self.genn_model.batch_size)
+        x_batched = [np.split(d, splits, axis=0) for d in x.values()]
+        y_batched = [np.split(d, splits, axis=0) for d in y.values()]
 
         # Zip together and evaluate using iterator 
-        return evaluate_iter(x.keys(), y.keys(), 
-                             iter(zip(x_batched, y_batched)))
+        return self.evaluate_batch_iter(list(x.keys()), list(y.keys()), 
+                                        iter(zip(*(x_batched + y_batched))))
 
     def evaluate_batch_iter(self, inputs, outputs, data: Iterator):
         """ Evaluate an input in iterator format against labels
