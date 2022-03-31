@@ -127,11 +127,12 @@ class FewSpikeRelu(Neuron):
 
         # Calculate scale
         if source_signed:
-            scale =  self.alpha.value * 2**(-self.k.value)
+            source_scale = source_alpha.value * 2**(-self.k.value // 2)
         else:
-            scale =  self.alpha.value * 2**(-self.k.value)
-        source_scale = source_alpha.value * 2**(-self.k.value)
-    
+            source_scale = source_alpha.value * 2**(-self.k.value)
+
+        scale =  self.alpha.value * 2**(-self.k.value)
+
         model = genn_model_upstream_signed if source_signed else genn_model
         return self.add_output_logic(
             NeuronModel(model, 
