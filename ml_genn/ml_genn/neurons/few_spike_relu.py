@@ -49,7 +49,7 @@ genn_model_upstream_signed = {
         const int pipeTimestep = (int)($(t) / DT);
 
         // Calculate magic constants. For RelU hT=h=T
-        const scalar hT = $(SourceScale) * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
         
         // Split timestep into interleaved positive and negative
         // **NOTE** sign is flipped compared to input model as we want sign of PREVIOUS timestep
