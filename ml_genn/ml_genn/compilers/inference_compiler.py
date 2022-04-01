@@ -1,6 +1,7 @@
 import numpy as np
 
-from typing import Sequence, Union
+from tqdm import tqdm
+from typing import Iterator, Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
@@ -87,17 +88,70 @@ class CompiledInferenceNetwork(CompiledNetwork):
         y = batch_numpy(y, batch_size, y_size)
         
         # Loop through batches
-        for x_batch, y_batch in zip(x, y):
-            # Get predictions from batch
-            correct = self.evaluate_batch(x_batch, y_batch)
-            
-            # Add to total correct
-            for p, c in correct.items():
-                total_correct[p] += c
+        with tqdm(total=len(x)) as pbar:
+            for x_batch, y_batch in zip(x, y):
+                # Get predictions from batch
+                correct = self.evaluate_batch(x_batch, y_batch)
+                
+                pbar.update(1)
+                
+                # Add to total correct
+                for p, c in correct.items():
+                    total_correct[p] += c
         
         # Return dictionary containing correct count
         return {p: c / x_size for p, c in total_correct.items()}
     
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator):
+        """ Evaluate an input in iterator format against labels
+        accuracy --  dictionary containing accuracy of predictions 
+                     made by each output Population or Layer
+        """
+        # Convert inputs and outputs to tuples
+        inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
+        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
+        
+        # Build empty dictionary of correct counts
+        # **NOTE** we use non-modified input keys
+        # so e.g. if layers go in, layers come out
+        total_correct = {o: 0 for o in outputs}
+        
+        # Loop through data
+        size = 0
+        while True:
+            # Attempt to get next batch of data, 
+            # break if none remains
+            try:
+                batch_x, batch_y = next(data)
+            except StopIteration:
+                break
+            
+            # Set x as input
+            # **YUCK** this isn't quite right as batch_x could also have outer dimension
+            if len(inputs) == 1:
+                size += len(batch_x)
+                x = {inputs[0]: batch_x}
+            else:
+                size += len(batch_x[0])
+                x = {p: x for p, x in zip(inputs, batch_x)}
+            
+            # Add each y to correct queue(s)
+            # **YUCK** this isn't quite right as batch_x could also have outer dimension
+            if len(outputs) == 1:
+                y = {outputs[0]: batch_y}
+            else:
+                y = {p: y for p, x in zip(outputs, batch_y)}
+            
+            # Get predictions from batch
+            correct = self.evaluate_batch(x, y)
+            
+            # Add to total correct
+            for p, c in correct.items():
+                total_correct[p] += c
+            
+        # Return dictionary containing correct count
+        return {p: c / size for p, c in total_correct.items()}
+            
     def evaluate_batch(self, x: dict, y: dict):
         """ Evaluate a single batch of inputs against labels
         Args:

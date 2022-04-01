@@ -102,12 +102,14 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # If there is any data remaining, 
             if data_remaining:
                 # Set x as input
+                # **YUCK** this isn't quite right as batch_x could also have outer dimension
                 if len(inputs) == 1:
                     self.set_input({inputs[0]: batch_x})
                 else:
                     self.set_input({p: x for p, x in zip(inputs, batch_x)})
                 
                 # Add each y to correct queue(s)
+                # **YUCK** this isn't quite right as batch_x could also have outer dimension
                 if len(outputs) == 1:
                     y_pipeline_queue[outputs[0]].append(batch_y)
                 else:
