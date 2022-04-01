@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 
 from tensorflow.keras import models, layers, datasets
-from ml_genn.compilers import FewSpikeCompiler, InferenceCompiler
 
 from arguments import parse_arguments
 from time import perf_counter

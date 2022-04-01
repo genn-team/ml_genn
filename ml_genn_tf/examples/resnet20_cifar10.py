@@ -2,7 +2,7 @@ from six import iteritems
 from time import perf_counter
 import numpy as np
 import tensorflow as tf
-from ml_genn.compilers import FewSpikeCompiler, InferenceCompiler
+
 from arguments import parse_arguments
 from cifar10_dataset import *
 
