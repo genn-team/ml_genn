@@ -41,95 +41,91 @@ def test_sequential_tf_conversion():
     assert len(mlg_net_inputs) == 1
     assert len(mlg_net_outputs) == 1
     
-    # Input layer
+    # Input population
     mlg_pop = mlg_net_inputs[0]
     assert mlg_pop.shape == (32, 32, 3)
     assert len(mlg_pop.outgoing_connections) == 1
 
-
-    # block1_conv1 population
+    # Input->block1_conv1 connection
     mlg_conn = mlg_pop.outgoing_connections[0]()
     assert isinstance(mlg_conn.connectivity, Conv2D)
-    mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (32, 32, 32)
-    assert len(mlg_pop.outgoing_connections) == 1
-    
-    # block1_conv1 connection
     tf_layer = tf_model.get_layer('block1_conv1')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
-
-
-    # block1_conv2 population
-    mlg_conn = mlg_pop.outgoing_connections[0]()
-    assert isinstance(mlg_conn.connectivity, Conv2D)
+    
+    # block1_conv1 population
     mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (32, 32, 64)
+    assert mlg_pop.shape == (32, 32, 32)
     assert len(mlg_pop.outgoing_connections) == 1
     
-    # block1_conv2 connection
+    # block1_conv1->block1_conv2 population
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block1_conv2')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
 
-
-    # block2_conv1 population
-    mlg_conn = mlg_pop.outgoing_connections[0]()
-    assert isinstance(mlg_conn.connectivity, AvgPoolConv2D)
+    # block1_conv2 population
     mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (16, 16, 64)
+    assert mlg_pop.shape == (32, 32, 64)
     assert len(mlg_pop.outgoing_connections) == 1
     
-    # block2_conv1 connection
+    # block1_conv2->block2_conv1 connection
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, AvgPoolConv2D)
     tf_layer = tf_model.get_layer('block2_conv1')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
 
-
-    # block2_conv2 population
-    mlg_conn = mlg_pop.outgoing_connections[0]()
-    assert isinstance(mlg_conn.connectivity, Conv2D)
+    # block2_conv1 population
     mlg_pop = mlg_conn.target()
     assert mlg_pop.shape == (16, 16, 64)
     assert len(mlg_pop.outgoing_connections) == 1
     
-    # block2_conv2 connection
+
+    # block2_conv1->block2_conv2 connection
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block2_conv2')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
 
-
-    # dense1 population
-    mlg_conn = mlg_pop.outgoing_connections[0]()
-    assert isinstance(mlg_conn.connectivity, AvgPoolDense2D)
+    # block2_conv2 population
     mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (256,)
+    assert mlg_pop.shape == (16, 16, 64)
     assert len(mlg_pop.outgoing_connections) == 1
     
-    # dense1 connection
+    # block2_conv2->dense1 connection
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, AvgPoolDense2D)
     tf_layer = tf_model.get_layer('dense1')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
+
+    # dense1 population
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop.shape == (256,)
+    assert len(mlg_pop.outgoing_connections) == 1
     
-    
-    # dense2 population
+    # dense1->dense2 connection
     mlg_conn = mlg_pop.outgoing_connections[0]()
     assert isinstance(mlg_conn.connectivity, Dense)
-    mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (10,)
-    assert len(mlg_pop.outgoing_connections) == 0
-    
-    # dense2 connection
     tf_layer = tf_model.get_layer('dense2')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
+    
+    # dense2 population
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop.shape == (10,)
     assert mlg_pop == mlg_net_outputs[0]
+    assert len(mlg_pop.outgoing_connections) == 0
+
 
 def test_functional_tf_conversion():
     '''
@@ -170,95 +166,104 @@ def test_functional_tf_conversion():
     assert len(mlg_net_inputs) == 1
     assert len(mlg_net_outputs) == 1
 
-    # Input layer
+    # Input population
     mlg_pop = mlg_net_inputs[0]
     assert mlg_pop.shape == (32, 32, 3)
     assert len(mlg_pop.outgoing_connections) == 1
-
-
-    # block1_conv1 layer
+    
+    # Input->block1_conv1 connection
     mlg_conn = mlg_pop.outgoing_connections[0]()
     assert isinstance(mlg_conn.connectivity, Conv2D)
-    mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (32, 32, 32)
-    assert len(mlg_pop.outgoing_connections) == 1
-
-    # block1_conv1 connection
     tf_layer = tf_model.get_layer('block1_conv1')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
+    
+    # block1_conv1 population
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop.shape == (32, 32, 32)
+    assert len(mlg_pop.outgoing_connections) == 1
 
-
-    # block1_conv2 layer
+    # block1_conv1->block1_conv2 connection
     mlg_conn = mlg_pop.outgoing_connections[0]()
     assert isinstance(mlg_conn.connectivity, Conv2D)
-    mlg_pop = mlg_conn.target()
-    assert mlg_pop.shape == (32, 32, 64)
-    assert len(mlg_pop.outgoing_connections) == 1
-    
-    # block1_conv2 connection
     tf_layer = tf_model.get_layer('block1_conv2')
     weights = mlg_conn.connectivity.weight
     assert weights.is_array
     assert np.equal(weights.value, tf_layer.get_weights()).all()
 
+    # block1_conv2 population    
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop.shape == (32, 32, 64)
+    assert len(mlg_pop.outgoing_connections) == 2
+    
+    # Identify branches
+    if isinstance(mlg_pop.outgoing_connections[0]().connectivity, AvgPoolConv2D):
+        mlg_conn = mlg_pop.outgoing_connections[0]()
+        mlg_conn_skip = mlg_pop.outgoing_connections[1]()
+    else:
+        mlg_conn = mlg_pop.outgoing_connections[1]()
+        mlg_conn_skip = mlg_pop.outgoing_connections[0]()
+      
+    # block1_conv2->block2_conv1 connection
+    assert isinstance(mlg_conn.connectivity, AvgPoolConv2D)
+    tf_layer = tf_model.get_layer('block2_conv1')
+    weights = mlg_conn.connectivity.weight
+    assert weights.is_array
+    assert np.equal(weights.value, tf_layer.get_weights()).all()
 
-    # block2_conv1 layer
-    mlg_conn = mlg_pop.outgoing_connections[0]()
-    assert isinstance(mlg_conn.connectivity, Conv2D)
+    # block2_conv1 population
     mlg_pop = mlg_conn.target()
     assert mlg_pop.shape == (16, 16, 64)
     assert len(mlg_pop.outgoing_connections) == 1
     
-    # block2_conv1 connection
-    tf_layer = tf_model.get_layer('block2_conv1')
-    weights = mlg_layer.get_weights()
-    assert(np.equal(weights, tf_layer.get_weights()).all())
-    # block2_conv1 synapses
-    synapses = mlg_layer.upstream_synapses
-    assert(isinstance(synapses[0], AvgPoolConv2D))
+    # block2_conv1->block2_conv2 connection
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, Conv2D)
+    tf_layer = tf_model.get_layer('block2_conv2')
+    weights = mlg_conn.connectivity.weight
+    assert weights.is_array
+    assert np.equal(weights.value, tf_layer.get_weights()).all()
 
     # block2_conv2 layer
-    mlg_layer = mlg_model.layers[4]
-    assert(mlg_layer.shape == (16, 16, 64))
-    assert(isinstance(mlg_layer, Layer))
-    # block2_conv2 weights
-    tf_layer = tf_model.get_layer('block2_conv2')
-    weights = mlg_layer.get_weights()
-    assert(np.equal(weights, tf_layer.get_weights()).all())
-    # block2_conv2 synapses
-    synapses = mlg_layer.upstream_synapses
-    assert(isinstance(synapses[0], Conv2DSynapses))
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop.shape == (16, 16, 64)
+    assert len(mlg_pop.outgoing_connections) == 1
 
-    # dense1 layer
-    mlg_layer = mlg_model.layers[5]
-    assert(mlg_layer.shape == (256,))
-    assert(isinstance(mlg_layer, Layer))
-    # dense1 weights
+    # block2_conv2->dense1 connection
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, AvgPoolDense2D)
     tf_layer = tf_model.get_layer('dense1')
-    weights = mlg_layer.get_weights()
-    assert(np.equal(weights, tf_layer.get_weights()).all())
-    # dense1 synapses
-    synapses = mlg_layer.upstream_synapses.copy()
-    #synapses.sort(key=lambda x: x.source().name)
-    assert(synapses[0].source().name == 'block1_conv2')
-    assert(isinstance(synapses[0], AvePool2DDenseSynapses))
-    assert(synapses[1].source().name == 'block2_conv2')
-    assert(isinstance(synapses[1], AvePool2DDenseSynapses))
+    weights = mlg_conn.connectivity.weight
+    assert weights.is_array
+    assert np.equal(weights.value, tf_layer.get_weights()).all()
 
-    # dense2 layer
-    mlg_layer = mlg_model.layers[6]
-    assert(mlg_layer.shape == (10,))
-    assert(isinstance(mlg_layer, Layer))
+    # block1_conv2->dense1 connection
+    assert isinstance(mlg_conn_skip.connectivity, AvgPoolDense2D)
+    tf_layer = tf_model.get_layer('dense1')
+    weights = mlg_conn_skip.connectivity.weight
+    assert weights.is_array
+    assert np.equal(weights.value, tf_layer.get_weights()).all()
     
-    # dense2 weights
+    # dense1 population
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop.shape == (256,)
+    assert mlg_conn_skip.target() == mlg_pop
+    assert len(mlg_pop.outgoing_connections) == 1
+    
+    # dense1->dense2 connection
+    mlg_conn = mlg_pop.outgoing_connections[0]()
+    assert isinstance(mlg_conn.connectivity, Dense)
     tf_layer = tf_model.get_layer('dense2')
-    weights = mlg_layer.get_weights()
-    assert(np.equal(weights, tf_layer.get_weights()).all())
-    # dense2 synapses
-    synapses = mlg_layer.upstream_synapses
-    assert(isinstance(synapses[0], DenseSynapses))
+    weights = mlg_conn.connectivity.weight
+    assert weights.is_array
+    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    
+    # dense2 population
+    mlg_pop = mlg_conn.target()
+    assert mlg_pop == mlg_net_outputs[0]
+    assert mlg_pop.shape == (10,)
+    assert len(mlg_pop.outgoing_connections) == 0
 
 if __name__ == '__main__':
     test_sequential_tf_conversion()
