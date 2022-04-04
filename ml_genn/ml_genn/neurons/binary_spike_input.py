@@ -1,7 +1,7 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input_base import InputBase
 from .neuron import Neuron
-from ..utils import NeuronModel, Value
+from ..utils import NeuronModel
 
 class BinarySpikeInput(Neuron, InputBase):
     def __init__(self, signed_spikes=False):
@@ -29,4 +29,4 @@ class BinarySpikeInput(Neuron, InputBase):
                 $(Input_pre) < 0.0 && spike
                 """
         
-        return NeuronModel(genn_model, {}, {"Input": Value(0.0)})
+        return NeuronModel(genn_model, {}, {"Input": 0.0})

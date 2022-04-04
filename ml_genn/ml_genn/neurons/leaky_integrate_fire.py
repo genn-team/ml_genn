@@ -1,22 +1,30 @@
 import numpy as np
 
 from .neuron import Neuron
-from ..utils import InitValue, Value, NeuronModel
+from ..utils import InitValue, NeuronModel, ValueDescriptor
+
+from ..utils import is_value_initializer
 
 class LeakyIntegrateFire(Neuron):
+    v_thresh = ValueDescriptor()
+    v_reset = ValueDescriptor()
+    v = ValueDescriptor()
+    tau_mem = ValueDescriptor()
+    tau_refrac = ValueDescriptor()
+    
     def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0, tau_mem=20.0, tau_refrac=None, 
                  relative_reset=True, integrate_during_refrac=True, output=None):
         super(LeakyIntegrateFire, self).__init__()
         
-        self.v_thresh = Value(v_thresh)
-        self.v_reset = Value(v_reset)
-        self.v = Value(v)
-        self.tau_mem = Value(tau_mem)
-        self.tau_refrac = Value(tau_refrac)
+        self.v_thresh = v_thresh
+        self.v_reset = v_reset
+        self.v = v)
+        self.tau_mem = tau_mem
+        self.tau_refrac = tau_refrac
         self.relative_reset = relative_reset
         self.integrate_during_refrac = integrate_during_refrac
         
-        if self.tau_mem.is_initializer:
+        if is_value_initializer(self.tau_mem):
             raise NotImplementedError("Leaky integrate and fire neuron model "
                                       "does not currently support tau_mem "
                                       "values specified using Initialiser objects")
@@ -30,7 +38,7 @@ class LeakyIntegrateFire(Neuron):
             "threshold_condition_code": "$(V) >= $(Vthresh)",
             "is_auto_refractory_required": False}
         param_vals = {"Vthresh": self.v_thresh, "Vreset": self.v_reset, 
-                      "Alpha": Value(np.exp(-dt / self.tau_mem.value))}
+                      "Alpha": np.exp(-dt / self.tau_mem.value)}
         var_vals = {"V": self.v}
         
         # Build reset code depending on whether 
@@ -54,7 +62,7 @@ class LeakyIntegrateFire(Neuron):
             
             # Initialize
             param_vals["TauRefrac"] = self.tau_refrac
-            var_vals["RefracTime"] = Value(0.0)
+            var_vals["RefracTime"] = 0.0
             
             # Build correct sim code depending on whether 
             # we should integrate during refractory period

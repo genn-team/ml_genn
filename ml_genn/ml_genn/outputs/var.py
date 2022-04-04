@@ -1,12 +1,12 @@
 import numpy as np
 
 from .output import Output
-from ..utils import NeuronModel, Value
+from ..utils import NeuronModel
 
 from copy import deepcopy
 
 class Var(Output):
-    def __call__(self, model: NeuronModel, output_var_name=None):
+    def __call__(self, model:NeuronModel, output_var_name=None):
         self.output_var_name = output_var_name
         
         if not "var_name_types" in model.model:

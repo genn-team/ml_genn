@@ -1,6 +1,6 @@
 from .few_spike_relu_input import FewSpikeReluInput
 from .neuron import Neuron
-from ..utils import InitValue, NeuronModel, Value
+from ..utils import ConstantValueDescriptor, InitValue, NeuronModel
 
 # Standard FS ReLU model where upstream neurons are FS ReLU or FS unsigned input
 genn_model = {
@@ -72,15 +72,14 @@ genn_model_upstream_signed = {
 
 class FewSpikeRelu(Neuron):
     pipelined = True
-
+    
+    k = ConstantValueDescriptor()
+    alpha = ConstantValueDescriptor()
+    
     def __init__(self, k=10, alpha=25, output=None):
         super(FewSpikeRelu, self).__init__(output)
-        self.k = Value(k)
-        self.alpha = Value(alpha)
-        
-        if not self.k.is_constant or not self.alpha.is_constant:
-            raise NotImplementedError("FewSpike ReLU model currently requires"
-                                      " homogeneous k and alpha values")
+        self.k = k
+        self.alpha = alpha
     
     def get_model(self, population, dt):
          # Loop through incoming connections
@@ -96,14 +95,14 @@ class FewSpikeRelu(Neuron):
             source_relu_input = isinstance(nrn, FewSpikeReluInput)
             if source_relu or source_relu_input:
                 # Check K parameters match
-                if nrn.k.value != self.k.value:
+                if nrn.k != self.k:
                     raise ValueError("K parameters of FewSpike ReLU neurons "
                                      "must match across whole model")
                 
                 # Check that all upstream neurons have the same alpha 
                 if source_alpha is None:
                     source_alpha = nrn.alpha
-                elif source_alpha.value != nrn.alpha.value:
+                elif source_alpha != nrn.alpha:
                     raise ValueError("All upstream FewSpike ReLU neurons "
                                      "must have the same alpha values")
 
@@ -127,16 +126,16 @@ class FewSpikeRelu(Neuron):
 
         # Calculate scale
         if source_signed:
-            source_scale = source_alpha.value * 2**(-self.k.value // 2)
+            source_scale = source_alpha * 2**(-self.k // 2)
         else:
-            source_scale = source_alpha.value * 2**(-self.k.value)
+            source_scale = source_alpha * 2**(-self.k)
 
-        scale =  self.alpha.value * 2**(-self.k.value)
+        scale =  self.alpha * 2**(-self.k)
 
         model = genn_model_upstream_signed if source_signed else genn_model
         return self.add_output_logic(
             NeuronModel(model, 
-                        {"K": self.k, "Scale": Value(scale), 
-                         "SourceScale": Value(source_scale)},
-                        {"Fx": Value(0.0), "V": Value(0.0)}), "Fx")
+                        {"K": self.k, "Scale": scale, 
+                         "SourceScale": source_scale},
+                        {"Fx": 0.0, "V": 0.0}), "Fx")
 

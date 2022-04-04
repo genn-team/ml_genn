@@ -1,7 +1,9 @@
 import numpy as np
 
 from .synapse import Synapse
-from ..utils import InitValue, SynapseModel, Value
+from ..utils import InitValue, SynapseModel, ValueDescriptor
+
+from ..utils import is_value_initializer
 
 genn_model = {
     "param_name_types": [("ExpDecay", "scalar")],
@@ -15,17 +17,18 @@ genn_model = {
         """}
         
 class Exponential(Synapse):
-    def __init__(self, tau=5.0):
+    tau = ValueDescriptor()
+    
+    def __init__(self, tau:InitValue=5.0):
         super(Exponential, self).__init__()
         
-        self.tau = Value(tau)
+        self.tau = tau
         
-        if self.tau.is_initializer:
+        if is_value_initializer(self.tau):
             raise NotImplementedError("Exponential synapse model does not "
                                       "currently support tau values specified"
                                       " using Initialiser objects")
 
     def get_model(self, connection, dt):
         return SynapseModel(genn_model, 
-                            {"ExpDecay": Value(np.exp(-dt / self.tau.value))},
-                            {})
+                            {"ExpDecay": np.exp(-dt / self.tau.value)}, {})

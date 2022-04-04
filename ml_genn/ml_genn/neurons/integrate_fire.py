@@ -1,5 +1,5 @@
 from .neuron import Neuron
-from ..utils import InitValue, NeuronModel, Value
+from ..utils import InitValue, NeuronModel, ValueDescriptor
 
 genn_model = {
     "var_name_types": [("V", "scalar")],
@@ -19,12 +19,17 @@ genn_model = {
     "is_auto_refractory_required": False}
 
 class IntegrateFire(Neuron):
-    def __init__(self, v_thresh=1.0, v_reset=0.0, v=0.0, output=None):
+    v_thresh = ValueDescriptor()
+    v_reset = ValueDescriptor()
+    v = ValueDescriptor()
+    
+    def __init__(self, v_thresh:InitValue=1.0, v_reset:InitValue=0.0, 
+                 v:InitValue=0.0, output=None):
         super(IntegrateFire, self).__init__(output)
 
-        self.v_thresh = Value(v_thresh)
-        self.v_reset = Value(v_reset)
-        self.v = Value(v)
+        self.v_thresh = v_thresh
+        self.v_reset = v_reset
+        self.v = v
 
     def get_model(self, population, dt):
         return self.add_output_logic(

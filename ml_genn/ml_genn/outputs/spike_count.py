@@ -1,7 +1,7 @@
 import numpy as np
 
 from .output import Output
-from ..utils import NeuronModel, Value
+from ..utils import NeuronModel
 
 from copy import deepcopy
 
@@ -29,7 +29,7 @@ class SpikeCount(Output):
         model_copy.model["var_name_types"].append(("Scount", "unsigned int"))
         
         # Initialise to zero
-        model_copy.var_vals["Scount"] = Value(0)
+        model_copy.var_vals["Scount"] = 0
         
         return model_copy
     

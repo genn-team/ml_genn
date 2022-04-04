@@ -1,7 +1,7 @@
 import numpy as np
 
 from .output import Output
-from ..utils import NeuronModel, Value
+from ..utils import NeuronModel
 
 from copy import deepcopy
 
@@ -44,7 +44,7 @@ class SumVar(Output):
         model_copy.model["var_name_types"].append((sum_var_name, output_var[1]))
 
         # Initialise to zero
-        model_copy.var_vals[sum_var_name] = Value(0)
+        model_copy.var_vals[sum_var_name] = 0
         
         return model_copy
 

@@ -21,6 +21,7 @@ from pygenn.genn_model import (create_custom_custom_update_class,
 from .weight_update_models import (static_pulse_model, static_pulse_delay_model,
                                    signed_static_pulse_model, 
                                    signed_static_pulse_delay_model)
+from ..utils import is_value_constant, is_value_array, is_value_initializer
 
 WeightUpdateModel = namedtuple("WeightUpdateModel", ["model", "param_vals", "var_vals"])
 
@@ -52,15 +53,15 @@ def build_model(model):
     var_vals_copy = {}
     var_egp = {}
     for name, val in model.var_vals.items():
-        if val.is_initializer:
-            snippet = val.value.get_snippet()
+        if is_value_initializer(val):
+            snippet = val.get_snippet()
             var_vals_copy[name] = init_var(snippet.snippet, 
                                            snippet.param_vals)
             var_egp[name] = snippet.egp_vals
-        elif val.is_array:
-            var_vals_copy[name] = val.value.flatten()
+        elif is_value_array(val):
+            var_vals_copy[name] = val.flatten()
         else:
-            var_vals_copy[name] = val.value
+            var_vals_copy[name] = val
     
     # Loop through parameters in model
     model_copy["param_names"] = []
@@ -70,20 +71,20 @@ def build_model(model):
         val = model.param_vals[name]
         
         # If value is a plain number, add it's name to parameter names
-        if val.is_constant:
+        if is_value_constant(val):
             model_copy["param_names"].append(name)
-            constant_param_vals[name] = val.value
+            constant_param_vals[name] = val
         # Otherwise, turn it into a (read-only) variable
         else:
             model_copy["var_name_types"].append((name, ptype, 
                                                  VarAccess_READ_ONLY))
-            if val.is_initializer:
-                snippet = val.value.get_snippet()
+            if is_value_initializer(val):
+                snippet = val.get_snippet()
                 var_vals_copy[name] = init_var(snippet.snippet,
                                                snippet.param_vals)
                 var_egp[name] = snippet.egp_vals
-            elif val.is_array:
-                var_vals_copy[name] = val.value.flatten()
+            elif is_value_array(val):
+                var_vals_copy[name] = val.flatten()
             else:
                 var_vals_copy[name] = val
 
@@ -134,7 +135,7 @@ class Compiler:
                                   custom_updates, pre_compile_output):
         # Build parameter values
         param_vals = {"g": weight}
-        het_delay = not delay.is_constant
+        het_delay = not is_value_constant(delay):
         if het_delay:
             param_vals["d"] = delay
         
@@ -243,7 +244,7 @@ class Compiler:
                                                          **wum)
                                                      
             # If delays are constant, use as axonal delay otherwise, disable
-            axonal_delay = (delay.value if delay.is_constant
+            axonal_delay = (delay if is_value_constant(delay)
                             else 0)
             
             # Add synapse population

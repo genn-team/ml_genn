@@ -1,7 +1,7 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input_base import InputBase
 from .neuron import Neuron
-from ..utils import InitValue, NeuronModel, Value
+from ..utils import ConstantValueDescriptor, InitValue, NeuronModel
 
 genn_model = {
     "param_name_types": [("K", "int"), ("Scale", "scalar")],
@@ -59,24 +59,22 @@ genn_model_signed = {
     
 
 class FewSpikeReluInput(Neuron, InputBase):
+    k = ConstantValueDescriptor()
+    alpha = ConstantValueDescriptor()
+    
     def __init__(self, k=10, alpha=25, signed_input=False):
         super(FewSpikeReluInput, self).__init__(var_name="V")
 
-        self.k = Value(k)
-        self.alpha = Value(alpha)
+        self.k = k
+        self.alpha = alpha
         self.signed_input = signed_input
-        
-        if not self.k.is_constant or not self.alpha.is_constant:
-            raise NotImplementedError("FewSpike ReLU model currently requires"
-                                      " homogeneous k and alpha values")
 
     def get_model(self, population, dt):
         # Calculate scale
         if self.signed_input:
-            scale = self.alpha.value * 2**(-self.k.value // 2)
+            scale = self.alpha * 2**(-self.k // 2)
         else:
-            scale = self.alpha.value * 2**(-self.k.value)
+            scale = self.alpha * 2**(-self.k)
         
         model = genn_model_signed if self.signed_input else genn_model
-        return NeuronModel(model, {"K": self.k, "Scale": Value(scale)},
-                           {"V": Value(0.0)})
+        return NeuronModel(model, {"K": self.k, "Scale": scale}, {"V": 0.0})
