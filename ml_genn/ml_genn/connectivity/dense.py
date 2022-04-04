@@ -1,7 +1,9 @@
 import numpy as np
 
 from .connectivity import Connectivity
-from ..utils import ConnectivitySnippet, InitValue, Value
+from ..utils import ConnectivitySnippet, InitValue
+
+from ..utils.value import is_value_array
 
 class Dense(Connectivity):
     def __init__(self, weight:InitValue, delay:InitValue=0):
@@ -9,8 +11,8 @@ class Dense(Connectivity):
 
     def connect(self, source, target):
         # If weights are specified as 2D array
-        if self.weight.is_array and self.weight.value.ndim == 2:
-            source_size, target_size = self.weight.value.shape
+        if is_value_array(self.weight) and self.weight.ndim == 2:
+            source_size, target_size = self.weight.shape
             
             # Set/check target shape
             if target.shape is None:

@@ -1,16 +1,21 @@
 import numpy as np
 
 from typing import Sequence
-from ..utils import InitValue, Value
+from ..utils import InitValue, ValueDescriptor
+
+from ..utils import is_value_array
 
 class Connectivity:
+    weight = ValueDescriptor()
+    delay = ValueDescriptor
+
     def __init__(self, weight: [InitValue], delay: [InitValue]):
-        self.weight = Value(weight)
-        self.delay = Value(delay)
+        self.weight = weight
+        self.delay = delay
         
         # If both weight and delay are arrays, check they are the same shape
-        weight_array = isinstance(self.weight, (Sequence, np.ndarray))
-        delay_array = isinstance(self.delay, (Sequence, np.ndarray))
+        weight_array = is_value_array(self.weight)
+        delay_array = is_value_array(self.delay)
         if (weight_array and delay_array 
                 and np.shape(weight_array) != np.shape(delay_array)):
             raise RuntimeError("If weights and delays are specified as "

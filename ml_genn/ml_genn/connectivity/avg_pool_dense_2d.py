@@ -89,10 +89,10 @@ class AvgPoolDense2D(Connectivity):
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
             "dense_units": int(np.prod(connection.target().shape))},
-            {"weights": self.weight.value.flatten() / (pool_kh * pool_kw)})
+            {"weights": self.weight.flatten() / (pool_kh * pool_kw)})
 
         return ConnectivitySnippet(snippet=None, 
                                    matrix_type=conn,
-                                   weight=Value(wu_var_val), 
+                                   weight=wu_var_val, 
                                    delay=self.delay)
 

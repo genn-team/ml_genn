@@ -1,5 +1,5 @@
 from .synapse import Synapse
-from ..utils import SynapseModel
+from ..utils.model import SynapseModel
 
 genn_model = {
     "apply_input_code":

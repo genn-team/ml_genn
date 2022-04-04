@@ -1,19 +1,18 @@
 from numbers import Number
 
 from .initializer import Initializer
-from ..utils import InitializerSnippet
+from ..utils.snippet import InitializerSnippet
+from ..utils.value import ConstantValueDescriptor
 
 class Uniform(Initializer):
-    def __init__(self, min: float=0.0, max: float=1.0):
+    min = ConstantValueDescriptor()
+    max = ConstantValueDescriptor()
+
+    def __init__(self, min:float=0.0, max:float=1.0):
         super(Uniform, self).__init__()
 
         self.min = min
         self.max = max
-    
-        if not(isinstance(self.min, Number)):
-            raise RuntimeError("'min' parameter must be a number")
-        if not(isinstance(self.max, Number)):
-            raise RuntimeError("'max' parameter must be a number")
     
     def get_snippet(self):
         return InitializerSnippet("Uniform", 

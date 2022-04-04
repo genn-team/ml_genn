@@ -1,7 +1,8 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input_base import InputBase
 from .neuron import Neuron
-from ..utils import ConstantValueDescriptor, InitValue, NeuronModel
+from ..utils.model NeuronModel
+from ..utils.value import ConstantValueDescriptor, InitValue
 
 genn_model = {
     "param_name_types": [("K", "int"), ("Scale", "scalar")],

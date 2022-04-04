@@ -9,6 +9,7 @@ from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
                                init_connectivity, init_var)
 from ..utils.connectivity import get_param_2d
+from ..utils.values import is_value_constant
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_2d",
@@ -67,8 +68,9 @@ class AvgPool2D(Connectivity):
         if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
             raise NotImplementedError("pool stride < pool size is not supported")
         
-        if not self.delay.is_constant:
-            raise NotImplementedError("AvgPool2D connectivity only supports constant delays")
+        if not is_value_constant(self.delay):
+            raise NotImplementedError("AvgPool2D connectivity only "
+                                      "supports constant delays")
 
     def connect(self, source, target):
         pool_kh, pool_kw = self.pool_size

@@ -1,5 +1,6 @@
 from .neuron import Neuron
-from ..utils import InitValue, NeuronModel, ValueDescriptor
+from ..utils.model import NeuronModel
+from ..utils.value import InitValue, ValueDescriptor
 
 genn_model = {
     "var_name_types": [("V", "scalar")],

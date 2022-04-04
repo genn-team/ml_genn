@@ -11,6 +11,7 @@ from pygenn.genn_model import (create_cmlf_class, create_cksf_class,
                                init_connectivity, init_toeplitz_connectivity,
                                init_var)
 from ..utils.connectivity import get_conv_same_padding, get_param_2d
+from ..utils.value import is_value_array
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_conv_2d",
@@ -136,7 +137,7 @@ class AvgPoolConv2D(Connectivity):
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
-        if self.weight.is_array and self.weight.value.shape != weight_shape:
+        if is_value_array(self.weight) and self.weight.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of AvgPoolConv2D kernel")
 
@@ -155,7 +156,7 @@ class AvgPoolConv2D(Connectivity):
             conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        scaled_weight = self.weight.value.flatten() / (pool_kh * pool_kw)
+        scaled_weight = self.weight.flatten() / (pool_kh * pool_kw)
                 
         if (not prefer_in_memory and conv_sh == 1 and conv_sw == 1 
             and (self.conv_padding is not PadMode.SAME 
@@ -192,10 +193,12 @@ class AvgPoolConv2D(Connectivity):
             else:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
-                weight = Value(KernelInit(scaled_weight) if self.weight.is_array
-                               else scaled_weight)
-                delay = Value(KernelInit(self.delay.value) if self.delay.is_array
-                              else self.delay)
+                weight = (KernelInit(scaled_weight) 
+                          if is_value_array(self.weight)
+                          else scaled_weight)
+                delay = (KernelInit(self.delay) 
+                         if is_value_array(self.delay)
+                         else self.delay)
                 return ConnectivitySnippet(snippet=conn_init, 
                                            matrix_type="SPARSE_INDIVIDUALG",
                                            weight=weight, delay=delay)

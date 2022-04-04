@@ -1,9 +1,10 @@
 import numpy as np
 
 from .neuron import Neuron
-from ..utils import InitValue, NeuronModel, ValueDescriptor
+from ..utils import NeuronModel
+from ..utils.value import InitValue, ValueDescriptor
 
-from ..utils import is_value_initializer
+from ..utils.value import is_value_initializer
 
 class LeakyIntegrateFire(Neuron):
     v_thresh = ValueDescriptor()

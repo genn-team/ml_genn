@@ -1,9 +1,10 @@
 import numpy as np
 
 from .synapse import Synapse
-from ..utils import InitValue, SynapseModel, ValueDescriptor
+from ..utils.model import SynapseModel
+from ..utils.value import InitValue, ValueDescriptor
 
-from ..utils import is_value_initializer
+from ..utils.value import is_value_initializer
 
 genn_model = {
     "param_name_types": [("ExpDecay", "scalar")],

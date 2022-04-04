@@ -8,6 +8,7 @@ from ..utils.connectivity import PadMode, KernelInit
 from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity, 
                                init_var)
 from ..utils.connectivity import get_conv_same_padding, get_param_2d
+from ..utils.value import is_value_array
 
 class Conv2D(Connectivity):
     def __init__(self, weight:InitValue, filters, conv_size, conv_strides=None,
@@ -41,7 +42,7 @@ class Conv2D(Connectivity):
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
-        if self.weight.is_array and self.weight.value.shape != weight_shape:
+        if is_value_array(self.weight) and self.weight.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of Conv2D kernel")
     
@@ -77,10 +78,12 @@ class Conv2D(Connectivity):
             if prefer_in_memory:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
-                weight = Value(KernelInit(self.weight.value) if self.weight.is_array
-                               else self.weight)
-                delay = Value(KernelInit(self.delay.value) if self.delay.is_array
-                              else self.delay)
+                weight = (KernelInit(self.weight) 
+                          if is_value_array(self.weight)
+                          else self.weight)
+                delay = (KernelInit(self.delay) 
+                         if is_value_array(self.delay)
+                         else self.delay)
                 return ConnectivitySnippet(snippet=conn_init, 
                                            matrix_type="SPARSE_INDIVIDUALG",
                                            weight=weight, delay=delay)

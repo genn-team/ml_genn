@@ -3,7 +3,11 @@ from ..utils import InitValue
 
 from pygenn.genn_model import init_connectivity
 
+from ..utils import ConstantValueDescriptor
+
 class FixedProbability(SparseBase):
+    p = ConstantValueDescriptor()
+
     def __init__(self, p: float, weight:InitValue, allow_self_connections=False, delay:InitValue=0):
         super(FixedProbability, self).__init__(weight, delay)
         
