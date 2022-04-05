@@ -4,7 +4,7 @@ from math import ceil
 from .connectivity import Connectivity
 from ..initializers import Wrapper
 from ..utils.snippet import ConnectivitySnippet
-from ..utils.value import InitValue, Value
+from ..utils.value import InitValue
 
 from pygenn.genn_model import create_custom_init_var_snippet_class
 from ..utils.connectivity import get_param_2d

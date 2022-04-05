@@ -136,7 +136,7 @@ class Compiler:
                                   custom_updates, pre_compile_output):
         # Build parameter values
         param_vals = {"g": weight}
-        het_delay = not is_value_constant(delay):
+        het_delay = not is_value_constant(delay)
         if het_delay:
             param_vals["d"] = delay
         

@@ -4,13 +4,13 @@ from math import ceil
 from .connectivity import Connectivity
 from ..utils.connectivity import KernelInit
 from ..utils.snippet import ConnectivitySnippet
-from ..utils.value import InitValue, Value
+from ..utils.value import InitValue
 
 from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
                                init_connectivity, init_var)
 from ..utils.connectivity import get_param_2d
-from ..utils.values import is_value_constant
+from ..utils.value import is_value_constant
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_2d",

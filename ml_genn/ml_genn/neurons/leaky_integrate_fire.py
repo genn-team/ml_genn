@@ -19,7 +19,7 @@ class LeakyIntegrateFire(Neuron):
         
         self.v_thresh = v_thresh
         self.v_reset = v_reset
-        self.v = v)
+        self.v = v
         self.tau_mem = tau_mem
         self.tau_refrac = tau_refrac
         self.relative_reset = relative_reset

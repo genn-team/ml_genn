@@ -1,8 +1,7 @@
 from numbers import Number
 
 from .initializer import Initializer
-from ..utils.snippet import InitializerSnippet
-from ..utils.value import ConstantValueDescriptor
+from ..utils.snippet import ConstantValueDescriptor, InitializerSnippet
 
 class Uniform(Initializer):
     min = ConstantValueDescriptor()

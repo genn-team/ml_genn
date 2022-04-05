@@ -1,7 +1,8 @@
 from .few_spike_relu_input import FewSpikeReluInput
 from .neuron import Neuron
 from ..utils.model import NeuronModel
-from ..utils.value import ConstantValueDescriptor, InitValue
+from ..utils.snippet import ConstantValueDescriptor
+from ..utils.value import InitValue
 
 # Standard FS ReLU model where upstream neurons are FS ReLU or FS unsigned input
 genn_model = {

@@ -1,5 +1,6 @@
 from .sparse_base import SparseBase
-from ..utils.value import ConstantValueDescriptor, InitValue
+from ..utils.snippet import ConstantValueDescriptor
+from ..utils.value import InitValue
 
 from pygenn.genn_model import init_connectivity
 
