@@ -1,6 +1,6 @@
 from enum import Enum
 from ..initializers import Initializer
-from ..utils import InitializerSnippet
+from ..utils.snippet import InitializerSnippet
 
 class PadMode(Enum):
     VALID = 'valid'

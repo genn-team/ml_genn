@@ -1,7 +1,7 @@
 import numpy as np
 
 from .output import Output
-from ..utils import NeuronModel
+from ..utils.model import NeuronModel
 
 from copy import deepcopy
 

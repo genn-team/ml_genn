@@ -5,7 +5,7 @@ from typing import Iterator, Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
-from ..utils import CustomUpdateModel
+from ..utils.model import CustomUpdateModel
 
 from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref

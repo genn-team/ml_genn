@@ -1,9 +1,9 @@
 import numpy as np
 
 from typing import Sequence
-from ..utils import InitValue, ValueDescriptor
+from ..utils.value import InitValue, ValueDescriptor
 
-from ..utils import is_value_array
+from ..utils.value import is_value_array
 
 class Connectivity:
     weight = ValueDescriptor()

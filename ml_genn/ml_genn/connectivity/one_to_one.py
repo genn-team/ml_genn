@@ -1,5 +1,5 @@
 from .sparse_base import SparseBase
-from ..utils import InitValue
+from ..utils.value import InitValue
 
 from pygenn.genn_model import init_connectivity
 

@@ -1,5 +1,5 @@
 from .connectivity import Connectivity
-from ..utils import ConnectivitySnippet, InitValue, Value
+from ..utils.snippet import ConnectivitySnippet
 
 from ..utils.value import is_value_array
 

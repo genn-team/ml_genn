@@ -2,8 +2,9 @@ import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
-from ..utils import ConnectivitySnippet, InitValue, Value
 from ..utils.connectivity import PadMode, KernelInit
+from ..utils.snippet import ConnectivitySnippet
+from ..utils.value import InitValue
 
 from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity, 
                                init_var)

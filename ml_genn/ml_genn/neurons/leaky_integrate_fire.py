@@ -1,7 +1,7 @@
 import numpy as np
 
 from .neuron import Neuron
-from ..utils import NeuronModel
+from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
 from ..utils.value import is_value_initializer

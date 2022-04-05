@@ -1,5 +1,5 @@
 from .initializer import Initializer
-from ..utils import InitializerSnippet
+from ..utils.snippet import InitializerSnippet
 
 class Wrapper(Initializer):
     def __init__(self, snippet, param_vals, egp_vals):

@@ -2,8 +2,9 @@ import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
-from ..utils import ConnectivitySnippet, InitValue, Value
 from ..utils.connectivity import KernelInit
+from ..utils.snippet import ConnectivitySnippet
+from ..utils.value import InitValue, Value
 
 from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 

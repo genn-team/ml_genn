@@ -7,13 +7,13 @@ from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
-from ..utils import CustomUpdateModel
 from ..utils.data import batch_numpy, get_numpy_size
+from ..utils.model import CustomUpdateModel
 
 from pygenn.genn_model import create_var_ref
 from .compiler import build_model
 from ..utils.network import get_network_dag, get_underlying_pop
-from ..utils import is_value_constant
+from ..utils.value import is_value_constant
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations, 

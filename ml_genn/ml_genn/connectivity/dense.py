@@ -1,7 +1,8 @@
 import numpy as np
 
 from .connectivity import Connectivity
-from ..utils import ConnectivitySnippet, InitValue
+from ..utils.snippet import ConnectivitySnippet
+from ..utils.value import InitValue
 
 from ..utils.value import is_value_array
 

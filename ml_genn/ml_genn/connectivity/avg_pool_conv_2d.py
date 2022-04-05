@@ -3,8 +3,9 @@ from math import ceil
 
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from .connectivity import Connectivity
-from ..utils import ConnectivitySnippet, InitValue, Value
+from ..utils.snippet import ConnectivitySnippet
 from ..utils.connectivity import PadMode, KernelInit
+from ..utils.value import InitValue
 
 from pygenn.genn_model import (create_cmlf_class, create_cksf_class,
                                create_custom_sparse_connect_init_snippet_class, 

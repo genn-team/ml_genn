@@ -21,7 +21,8 @@ from pygenn.genn_model import (create_custom_custom_update_class,
 from .weight_update_models import (static_pulse_model, static_pulse_delay_model,
                                    signed_static_pulse_model, 
                                    signed_static_pulse_delay_model)
-from ..utils import is_value_constant, is_value_array, is_value_initializer
+from ..utils.value import (is_value_constant, is_value_array, 
+                           is_value_initializer)
 
 WeightUpdateModel = namedtuple("WeightUpdateModel", ["model", "param_vals", "var_vals"])
 
