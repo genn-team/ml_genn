@@ -7,6 +7,7 @@ from .network import Network
 from .population import Population
 from .synapses import Synapse
 
+from copy import deepcopy
 from .utils.module import get_module_classes, get_object
 
 # Use Keras-style trick to get dictionary containing default synapse models
@@ -19,7 +20,7 @@ class Connection:
         self.source = ref(source)
         self.target = ref(target)
 
-        self.connectivity = connectivity
+        self.connectivity = deepcopy(connectivity)
         self.synapse = get_object(synapse, Synapse, "Synapse", _synapse_models)
         
         # Add weak references to ourselves to source

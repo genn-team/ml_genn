@@ -1,5 +1,6 @@
 from inspect import Parameter
 
+from copy import deepcopy
 from re import compile
 from inspect import isclass, signature
 
@@ -37,7 +38,7 @@ def get_object(obj, base_class, description, dictionary):
     if obj is None:
         return obj
     elif isinstance(obj, base_class):
-        return obj
+        return deepcopy(obj)
     elif isinstance(obj, str):
         if obj in dictionary:
             return dictionary[obj]

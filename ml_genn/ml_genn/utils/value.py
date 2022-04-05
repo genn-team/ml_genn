@@ -5,6 +5,7 @@ from numbers import Number
 from typing import Sequence, Union
 from ..initializers import Initializer
 
+from copy import deepcopy
 from .module import get_module_classes
 
 # Use Keras-style trick to get dictionary containing default neuron models
@@ -30,7 +31,7 @@ class ValueDescriptor:
         elif isinstance(value, (Sequence, np.ndarray)):
             setattr(instance, name_internal, np.asarray(value)) 
         elif isinstance(value, (Number, Initializer)):
-            setattr(instance, name_internal, value) 
+            setattr(instance, name_internal, deepcopy(value)) 
         elif value is None:
             setattr(instance, name_internal, None) 
         else:
