@@ -9,9 +9,9 @@ class SparseBase(Connectivity):
         # connectivity, only option is to use SPARSE_INDIVIDUALG
         if (is_value_array(self.weight) or is_value_array(self.delay) 
                 or prefer_in_memory):
-            return Snippet(snippet=snippet, 
-                           matrix_type="SPARSE_INDIVIDUALG",
-                           weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(snippet=snippet, 
+                                       matrix_type="SPARSE_INDIVIDUALG",
+                                       weight=self.weight, delay=self.delay)
         # Otherwise, we can use PROCEDURAL_PROCEDURALG 
         # **NOTE** same as PROCEDURAL_GLOBALG for constant weights/delays
         else:

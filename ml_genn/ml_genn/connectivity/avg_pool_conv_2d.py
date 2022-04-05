@@ -172,8 +172,7 @@ class AvgPoolConv2D(Connectivity):
 
             return ConnectivitySnippet(snippet=conn_init, 
                                        matrix_type="TOEPLITZ_KERNELG",
-                                       weight=Value(scaled_weight), 
-                                       delay=self.delay)
+                                       weight=scaled_weight, delay=self.delay)
         else:
             conn_init = init_connectivity(genn_snippet, {
                 "pool_kh": pool_kh, "pool_kw": pool_kw,
@@ -188,7 +187,7 @@ class AvgPoolConv2D(Connectivity):
             if prefer_in_memory:
                 return ConnectivitySnippet(snippet=conn_init, 
                                            matrix_type="PROCEDURAL_KERNELG",
-                                           weight=Value(scaled_weight), 
+                                           weight=scaled_weight, 
                                            delay=self.delay)
                 
             else:

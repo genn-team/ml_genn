@@ -7,11 +7,11 @@ from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
-from ..utils.data import batch_numpy, get_numpy_size
 from ..utils.model import CustomUpdateModel
 
 from pygenn.genn_model import create_var_ref
 from .compiler import build_model
+from ..utils.data import batch_numpy, get_numpy_size
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
@@ -196,7 +196,7 @@ class FewSpikeCompiler(Compiler):
         # Check that no delay is already set
         assert is_value_constant(delay) and delay == 0
         
-        return Value(pre_compile_output.con_delay[conn])
+        return pre_compile_output.con_delay[conn]
     
     def build_neuron_model(self, pop, model, custom_updates, 
                            pre_compile_output):

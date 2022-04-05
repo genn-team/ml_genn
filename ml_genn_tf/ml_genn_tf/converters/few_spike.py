@@ -6,7 +6,6 @@ from collections import namedtuple
 from ml_genn.compilers import FewSpikeCompiler
 from ml_genn.neurons import FewSpikeRelu, FewSpikeReluInput
 from ml_genn.outputs import Var
-from ml_genn.utils import Value
 from .converter import Converter
 
 from copy import copy
@@ -80,15 +79,13 @@ class FewSpike(Converter):
             # If population has incoming connections
             if len(p.incoming_connections) > 0:
                 # Determine the maximum alpha value of presynaptic populations
-                # **TODO** this should be done in the converter - neurons already check this
-                max_presyn_alpha = max(c().source().neuron.alpha.value 
+                max_presyn_alpha = max(c().source().neuron.alpha 
                                        for c in p.incoming_connections)
                 
                 # Loop through incoming connections
                 for c in p.incoming_connections:
                     # Set presyn alpha to maximum alpha of all presyn layers
-                    # **YUCK** property should be wrapped up somehow
-                    c().source().neuron.alpha = Value(max_presyn_alpha)
+                    c().source().neuron.alpha = max_presyn_alpha
     
     def create_compiler(self, **kwargs):
         return FewSpikeCompiler(k=self.k, **kwargs)
