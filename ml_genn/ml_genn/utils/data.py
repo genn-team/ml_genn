@@ -1,5 +1,37 @@
 import numpy as np
 
+from ..metrics import Metric
+
+from copy import deepcopy
+
+from ..metrics import default_metrics
+
+def get_metric(metric):
+    if isinstance(metric, Metric):
+        return deepcopy(metric)
+    elif isinstance(metric, str):
+        if metric in default_metrics:
+            return default_metrics[metric]
+        else:
+            raise RuntimeError(f"Metric '{metric}' unknown")
+    else:
+        raise RuntimeError("Metric should be specified as a "
+                           "string or a Metric object")
+
+def get_metrics(metrics, outputs):
+    # If metrics are already in dictionary form
+    if isinstance(metrics, dict):
+        # If keys match, process each metric and create new dictionary
+        if set(metrics.keys()) == set(outputs):
+            return {o: get_metric(m) for o, m in metrics.items()}
+        else:
+            raise RuntimeError("Metric dictionary keys should "
+                               "match network outputs")
+    # Otherwise, create new dictionay with 
+    # copy of processed metric for each output
+    else:
+        return {o: get_metric(metrics) for o in outputs}
+
 def get_numpy_size(data):
     sizes = [d.shape[0] for d in data.values()]
     return sizes[0] if len(set(sizes)) <= 1 else None

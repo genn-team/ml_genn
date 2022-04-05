@@ -11,7 +11,7 @@ from ..utils.model import CustomUpdateModel
 
 from pygenn.genn_model import create_var_ref
 from .compiler import build_model
-from ..utils.data import batch_numpy, get_numpy_size
+from ..utils.data import batch_numpy, get_metrics, get_numpy_size
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
@@ -24,7 +24,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
 
-    def evaluate_numpy(self, x: dict, y: dict):
+    def evaluate_numpy(self, x: dict, y: dict, 
+                       metrics="sparse_categorical_accuracy"):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions 
                      made by each output Population or Layer
@@ -53,7 +54,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         return self.evaluate_batch_iter(list(x.keys()), list(y.keys()), 
                                         iter(zip(*(x_batched + y_batched))))
 
-    def evaluate_batch_iter(self, inputs, outputs, data: Iterator):
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
+                            metrics="sparse_categorical_accuracy"):
         """ Evaluate an input in iterator format against labels
         accuracy --  dictionary containing accuracy of predictions 
                      made by each output Population or Layer
@@ -62,6 +64,9 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
         
+        # Build metrics
+        metrics = get_metrics(metrics, outputs)
+
         # Build empty dictionary of correct counts
         # **NOTE** we use non-modified input keys
         # so e.g. if layers go in, layers come out
@@ -125,23 +130,19 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 # If there is output to read from this population
                 if batch_i >= y_pipeline_depth[o] and len(y_pipeline_queue[o]) > 0:
                     # Pop correct labels from queue
-                    pipe_batch_y = y_pipeline_queue[o].popleft()
+                    batch_y_true = y_pipeline_queue[o].popleft()
 
                     # Get predictions from model
-                    batch_y_star = self.get_output(o)
+                    batch_y_pred = self.get_output(o)
                     
-                    # Add number correct to total
-                    # **TODO** insert loss-function/other metric here
-                    total_correct[o] += np.sum((np.argmax(batch_y_star[:len(pipe_batch_y)], axis=1) == pipe_batch_y))
-                    
-                    # Add number of outputs in this batch to total
-                    size += len(pipe_batch_y)
+                    # Update metrics
+                    metrics[o](batch_y_true, batch_y_pred[:len(batch_y_true)])
 
             # Next batch
             batch_i += 1
         
-        # Return dictionary containing correct count
-        return {p: c / size for p, c in total_correct.items()}
+        # Return metrics
+        return metrics
 
 # Because we want the converter class to be reusable, we don't want 
 # the data to be a member, instead we encapsulate it in a tuple

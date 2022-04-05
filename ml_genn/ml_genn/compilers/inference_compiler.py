@@ -10,7 +10,8 @@ from ..utils.model import CustomUpdateModel
 from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
-from ..utils.data import batch_numpy, get_numpy_size
+from ..utils.data import batch_numpy, get_metrics, get_numpy_size
+
 
 def _build_reset_model(model, custom_updates, var_ref_creator):
     # If model has any state variables
@@ -62,7 +63,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
     
         self.evaluate_timesteps = evaluate_timesteps
 
-    def evaluate_numpy(self, x: dict, y: dict):
+    def evaluate_numpy(self, x: dict, y: dict, metric="sparse_categorical_accuracy"):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions 
                      made by each output Population or Layer
@@ -102,7 +103,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Return dictionary containing correct count
         return {p: c / x_size for p, c in total_correct.items()}
     
-    def evaluate_batch_iter(self, inputs, outputs, data: Iterator):
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator, metric="sparse_categorical_accuracy"):
         """ Evaluate an input in iterator format against labels
         accuracy --  dictionary containing accuracy of predictions 
                      made by each output Population or Layer
@@ -152,7 +153,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Return dictionary containing correct count
         return {p: c / size for p, c in total_correct.items()}
             
-    def evaluate_batch(self, x: dict, y: dict):
+    def evaluate_batch(self, x: dict, y: dict, metric="sparse_categorical_accuracy"):
         """ Evaluate a single batch of inputs against labels
         Args:
         x --        dict mapping input Population or InputLayer to 
@@ -174,12 +175,12 @@ class CompiledInferenceNetwork(CompiledNetwork):
             self.step_time()
 
         # Get predictions from model
-        y_star = self.get_output(list(y.keys()))
+        y_pred = self.get_output(list(y.keys()))
         
         # Return dictionaries of output population to number of correct
         # **TODO** insert loss-function/other metric here
         return {p : np.sum((np.argmax(o_y_star[:len(o_y)], axis=1) == o_y))
-                for (p, o_y), o_y_star in zip(y.items(), y_star)}
+                for (p, o_y), o_y_star in zip(y.items(), y_pred)}
 
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps:int, dt:float=1.0, batch_size:int=1, rng_seed:int=0,
