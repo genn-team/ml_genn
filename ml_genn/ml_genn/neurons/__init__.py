@@ -6,3 +6,7 @@ from .integrate_fire_input import IntegrateFireInput
 from .leaky_integrate_fire import LeakyIntegrateFire
 from .neuron import Neuron
 from .poisson_input import PoissonInput
+
+from ..utils.module import get_module_classes
+
+default_neurons = get_module_classes(globals(), Neuron)

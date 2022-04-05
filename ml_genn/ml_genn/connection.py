@@ -1,5 +1,3 @@
-from . import synapses
-
 from typing import Sequence, Union
 from weakref import ref
 from .connectivity import Connectivity
@@ -8,10 +6,9 @@ from .population import Population
 from .synapses import Synapse
 
 from copy import deepcopy
-from .utils.module import get_module_classes, get_object
+from .utils.module import get_object
 
-# Use Keras-style trick to get dictionary containing default synapse models
-_synapse_models = get_module_classes(synapses, Synapse)
+from .synapses import default_synapses
 
 class Connection:
     def __init__(self, source: Population, target: Population,
@@ -21,7 +18,7 @@ class Connection:
         self.target = ref(target)
 
         self.connectivity = deepcopy(connectivity)
-        self.synapse = get_object(synapse, Synapse, "Synapse", _synapse_models)
+        self.synapse = get_object(synapse, Synapse, "Synapse", default_synapses)
         
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists

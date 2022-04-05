@@ -1,15 +1,12 @@
 import numpy as np
-from .. import initializers
 
 from numbers import Number
 from typing import Sequence, Union
 from ..initializers import Initializer
 
 from copy import deepcopy
-from .module import get_module_classes
 
-# Use Keras-style trick to get dictionary containing default neuron models
-_initializers = get_module_classes(initializers, Initializer)
+from ..initializers import default_initializers
 
 InitValue = Union[Number, Sequence[Number], np.ndarray, Initializer, str]
 
@@ -24,8 +21,8 @@ class ValueDescriptor:
         # **NOTE** strings are checked first as strings ARE sequences
         name_internal = f"_{self.name}"
         if isinstance(value, str):
-            if value in _initializers:
-                setattr(instance, name_internal, _initializers[value])  
+            if value in default_initializers:
+                setattr(instance, name_internal, default_initializers[value])  
             else:
                 raise RuntimeError(f"Initializer '{value}' unknown")
         elif isinstance(value, (Sequence, np.ndarray)):
