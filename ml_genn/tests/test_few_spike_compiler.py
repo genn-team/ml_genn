@@ -44,19 +44,19 @@ def test_delay_balancing():
         Connection(input, dense_b3_1, hidden_connectivity)
         Connection(dense_b3_1, output, output_connectivity)
     
-    compiler = FewSpikeCompiler()
+    compiler = FewSpikeCompiler(k=8)
     compiled_net = compiler.compile(network, "test_delay_balancing",
                                     inputs=input, outputs=output)
     
     # Define array of inputs and get TF model for them
     x = np.arange(0.0, 5.0).reshape((-1, 1))
-    
+
     with compiled_net:
         # Evaluate model on x, calculate mean square error with x
         accuracy = compiled_net.evaluate_numpy({input: x},
                                                {output: x},
                                                "mean_square_error")
-        print(accuracy.result)
+        assert accuracy[output].result < 0.1
     
 if __name__ == '__main__':
     test_delay_balancing()
