@@ -13,13 +13,13 @@ class MeanSquareError(Metric):
     
         # Add number of one-hot predictions which match labels to correct
         self.sum_mse += np.mean(np.square(y_true - y_pred))
-        
+
         # Add shape of true 
         self.total += y_true.shape[0]
     
     def reset(self):
         self.sum_mse = 0.0
-        self.correct = 0
+        self.total = 0
     
     @property
     def result(self):
