@@ -52,7 +52,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
         # Zip together and evaluate using iterator 
         return self.evaluate_batch_iter(list(x.keys()), list(y.keys()), 
-                                        iter(zip(*(x_batched + y_batched))))
+                                        iter(zip(*(x_batched + y_batched))),
+                                        metrics)
 
     def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
                             metrics="sparse_categorical_accuracy"):
@@ -134,7 +135,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
                     # Get predictions from model
                     batch_y_pred = self.get_output(o)
-                    
+
                     # Update metrics
                     metrics[o].update(batch_y_true, 
                                       batch_y_pred[:len(batch_y_true)])
