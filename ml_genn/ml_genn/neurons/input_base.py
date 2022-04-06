@@ -13,7 +13,7 @@ class InputBase:
         # If batch size is 1
         if batch_size == 1:
             # Give error if shapes don't match
-            if input.shape != shape and (input.shape[0] != 0 
+            if input.shape != shape and (input.shape[0] != 1 
                                          or input.shape[1:] != shape):
                 raise RuntimeError(f"Input shape {input.shape} does not match "
                                    f"population shape {shape}")
