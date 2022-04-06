@@ -63,7 +63,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
     
         self.evaluate_timesteps = evaluate_timesteps
 
-    def evaluate_numpy(self, x: dict, y: dict, metric="sparse_categorical_accuracy"):
+    def evaluate_numpy(self, x: dict, y: dict, 
+                       metrics="sparse_categorical_accuracy"):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions 
                      made by each output Population or Layer
@@ -71,6 +72,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Determine the number of elements in x and y
         x_size = get_numpy_size(x)
         y_size = get_numpy_size(x)
+        
+        # Build metrics
+        metrics = get_metrics(metrics, y.keys())
         
         if x_size is None:
             raise RuntimeError("Each input population must be "
@@ -81,29 +85,22 @@ class CompiledInferenceNetwork(CompiledNetwork):
         if x_size != y_size:
             raise RuntimeError("Number of inputs and labels must match")
         
-        total_correct = {p: 0 for p in y.keys()}
-        
         # Batch x and y
         batch_size = self.genn_model.batch_size
         x = batch_numpy(x, batch_size, x_size)
         y = batch_numpy(y, batch_size, y_size)
         
-        # Loop through batches
+        # Loop through batches and evaluate
         with tqdm(total=len(x)) as pbar:
             for x_batch, y_batch in zip(x, y):
-                # Get predictions from batch
-                correct = self.evaluate_batch(x_batch, y_batch)
-                
+                self._evaluate_batch(x_batch, y_batch, metrics)
                 pbar.update(1)
-                
-                # Add to total correct
-                for p, c in correct.items():
-                    total_correct[p] += c
-        
-        # Return dictionary containing correct count
-        return {p: c / x_size for p, c in total_correct.items()}
+
+        # Return metrics
+        return metrics
     
-    def evaluate_batch_iter(self, inputs, outputs, data: Iterator, metric="sparse_categorical_accuracy"):
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator, 
+                            metrics="sparse_categorical_accuracy"):
         """ Evaluate an input in iterator format against labels
         accuracy --  dictionary containing accuracy of predictions 
                      made by each output Population or Layer
@@ -112,10 +109,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
         
-        # Build empty dictionary of correct counts
-        # **NOTE** we use non-modified input keys
-        # so e.g. if layers go in, layers come out
-        total_correct = {o: 0 for o in outputs}
+        # Build metrics
+        metrics = get_metrics(metrics, outputs)
         
         # Loop through data
         size = 0
@@ -143,17 +138,22 @@ class CompiledInferenceNetwork(CompiledNetwork):
             else:
                 y = {p: y for p, x in zip(outputs, batch_y)}
             
-            # Get predictions from batch
-            correct = self.evaluate_batch(x, y)
-            
-            # Add to total correct
-            for p, c in correct.items():
-                total_correct[p] += c
-            
-        # Return dictionary containing correct count
-        return {p: c / size for p, c in total_correct.items()}
-            
-    def evaluate_batch(self, x: dict, y: dict, metric="sparse_categorical_accuracy"):
+            # Evaluate batch
+            self._evaluate_batch(x, y, metrics)
+
+        # Return metrics
+        return metrics
+    
+    def evaluate_batch(self, x: dict, y: dict, 
+                       metrics="sparse_categorical_accuracy"):
+        # Build metrics
+        metrics = get_metrics(metrics, y.keys())
+        
+        # Evaluate batch and return metrics
+        self._evaluate_batch(x, y, metrics)
+        return metrics
+
+    def _evaluate_batch(self, x: dict, y: dict, metrics):
         """ Evaluate a single batch of inputs against labels
         Args:
         x --        dict mapping input Population or InputLayer to 
@@ -177,10 +177,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Get predictions from model
         y_pred = self.get_output(list(y.keys()))
         
-        # Return dictionaries of output population to number of correct
-        # **TODO** insert loss-function/other metric here
-        return {p : np.sum((np.argmax(o_y_star[:len(o_y)], axis=1) == o_y))
-                for (p, o_y), o_y_star in zip(y.items(), y_pred)}
+        # Update metrics
+        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
+            metrics[o].update(y_true, out_y_pred[:len(y_true)])
 
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps:int, dt:float=1.0, batch_size:int=1, rng_seed:int=0,

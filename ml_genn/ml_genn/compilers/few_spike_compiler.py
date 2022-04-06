@@ -136,7 +136,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     batch_y_pred = self.get_output(o)
                     
                     # Update metrics
-                    metrics[o](batch_y_true, batch_y_pred[:len(batch_y_true)])
+                    metrics[o].update(batch_y_true, 
+                                      batch_y_pred[:len(batch_y_true)])
 
             # Next batch
             batch_i += 1
