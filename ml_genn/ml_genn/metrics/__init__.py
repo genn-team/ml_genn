@@ -1,3 +1,4 @@
+from .mean_square_error import MeanSquareError
 from .metric import Metric
 from .sparse_categorical_accuracy import SparseCategoricalAccuracy
 
