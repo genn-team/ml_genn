@@ -78,7 +78,7 @@ with compiled_net:
     accuracy = compiled_net.evaluate_numpy({mlg_net_inputs[0]: validate_x},
                                            {mlg_net_outputs[0]: validate_y})
     end_time = perf_counter()
-    print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]]}")
+    print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]].result}%")
     print(f"Time = {end_time - start_time} s")
     
     if args.kernel_profiling:

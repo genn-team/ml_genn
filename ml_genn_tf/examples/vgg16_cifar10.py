@@ -137,7 +137,7 @@ if __name__ == '__main__':
                                                     mlg_net_outputs,
                                                     iter(mlg_validate_ds))
         end_time = perf_counter()
-        print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]]}")
+        print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]].result}%")
         print(f"Time = {end_time - start_time} s")
         
         if args.kernel_profiling:
