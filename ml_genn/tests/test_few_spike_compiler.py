@@ -1,51 +1,58 @@
 import numpy as np
 
-import tensorflow as tf
-from tensorflow.keras import models
-from tensorflow.keras import layers
-
-import ml_genn as mlg
+from ml_genn import Connection, Network, Population
+from ml_genn.compilers import FewSpikeCompiler
+from ml_genn.neurons import FewSpikeInput, FewSpikeRelu
+from ml_genn.connectivity import Dense
 
 def test_delay_balancing():
     '''
     Test delay-balancing when converting ResNet-style TensorFlow model to few-spike.
     '''
-
-    for gpu in tf.config.experimental.list_physical_devices('GPU'):
-        tf.config.experimental.set_memory_growth(gpu, True)
     
-    # Define overly-complex branching network which ends up with unity gain
-    inputs =  layers.Input(shape=1, name='inputs')
+    hidden_neuron = FewSpikeRelu(k=8, alpha=5.0)
+    hidden_connectivity = Dense(1.0)
+    output_connectivity = Dense(1.0 / 3.0)
     
-    dense_b1_1 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b1_1',
-                              kernel_initializer=lambda shape, dtype: [[1.0]])(inputs)
-    dense_b1_2 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b1_2',
-                              kernel_initializer=lambda shape, dtype: [[1.0]])(dense_b1_1)
-    dense_b1_3 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b1_3',
-                              kernel_initializer=lambda shape, dtype: [[1.0]])(dense_b1_2)
+    network = Network()
+    with network:
+        input = Population(FewSpikeInput(k=8, alpha=5.0), 1)
+        
+        dense_b1_1 = Population(hidden_neuron, 1)
+        dense_b1_2 = Population(hidden_neuron, 1)
+        dense_b1_3 = Population(hidden_neuron, 1)
+        
+        dense_b2_1 = Population(hidden_neuron, 1)
+        dense_b2_2 = Population(hidden_neuron, 1)
+        
+        dense_b3_1 = Population(hidden_neuron, 1)
+        
+        output = Population(FewSpikeRelu(k=8, alpha=5.0, output="var"), 1)
+        
+        # Connect input to output via block 1
+        Connection(input, dense_b1_1, hidden_connectivity)
+        Connection(dense_b1_1, dense_b1_2, hidden_connectivity)
+        Connection(dense_b1_2, dense_b1_3, hidden_connectivity)
+        Connection(dense_b1_3, output, output_connectivity)
+        
+        # Connect input to output via block 2
+        Connection(input, dense_b2_1, hidden_connectivity)
+        Connection(dense_b2_1, dense_b2_2, hidden_connectivity)
+        Connection(dense_b2_2, output, output_connectivity)
+        
+        # Connect input to output via block 3
+        Connection(input, dense_b3_1, hidden_connectivity)
+        Connection(dense_b3_1, output, output_connectivity)
     
-    dense_b2_1 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b2_1',
-                              kernel_initializer=lambda shape, dtype: [[1.0]])(inputs)
-    dense_b2_2 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b2_2',
-                              kernel_initializer=lambda shape, dtype: [[1.0]])(dense_b2_1)
-    
-    dense_b3_1_1 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b3_1_1',
-                                kernel_initializer=lambda shape, dtype: [[1.0]])(inputs)
-    dense_b3_2_1 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b3_2_1',
-                                kernel_initializer=lambda shape, dtype: [[1.0]])(inputs)
-    add_b3 = layers.add([dense_b3_1_1, dense_b3_2_1])
-    dense_b3_2 = layers.Dense(1, activation='relu', use_bias=False, name='dense_b3_2',
-                              kernel_initializer=lambda shape, dtype: [[0.5]])(add_b3)
-    
-    add = layers.add([dense_b1_3, dense_b2_2, dense_b3_2])
-    
-    output = layers.Dense(1, activation='relu', use_bias=False, name='output',
-                          kernel_initializer=lambda shape, dtype: [[1.0 / 3.0]])(add)
-    
-    tf_model = models.Model(inputs, output, name='test_delay_balancing')
+    compiler = FewSpikeCompiler()
+    compiled_net = compiler.compile(network, "test_delay_balancing")
     
     # Define array of inputs and get TF model for them
     x = np.arange(0.0, 5.0).reshape((-1, 1))
+    
+    with compiled_net:
+        
+    
     norm_data = zip(x, np.full(x.shape, np.nan))
     tf_y = tf_model(x).numpy()
     
