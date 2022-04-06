@@ -33,6 +33,6 @@ with compiled_net:
     accuracy = compiled_net.evaluate_numpy({input: testing_images * 0.01},
                                            {output: testing_labels})
     end_time = perf_counter()
-    print(f"Accuracy = {100 * accuracy[output]}%")
+    print(f"Accuracy = {100 * accuracy[output].result}%")
     print(f"Time = {end_time - start_time}s")
     
