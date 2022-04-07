@@ -38,7 +38,7 @@ def get_numpy_size(data):
 
 def batch_numpy(data, batch_size, size):
     # Determine splits to batch data
-    splits = range(batch_size, size, batch_size)
+    splits = range(batch_size, size + 1, batch_size)
     
     # Perform split, resulting in {key: split data} dictionary
     data = {k : np.split(v, splits, axis=0)

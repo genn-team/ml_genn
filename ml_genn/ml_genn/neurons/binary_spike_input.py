@@ -20,7 +20,7 @@ class BinarySpikeInput(Neuron, InputBase):
                 """
                 $(Input) > 0.0 && spike
                 """,
-            is_auto_refractory_required:False}
+            "is_auto_refractory_required":False}
         
         # If signed spikes are enabled, add negative threshold condition
         if self.signed_spikes:
