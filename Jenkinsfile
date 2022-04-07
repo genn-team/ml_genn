@@ -12,7 +12,7 @@ void buildStage(String message, Closure closure) {
             setBuildStatus(message, "PENDING");
             closure();
         }
-	catch (Exception e) {
+    catch (Exception e) {
             setBuildStatus(message, "FAILURE");
         }
     }
@@ -49,11 +49,6 @@ for (node in jenkins.model.Jenkins.instance.nodes) {
     }
 }
 
-// // Add master if it has any idle executors
-// if (jenkins.model.Jenkins.instance.toComputer().countIdle() > 0) {
-//     availableNodes["master"] = jenkins.model.Jenkins.instance.getLabelString().split() as Set
-// }
-
 // Loop through the desired builds
 def builderNodes = []
 for (b in desiredBuilds) {
@@ -70,15 +65,9 @@ for (b in desiredBuilds) {
     }
 }
 
-//  desiredBuilds:  list of desired node feature sets
-// availableNodes:  dict of node feature sets, keyed by node name
-//   builderNodes:  list of [node_name, node_features] satisfying desiredBuilds entries
-
-
 //--------------------------------------------------------------------------
 // Parallel build step
 //--------------------------------------------------------------------------
-
 // **YUCK** need to do a C style loop here - probably due to JENKINS-27421 
 def builders = [:]
 for (b = 0; b < builderNodes.size(); b++) {
@@ -145,34 +134,64 @@ for (b = 0; b < builderNodes.size(); b++) {
                 }
             }
 
-            buildStage("Running tests (${NODE_NAME})") {
-                // Install ML GeNN
-                echo "Installing ML GeNN";
-                sh """
-                . ${WORKSPACE}/venv/bin/activate
-                pip install .
-                """;
-
-                dir("tests") {
-                    // Run ML GeNN test suite
-                    def messages_ML_GeNN = "mlgenn_${NODE_NAME}";
-                    sh "rm -f ${messages_ML_GeNN}";
-                    def commands_ML_GeNN = """
+            buildStage("Running mlGeNN tests (${NODE_NAME})") {
+                dir("ml_genn") {
+                    // Install ML GeNN
+                    sh """
                     . ${WORKSPACE}/venv/bin/activate
-                    pytest -v --junitxml result_${NODE_NAME}.xml  1>>\"${messages_ML_GeNN}\" 2>&1
+                    pip install .
                     """;
-                    def status_ML_GeNN = sh script:commands_ML_GeNN, returnStatus:true;
-                    archive messages_ML_GeNN;
-                    if (status_ML_GeNN != 0) {
-                        setBuildStatus("Running tests (${NODE_NAME})", "FAILURE");
+
+                    dir("tests") {
+                        // Run ML GeNN test suite
+                        def messagesMLGeNN = "ml_genn_${NODE_NAME}";
+                        sh "rm -f ${messagesMLGeNN}";
+                        def commandsMLGeNN = """
+                        . ${WORKSPACE}/venv/bin/activate
+                        pytest -v --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
+                        """;
+                        def statusMLGeNN = sh script:commandsMLGeNN, returnStatus:true;
+                        archive commandsMLGeNN;
+                        if (statusMLGeNN != 0) {
+                            setBuildStatus("Running mlGeNN tests (${NODE_NAME})", "FAILURE");
+                        }
+                    }
+                }
+            }
+            
+            buildStage("Running mlGeNN TF tests (${NODE_NAME})") {
+                dir("ml_genn_tf") {
+                    // Install ML GeNN
+                    sh """
+                    . ${WORKSPACE}/venv/bin/activate
+                    pip install .
+                    """;
+
+                    dir("tests") {
+                        // Run ML GeNN test suite
+                        def messagesMLGeNNTF = "ml_genn_tf_${NODE_NAME}";
+                        sh "rm -f ${messagesMLGeNNTF}";
+                        def commandsMLGeNNTF = """
+                        . ${WORKSPACE}/venv/bin/activate
+                        pytest -v --junitxml ml_genn_tf_${NODE_NAME}.xml  1>>\"${messagesMLGeNNTF}\" 2>&1
+                        """;
+                        def statusMLGeNNTF = sh script:commandsMLGeNNTF, returnStatus:true;
+                        archive messagesMLGeNNTF;
+                        if (statusMLGeNNTF != 0) {
+                            setBuildStatus("Running mlGeNN TF tests (${NODE_NAME})", "FAILURE");
+                        }
                     }
                 }
             }
 
             buildStage("Gathering test results (${NODE_NAME})") {
-                dir("tests") {
-                    // Process JUnit test output
-                    junit "result_${NODE_NAME}.xml";
+                // Process JUnit test output
+                dir("ml_genn/tests") {
+                    junit "ml_genn_${NODE_NAME}.xml";
+                }
+                
+                dir("ml_genn_tf/tests") {
+                    junit "ml_genn_tf_${NODE_NAME}.xml";
                 }
             }
         }
