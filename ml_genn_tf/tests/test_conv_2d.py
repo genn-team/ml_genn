@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-import ml_genn as mlg
 import pytest
 from converter import Converter
 
