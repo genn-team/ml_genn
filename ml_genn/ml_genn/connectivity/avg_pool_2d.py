@@ -8,7 +8,7 @@ from ..utils.value import InitValue
 
 from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
-                               init_connectivity, init_var)
+                               init_connectivity)
 from ..utils.connectivity import get_param_2d
 from ..utils.value import is_value_constant
 
@@ -19,8 +19,7 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         "pool_kh", "pool_kw",
         "pool_sh", "pool_sw",
         "pool_ih", "pool_iw", "pool_ic",
-        "pool_oh", "pool_ow", "pool_oc",
-    ],
+        "pool_oh", "pool_ow", "pool_oc"],
 
     calc_max_row_len_func=create_cmlf_class(
         lambda num_pre, num_post, pars: int(ceil(pars[0] / pars[2])) * int(ceil(pars[1] / pars[3])) * int(pars[9]))(),
@@ -77,10 +76,9 @@ class AvgPool2D(Connectivity):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
-        output_shape = (
-            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-            pool_ic)
+        output_shape = (ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
+                        ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+                        pool_ic)
         
         if target.shape is None:
             target.shape = output_shape

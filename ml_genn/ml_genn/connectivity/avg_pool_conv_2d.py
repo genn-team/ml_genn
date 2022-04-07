@@ -25,8 +25,7 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         "conv_sh", "conv_sw",
         "conv_padh", "conv_padw",
         "conv_ih", "conv_iw", "conv_ic",
-        "conv_oh", "conv_ow", "conv_oc",
-    ],
+        "conv_oh", "conv_ow", "conv_oc"],
 
     calc_max_row_len_func=create_cmlf_class(
         lambda num_pre, num_post, pars: int(ceil(pars[7] / pars[9])) * int(ceil(pars[8] / pars[10])) * int(pars[18]))(),

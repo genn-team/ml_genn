@@ -6,8 +6,7 @@ from ..utils.connectivity import PadMode, KernelInit
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity, 
-                               init_var)
+from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity)
 from ..utils.connectivity import get_conv_same_padding, get_param_2d
 from ..utils.value import is_value_array
 
@@ -31,10 +30,9 @@ class Conv2D(Connectivity):
                 ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
                 self.filters)
         elif self.conv_padding == PadMode.SAME:
-            output_shape = (
-                ceil(float(conv_ih) / float(conv_sh)),
-                ceil(float(conv_iw) / float(conv_sw)),
-                self.filters)
+            output_shape = (ceil(float(conv_ih) / float(conv_sh)),
+                            ceil(float(conv_iw) / float(conv_sw)),
+                            self.filters)
 
         if target.shape is None:
             target.shape = output_shape
