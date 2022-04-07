@@ -23,7 +23,7 @@ from converter import Converter
 
 def test_conv_2d(in_size, in_chan, out_chan, conv_size, conv_strides,
                  conv_padding, prefer_in_memory_connect, request):
-    # Don"t use all GPU memory for TF!
+    # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
     
