@@ -4,9 +4,10 @@ import tensorflow as tf
 from tensorflow.keras import models
 from tensorflow.keras import layers
 
-from ml_genn_tf.converters import Simple
 from ml_genn.connectivity import AvgPoolConv2D, AvgPoolDense2D, Conv2D, Dense
+from ml_genn_tf.converters import Simple
 
+from ml_genn.utils.value import is_value_array
 
 def test_sequential_tf_conversion():
     '''
@@ -51,8 +52,8 @@ def test_sequential_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block1_conv1')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
     
     # block1_conv1 population
     mlg_pop = mlg_conn.target()
@@ -64,8 +65,8 @@ def test_sequential_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block1_conv2')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block1_conv2 population
     mlg_pop = mlg_conn.target()
@@ -77,8 +78,8 @@ def test_sequential_tf_conversion():
     assert isinstance(mlg_conn.connectivity, AvgPoolConv2D)
     tf_layer = tf_model.get_layer('block2_conv1')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block2_conv1 population
     mlg_pop = mlg_conn.target()
@@ -91,8 +92,8 @@ def test_sequential_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block2_conv2')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block2_conv2 population
     mlg_pop = mlg_conn.target()
@@ -104,8 +105,8 @@ def test_sequential_tf_conversion():
     assert isinstance(mlg_conn.connectivity, AvgPoolDense2D)
     tf_layer = tf_model.get_layer('dense1')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # dense1 population
     mlg_pop = mlg_conn.target()
@@ -117,8 +118,8 @@ def test_sequential_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Dense)
     tf_layer = tf_model.get_layer('dense2')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
     
     # dense2 population
     mlg_pop = mlg_conn.target()
@@ -176,8 +177,8 @@ def test_functional_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block1_conv1')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
     
     # block1_conv1 population
     mlg_pop = mlg_conn.target()
@@ -189,8 +190,8 @@ def test_functional_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block1_conv2')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block1_conv2 population    
     mlg_pop = mlg_conn.target()
@@ -209,8 +210,8 @@ def test_functional_tf_conversion():
     assert isinstance(mlg_conn.connectivity, AvgPoolConv2D)
     tf_layer = tf_model.get_layer('block2_conv1')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block2_conv1 population
     mlg_pop = mlg_conn.target()
@@ -222,8 +223,8 @@ def test_functional_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Conv2D)
     tf_layer = tf_model.get_layer('block2_conv2')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block2_conv2 layer
     mlg_pop = mlg_conn.target()
@@ -235,15 +236,15 @@ def test_functional_tf_conversion():
     assert isinstance(mlg_conn.connectivity, AvgPoolDense2D)
     tf_layer = tf_model.get_layer('dense1')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
 
     # block1_conv2->dense1 connection
     assert isinstance(mlg_conn_skip.connectivity, AvgPoolDense2D)
     tf_layer = tf_model.get_layer('dense1')
     weights = mlg_conn_skip.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
     
     # dense1 population
     mlg_pop = mlg_conn.target()
@@ -256,8 +257,8 @@ def test_functional_tf_conversion():
     assert isinstance(mlg_conn.connectivity, Dense)
     tf_layer = tf_model.get_layer('dense2')
     weights = mlg_conn.connectivity.weight
-    assert weights.is_array
-    assert np.equal(weights.value, tf_layer.get_weights()).all()
+    assert is_value_array(weights)
+    assert np.equal(weights, tf_layer.get_weights()).all()
     
     # dense2 population
     mlg_pop = mlg_conn.target()
