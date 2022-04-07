@@ -106,28 +106,28 @@ for (b = 0; b < builderNodes.size(); b++) {
                 dir("genn") {
                     // Build dynamic LibGeNN
                     echo "Building LibGeNN";
-                    def messages_libGeNN = "libgenn_${NODE_NAME}";
-                    sh "rm -f ${messages_libGeNN}";
-                    def commands_libGeNN = """
+                    def messagesLibGeNN = "libgenn_${NODE_NAME}";
+                    sh "rm -f ${messagesLibGeNN}";
+                    def commandsLibGeNN = """
                     make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messages_libGeNN}\" 2>&1
                     """;
-                    def status_libGeNN = sh script:commands_libGeNN, returnStatus:true;
-                    archive messages_libGeNN;
+                    def status_libGeNN = sh script:commandsLibGeNN, returnStatus:true;
+                    archive messagesLibGeNN;
                     if (status_libGeNN != 0) {
                         setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
                     }
 
                     // Build PyGeNN module
                     echo "Building and installing PyGeNN";
-                    def messages_PyGeNN = "pygenn_${NODE_NAME}";
-                    sh "rm -f ${messages_PyGeNN}";
-                    def commands_PyGeNN = """
+                    def messagesPyGeNN = "pygenn_${NODE_NAME}";
+                    sh "rm -f ${messagesPyGeNN}";
+                    def commandsPyGeNN = """
                     . ${WORKSPACE}/venv/bin/activate
-                    python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
-                    python setup.py install  1>>\"${messages_PyGeNN}\" 2>&1
+                    python setup.py install  1>>\"${messagesPyGeNN}\" 2>&1
+                    python setup.py install  1>>\"${messagesPyGeNN}\" 2>&1
                     """;
-                    def status_PyGeNN = sh script:commands_PyGeNN, returnStatus:true;
-                    archive messages_PyGeNN;
+                    def statusPyGeNN = sh script:commandsPyGeNN, returnStatus:true;
+                    archive messagesPyGeNN;
                     if (status_PyGeNN != 0) {
                         setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
                     }
@@ -151,7 +151,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                         pytest -v --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
                         """;
                         def statusMLGeNN = sh script:commandsMLGeNN, returnStatus:true;
-                        archive commandsMLGeNN;
+                        archive messagesMLGeNN;
                         if (statusMLGeNN != 0) {
                             setBuildStatus("Running mlGeNN tests (${NODE_NAME})", "FAILURE");
                         }
