@@ -167,7 +167,7 @@ class Converter:
                         is_output=is_output,
                         has_activation=not tf_layer.activation is tf.keras.activations.linear,
                         neurons=self.create_neurons(tf_layer, pre_convert_output, 
-                                                         is_output))
+                                                    is_output))
 
                     self.validate_tf_layer(tf_layer, config)
 
@@ -385,15 +385,12 @@ class Converter:
         with mlg_network:
             # for each build step
             for config in config_steps:
+                # build population
+                mlg_pop = Population(config.neurons, config.shape)
+                
                 if config.is_input:
-                    # build pself, opulation
-                    mlg_pop = Population(config.neurons, config.shape)
-                    
                     mlg_network_inputs.append(mlg_pop)
                 else:
-                    # build layer
-                    mlg_pop = Population(config.neurons, config.shape)
-
                     # build connections
                     for s in config.synapses:
                         source = mlg_pop_lookup[s.source]
