@@ -134,7 +134,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 }
             }
 
-            def coverageMLGeNN = "${WORKSPACE}/coverage_${NODE_NAME}";
+            def coverageMLGeNN = "${WORKSPACE}/coverage_${NODE_NAME}.xml";
             buildStage("Running mlGeNN tests (${NODE_NAME})") {
                 dir("ml_genn") {
                     // Install ML GeNN
@@ -206,7 +206,8 @@ for (b = 0; b < builderNodes.size(); b++) {
                     
                     // **NOTE** groovy would expand ${CODECOV_TOKEN} which would mean it could, for example, be strace'd
                     // see https://www.jenkins.io/doc/book/pipeline/jenkinsfile/#string-interpolation
-                    sh './codecov -t $CODECOV_TOKEN -f ' + coverageMLGeNN
+                    //sh './codecov -t $CODECOV_TOKEN -f ' + coverageMLGeNN
+                    sh 'curl -s https://codecov.io/bash | bash -s - -n ' + env.NODE_NAME + ' -f ' + coverageMLGeNN + ' -t $CODECOV_TOKEN';
                 }
             }
         }
