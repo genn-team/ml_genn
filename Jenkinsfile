@@ -217,7 +217,6 @@ for (b = 0; b < builderNodes.size(); b++) {
                 // Run flake8
                 def logFlake8MLGeNN = "flake8_${NODE_NAME}.log";
                 def commandsFlake8MLGeNN = """
-                sh """
                 . ${WORKSPACE}/venv/bin/activate
                 flake8 --format pylint --output-file ${logFlake8MLGeNN} ml_genn
                 """
