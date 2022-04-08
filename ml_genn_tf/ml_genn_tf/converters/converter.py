@@ -64,7 +64,7 @@ class Converter:
                 self.neurons = neurons
                 self.synapses = []
 
-        InSynConfig = namedtuple('InSynconfig', ['type', 'params', 'source'])
+        InSynConfig = namedtuple("InSynconfig", ["type", "params", "source"])
 
         config_steps = []
         configs_lookups = {}
@@ -95,8 +95,8 @@ class Converter:
 
             # input layers cannot be output layers
             if len(tf_out_layers_all[tf_in_layer]) == 0:
-                raise NotImplementedError(
-                    'input layers as output layers not supported')
+                raise NotImplementedError("Input layers as output "
+                                          "layers not supported")
 
 
         # === Input Layers ===
@@ -143,15 +143,14 @@ class Converter:
 
                     # do not allow output Add layers
                     if len(tf_out_layers) == 0:
-                        raise NotImplementedError(
-                            'output Add layers not supported')
+                        raise NotImplementedError("Output Add layers "
+                                                  "not supported")
 
                     configs_lookups[tf_layer] = config
 
 
                 # === Dense Layers ===
                 elif isinstance(tf_layer, tf.keras.layers.Dense):
-
                     assert(len(tf_in_layers) == 1)
                     tf_in_layer = tf_in_layers[0]
                     in_configs = configs_lookups[tf_in_layer]
@@ -174,7 +173,7 @@ class Converter:
                             config.synapses.append(
                                 InSynConfig(
                                     type=Dense,
-                                    params={'weight': tf_layer.get_weights()[0]},
+                                    params={"weight": tf_layer.get_weights()[0]},
                                     source=in_config))
 
                         else:
@@ -186,14 +185,19 @@ class Converter:
                                             type=AvgPoolDense2D,
                                             params=in_config.synapses[i].params.copy(),
                                             source=in_config.synapses[i].source))
-                                    config.synapses[-1].params.update({
-                                        'weight': tf_layer.get_weights()[0]})
+                                    config.synapses[-1].params.update(
+                                        {"weight": tf_layer.get_weights()[0]})
 
+                                    # **YUCK** remove any flatten parameters
+                                    if "flatten" in config.synapses[-1].params:
+                                        del config.synapses[-1].params["flatten"]
                                 else:
-                                    # fail if incoming (weighted) layer does not have activation
+                                    # fail if incoming (weighted) layer 
+                                    # does not have activation
                                     if not in_config.has_activation:
                                         raise NotImplementedError(
-                                            'weighted layers without activation not supported')
+                                            "weighted layers without "
+                                            "activation not supported")
 
                     if config.has_activation or config.is_output:
                         config_steps.append(config)
@@ -203,7 +207,6 @@ class Converter:
 
                 # === Conv2D Layers ===
                 elif isinstance(tf_layer, tf.keras.layers.Conv2D):
-
                     assert(len(tf_in_layers) == 1)
                     tf_in_layer = tf_in_layers[0]
                     in_configs = configs_lookups[tf_in_layer]
@@ -220,19 +223,18 @@ class Converter:
                     self.validate_tf_layer(tf_layer, config)
 
                     # configure synapses
+                    tf_weights = tf_layer.get_weights()[0]
                     for in_config in in_configs:
-
                         if in_config.has_activation:
                             # configure Conv2D synapses
                             config.synapses.append(
                                 InSynConfig(
                                     type=Conv2D,
-                                    params={
-                                        'filters': tf_layer.filters,
-                                        'conv_size': tf_layer.kernel_size,
-                                        'conv_strides': tf_layer.strides,
-                                        'conv_padding': tf_layer.padding,
-                                        'weight': tf_layer.get_weights()[0]},
+                                    params={"filters": tf_layer.filters,
+                                            "conv_size": tf_layer.kernel_size,
+                                            "conv_strides": tf_layer.strides,
+                                            "conv_padding": tf_layer.padding,
+                                            "weight": tf_weights},
                                     source=in_config))
 
                         else:
@@ -245,17 +247,19 @@ class Converter:
                                             params=in_config.synapses[i].params.copy(),
                                             source=in_config.synapses[i].source))
                                     config.synapses[-1].params.update({
-                                        'filters': tf_layer.filters,
-                                        'conv_size': tf_layer.kernel_size,
-                                        'conv_strides': tf_layer.strides,
-                                        'conv_padding': tf_layer.padding,
-                                        'weight': tf_layer.get_weights()[0]})
+                                        "filters": tf_layer.filters,
+                                        "conv_size": tf_layer.kernel_size,
+                                        "conv_strides": tf_layer.strides,
+                                        "conv_padding": tf_layer.padding,
+                                        "weight": tf_weights})
 
                                 else:
-                                    # fail if incoming (weighted) layer does not have activation
+                                    # fail if incoming (weighted) 
+                                    # layer does not have activation
                                     if not in_config.has_activation:
                                         raise NotImplementedError(
-                                            'weighted layers without activation not supported')
+                                            "Weighted layers without "
+                                            "activation not supported")
 
                     if config.has_activation or config.is_output:
                         config_steps.append(config)
@@ -267,7 +271,6 @@ class Converter:
                 elif isinstance(tf_layer, 
                                 (tf.keras.layers.AveragePooling2D,
                                  tf.keras.layers.GlobalAveragePooling2D)):
-
                     assert(len(tf_in_layers) == 1)
                     tf_in_layer = tf_in_layers[0]
                     in_configs = configs_lookups[tf_in_layer]
@@ -281,8 +284,8 @@ class Converter:
 
                     # do not allow output pooling layers
                     if config.is_output:
-                        raise NotImplementedError(
-                            'output pooling layers not supported')
+                        raise NotImplementedError("Output pooling layers "
+                                                  "not supported")
 
                     # configure synapses
                     for in_config in in_configs:
@@ -292,21 +295,23 @@ class Converter:
                                 config.synapses.append(
                                     InSynConfig(
                                         type=AvgPool2D,
-                                        params={'pool_size': tf_layer.pool_size,
-                                                'pool_strides': tf_layer.strides},
+                                        params={"pool_size": tf_layer.pool_size,
+                                                "pool_strides": tf_layer.strides},
                                         source=in_config))
                             elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
                                 config.synapses.append(
                                     InSynConfig(
                                         type=AvgPool2D,
-                                        params={'pool_size': tf_layer.input_shape[1:3],
-                                                'pool_strides': None},
+                                        params={"pool_size": tf_layer.input_shape[1:3],
+                                                "pool_strides": None},
                                         source=in_config))
                         else:
-                            # fail if incoming (weighted) layer does not have activation
+                            # fail if incoming (weighted) layer 
+                            # does not have activation
                             if not in_config.has_activation:
                                 raise NotImplementedError(
-                                    'weighted layers without activation not supported')
+                                    "Weighted layers without "
+                                    "activation not supported")
 
                     configs_lookups[tf_layer] = [config]
 
@@ -322,8 +327,9 @@ class Converter:
                         tf_layer.name, tf_layer.output_shape[1:],
                         is_output=is_output,
                         has_activation=True,
-                        neurons=self.create_neurons(tf_layer, pre_convert_output,
-                                                         is_output))
+                        neurons=self.create_neurons(tf_layer,
+                                                    pre_convert_output,
+                                                    is_output))
 
                     self.validate_tf_layer(tf_layer, config)
 
@@ -334,7 +340,7 @@ class Converter:
                             config.synapses.append(
                                 InSynConfig(
                                     type=OneToOne,
-                                    params={'weight': 1.0},
+                                    params={"weight": 1.0},
                                     source=in_config))
 
                         else:
@@ -375,8 +381,7 @@ class Converter:
 
                 # === Unsupported Layers ===
                 else:
-                    raise NotImplementedError('{} layers not supported'.format(
-                        tf_layer.__class__.__name__))
+                    raise NotImplementedError(f"{tf_layer.__class__.__name__} layers not supported")
 
 
         # execute model build process
@@ -397,6 +402,7 @@ class Converter:
                     # build connections
                     for s in config.synapses:
                         source = mlg_pop_lookup[s.source]
+                        print(s.type)
                         connectivity = s.type(**s.params)
                         
                         Connection(source, mlg_pop, connectivity)
@@ -468,7 +474,7 @@ class Converter:
             # global average pooling allowed
             pass
         elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-            if tf_layer.padding != 'valid':
+            if tf_layer.padding != "valid":
                 raise NotImplementedError("Only valid padding is supported "
                                           "for pooling layers")
         else:
