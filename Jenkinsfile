@@ -93,7 +93,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 sh """
                 . ${WORKSPACE}/venv/bin/activate
                 pip install -U pip
-                pip install numpy pytest pytest-cov
+                pip install numpy pytest pytest-cov wheel
                 """;
             }
 
@@ -149,7 +149,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                         sh "rm -f ${messagesMLGeNN}";
                         def commandsMLGeNN = """
                         . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
+                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml:${coverageMLGeNN} --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
                         """;
                         def statusMLGeNN = sh script:commandsMLGeNN, returnStatus:true;
                         archive messagesMLGeNN;
@@ -197,7 +197,7 @@ for (b = 0; b < builderNodes.size(); b++) {
             }
             
             buildStage("Uploading coverage (${NODE_NAME})") {
-                withCredentials([string(credentialsId: "codecov_token", variable: "CODECOV_TOKEN")]) {
+                withCredentials([string(credentialsId: "codecov_token_ml_genn", variable: "CODECOV_TOKEN")]) {
                     // Download codecov uploader and make executable
                     sh """
                     curl -Os https://uploader.codecov.io/latest/linux/codecov
