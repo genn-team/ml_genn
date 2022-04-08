@@ -17,14 +17,11 @@ class Converter:
         tf_model  --  TensorFlow model to be converted
         """
 
-        tf_activation_layers = (
-            tf.keras.layers.Activation,
-            tf.keras.layers.ReLU,
-            tf.keras.layers.Softmax)
+        tf_activation_layers = (tf.keras.layers.Activation,
+                                tf.keras.layers.ReLU,
+                                tf.keras.layers.Softmax)
 
-        tf_ignored_layers = (
-            tf.keras.layers.Flatten,
-            tf.keras.layers.Dropout)
+        tf_ignored_layers = (tf.keras.layers.Dropout,)
 
         # only traverse nodes belonging to this model
         tf_model_nodes = set()
@@ -35,7 +32,6 @@ class Converter:
         tf_in_layers_all = {}
         tf_out_layers_all = {}
         for tf_layer in tf_model.layers:
-
             # find inbound layers
             tf_in_layers = []
             for n in tf_layer.inbound_nodes:
@@ -173,7 +169,6 @@ class Converter:
 
                     # configure synapses
                     for in_config in in_configs:
-
                         if in_config.has_activation:
                             # configure Dense synapses
                             config.synapses.append(
@@ -291,7 +286,6 @@ class Converter:
 
                     # configure synapses
                     for in_config in in_configs:
-
                         if in_config.has_activation:
                             # configure AvgPool2D synapses
                             if isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
@@ -308,7 +302,6 @@ class Converter:
                                         params={'pool_size': tf_layer.input_shape[1:3],
                                                 'pool_strides': None},
                                         source=in_config))
-
                         else:
                             # fail if incoming (weighted) layer does not have activation
                             if not in_config.has_activation:
@@ -317,10 +310,8 @@ class Converter:
 
                     configs_lookups[tf_layer] = [config]
 
-
                 # === Activation Layers ===
                 elif isinstance(tf_layer, tf_activation_layers):
-
                     assert(len(tf_in_layers) == 1)
                     tf_in_layer = tf_in_layers[0]
                     in_configs = configs_lookups[tf_in_layer]
@@ -359,16 +350,28 @@ class Converter:
 
                     configs_lookups[tf_layer] = [config]
 
+                # === Flatten Layers ===
+                elif isinstance(tf_layer, tf.keras.layers.Flatten):
+                    assert(len(tf_in_layers) == 1)
+                    tf_in_layer = tf_in_layers[0]
+                    in_configs = configs_lookups[tf_in_layer]
+
+                    # Loop through incoming layers and their synapses
+                    for in_config in in_configs:
+                        for s in in_config.synapses:
+                            # If connectivity is a 2D type, set flatten flag
+                            if s.type in (AvgPool2D, Conv2D, AvgPoolConv2D):
+                                s.params.update({"flatten": True})
+
+                    configs_lookups[tf_layer] = in_configs
 
                 # === Ignored Layers ===
                 elif isinstance(tf_layer, tf_ignored_layers):
-
                     assert(len(tf_in_layers) == 1)
                     tf_in_layer = tf_in_layers[0]
                     in_configs = configs_lookups[tf_in_layer]
 
                     configs_lookups[tf_layer] = in_configs
-
 
                 # === Unsupported Layers ===
                 else:
