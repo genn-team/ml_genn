@@ -109,12 +109,12 @@ for (b = 0; b < builderNodes.size(); b++) {
                     def messagesLibGeNN = "libgenn_${NODE_NAME}";
                     sh "rm -f ${messagesLibGeNN}";
                     def commandsLibGeNN = """
-                    make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messages_libGeNN}\" 2>&1
+                    make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messagesLibGeNN}\" 2>&1
                     """;
-                    def status_libGeNN = sh script:commandsLibGeNN, returnStatus:true;
+                    def statusLibGeNN = sh script:commandsLibGeNN, returnStatus:true;
                     archive messagesLibGeNN;
-                    if (status_libGeNN != 0) {
-                        setBuildStatus("Building PyGeNN (${NODE_NAME})", "FAILURE");
+                    if (statusLibGeNN != 0) {
+                        setBuildStatus("Building LibGeNN (${NODE_NAME})", "FAILURE");
                     }
 
                     // Build PyGeNN module
