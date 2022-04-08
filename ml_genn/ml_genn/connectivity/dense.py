@@ -12,7 +12,11 @@ class Dense(Connectivity):
 
     def connect(self, source, target):
         # If weights are specified as 2D array
-        if is_value_array(self.weight) and self.weight.ndim == 2:
+        if is_value_array(self.weight):
+            if self.weight.ndim != 2:
+                raise NotImplementedError("Dense connectivity required "
+                                          "a 2D array of weights")
+
             source_size, target_size = self.weight.shape
             
             # Set/check target shape
@@ -28,7 +32,6 @@ class Dense(Connectivity):
             elif source.shape != (source_size,):
                 raise RuntimeError("source population shape "
                                    "doesn't match weights")
-        # **TODO** should we do something sensible with 1D arrays too
     
     def get_snippet(self, connection, prefer_in_memory):
         return ConnectivitySnippet(snippet=None, 
