@@ -134,6 +134,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 }
             }
 
+            def coverageMLGeNN = "${WORKSPACE}/coverage_${NODE_NAME}";
             buildStage("Running mlGeNN tests (${NODE_NAME})") {
                 dir("ml_genn") {
                     // Install ML GeNN
@@ -173,7 +174,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                         sh "rm -f ${messagesMLGeNNTF}";
                         def commandsMLGeNNTF = """
                         . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml --cov-append --junitxml ml_genn_tf_${NODE_NAME}.xml  1>>\"${messagesMLGeNNTF}\" 2>&1
+                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml:${coverageMLGeNN} --cov-append --junitxml ml_genn_tf_${NODE_NAME}.xml  1>>\"${messagesMLGeNNTF}\" 2>&1
                         """;
                         def statusMLGeNNTF = sh script:commandsMLGeNNTF, returnStatus:true;
                         archive messagesMLGeNNTF;
@@ -197,11 +198,15 @@ for (b = 0; b < builderNodes.size(); b++) {
             
             buildStage("Uploading coverage (${NODE_NAME})") {
                 withCredentials([string(credentialsId: "codecov_token", variable: "CODECOV_TOKEN")]) {
+                    // Download codecov uploader and make executable
                     sh """
-                    curl -Os https://uploader.codecov.io/v0.1.0_4653/linux/codecov
+                    curl -Os https://uploader.codecov.io/latest/linux/codecov
                     chmod +x codecov
-                    ./codecov -t ${CODECOV_TOKEN}
                     """
+                    
+                    // **NOTE** groovy would expand ${CODECOV_TOKEN} which would mean it could, for example, be strace'd
+                    // see https://www.jenkins.io/doc/book/pipeline/jenkinsfile/#string-interpolation
+                    sh './codecov -t $CODECOV_TOKEN -f ' + coverageMLGeNN
                 }
             }
         }
