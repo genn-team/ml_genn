@@ -148,7 +148,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                         sh "rm -f ${messagesMLGeNN}";
                         def commandsMLGeNN = """
                         . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
+                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
                         """;
                         def statusMLGeNN = sh script:commandsMLGeNN, returnStatus:true;
                         archive messagesMLGeNN;
@@ -173,7 +173,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                         sh "rm -f ${messagesMLGeNNTF}";
                         def commandsMLGeNNTF = """
                         . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --junitxml ml_genn_tf_${NODE_NAME}.xml  1>>\"${messagesMLGeNNTF}\" 2>&1
+                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml --cov-append --junitxml ml_genn_tf_${NODE_NAME}.xml  1>>\"${messagesMLGeNNTF}\" 2>&1
                         """;
                         def statusMLGeNNTF = sh script:commandsMLGeNNTF, returnStatus:true;
                         archive messagesMLGeNNTF;
@@ -192,6 +192,16 @@ for (b = 0; b < builderNodes.size(); b++) {
                 
                 dir("ml_genn_tf/tests") {
                     junit "ml_genn_tf_${NODE_NAME}.xml";
+                }
+            }
+            
+            buildStage("Uploading coverage (${NODE_NAME})") {
+                withCredentials([string(credentialsId: "codecov_token", variable: "CODECOV_TOKEN")]) {
+                    sh """
+                    curl -Os https://uploader.codecov.io/v0.1.0_4653/linux/codecov
+                    chmod +x codecov
+                    ./codecov -t ${CODECOV_TOKEN}
+                    """
                 }
             }
         }
