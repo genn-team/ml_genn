@@ -1,6 +1,7 @@
 import numpy as np
 from math import ceil
 
+from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from .connectivity import Connectivity
 from ..utils.connectivity import PadMode, KernelInit
 from ..utils.snippet import ConnectivitySnippet
@@ -9,18 +10,18 @@ from ..utils.value import InitValue
 from pygenn.genn_model import (create_cksf_class, create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
                                init_connectivity)
-from ..utils.connectivity import get_conv_same_padding, get_param_2d
+from ..utils.connectivity import (get_conv_same_padding, get_param_2d, 
+                                  update_target_shape)
 from ..utils.value import is_value_array, is_value_constant
 
-convtranspose2d_init = create_custom_sparse_connect_init_snippet_class(
-    "convtranspose2d",
+genn_snippet = create_custom_sparse_connect_init_snippet_class(
+    "conv_2d_transpose",
 
-    param_names=[
-        "conv_kh", "conv_kw",
-        "conv_sh", "conv_sw",
-        "conv_padh", "conv_padw",
-        "conv_ih", "conv_iw", "conv_ic",
-        "conv_oh", "conv_ow", "conv_oc"],
+    param_names=["conv_kh", "conv_kw",
+                 "conv_sh", "conv_sw",
+                 "conv_padh", "conv_padw",
+                 "conv_ih", "conv_iw", "conv_ic",
+                 "conv_oh", "conv_ow", "conv_oc"],
 
     calc_max_row_len_func=create_cmlf_class(
         lambda num_pre, num_post, pars: int(pars[0] * pars[1] * pars[11]))(),
@@ -57,14 +58,14 @@ convtranspose2d_init = create_custom_sparse_connect_init_snippet_class(
         $(outRow)++;
         """)
 
-class ConvTranspose2D(Connectivity):
-
-    def __init__(self, weight:InitValue, filters, conv_size, conv_strides=None,
-                 conv_padding="valid", delay:InitValue=0):
-        super(Conv2D, self).__init__(weight, delay)
+class Conv2DTranspose(Connectivity):
+    def __init__(self, weight:InitValue, filters, conv_size, flatten=False,
+                 conv_strides=None, conv_padding="valid", delay:InitValue=0):
+        super(Conv2DTranspose, self).__init__(weight, delay)
         
         self.filters = filters
         self.conv_size = get_param_2d("conv_size", conv_size)
+        self.flatten = flatten
         self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
 
@@ -73,30 +74,29 @@ class ConvTranspose2D(Connectivity):
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = source.shape
         if self.conv_padding is PadMode.VALID:
-            output_shape = (conv_ih * conv_sh + max(conv_kh - conv_sh, 0),
-                            conv_iw * conv_sw + max(conv_kw - conv_sw, 0),
-                            self.filters)
+            self.output_shape = (
+                conv_ih * conv_sh + max(conv_kh - conv_sh, 0),
+                conv_iw * conv_sw + max(conv_kw - conv_sw, 0),
+                self.filters)
         elif self.conv_padding is PadMode.SAME:
-            output_shape = (conv_ih * conv_sh,
-                            conv_iw * conv_sw,
-                            self.filters)
+            self.output_shape = (conv_ih * conv_sh,
+                                 conv_iw * conv_sw,
+                                 self.filters)
 
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError("target population shape mismatch")
+        # Update target shape
+        update_target_shape(target, self.output_shape, self.flatten)
 
         # Check shape of weights matches kernels
-        weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
+        weight_shape = (conv_kh, conv_kw, self.filters, conv_ic)
         if is_value_array(self.weight) and self.weight.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
-                               "should  match shape of Conv2D kernel")
+                               "should match shape of Conv2DTranspose kernel")
 
     def get_snippet(self, connection, prefer_in_memory):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
-        conv_ih, conv_iw, conv_ic = self.source().shape
-        conv_oh, conv_ow, conv_oc = self.target().shape
+        conv_ih, conv_iw, conv_ic = connection.source().shape
+        conv_oh, conv_ow, conv_oc = self.output_shape
         if self.conv_padding is PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
@@ -104,7 +104,7 @@ class ConvTranspose2D(Connectivity):
             conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        conn_init = init_connectivity(convtranspose2d_init, {
+        conn_init = init_connectivity(genn_snippet, {
             "conv_kh": conv_kh, "conv_kw": conv_kw,
             "conv_sh": conv_sh, "conv_sw": conv_sw,
             "conv_padh": conv_padh, "conv_padw": conv_padw,
