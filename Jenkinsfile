@@ -95,7 +95,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 sh """
                 . ${WORKSPACE}/venv/bin/activate
                 pip install -U pip
-                pip install numpy pytest pytest-cov wheel
+                pip install numpy pytest pytest-cov wheel flake8
                 """;
             }
 
@@ -108,7 +108,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 dir("genn") {
                     // Build dynamic LibGeNN
                     echo "Building LibGeNN";
-                    def messagesLibGeNN = "libgenn_${NODE_NAME}";
+                    def messagesLibGeNN = "libgenn_${NODE_NAME}.txt";
                     sh "rm -f ${messagesLibGeNN}";
                     def commandsLibGeNN = """
                     make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messagesLibGeNN}\" 2>&1
@@ -121,7 +121,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 
                     // Build PyGeNN module
                     echo "Building and installing PyGeNN";
-                    def messagesPyGeNN = "pygenn_${NODE_NAME}";
+                    def messagesPyGeNN = "pygenn_${NODE_NAME}.txt";
                     sh "rm -f ${messagesPyGeNN}";
                     def commandsPyGeNN = """
                     . ${WORKSPACE}/venv/bin/activate
@@ -147,7 +147,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 
                     dir("tests") {
                         // Run ML GeNN test suite
-                        def messagesMLGeNN = "ml_genn_${NODE_NAME}";
+                        def messagesMLGeNN = "ml_genn_${NODE_NAME}.txt";
                         sh "rm -f ${messagesMLGeNN}";
                         def commandsMLGeNN = """
                         . ${WORKSPACE}/venv/bin/activate
@@ -172,7 +172,7 @@ for (b = 0; b < builderNodes.size(); b++) {
 
                     dir("tests") {
                         // Run ML GeNN test suite
-                        def messagesMLGeNNTF = "ml_genn_tf_${NODE_NAME}";
+                        def messagesMLGeNNTF = "ml_genn_tf_${NODE_NAME}.txt";
                         sh "rm -f ${messagesMLGeNNTF}";
                         def commandsMLGeNNTF = """
                         . ${WORKSPACE}/venv/bin/activate
@@ -211,6 +211,15 @@ for (b = 0; b < builderNodes.size(); b++) {
                     //sh './codecov -t $CODECOV_TOKEN -f ' + coverageMLGeNN
                     sh 'curl -s https://codecov.io/bash | bash -s - -n ' + env.NODE_NAME + ' -f ' + coverageMLGeNN + ' -t $CODECOV_TOKEN';
                 }
+            }
+            
+            buildStage("Running Flake8 (${NODE_NAME})") {
+                def flake8MLGeNN = "flake8_${NODE_NAME}.log";
+                sh """
+                . ${WORKSPACE}/venv/bin/activate
+                flake8 --format pylint --output-file ${flake8MLGeNN} ml_genn
+                """
+                recordIssues enabledForFailure: true, tool: flake8(pattern: flake8MLGeNN);
             }
         }
     }
