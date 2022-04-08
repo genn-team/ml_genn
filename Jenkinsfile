@@ -214,12 +214,21 @@ for (b = 0; b < builderNodes.size(); b++) {
             }
             
             buildStage("Running Flake8 (${NODE_NAME})") {
-                def flake8MLGeNN = "flake8_${NODE_NAME}.log";
+                // Run flake8
+                def logFlake8MLGeNN = "flake8_${NODE_NAME}.log";
+                def commandsFlake8MLGeNN = """
                 sh """
                 . ${WORKSPACE}/venv/bin/activate
-                flake8 --format pylint --output-file ${flake8MLGeNN} ml_genn
+                flake8 --format pylint --output-file ${logFlake8MLGeNN} ml_genn
                 """
-                recordIssues enabledForFailure: true, tool: flake8(pattern: flake8MLGeNN);
+                def statusFlake8MLGeNN = sh script:commandsFlake8MLGeNN, returnStatus:true;
+                
+                // Record any issues
+                recordIssues enabledForFailure: true, tool: flake8(pattern: logFlake8MLGeNN);
+                
+                if (statusFlake8MLGeNN != 0) {
+                    setBuildStatus("Running Flake8 (${NODE_NAME})", "FAILURE");
+                }
             }
         }
     }
