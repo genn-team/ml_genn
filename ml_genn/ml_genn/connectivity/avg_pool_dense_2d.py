@@ -8,6 +8,7 @@ from ..utils.value import InitValue
 
 from pygenn.genn_model import create_custom_init_var_snippet_class
 from ..utils.connectivity import get_param_2d
+from ..utils.value import is_value_array
 
 genn_snippet = create_custom_init_var_snippet_class(
     "avepool2d_dense",
@@ -74,6 +75,26 @@ class AvgPoolDense2D(Connectivity):
             ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
             ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
             pool_ic)
+
+        # If weights are specified as 2D array
+        if is_value_array(self.weight):
+            if self.weight.ndim != 2:
+                raise NotImplementedError("AvgPoolDense2D connectivity "
+                                          "requires a 2D array of weights")
+
+            source_size, target_size = self.weight.shape
+            
+            # Set/check target shape
+            if target.shape is None:
+                target.shape = (target_size,)
+            elif target.shape != (target_size,):
+                raise RuntimeError("target population shape "
+                                   "doesn't match weights")
+
+            # Set/check source shape
+            if np.prod(self.pool_output_shape) != source_size:
+                raise RuntimeError("pool output size doesn't "
+                                   "match weights")
 
     def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size

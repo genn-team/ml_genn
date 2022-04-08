@@ -7,16 +7,18 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity)
-from ..utils.connectivity import get_conv_same_padding, get_param_2d
+from ..utils.connectivity import (get_conv_same_padding, get_param_2d, 
+                                  update_target_shape)
 from ..utils.value import is_value_array
 
 class Conv2D(Connectivity):
-    def __init__(self, weight:InitValue, filters, conv_size, conv_strides=None,
-                 conv_padding="valid", delay:InitValue=0):
+    def __init__(self, weight:InitValue, filters, conv_size, flatten=False,
+                 conv_strides=None, conv_padding="valid", delay:InitValue=0):
         super(Conv2D, self).__init__(weight, delay)
 
         self.filters = filters
         self.conv_size = get_param_2d("conv_size", conv_size)
+        self.flatten = flatten
         self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
 
@@ -25,19 +27,17 @@ class Conv2D(Connectivity):
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = source.shape
         if self.conv_padding == PadMode.VALID:
-            output_shape = (
+            self.output_shape = (
                 ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
                 ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
                 self.filters)
         elif self.conv_padding == PadMode.SAME:
-            output_shape = (ceil(float(conv_ih) / float(conv_sh)),
-                            ceil(float(conv_iw) / float(conv_sw)),
-                            self.filters)
+            self.output_shape = (ceil(float(conv_ih) / float(conv_sh)),
+                                 ceil(float(conv_iw) / float(conv_sw)),
+                                 self.filters)
 
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError("target population shape mismatch")
+        # Update target shape
+        update_target_shape(target, self.output_shape, self.flatten)
 
         # Check shape of weights matches kernels
         weight_shape = (conv_kh, conv_kw, conv_ic, self.filters)
@@ -49,7 +49,7 @@ class Conv2D(Connectivity):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = connection.source().shape
-        conv_oh, conv_ow, conv_oc = connection.target().shape
+        conv_oh, conv_ow, conv_oc = self.output_shape
         if self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0

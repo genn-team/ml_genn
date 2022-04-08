@@ -14,7 +14,7 @@ class Dense(Connectivity):
         # If weights are specified as 2D array
         if is_value_array(self.weight):
             if self.weight.ndim != 2:
-                raise NotImplementedError("Dense connectivity required "
+                raise NotImplementedError("Dense connectivity requires "
                                           "a 2D array of weights")
 
             source_size, target_size = self.weight.shape

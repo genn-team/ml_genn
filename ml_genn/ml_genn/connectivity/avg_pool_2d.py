@@ -9,7 +9,7 @@ from ..utils.value import InitValue
 from pygenn.genn_model import (create_cmlf_class,
                                create_custom_sparse_connect_init_snippet_class, 
                                init_connectivity)
-from ..utils.connectivity import get_param_2d
+from ..utils.connectivity import get_param_2d, update_target_shape
 from ..utils.value import is_value_constant
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
@@ -59,8 +59,10 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         """)
 
 class AvgPool2D(Connectivity):
-    def __init__(self, pool_size, pool_strides=None, delay:InitValue=0):
+    def __init__(self, pool_size, flatten=False, 
+                 pool_strides=None, delay:InitValue=0):
         self.pool_size = get_param_2d("pool_size", pool_size)
+        self.flatten = flatten
         self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
         
         super(AvgPool2D, self).__init__(1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
@@ -76,20 +78,19 @@ class AvgPool2D(Connectivity):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
-        output_shape = (ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-                        ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
-                        pool_ic)
+        self.output_shape = (
+            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
+            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+            pool_ic)
         
-        if target.shape is None:
-            target.shape = output_shape
-        elif output_shape != target.shape:
-            raise RuntimeError("target layer shape mismatch")
+        # Update target shape
+        update_target_shape(target, self.output_shape, self.flatten)
 
     def get_snippet(self, connection, prefer_in_memory):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape
-        pool_oh, pool_ow, pool_oc = connection.target().shape
+        pool_oh, pool_ow, pool_oc = self.output_shape
 
         conn_init = init_connectivity(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,

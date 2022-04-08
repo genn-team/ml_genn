@@ -1,3 +1,5 @@
+import numpy as np
+
 from enum import Enum
 from ..initializers import Initializer
 from ..utils.snippet import InitializerSnippet
@@ -43,3 +45,21 @@ def get_param_2d(name, param, default=None):
 
     else:
         raise TypeError('{}: incorrect type: {}'.format(name, type(param)))
+
+def update_target_shape(target, output_shape:tuple, flatten_out:bool):
+    # If no target shape is set, set to either flattened 
+    # or un-modified output shape depending on flag
+    flat_output_shape = (np.prod(output_shape),)
+    if target.shape is None:
+        target.shape = (flat_output_shape if flatten_out 
+                        else output_shape)
+    # Otherwise, if output should be flattened and target 
+    # shape doesn't match flattened output shape, give error
+    elif flatten_out and flat_output_shape != target.shape:
+        raise RuntimeError(f"Target layer shape {target.shape} doesn't match "
+                           f"flattened output shape {flat_output_shape}")
+    # Otherwise, if output shouldn't be flattened and target
+    # shape doesn't match original output shape, give error
+    elif not flatten_out and output_shape != target.shape:
+        raise RuntimeError(f"Target layer shape {target.shape} doesn't "
+                           f"match output shape {output_shape}")
