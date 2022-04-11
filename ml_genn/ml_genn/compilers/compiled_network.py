@@ -4,10 +4,11 @@ from ..layer import InputLayer, Layer
 
 from ..utils.network import get_underlying_pop
 
+
 class CompiledNetwork:
     _context = None
 
-    def __init__(self, genn_model, neuron_populations, 
+    def __init__(self, genn_model, neuron_populations,
                  connection_populations):
 
         self.genn_model = genn_model
@@ -20,10 +21,10 @@ class CompiledNetwork:
         for pop, input in inputs.items():
             # Find corresponding GeNN population and set input
             pop = get_underlying_pop(pop)
-            pop.neuron.set_input(self.neuron_populations[pop], 
+            pop.neuron.set_input(self.neuron_populations[pop],
                                  self.genn_model.batch_size, pop.shape, input)
-    
-    def get_output(self, outputs: Union[Sequence, Population, 
+
+    def get_output(self, outputs: Union[Sequence, Population,
                                         InputLayer, Layer]):
         if isinstance(outputs, Sequence):
             return [self._get_output(p) for p in outputs]
@@ -51,13 +52,14 @@ class CompiledNetwork:
 
         CompiledNetwork._context = self
         self.genn_model.build()
-        self.genn_model.load(num_recording_timesteps=self.num_recording_timesteps)
+        self.genn_model.load(
+            num_recording_timesteps=self.num_recording_timesteps)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
         assert CompiledNetwork._context is not None
         CompiledNetwork._context = None
-    
+
     def _get_output(self, pop):
         pop = get_underlying_pop(pop)
-        return pop.neuron.get_output(self.neuron_populations[pop], 
+        return pop.neuron.get_output(self.neuron_populations[pop],
                                      self.genn_model.batch_size, pop.shape)

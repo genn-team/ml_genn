@@ -55,17 +55,21 @@ genn_snippet = create_custom_init_var_snippet_class(
         }
         """)
 
-    
+
 class AvgPoolDense2D(Connectivity):
-    def __init__(self, weight:InitValue, pool_size, pool_strides=None, delay:InitValue=0):
+    def __init__(self, weight: InitValue, pool_size, pool_strides=None,
+                 delay: InitValue = 0):
         super(AvgPoolDense2D, self).__init__(weight, delay)
 
         self.pool_size = get_param_2d("pool_size", pool_size)
-        self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
+        self.pool_strides = get_param_2d("pool_strides", pool_strides,
+                                         default=self.pool_size)
         self.pool_output_shape = None
 
-        if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
-            raise NotImplementedError("pool stride < pool size is not supported")
+        if (self.pool_strides[0] < self.pool_size[0]
+                or self.pool_strides[1] < self.pool_size[1]):
+            raise NotImplementedError("pool stride < pool size "
+                                      "is not supported")
 
     def connect(self, source, target):
         pool_kh, pool_kw = self.pool_size
@@ -83,7 +87,7 @@ class AvgPoolDense2D(Connectivity):
                                           "requires a 2D array of weights")
 
             source_size, target_size = self.weight.shape
-            
+
             # Set/check target shape
             if target.shape is None:
                 target.shape = (target_size,)
@@ -102,9 +106,9 @@ class AvgPoolDense2D(Connectivity):
         pool_ih, pool_iw, pool_ic = connection.source().shape
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
-        conn = ("DENSE_INDIVIDUALG" if prefer_in_memory 
+        conn = ("DENSE_INDIVIDUALG" if prefer_in_memory
                 else "DENSE_PROCEDURALG")
-        
+
         wu_var_val = Wrapper(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,
             "pool_sh": pool_sh, "pool_sw": pool_sw,
@@ -113,8 +117,5 @@ class AvgPoolDense2D(Connectivity):
             "dense_units": int(np.prod(connection.target().shape))},
             {"weights": self.weight.flatten() / (pool_kh * pool_kw)})
 
-        return ConnectivitySnippet(snippet=None, 
-                                   matrix_type=conn,
-                                   weight=wu_var_val, 
-                                   delay=self.delay)
-
+        return ConnectivitySnippet(snippet=None, matrix_type=conn,
+                                   weight=wu_var_val, delay=self.delay)

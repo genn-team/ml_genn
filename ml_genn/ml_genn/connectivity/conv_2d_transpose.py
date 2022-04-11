@@ -1,6 +1,3 @@
-import numpy as np
-from math import ceil
-
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
 from .connectivity import Connectivity
 from ..utils.connectivity import PadMode, KernelInit
@@ -8,11 +5,11 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from pygenn.genn_model import (create_cksf_class, create_cmlf_class,
-                               create_custom_sparse_connect_init_snippet_class, 
+                               create_custom_sparse_connect_init_snippet_class,
                                init_connectivity)
-from ..utils.connectivity import (get_conv_same_padding, get_param_2d, 
+from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
-from ..utils.value import is_value_array, is_value_constant
+from ..utils.value import is_value_array
 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "conv_2d_transpose",
@@ -27,7 +24,8 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         lambda num_pre, num_post, pars: int(pars[0] * pars[1] * pars[11]))(),
 
     calc_kernel_size_func=create_cksf_class(
-        lambda pars: UnsignedIntVector([int(pars[0]), int(pars[1]), int(pars[11]), int(pars[8])]))(),
+        lambda pars: UnsignedIntVector([int(pars[0]), int(pars[1]),
+                                        int(pars[11]), int(pars[8])]))(),
 
     row_build_state_vars=[
         ("inRow", "int", "($(id_pre) / (int) $(conv_ic)) / (int) $(conv_iw)"),
@@ -58,15 +56,18 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         $(outRow)++;
         """)
 
+
 class Conv2DTranspose(Connectivity):
-    def __init__(self, weight:InitValue, filters, conv_size, flatten=False,
-                 conv_strides=None, conv_padding="valid", delay:InitValue=0):
+    def __init__(self, weight: InitValue, filters, conv_size,
+                 flatten=False, conv_strides=None, 
+                 conv_padding="valid", delay: InitValue = 0):
         super(Conv2DTranspose, self).__init__(weight, delay)
-        
+
         self.filters = filters
         self.conv_size = get_param_2d("conv_size", conv_size)
         self.flatten = flatten
-        self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
+        self.conv_strides = get_param_2d("conv_strides", conv_strides,
+                                         default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
 
     def connect(self, source, target):
@@ -110,21 +111,21 @@ class Conv2DTranspose(Connectivity):
             "conv_padh": conv_padh, "conv_padw": conv_padw,
             "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
             "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
-        
+
         if prefer_in_memory:
             # If weights/delays are arrays, use kernel initializer
             # to initialize, otherwise use as is
-            weight = (KernelInit(self.weight) 
+            weight = (KernelInit(self.weight)
                       if is_value_array(self.weight)
                       else self.weight)
-            delay = (KernelInit(self.delay) 
+            delay = (KernelInit(self.delay)
                      if is_value_array(self.delay)
                      else self.delay)
-            return ConnectivitySnippet(snippet=conn_init, 
+            return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type="SPARSE_INDIVIDUALG",
                                        weight=weight, delay=delay)
         else:
-            return ConnectivitySnippet(snippet=conn_init, 
+            return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type="PROCEDURAL_KERNELG",
-                                       weight=self.weight, 
+                                       weight=self.weight,
                                        delay=self.delay)

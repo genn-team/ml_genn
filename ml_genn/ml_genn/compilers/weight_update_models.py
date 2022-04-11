@@ -11,7 +11,7 @@ static_pulse_delay_model = {
         """
         $(addToInSynDelay, $(g), $(d));
         """}
-        
+
 signed_static_pulse_model = {
     "param_name_types": [("g", "scalar")],
     "sim_code":

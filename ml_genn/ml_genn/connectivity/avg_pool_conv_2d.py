@@ -1,4 +1,3 @@
-import numpy as np
 from math import ceil
 
 from pygenn.genn_wrapper.StlContainers import UnsignedIntVector
@@ -8,10 +7,9 @@ from ..utils.connectivity import PadMode, KernelInit
 from ..utils.value import InitValue
 
 from pygenn.genn_model import (create_cmlf_class, create_cksf_class,
-                               create_custom_sparse_connect_init_snippet_class, 
-                               init_connectivity, init_toeplitz_connectivity,
-                               init_var)
-from ..utils.connectivity import (get_conv_same_padding, get_param_2d, 
+                               create_custom_sparse_connect_init_snippet_class,
+                               init_connectivity, init_toeplitz_connectivity)
+from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
@@ -32,7 +30,8 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         lambda num_pre, num_post, pars: int(ceil(pars[7] / pars[9])) * int(ceil(pars[8] / pars[10])) * int(pars[18]))(),
 
     calc_kernel_size_func=create_cksf_class(
-        lambda pars: UnsignedIntVector([int(pars[7]), int(pars[8]), int(pars[15]), int(pars[18])]))(),
+        lambda pars: UnsignedIntVector([int(pars[7]), int(pars[8]), 
+                                        int(pars[15]), int(pars[18])]))(),
 
         row_build_code=
         """
@@ -90,23 +89,27 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         $(endRow);
         """)
 
-class AvgPoolConv2D(Connectivity):
 
-    def __init__(self, weight:InitValue, filters, pool_size, conv_size, 
-                 flatten=False, pool_strides=None, conv_strides=None, 
-                 conv_padding="valid", delay:InitValue=0):
+class AvgPoolConv2D(Connectivity):
+    def __init__(self, weight: InitValue, filters: int, pool_size, conv_size,
+                 flatten=False, pool_strides=None, conv_strides=None,
+                 conv_padding="valid", delay: InitValue = 0):
         super(AvgPoolConv2D, self).__init__(weight, delay)
         self.filters = filters
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.conv_size = get_param_2d("conv_size", conv_size)
         self.flatten = flatten
-        self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
-        self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
+        self.pool_strides = get_param_2d("pool_strides", pool_strides,
+                                         default=self.pool_size)
+        self.conv_strides = get_param_2d("conv_strides", conv_strides,
+                                         default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
         self.pool_output_shape = None
-        
-        if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
-            raise NotImplementedError("pool stride < pool size is not supported")
+
+        if (self.pool_strides[0] < self.pool_size[0]
+                or self.pool_strides[1] < self.pool_size[1]):
+            raise NotImplementedError("pool stride < pool size "
+                                      "is not supported")
         if self.conv_strides[0] != 1 or self.conv_strides[1] != 1:
             raise NotImplementedError("conv stride != 1 is not supported")
 
@@ -157,10 +160,10 @@ class AvgPoolConv2D(Connectivity):
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
         scaled_weight = self.weight.flatten() / (pool_kh * pool_kw)
-                
-        if (not prefer_in_memory and conv_sh == 1 and conv_sw == 1 
-            and (self.conv_padding is not PadMode.SAME 
-                 or ((self.conv_size[0] % 2) != 0 
+
+        if (not prefer_in_memory and conv_sh == 1 and conv_sw == 1
+            and (self.conv_padding is not PadMode.SAME
+                 or ((self.conv_size[0] % 2) != 0
                      and (self.conv_size[1] % 2) != 0))):
             conn_init = init_toeplitz_connectivity("AvgPoolConv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
@@ -169,7 +172,7 @@ class AvgPoolConv2D(Connectivity):
                 "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-            return ConnectivitySnippet(snippet=conn_init, 
+            return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type="TOEPLITZ_KERNELG",
                                        weight=scaled_weight, delay=self.delay)
         else:
@@ -182,22 +185,21 @@ class AvgPoolConv2D(Connectivity):
                 "conv_padh": conv_padh, "conv_padw": conv_padw,
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
-            
+
             if prefer_in_memory:
-                return ConnectivitySnippet(snippet=conn_init, 
+                return ConnectivitySnippet(snippet=conn_init,
                                            matrix_type="PROCEDURAL_KERNELG",
-                                           weight=scaled_weight, 
+                                           weight=scaled_weight,
                                            delay=self.delay)
-                
             else:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
-                weight = (KernelInit(scaled_weight) 
+                weight = (KernelInit(scaled_weight)
                           if is_value_array(self.weight)
                           else scaled_weight)
-                delay = (KernelInit(self.delay) 
+                delay = (KernelInit(self.delay)
                          if is_value_array(self.delay)
                          else self.delay)
-                return ConnectivitySnippet(snippet=conn_init, 
+                return ConnectivitySnippet(snippet=conn_init,
                                            matrix_type="SPARSE_INDIVIDUALG",
                                            weight=weight, delay=delay)

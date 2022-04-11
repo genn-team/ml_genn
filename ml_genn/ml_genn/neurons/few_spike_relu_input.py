@@ -1,9 +1,7 @@
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input_base import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
-from ..utils.value import InitValue
 
 genn_model = {
     "param_name_types": [("K", "int"), ("Scale", "scalar")],
@@ -12,7 +10,7 @@ genn_model = {
         """
         // Convert K to integer
         const int kInt = (int)$(K);
-        
+
         // Get timestep within presentation
         const int pipeTimestep = (int)($(t) / DT);
 
@@ -58,13 +56,13 @@ genn_model_signed = {
         }
         """,
     "is_auto_refractory_required": False}
-    
+
 
 class FewSpikeReluInput(Neuron, InputBase):
     k = ConstantValueDescriptor()
     alpha = ConstantValueDescriptor()
-    
-    def __init__(self, k=10, alpha=25, signed_input=False):
+
+    def __init__(self, k: int = 10, alpha: float = 25, signed_input=False):
         super(FewSpikeReluInput, self).__init__(var_name="V")
 
         self.k = k
@@ -77,6 +75,6 @@ class FewSpikeReluInput(Neuron, InputBase):
             scale = self.alpha * 2**(-self.k // 2)
         else:
             scale = self.alpha * 2**(-self.k)
-        
+
         model = genn_model_signed if self.signed_input else genn_model
         return NeuronModel(model, {"K": self.k, "Scale": scale}, {"V": 0.0})

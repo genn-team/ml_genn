@@ -19,13 +19,14 @@ genn_model = {
         """,
     "is_auto_refractory_required": False}
 
+
 class IntegrateFire(Neuron):
     v_thresh = ValueDescriptor()
     v_reset = ValueDescriptor()
     v = ValueDescriptor()
-    
-    def __init__(self, v_thresh:InitValue=1.0, v_reset:InitValue=0.0, 
-                 v:InitValue=0.0, output=None):
+
+    def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
+                 v: InitValue = 0.0, output=None):
         super(IntegrateFire, self).__init__(output)
 
         self.v_thresh = v_thresh
@@ -34,6 +35,6 @@ class IntegrateFire(Neuron):
 
     def get_model(self, population, dt):
         return self.add_output_logic(
-            NeuronModel(genn_model, 
+            NeuronModel(genn_model,
                         {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
                         {"V": self.v}), "V")

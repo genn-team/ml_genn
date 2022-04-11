@@ -1,4 +1,3 @@
-import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
@@ -7,19 +6,22 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from pygenn.genn_model import (init_connectivity, init_toeplitz_connectivity)
-from ..utils.connectivity import (get_conv_same_padding, get_param_2d, 
+from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
+
 class Conv2D(Connectivity):
-    def __init__(self, weight:InitValue, filters, conv_size, flatten=False,
-                 conv_strides=None, conv_padding="valid", delay:InitValue=0):
+    def __init__(self, weight: InitValue, filters, conv_size,
+                 flatten=False, conv_strides=None,
+                 conv_padding="valid", delay: InitValue = 0):
         super(Conv2D, self).__init__(weight, delay)
 
         self.filters = filters
         self.conv_size = get_param_2d("conv_size", conv_size)
         self.flatten = flatten
-        self.conv_strides = get_param_2d("conv_strides", conv_strides, default=(1, 1))
+        self.conv_strides = get_param_2d("conv_strides", conv_strides,
+                                         default=(1, 1))
         self.conv_padding = PadMode(conv_padding)
 
     def connect(self, source, target):
@@ -44,7 +46,7 @@ class Conv2D(Connectivity):
         if is_value_array(self.weight) and self.weight.shape != weight_shape:
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of Conv2D kernel")
-    
+
     def get_snippet(self, connection, prefer_in_memory):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -62,8 +64,8 @@ class Conv2D(Connectivity):
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
-            
-            return ConnectivitySnippet(snippet=conn_init, 
+
+            return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type="TOEPLITZ_KERNELG",
                                        weight=self.weight, delay=self.delay)
         else:
@@ -77,18 +79,17 @@ class Conv2D(Connectivity):
             if prefer_in_memory:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
-                weight = (KernelInit(self.weight) 
+                weight = (KernelInit(self.weight)
                           if is_value_array(self.weight)
                           else self.weight)
-                delay = (KernelInit(self.delay) 
+                delay = (KernelInit(self.delay)
                          if is_value_array(self.delay)
                          else self.delay)
-                return ConnectivitySnippet(snippet=conn_init, 
+                return ConnectivitySnippet(snippet=conn_init,
                                            matrix_type="SPARSE_INDIVIDUALG",
                                            weight=weight, delay=delay)
             else:
-                return ConnectivitySnippet(snippet=conn_init, 
+                return ConnectivitySnippet(snippet=conn_init,
                                            matrix_type="PROCEDURAL_KERNELG",
-                                           weight=self.weight, 
+                                           weight=self.weight,
                                            delay=self.delay)
-                

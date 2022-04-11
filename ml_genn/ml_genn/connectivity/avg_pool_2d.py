@@ -1,13 +1,11 @@
-import numpy as np
 from math import ceil
 
 from .connectivity import Connectivity
-from ..utils.connectivity import KernelInit
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from pygenn.genn_model import (create_cmlf_class,
-                               create_custom_sparse_connect_init_snippet_class, 
+                               create_custom_sparse_connect_init_snippet_class,
                                init_connectivity)
 from ..utils.connectivity import get_param_2d, update_target_shape
 from ..utils.value import is_value_constant
@@ -58,18 +56,23 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         $(endRow);
         """)
 
+
 class AvgPool2D(Connectivity):
-    def __init__(self, pool_size, flatten=False, 
-                 pool_strides=None, delay:InitValue=0):
+    def __init__(self, pool_size, flatten=False,
+                 pool_strides=None, delay: InitValue = 0):
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.flatten = flatten
-        self.pool_strides = get_param_2d("pool_strides", pool_strides, default=self.pool_size)
-        
-        super(AvgPool2D, self).__init__(1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
-        
-        if self.pool_strides[0] < self.pool_size[0] or self.pool_strides[1] < self.pool_size[1]:
-            raise NotImplementedError("pool stride < pool size is not supported")
-        
+        self.pool_strides = get_param_2d("pool_strides", pool_strides,
+                                         default=self.pool_size)
+
+        super(AvgPool2D, self).__init__(
+            1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
+
+        if (self.pool_strides[0] < self.pool_size[0]
+                or self.pool_strides[1] < self.pool_size[1]):
+            raise NotImplementedError("pool stride < pool size "
+                                      "is not supported")
+
         if not is_value_constant(self.delay):
             raise NotImplementedError("AvgPool2D connectivity only "
                                       "supports constant delays")
@@ -82,7 +85,7 @@ class AvgPool2D(Connectivity):
             ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
             ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
             pool_ic)
-        
+
         # Update target shape
         update_target_shape(target, self.output_shape, self.flatten)
 
@@ -97,13 +100,12 @@ class AvgPool2D(Connectivity):
             "pool_sh": pool_sh, "pool_sw": pool_sw,
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "pool_oh": pool_oh, "pool_ow": pool_ow, "pool_oc": pool_oc})
-        
+
         if prefer_in_memory:
-            return ConnectivitySnippet(snippet=conn_init, 
+            return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type="SPARSE_GLOBALG",
                                        weight=self.weight, delay=self.delay)
         else:
-            return ConnectivitySnippet(snippet=conn_init, 
+            return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type="PROCEDURAL_GLOBALG",
                                        weight=self.weight, delay=self.delay)
-            

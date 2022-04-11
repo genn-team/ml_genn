@@ -1,13 +1,12 @@
-import numpy as np
-
 from .connectivity import Connectivity
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from ..utils.value import is_value_array
 
+
 class Dense(Connectivity):
-    def __init__(self, weight:InitValue, delay:InitValue=0):
+    def __init__(self, weight: InitValue, delay: InitValue = 0):
         super(Dense, self).__init__(weight, delay)
 
     def connect(self, source, target):
@@ -18,7 +17,7 @@ class Dense(Connectivity):
                                           "a 2D array of weights")
 
             source_size, target_size = self.weight.shape
-            
+
             # Set/check target shape
             if target.shape is None:
                 target.shape = (target_size,)
@@ -32,9 +31,8 @@ class Dense(Connectivity):
             elif source.shape != (source_size,):
                 raise RuntimeError("source population shape "
                                    "doesn't match weights")
-    
+
     def get_snippet(self, connection, prefer_in_memory):
-        return ConnectivitySnippet(snippet=None, 
+        return ConnectivitySnippet(snippet=None,
                                    matrix_type="DENSE_INDIVIDUALG",
                                    weight=self.weight, delay=self.delay)
-        

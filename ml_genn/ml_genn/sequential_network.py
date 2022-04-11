@@ -1,5 +1,6 @@
 from .network import Network
 
+
 class SequentialNetwork(Network):
     _context = None
 
@@ -24,7 +25,7 @@ class SequentialNetwork(Network):
         SequentialNetwork._context.layers.append(layer)
         SequentialNetwork._context.populations.append(population)
         SequentialNetwork._context.connections.append(connection)
-    
+
     @staticmethod
     def get_prev_layer():
         if SequentialNetwork._context is None:
@@ -34,7 +35,7 @@ class SequentialNetwork(Network):
             return SequentialNetwork._context.layers[-1]
         else:
             return None
-    
+
     def __enter__(self):
         if SequentialNetwork._context is not None:
             raise RuntimeError("Nested sequential networks are "

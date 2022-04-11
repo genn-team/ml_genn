@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
@@ -14,9 +13,9 @@ BATCH_SIZE = 128
 network = SequentialNetwork()
 with network:
     input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784)
-    Layer(Dense(weight=np.load("weights_0_1.npy")), 
+    Layer(Dense(weight=np.load("weights_0_1.npy")),
           IntegrateFire(v_thresh=5.0))
-    output = Layer(Dense(weight=np.load("weights_1_2.npy")), 
+    output = Layer(Dense(weight=np.load("weights_1_2.npy")),
                    IntegrateFire(v_thresh=5.0, output="spike_count"))
 
 compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE, 
@@ -35,4 +34,3 @@ with compiled_net:
     end_time = perf_counter()
     print(f"Accuracy = {100 * accuracy[output].result}%")
     print(f"Time = {end_time - start_time}s")
-    

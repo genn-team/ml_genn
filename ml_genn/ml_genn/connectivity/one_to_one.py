@@ -3,8 +3,9 @@ from ..utils.value import InitValue
 
 from pygenn.genn_model import init_connectivity
 
+
 class OneToOne(SparseBase):
-    def __init__(self, weight:InitValue, delay:InitValue=0):
+    def __init__(self, weight: InitValue, delay: InitValue = 0):
         super(OneToOne, self).__init__(weight, delay)
 
     def connect(self, source, target):

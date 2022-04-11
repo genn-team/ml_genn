@@ -1,7 +1,5 @@
-import numpy as np
-
 from tqdm import tqdm
-from typing import Iterator, Sequence, Union
+from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
@@ -19,12 +17,12 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
     if "var_name_types" in model.model:
         # Loop through them
         for v in model.model["var_name_types"]:
-            # If variable either has default (read-write) 
+            # If variable either has default (read-write)
             # access or this is explicitly set
             # **TODO** mechanism to exclude variables from reset
             if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
                 reset_vars.append((v[0], v[1], model.var_vals[v[0]]))
- 
+
     # If there's nothing to reset, return
     if len(reset_vars) == 0:
         return
@@ -46,36 +44,37 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
         model.param_vals[name + "Reset"] = value
         model.var_refs[name] = partial(var_ref_creator, name=name)
 
-        # Add code to set var 
+        # Add code to set var
         model.model["update_code"] += f"$({name}) = $({name}Reset);\n"
-    
+
     # Build custom update model customised for parameters and values
     custom_model = build_model(model)
-    
+
     # Add to list of custom updates to be applied in "Reset" group
     custom_updates["Reset"].append(custom_model + (model.var_refs,))
 
+
 class CompiledInferenceNetwork(CompiledNetwork):
-    def __init__(self, genn_model, neuron_populations, 
-                 connection_populations, evaluate_timesteps:int):
+    def __init__(self, genn_model, neuron_populations,
+                 connection_populations, evaluate_timesteps: int):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations)
-    
+
         self.evaluate_timesteps = evaluate_timesteps
 
-    def evaluate_numpy(self, x: dict, y: dict, 
+    def evaluate_numpy(self, x: dict, y: dict,
                        metrics="sparse_categorical_accuracy"):
         """ Evaluate an input in numpy format against labels
-        accuracy --  dictionary containing accuracy of predictions 
+        accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
         """
         # Determine the number of elements in x and y
         x_size = get_numpy_size(x)
         y_size = get_numpy_size(x)
-        
+
         # Build metrics
         metrics = get_metrics(metrics, y.keys())
-        
+
         if x_size is None:
             raise RuntimeError("Each input population must be "
                                " provided with same number of inputs")
@@ -84,12 +83,12 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                " provided with same number of labels")
         if x_size != y_size:
             raise RuntimeError("Number of inputs and labels must match")
-        
+
         # Batch x and y
         batch_size = self.genn_model.batch_size
         x = batch_numpy(x, batch_size, x_size)
         y = batch_numpy(y, batch_size, y_size)
-        
+
         # Loop through batches and evaluate
         with tqdm(total=len(x)) as pbar:
             for x_batch, y_batch in zip(x, y):
@@ -98,57 +97,59 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Return metrics
         return metrics
-    
-    def evaluate_batch_iter(self, inputs, outputs, data: Iterator, 
+
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
                             metrics="sparse_categorical_accuracy"):
         """ Evaluate an input in iterator format against labels
-        accuracy --  dictionary containing accuracy of predictions 
+        accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
-        
+
         # Build metrics
         metrics = get_metrics(metrics, outputs)
-        
+
         # Loop through data
         size = 0
         while True:
-            # Attempt to get next batch of data, 
+            # Attempt to get next batch of data,
             # break if none remains
             try:
                 batch_x, batch_y = next(data)
             except StopIteration:
                 break
-            
+
             # Set x as input
-            # **YUCK** this isn't quite right as batch_x could also have outer dimension
+            # **YUCK** this isn't quite right as batch_x
+            # could also have outer dimension
             if len(inputs) == 1:
                 size += len(batch_x)
                 x = {inputs[0]: batch_x}
             else:
                 size += len(batch_x[0])
                 x = {p: x for p, x in zip(inputs, batch_x)}
-            
+
             # Add each y to correct queue(s)
-            # **YUCK** this isn't quite right as batch_x could also have outer dimension
+            # **YUCK** this isn't quite right as batch_y
+            # could also have outer dimension
             if len(outputs) == 1:
                 y = {outputs[0]: batch_y}
             else:
                 y = {p: y for p, x in zip(outputs, batch_y)}
-            
+
             # Evaluate batch
             self._evaluate_batch(x, y, metrics)
 
         # Return metrics
         return metrics
-    
-    def evaluate_batch(self, x: dict, y: dict, 
+
+    def evaluate_batch(self, x: dict, y: dict,
                        metrics="sparse_categorical_accuracy"):
         # Build metrics
         metrics = get_metrics(metrics, y.keys())
-        
+
         # Evaluate batch and return metrics
         self._evaluate_batch(x, y, metrics)
         return metrics
@@ -156,60 +157,64 @@ class CompiledInferenceNetwork(CompiledNetwork):
     def _evaluate_batch(self, x: dict, y: dict, metrics):
         """ Evaluate a single batch of inputs against labels
         Args:
-        x --        dict mapping input Population or InputLayer to 
+        x --        dict mapping input Population or InputLayer to
                     array containing one batch of inputs
         y --        dict mapping output Population or Layer to
                     array containing one batch of labels
 
         Returns:
-        correct --  dictionary containing number of correct predictions 
+        correct --  dictionary containing number of correct predictions
                     made by each output Population or Layer
         """
         self.custom_update("Reset")
 
         # Apply inputs to model
         self.set_input(x)
-        
+
         # Simulate timesteps
         for t in range(self.evaluate_timesteps):
             self.step_time()
 
         # Get predictions from model
         y_pred = self.get_output(list(y.keys()))
-        
+
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
             metrics[o].update(y_true, out_y_pred[:len(y_true)])
 
+
 class InferenceCompiler(Compiler):
-    def __init__(self, evaluate_timesteps:int, dt:float=1.0, batch_size:int=1, rng_seed:int=0,
-                 kernel_profiling:bool=False, prefer_in_memory_connect=True,
-                 **genn_kwargs):
+    def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
+                 batch_size: int = 1, rng_seed: int = 0,
+                 kernel_profiling: bool = False,
+                 prefer_in_memory_connect=True, **genn_kwargs):
         super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
-                                                kernel_profiling, 
+                                                kernel_profiling,
                                                 prefer_in_memory_connect,
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
 
-    def build_neuron_model(self, pop, model, custom_updates, 
+    def build_neuron_model(self, pop, model, custom_updates,
                            pre_compile_output):
-        _build_reset_model(model, custom_updates, 
-            lambda nrn_pops, _, name: create_var_ref(nrn_pops[pop], name))
-    
+        _build_reset_model(
+            model, custom_updates,
+            lambda n_pops, _, name: create_var_ref(n_pops[pop], name))
+
         # Build neuron model
         return super(InferenceCompiler, self).build_neuron_model(
             pop, model, custom_updates, pre_compile_output)
 
-    def build_synapse_model(self, conn, model, custom_updates, 
+    def build_synapse_model(self, conn, model, custom_updates,
                             pre_compile_output):
-        _build_reset_model(model, custom_updates, 
-            lambda _, conn_pops, name: create_psm_var_ref(conn_pops[conn], name))
-    
+        _build_reset_model(
+            model, custom_updates,
+            lambda _, c_pops, name: create_psm_var_ref(c_pops[conn], name))
+
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, custom_updates, pre_compile_output)
-    
+
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, pre_compile_output):
-        return CompiledInferenceNetwork(genn_model, neuron_populations, 
+        return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
                                         self.evaluate_timesteps)

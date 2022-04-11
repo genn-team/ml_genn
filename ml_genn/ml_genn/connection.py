@@ -1,4 +1,4 @@
-from typing import Sequence, Union
+from typing import Union
 from weakref import ref
 from .connectivity import Connectivity
 from .network import Network
@@ -10,16 +10,23 @@ from .utils.module import get_object
 
 from .synapses import default_synapses
 
+SynapseInitializer = Union[Synapse, str]
+ConnectivityInitializer = Union[Connectivity, str]
+
+
 class Connection:
     def __init__(self, source: Population, target: Population,
-                 connectivity: Connectivity, synapse="delta", add_to_model=True):
+                 connectivity: ConnectivityInitializer,
+                 synapse: SynapseInitializer = "delta",
+                 add_to_model=True):
         # Store weak references to source and target in class
         self.source = ref(source)
         self.target = ref(target)
 
         self.connectivity = deepcopy(connectivity)
-        self.synapse = get_object(synapse, Synapse, "Synapse", default_synapses)
-        
+        self.synapse = get_object(synapse, Synapse, "Synapse",
+                                  default_synapses)
+
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists
         source.outgoing_connections.append(ref(self))
