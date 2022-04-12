@@ -4,8 +4,6 @@ from argparse import ArgumentParser
 from ml_genn_tf.converters import (ConverterType, DataNorm, FewSpike, 
                                    InputType, Simple)
 
-from functools import partial
-
 def parse_arguments(model_description='ML GeNN model'):
     '''
     Parses command line arguments for common ML GeNN options, and returns them in namespace form.
@@ -42,22 +40,24 @@ def parse_arguments(model_description='ML GeNN model'):
     # Configure logging
     logging.basicConfig(level=args.log_level.upper())
 
-    def build_converter(self, norm_data, signed_input=False, k=8, 
+    def build_converter(norm_data, signed_input=False, k=8, 
                         evaluate_timesteps=500):
-        if self.converter == 'few-spike':
+        if args.converter == 'few-spike':
             return FewSpike(k=k, signed_input=signed_input, 
                             norm_data=[norm_data])
-        if args.converter == 'data-norm':
+        elif args.converter == 'data-norm':
             return DataNorm(evaluate_timesteps=evaluate_timesteps, 
                             signed_input=signed_input,
                             norm_data=[norm_data],
-                            input_type=self.input_type)
+                            input_type=args.input_type)
         #elif args.converter == 'spike-norm':
         #    return SpikeNorm(norm_data=[norm_data], norm_time=norm_time, 
-        #                     signed_input=signed_input, input_type=self.input_type)
+        #                     signed_input=signed_input, input_type=args.input_type)
         else:
-            return Simple(signed_input=signed_input, input_type=self.input_type)
+            return Simple(evaluate_timesteps=evaluate_timesteps,
+                          signed_input=signed_input,
+                          input_type=args.input_type)
 
-    args.build_converter = partial(build_converter, args)
+    args.build_converter = build_converter
 
     return args
