@@ -96,9 +96,6 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             self.genn_model.timestep = 0
             self.genn_model.t = 0.0
 
-            # Launch reset kernel
-            self.custom_update("Reset")
-
             # If there is any data remaining,
             if data_remaining:
                 # Set x as input
@@ -203,30 +200,8 @@ class FewSpikeCompiler(Compiler):
 
     def build_neuron_model(self, pop, model, custom_updates,
                            pre_compile_output):
-        if isinstance(pop.neuron, FewSpikeRelu):
-            # Define custom model for resetting
-            genn_model = {
-                "var_refs": [("Fx", "scalar"), ("V", "scalar")],
-                "update_code":
-                    """
-                    $(V) = $(Fx);
-                    $(Fx) = 0.0;
-                    """}
-
-            # Create empty model
-            custom_model = CustomUpdateModel(
-                model=genn_model, param_vals={}, var_vals={},
-                var_refs={
-                    "V": lambda n_pops, _: create_var_ref(n_pops[pop], "V"),
-                    "Fx": lambda n_pops, _: create_var_ref(n_pops[pop], "Fx")})
-
-            # Build custom update model customised for parameters and values
-            built_custom_model = build_model(custom_model)
-
-            # Add to list of custom updates to be applied in "Reset" group
-            custom_updates["Reset"].append(
-                built_custom_model + (custom_model.var_refs,))
-        elif not isinstance(pop.neuron, FewSpikeReluInput):
+        # Check neuron model is supported
+        if not isinstance(pop.neuron, (FewSpikeRelu, FewSpikeReluInput)):
             raise NotImplementedError(
                 "FewSpike models only support FewSpikeRelu "
                 "and FewSpikeReluInput neurons")

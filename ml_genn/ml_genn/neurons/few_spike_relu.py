@@ -27,6 +27,14 @@ genn_model = {
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
         $(Fx) += ($(Isyn) * d);
+        
+        // If this is the first timestep, apply input
+        // **NOTE** this cannot be done in custom update as it
+        // needs to occur in the middle of neuron update
+        if(pipeTimestep == 0) {
+            $(V) = $(Fx);
+            $(Fx) = 0.0;
+        }
         """,
     "threshold_condition_code":
         """
@@ -64,6 +72,14 @@ genn_model_upstream_signed = {
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
         $(Fx) += ($(Isyn) * d);
+        
+        // If this is the first timestep, apply input
+        // **NOTE** this cannot be done in custom update as it
+        // needs to occur in the middle of neuron update
+        if(pipeTimestep == 0) {
+            $(V) = $(Fx);
+            $(Fx) = 0.0;
+        }
         """,
     "threshold_condition_code":
         """
