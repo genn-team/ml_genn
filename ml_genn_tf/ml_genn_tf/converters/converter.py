@@ -402,7 +402,6 @@ class Converter:
                     # build connections
                     for s in config.synapses:
                         source = mlg_pop_lookup[s.source]
-                        print(s.type)
                         connectivity = s.type(**s.params)
                         
                         Connection(source, mlg_pop, connectivity)
