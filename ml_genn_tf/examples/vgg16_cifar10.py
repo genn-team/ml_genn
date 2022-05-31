@@ -133,9 +133,11 @@ if __name__ == '__main__':
     with compiled_net:
         # Evaluate ML GeNN model
         start_time = perf_counter()
+        num_batches = args.n_test_samples // args.batch_size
         accuracy = compiled_net.evaluate_batch_iter(mlg_net_inputs, 
                                                     mlg_net_outputs,
-                                                    iter(mlg_validate_ds))
+                                                    iter(mlg_validate_ds),
+                                                    num_batches=num_batches)
         end_time = perf_counter()
         print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]].result}%")
         print(f"Time = {end_time - start_time} s")
