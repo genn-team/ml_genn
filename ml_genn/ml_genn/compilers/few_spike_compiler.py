@@ -83,7 +83,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Create callback list and begin testing
         num_batches = (None if num_batches is None 
                        else num_batches + 1 + max(y_pipe_depth.values()))
-        callback_list = CallbackList(callbacks, num_batches=num_batches)
+        callback_list = CallbackList(callbacks, compiled_network=self,
+                                     num_batches=num_batches)
         callback_list.on_test_begin()
 
 

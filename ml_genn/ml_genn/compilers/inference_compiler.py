@@ -93,7 +93,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         y = batch_numpy(y, batch_size, y_size)
         
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, num_batches=len(x))
+        callback_list = CallbackList(callbacks, compiled_network=self,
+                                     num_batches=len(x))
         callback_list.on_test_begin()
         
         # Loop through batches and evaluate
@@ -122,7 +123,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         metrics = get_metrics(metrics, outputs)
 
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, num_batches=num_batches)
+        callback_list = CallbackList(callbacks, compiled_network=self,
+                                     num_batches=num_batches)
         callback_list.on_test_begin()
         
         # Loop through data
