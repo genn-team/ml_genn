@@ -24,4 +24,7 @@ class SparseCategoricalAccuracy(Metric):
 
     @property
     def result(self):
-        return self.correct / self.total
+        if self.total == 0:
+            return None
+        else:
+            return self.correct / self.total

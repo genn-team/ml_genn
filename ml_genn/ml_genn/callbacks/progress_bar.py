@@ -9,6 +9,7 @@ class BatchProgressBar:
             self._num_batches = params["num_batches"]
 
     def on_batch_end(self, metrics):
+        self._display_metrics(metrics)
         self._progress_bar.update(1)
     
     def on_test_begin(self):
@@ -16,6 +17,7 @@ class BatchProgressBar:
         self._init_prog_bar()
 
     def on_test_end(self, metrics):
+        self._display_metrics(metrics)
         self._progress_bar.close()
     
     def _init_prog_bar(self):
@@ -26,5 +28,10 @@ class BatchProgressBar:
 
         # Reset progress bar
         self._progress_bar.reset()
+    
+    def _display_metrics(self, metrics):
+        self._progress_bar.set_postfix_str(
+            ",".join(f"{type(m).__name__}: {m.result}" for m in metrics.values()))
+            
             
         

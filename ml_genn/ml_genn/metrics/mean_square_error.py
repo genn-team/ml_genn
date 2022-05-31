@@ -24,4 +24,7 @@ class MeanSquareError(Metric):
 
     @property
     def result(self):
-        return self.sum_mse / self.total
+        if self.total == 0:
+            return None
+        else:
+            return self.sum_mse / self.total
