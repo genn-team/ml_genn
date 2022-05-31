@@ -73,16 +73,19 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Build metrics
         metrics = get_metrics(metrics, outputs)
         
-        # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, num_batches=num_batches)
-        callback_list.on_test_begin()
-
         # Get the pipeline depth of each output
         y_pipe_depth = {
             o: (self.pop_pipeline_depth[get_underlying_pop(o)]
                 if get_underlying_pop(o) in self.pop_pipeline_depth
                 else 0)
             for o in outputs}
+        
+        # Create callback list and begin testing
+        num_batches = (None if num_batches is None 
+                       else num_batches + 1 + max(y_pipe_depth.values()))
+        callback_list = CallbackList(callbacks, num_batches=num_batches)
+        callback_list.on_test_begin()
+
 
         # Build deque to hold y
         y_pipe_queue = {p: deque(maxlen=d + 1)
