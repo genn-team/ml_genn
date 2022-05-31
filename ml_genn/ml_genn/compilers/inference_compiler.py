@@ -3,6 +3,8 @@ from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
+from ..callbacks import BatchProgressBar
+from ..utils.callback_list import CallbackList
 from ..utils.model import CustomUpdateModel
 
 from functools import partial
@@ -63,7 +65,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         self.evaluate_timesteps = evaluate_timesteps
 
     def evaluate_numpy(self, x: dict, y: dict,
-                       metrics="sparse_categorical_accuracy"):
+                       metrics="sparse_categorical_accuracy",
+                       callbacks=[BatchProgressBar()]):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
@@ -71,7 +74,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Determine the number of elements in x and y
         x_size = get_numpy_size(x)
         y_size = get_numpy_size(x)
-
+        
         # Build metrics
         metrics = get_metrics(metrics, y.keys())
 
@@ -88,18 +91,25 @@ class CompiledInferenceNetwork(CompiledNetwork):
         batch_size = self.genn_model.batch_size
         x = batch_numpy(x, batch_size, x_size)
         y = batch_numpy(y, batch_size, y_size)
-
+        
+        # Create callback list and begin testing
+        callback_list = CallbackList(callbacks, num_batches=len(x))
+        callback_list.on_test_begin()
+        
         # Loop through batches and evaluate
-        with tqdm(total=len(x)) as pbar:
-            for x_batch, y_batch in zip(x, y):
-                self._evaluate_batch(x_batch, y_batch, metrics)
-                pbar.update(1)
-
+        for x_batch, y_batch in zip(x, y):
+            self._evaluate_batch(x_batch, y_batch, metrics, callback_list)
+            
+        # End testing
+        callback_list.on_test_end(metrics)
+        
         # Return metrics
         return metrics
 
     def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
-                            metrics="sparse_categorical_accuracy"):
+                            num_batches: int=None,
+                            metrics="sparse_categorical_accuracy",
+                            callbacks=[BatchProgressBar()]):
         """ Evaluate an input in iterator format against labels
         accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
@@ -111,6 +121,10 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Build metrics
         metrics = get_metrics(metrics, outputs)
 
+        # Create callback list and begin testing
+        callback_list = CallbackList(callbacks, num_batches=num_batches)
+        callback_list.on_test_begin()
+        
         # Loop through data
         size = 0
         while True:
@@ -140,7 +154,10 @@ class CompiledInferenceNetwork(CompiledNetwork):
                 y = {p: y for p, x in zip(outputs, batch_y)}
 
             # Evaluate batch
-            self._evaluate_batch(x, y, metrics)
+            self._evaluate_batch(x, y, metrics, callback_list)
+        
+        # End testing
+        callback_list.on_test_end(metrics)
 
         # Return metrics
         return metrics
@@ -150,11 +167,20 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Build metrics
         metrics = get_metrics(metrics, y.keys())
 
+        # Create callback list and begin testing
+        callback_list = CallbackList(callbacks, num_batches=num_batches)
+        callback_list.on_test_begin()
+        
         # Evaluate batch and return metrics
-        self._evaluate_batch(x, y, metrics)
+        self._evaluate_batch(x, y, metrics, callback_list)
+        
+        # End testing
+        callback_list.on_test_end(metrics)
+
         return metrics
 
-    def _evaluate_batch(self, x: dict, y: dict, metrics):
+    def _evaluate_batch(self, x: dict, y: dict, metrics, 
+                        callback_list: CallbackList):
         """ Evaluate a single batch of inputs against labels
         Args:
         x --        dict mapping input Population or InputLayer to
@@ -166,6 +192,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
         correct --  dictionary containing number of correct predictions
                     made by each output Population or Layer
         """
+        # Start batch
+        callback_list.on_batch_begin()
+        
         self.custom_update("Reset")
 
         # Apply inputs to model
@@ -173,7 +202,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Simulate timesteps
         for t in range(self.evaluate_timesteps):
-            self.step_time()
+            self.step_time(callback_list)
 
         # Get predictions from model
         y_pred = self.get_output(list(y.keys()))
@@ -181,6 +210,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
             metrics[o].update(y_true, out_y_pred[:len(y_true)])
+        
+        # End batch
+        callback_list.on_batch_end(metrics)
 
 
 class InferenceCompiler(Compiler):

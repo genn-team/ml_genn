@@ -1,6 +1,7 @@
 from typing import Sequence, Union
 from ..population import Population
 from ..layer import InputLayer, Layer
+from ..utils.callback_list import CallbackList
 
 from ..utils.network import get_underlying_pop
 
@@ -35,10 +36,16 @@ class CompiledNetwork:
         """Perform custom update"""
         self.genn_model.custom_update(name)
 
-    def step_time(self):
+    def step_time(self, callback_list: CallbackList=None):
         """Step the GeNN model
         """
+        if callback_list is not None:
+            callback_list.on_timestep_begin()
+        
         self.genn_model.step_time()
+        
+        if callback_list is not None:
+            callback_list.on_timestep_end()
 
     def reset_time(self):
         """Reset the GeNN model"""

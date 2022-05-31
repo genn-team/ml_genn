@@ -4,8 +4,10 @@ from collections import deque, namedtuple
 from typing import Iterator, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
+from ..callbacks import BatchProgressBar
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
+from ..utils.callback_list import CallbackList
 from ..utils.model import CustomUpdateModel
 
 from pygenn.genn_model import create_var_ref
@@ -25,7 +27,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         self.pop_pipeline_depth = pop_pipeline_depth
 
     def evaluate_numpy(self, x: dict, y: dict,
-                       metrics="sparse_categorical_accuracy"):
+                       metrics="sparse_categorical_accuracy",
+                       callbacks=[BatchProgressBar()]):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
@@ -56,7 +59,9 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                         metrics)
 
     def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
-                            metrics="sparse_categorical_accuracy"):
+                            num_batches: int=None,
+                            metrics="sparse_categorical_accuracy",
+                            callbacks=[BatchProgressBar()]):
         """ Evaluate an input in iterator format against labels
         accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
@@ -67,6 +72,10 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
         # Build metrics
         metrics = get_metrics(metrics, outputs)
+        
+        # Create callback list and begin testing
+        callback_list = CallbackList(callbacks, num_batches=num_batches)
+        callback_list.on_test_begin()
 
         # Get the pipeline depth of each output
         y_pipe_depth = {
@@ -114,10 +123,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 else:
                     for p, y in zip(outputs, batch_y):
                         y_pipe_queue[p].append(y)
+            
+            # Start batch
+            callback_list.on_batch_begin()
 
             # Simulate K timesteps
             for t in range(self.k):
-                self.step_time()
+                self.step_time(callback_list)
 
             # Loop through outputs
             for o in outputs:
@@ -132,9 +144,15 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     # Update metrics
                     metrics[o].update(batch_y_true,
                                       batch_y_pred[:len(batch_y_true)])
+            
+            # End batch
+            callback_list.on_batch_end(metrics)
 
             # Next batch
             batch_i += 1
+        
+        # End testing
+        callback_list.on_test_end(metrics)
 
         # Return metrics
         return metrics
