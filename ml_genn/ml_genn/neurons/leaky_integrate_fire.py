@@ -43,7 +43,7 @@ class LeakyIntegrateFire(Neuron):
             "threshold_condition_code": "$(V) >= $(Vthresh)",
             "is_auto_refractory_required": False}
         param_vals = {"Vthresh": self.v_thresh, "Vreset": self.v_reset,
-                      "Alpha": np.exp(-dt / self.tau_mem.value)}
+                      "Alpha": np.exp(-dt / self.tau_mem)}
         var_vals = {"V": self.v}
 
         # Build reset code depending on whether
