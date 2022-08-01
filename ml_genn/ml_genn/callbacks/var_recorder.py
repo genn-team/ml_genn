@@ -19,9 +19,8 @@ class VarRecorder:
         # Create empty list to hold recorded data from each variable
         self.data = {v: [] for v in vars}
     
-    def set_params(self, params):
-        assert  "compiled_network" in params
-        self._compiled_network = params["compiled_network"]
+    def set_params(self, compiled_network, **kwargs):
+        self._compiled_network = compiled_network
             
     def on_timestep_end(self):
         # Loop through variables we want to record

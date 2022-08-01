@@ -3,10 +3,8 @@ class BatchProgressBar:
         self._num_batches = None
         self._progress_bar = None
 
-    def set_params(self, params):
-        # If number of batches is passes as a parameter, store
-        if "num_batches" in params:
-            self._num_batches = params["num_batches"]
+    def set_params(self, num_batches, **kwargs):
+       self._num_batches = num_batches
 
     def on_batch_end(self, metrics):
         self._display_metrics(metrics)
