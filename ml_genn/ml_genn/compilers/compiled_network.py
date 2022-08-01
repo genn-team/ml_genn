@@ -10,12 +10,12 @@ class CompiledNetwork:
     _context = None
 
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations):
+                 connection_populations, num_recording_timesteps=None):
 
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
         self.connection_populations = connection_populations
-        self.num_recording_timesteps = None
+        self.num_recording_timesteps = num_recording_timesteps
 
     def set_input(self, inputs: dict):
         # Loop through populations

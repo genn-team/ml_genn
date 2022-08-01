@@ -16,10 +16,12 @@ class InputLayer:
 
 class Layer:
     def __init__(self, connectivity: ConnectivityInitializer,
-                 neuron: NeuronInitializer,
-                 shape: Shape = None, synapse: SynapseInitializer = "delta"):
+                 neuron: NeuronInitializer, shape: Shape = None, 
+                 synapse: SynapseInitializer = "delta", record_spikes=False):
         # Create population and store weak reference in class
-        population = Population(neuron, shape=shape, add_to_model=False)
+        population = Population(neuron, shape=shape, 
+                                record_spikes=record_spikes, 
+                                add_to_model=False)
         self.population = ref(population)
 
         # If there are any preceding layers, also create

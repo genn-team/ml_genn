@@ -21,7 +21,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, k: int, pop_pipeline_depth: dict):
         super(CompiledFewSpikeNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations)
+            genn_model, neuron_populations, connection_populations, k)
 
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth

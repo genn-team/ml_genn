@@ -204,7 +204,10 @@ class Compiler:
             genn_pop = genn_model.add_neuron_population(
                 f"Pop{i}", np.prod(pop.shape),
                 genn_neuron_model, param_vals, var_vals)
-
+            
+            # Configure spike recording
+            genn_pop.spike_recording_enabled = pop.record_spikes
+    
             # Configure EGPs
             set_egps(var_vals_egp, genn_pop.vars)
 

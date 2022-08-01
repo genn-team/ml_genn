@@ -24,11 +24,12 @@ NeuronInitializer = Union[Neuron, str]
 
 class Population:
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
-                 add_to_model=True):
+                 record_spikes=False, add_to_model=True):
         self.neuron = get_object(neuron, Neuron, "Neuron", default_neurons)
         self.shape = _get_shape(shape)
         self.incoming_connections = []
         self.outgoing_connections = []
+        self.record_spikes = record_spikes
 
         # Add population to model
         if add_to_model:

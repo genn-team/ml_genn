@@ -60,7 +60,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, evaluate_timesteps: int):
         super(CompiledInferenceNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations)
+            genn_model, neuron_populations, connection_populations,
+            evaluate_timesteps)
 
         self.evaluate_timesteps = evaluate_timesteps
 
