@@ -40,7 +40,7 @@ def get_object(obj, base_class, description, dictionary):
         return deepcopy(obj)
     elif isinstance(obj, str):
         if obj in dictionary:
-            return dictionary[obj]
+            return deepcopy(dictionary[obj])
         else:
             raise RuntimeError(f"{description} object '{obj}' unknown")
     else:
