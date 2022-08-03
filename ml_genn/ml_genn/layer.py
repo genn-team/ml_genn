@@ -6,9 +6,12 @@ from .sequential_network import SequentialNetwork
 
 
 class InputLayer:
-    def __init__(self, neuron: NeuronInitializer, shape: Shape = None):
+    def __init__(self, neuron: NeuronInitializer, shape: Shape = None, 
+                 record_spikes=False):
         # Create population and store weak reference in class
-        population = Population(neuron, shape=shape, add_to_model=False)
+        population = Population(neuron, shape=shape, 
+                                record_spikes=record_spikes, 
+                                add_to_model=False)
         self.population = ref(population)
 
         SequentialNetwork.add_input_layer(self, population)
