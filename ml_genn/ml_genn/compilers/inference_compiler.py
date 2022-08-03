@@ -99,9 +99,10 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_test_begin()
         
         # Loop through batches and evaluate
-        for x_batch, y_batch in zip(x, y):
-            self._evaluate_batch(x_batch, y_batch, metrics, callback_list)
-            
+        for batch_i, (x_batch, y_batch) in enumerate(zip(x, y)):
+            self._evaluate_batch(batch_i, x_batch, y_batch,
+                                 metrics, callback_list)
+
         # End testing
         callback_list.on_test_end(metrics)
         
@@ -129,7 +130,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_test_begin()
         
         # Loop through data
-        size = 0
+        batch_i = 0
         while True:
             # Attempt to get next batch of data,
             # break if none remains
@@ -142,10 +143,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
             # **YUCK** this isn't quite right as batch_x
             # could also have outer dimension
             if len(inputs) == 1:
-                size += len(batch_x)
                 x = {inputs[0]: batch_x}
             else:
-                size += len(batch_x[0])
                 x = {p: x for p, x in zip(inputs, batch_x)}
 
             # Add each y to correct queue(s)
@@ -157,7 +156,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
                 y = {p: y for p, x in zip(outputs, batch_y)}
 
             # Evaluate batch
-            self._evaluate_batch(x, y, metrics, callback_list)
+            self._evaluate_batch(batch_i, x, y, metrics, callback_list)
+            batch_i += 1
         
         # End testing
         callback_list.on_test_end(metrics)
@@ -175,17 +175,18 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_test_begin()
         
         # Evaluate batch and return metrics
-        self._evaluate_batch(x, y, metrics, callback_list)
+        self._evaluate_batch(0, x, y, metrics, callback_list)
         
         # End testing
         callback_list.on_test_end(metrics)
 
         return metrics
 
-    def _evaluate_batch(self, x: dict, y: dict, metrics, 
+    def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
                         callback_list: CallbackList):
         """ Evaluate a single batch of inputs against labels
         Args:
+        batch --    index of current batch
         x --        dict mapping input Population or InputLayer to
                     array containing one batch of inputs
         y --        dict mapping output Population or Layer to
@@ -196,7 +197,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
                     made by each output Population or Layer
         """
         # Start batch
-        callback_list.on_batch_begin()
+        callback_list.on_batch_begin(batch)
         
         self.custom_update("Reset")
 
@@ -215,7 +216,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
             metrics[o].update(y_true, out_y_pred[:len(y_true)])
         
         # End batch
-        callback_list.on_batch_end(metrics)
+        callback_list.on_batch_end(batch, metrics)
 
 
 class InferenceCompiler(Compiler):

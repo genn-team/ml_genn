@@ -129,7 +129,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                         y_pipe_queue[p].append(y)
             
             # Start batch
-            callback_list.on_batch_begin()
+            callback_list.on_batch_begin(batch_i)
 
             # Simulate K timesteps
             for t in range(self.k):
@@ -150,7 +150,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                       batch_y_pred[:len(batch_y_true)])
             
             # End batch
-            callback_list.on_batch_end(metrics)
+            callback_list.on_batch_end(batch_i, metrics)
 
             # Next batch
             batch_i += 1

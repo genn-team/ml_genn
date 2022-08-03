@@ -2,6 +2,7 @@ import numpy as np
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
+from ml_genn.callbacks import BatchProgressBar, SpikeRecorder
 from ml_genn.neurons import IntegrateFire, IntegrateFireInput
 from ml_genn.connectivity import Dense
 
@@ -12,7 +13,7 @@ BATCH_SIZE = 128
 # Create sequential model
 network = SequentialNetwork()
 with network:
-    input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784)
+    input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784, record_spikes=True)
     Layer(Dense(weight=np.load("weights_0_1.npy")),
           IntegrateFire(v_thresh=5.0))
     output = Layer(Dense(weight=np.load("weights_1_2.npy")),
@@ -29,8 +30,19 @@ testing_labels = np.load("testing_labels.npy")
 with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
+    callbacks = [BatchProgressBar(), SpikeRecorder(input)]
     accuracy = compiled_net.evaluate_numpy({input: testing_images * 0.01},
-                                           {output: testing_labels})
+                                           {output: testing_labels},
+                                           callbacks=callbacks)
     end_time = perf_counter()
     print(f"Accuracy = {100 * accuracy[output].result}%")
     print(f"Time = {end_time - start_time}s")
+    
+    
+    input_spike_times, input_spike_ids = callbacks[1].spikes
+    print(len(input_spike_times[0][0]))
+    #print(input_spike_times[0][0], input_spike_ids[0][0])
+    #import matplotlib.pyplot as plt
+    #fig, axis = plt.subplots()
+    #axis.scatter(input_spike_times[0][0], input_spike_ids[0][0])
+    #plt.show()

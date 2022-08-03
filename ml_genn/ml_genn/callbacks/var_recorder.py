@@ -22,7 +22,7 @@ class VarRecorder:
     def set_params(self, compiled_network, **kwargs):
         self._compiled_network = compiled_network
             
-    def on_timestep_end(self):
+    def on_timestep_end(self, timestep):
         # Loop through variables we want to record
         for v in self.data.keys():
             # Copy variable from device
@@ -39,7 +39,7 @@ class VarRecorder:
             else:
                 self.data[v].append(data)
 
-    def on_batch_begin(self):
+    def on_batch_begin(self, batch):
         # Set flag
         self._in_batch = True
         

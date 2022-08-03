@@ -6,7 +6,7 @@ class BatchProgressBar:
     def set_params(self, num_batches, **kwargs):
        self._num_batches = num_batches
 
-    def on_batch_end(self, metrics):
+    def on_batch_end(self, batch, metrics):
         self._display_metrics(metrics)
         self._progress_bar.update(1)
     
@@ -29,7 +29,7 @@ class BatchProgressBar:
     
     def _display_metrics(self, metrics):
         self._progress_bar.set_postfix_str(
-            ",".join(f"{type(m).__name__}: {m.result}" for m in metrics.values()))
+            ",".join(f"{type(m).__name__}: {m.result:.4f}" for m in metrics.values()))
             
             
         

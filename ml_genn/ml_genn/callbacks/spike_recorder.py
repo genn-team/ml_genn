@@ -11,7 +11,10 @@ class SpikeRecorder:
         
         # Flag to track whether simualtion is batched or not
         self._in_batch = False
-        
+
+        # Should this SpikeRecorder be the one responsible for pulling spikes?
+        self._pull = False
+
         # List of spike times and IDs
         self._times = []
         self._ids = []
@@ -31,28 +34,36 @@ class SpikeRecorder:
         if not self._compiled_network.neuron_populations[self._pop].spike_recording_enabled:
             raise RuntimeError("SpikeRecorder callback can only be used"
                                "on Populations/Layers with record_spikes=True")
-
-    def on_timestep_end(self):
+    def set_first(self):
+        self._pull = True
+    
+    def on_timestep_end(self, timestep):
         # If spike recording buffer is full
         cn = self._compiled_network
         timestep = cn.genn_model.timestep
         if (timestep % cn.num_recording_timesteps) == 0:
+            # If this is the spike recorder responsible for pulling, do so!
+            if self._pull:
+                cn.genn_model.pull_recording_buffers_from_device()
+
             # Get spike times and IDs
-            times, ids = cn.neuron_populations[self._pop].spike_recording_data
+            data = cn.neuron_populations[self._pop].spike_recording_data
 
             # If we're in a batch add data to the latest batch list
             if self._in_batch:
+                times, ids = zip(*data)
                 self._times[-1].append(times)
                 self._ids[-1].append(ids)
             # Otherwise, add data directly to variable list
             else:
+                times, ids = data
                 self._times.append(times)
                 self._ids.append(ids)
     
-    def on_batch_begin(self):
+    def on_batch_begin(self, batch):
         # Set flag
         self._in_batch = True
-        
+
         # Add new lists for this batches spike times and ids
         self._times.append([])
         self._ids.append([])

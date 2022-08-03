@@ -40,12 +40,12 @@ class CompiledNetwork:
         """Step the GeNN model
         """
         if callback_list is not None:
-            callback_list.on_timestep_begin()
+            callback_list.on_timestep_begin(self.genn_model.timestep)
         
         self.genn_model.step_time()
         
         if callback_list is not None:
-            callback_list.on_timestep_end()
+            callback_list.on_timestep_end(self.genn_model.timestep - 1)
 
     def reset_time(self):
         """Reset the GeNN model"""
