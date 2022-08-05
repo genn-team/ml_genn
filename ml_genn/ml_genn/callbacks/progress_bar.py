@@ -31,7 +31,9 @@ class BatchProgressBar(Callback):
     
     def _display_metrics(self, metrics):
         self._progress_bar.set_postfix_str(
-            ",".join(f"{type(m).__name__}: {m.result:.4f}" for m in metrics.values()))
+            ",".join(f"{type(m).__name__}: {m.result:.4f}" 
+                     for m in metrics.values() 
+                     if m.result is not None))
             
             
         
