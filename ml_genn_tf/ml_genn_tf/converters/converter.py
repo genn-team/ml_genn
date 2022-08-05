@@ -54,9 +54,9 @@ class Converter:
 
         # configure model build process
         class LayerConfig(object):
-            def __init__(self, name, shape, is_input=False, is_output=False,
+            def __init__(self, tf_layer, shape, is_input=False, is_output=False,
                          has_activation=False, neurons=None):
-                self.name = name
+                self.tf_layer = tf_layer
                 self.shape = shape
                 self.is_input = is_input
                 self.is_output = is_output
@@ -106,7 +106,7 @@ class Converter:
 
             # configure layer
             config = LayerConfig(
-                tf_layer.name, tf_layer.output_shape[0][1:],
+                tf_layer, tf_layer.output_shape[0][1:],
                 is_input=True, has_activation=True,
                 neurons=self.create_input_neurons(pre_convert_output))
 
@@ -158,7 +158,7 @@ class Converter:
                     # configure layer
                     is_output = (len(tf_out_layers) == 0)
                     config = LayerConfig(
-                        tf_layer.name, tf_layer.output_shape[1:],
+                        tf_layer, tf_layer.output_shape[1:],
                         is_output=is_output,
                         has_activation=not tf_layer.activation is tf.keras.activations.linear,
                         neurons=self.create_neurons(tf_layer, pre_convert_output, 
@@ -214,7 +214,7 @@ class Converter:
                     # configure layer
                     is_output = (len(tf_out_layers) == 0)
                     config = LayerConfig(
-                        tf_layer.name, tf_layer.output_shape[1:],
+                        tf_layer, tf_layer.output_shape[1:],
                         is_output=is_output,
                         has_activation=not tf_layer.activation is tf.keras.activations.linear,
                         neurons=self.create_neurons(tf_layer, pre_convert_output,
@@ -277,7 +277,7 @@ class Converter:
 
                     # configure layer
                     config = LayerConfig(
-                        tf_layer.name, tf_layer.output_shape[1:],
+                        tf_layer, tf_layer.output_shape[1:],
                         is_output=len(tf_out_layers) == 0)
 
                     self.validate_tf_layer(tf_layer, config)
@@ -324,7 +324,7 @@ class Converter:
                     # configure layer
                     is_output = (len(tf_out_layers) == 0)
                     config = LayerConfig(
-                        tf_layer.name, tf_layer.output_shape[1:],
+                        tf_layer, tf_layer.output_shape[1:],
                         is_output=is_output,
                         has_activation=True,
                         neurons=self.create_neurons(tf_layer,
@@ -381,40 +381,45 @@ class Converter:
 
                 # === Unsupported Layers ===
                 else:
-                    raise NotImplementedError(f"{tf_layer.__class__.__name__} layers not supported")
+                    raise NotImplementedError(f"{tf_layer.__class__.__name__} "
+                                              f"layers not supported")
 
 
         # execute model build process
-        mlg_pop_lookup = {}
-        mlg_network_inputs = []
-        mlg_model_outputs = []
+        tf_layer_pops = {}
+        pop_lookup = {}
+        network_inputs = []
+        network_outputs = []
 
-        mlg_network = Network()
-        with mlg_network:
+        network = Network()
+        with network:
             # for each build step
             for config in config_steps:
                 # build population
                 mlg_pop = Population(config.neurons, config.shape)
                 
+                # add population to layer lookup
+                tf_layer_pops[config.tf_layer] = mlg_pop
+                
                 if config.is_input:
-                    mlg_network_inputs.append(mlg_pop)
+                    network_inputs.append(mlg_pop)
                 else:
                     # build connections
                     for s in config.synapses:
-                        source = mlg_pop_lookup[s.source]
+                        source = pop_lookup[s.source]
                         connectivity = s.type(**s.params)
                         
                         Connection(source, mlg_pop, connectivity)
 
                     if config.is_output:
-                        mlg_model_outputs.append(mlg_pop)
+                        network_outputs.append(mlg_pop)
 
-                mlg_pop_lookup[config] = mlg_pop
+                pop_lookup[config] = mlg_pop
         
         # Perform any pre-conversion tasks
-        self.post_convert(mlg_network, mlg_network_inputs, mlg_model_outputs)
+        self.post_convert(network, network_inputs, network_outputs)
             
-        return mlg_network, mlg_network_inputs, mlg_model_outputs
+        return network, network_inputs, network_outputs, tf_layer_pops
     
     def pre_convert(self, tf_model):
         pass

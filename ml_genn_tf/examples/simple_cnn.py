@@ -3,7 +3,10 @@ import numpy as np
 
 from tensorflow.keras import models, layers, datasets
 
+from ml_genn.callbacks import SpikeRecorder
+
 from arguments import parse_arguments
+from plotting import plot_spikes
 from time import perf_counter
 
 
@@ -62,23 +65,36 @@ converter = args.build_converter(mlg_norm_ds, signed_input=False,
                                  k=K, evaluate_timesteps=T)
 
 # Convert and compile ML GeNN model
-mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
+net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
 
+# If we should plot any spikes, turn on spike recording for all populations
+if len(args.plot_sample_spikes) > 0:
+    for p in net.populations:
+        p.record_spikes = True
+    
 # Create suitable compiler for model
 compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                      dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                      kernel_profiling=args.kernel_profiling)
-compiled_net = compiler.compile(mlg_net, "simple_cnn", inputs=mlg_net_inputs, 
-                                outputs=mlg_net_outputs)
+compiled_net = compiler.compile(net, "simple_cnn", inputs=net_inputs, 
+                                outputs=net_outputs)
 compiled_net.genn_model.timing_enabled = args.kernel_profiling
     
 with compiled_net:
-    # Evaluate ML GeNN model
+    callbacks = ["batch_progress_bar"]
+    
+    # If we should plot any spikes, add spike recorder callback for all populations
+    if len(args.plot_sample_spikes) > 0:
+        for p in net.populations:
+            callbacks.append(SpikeRecorder(p))
+
+    # Evaluate ML GeNN modelplot_spikes
     start_time = perf_counter()
-    accuracy = compiled_net.evaluate_numpy({mlg_net_inputs[0]: validate_x},
-                                           {mlg_net_outputs[0]: validate_y})
+    accuracy = compiled_net.evaluate_numpy({net_inputs[0]: validate_x},
+                                           {net_outputs[0]: validate_y},
+                                           callbacks=callbacks)
     end_time = perf_counter()
-    print(f"Accuracy = {100.0 * accuracy[mlg_net_outputs[0]].result}%")
+    print(f"Accuracy = {100.0 * accuracy[net_outputs[0]].result}%")
     print(f"Time = {end_time - start_time} s")
     
     if args.kernel_profiling:
@@ -89,3 +105,8 @@ with compiled_net:
               f"\tneuron_update_time: {compiled_net.genn_model.neuron_update_time} s\n"
               f"\tpresynaptic_update_time: {compiled_net.genn_model.presynaptic_update_time} s\n"
               f"\tcustom_update_reset_time: {reset_time} s")
+    
+    # Plot spikes if desired
+    if len(args.plot_sample_spikes) > 0:
+        plot_spikes(callbacks, args.plot_sample_spikes)
+        
