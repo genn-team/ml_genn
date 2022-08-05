@@ -1,5 +1,6 @@
 import numpy as np
 
+from itertools import chain
 from typing import Sequence, Union
 
 from ..utils.network import get_underlying_pop
@@ -9,15 +10,11 @@ class SpikeRecorder:
         # Get underlying population
         self._pop = get_underlying_pop(pop)
         
-        # Flag to track whether simualtion is batched or not
-        self._in_batch = False
-
         # Should this SpikeRecorder be the one responsible for pulling spikes?
         self._pull = False
 
         # List of spike times and IDs
-        self._times = []
-        self._ids = []
+        self.spikes = ([], [])
 
     def set_params(self, compiled_network, **kwargs):
         # Extract compiled network
@@ -49,28 +46,18 @@ class SpikeRecorder:
             # Get spike times and IDs
             data = cn.neuron_populations[self._pop].spike_recording_data
 
-            # If we're in a batch add data to the latest batch list
-            if self._in_batch:
-                times, ids = zip(*data)
-                self._times[-1].append(times)
-                self._ids[-1].append(ids)
-            # Otherwise, add data directly to variable list
+            # If model is batched
+            if cn.genn_model.batch_size > 1:
+                # Unzip batches to get seperate lists of times and IDs 
+                # and extend time and ID lists with these
+                times, ids = list(zip(*data))
+                self.spikes[0].extend(times)
+                self.spikes[1].extend(ids)
+            # Otherwise, simply add times and IDs to lists
             else:
                 times, ids = data
-                self._times.append(times)
-                self._ids.append(ids)
-    
-    def on_batch_begin(self, batch):
-        # Set flag
-        self._in_batch = True
-
-        # Add new lists for this batches spike times and ids
-        self._times.append([])
-        self._ids.append([])
-    
-    @property
-    def spikes(self):
-        return self._times, self._ids
+                self.spikes[0].append(times)
+                self.spikes[1].append(ids)
             
             
             

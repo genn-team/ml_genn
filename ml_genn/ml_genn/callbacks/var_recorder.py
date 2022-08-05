@@ -34,16 +34,13 @@ class VarRecorder:
         
     @property
     def data(self):
-        # If simulation is example based
-        batched = (self._compiled_network.genn_model.batch_size > 1)
-
         # Stack 1D or 2D numpy arrays containing value 
         # for each timestep in each batch to get 
         # (time, batch, neuron) or (time, neuron) arrays
         data = [np.stack(d) for d in self._data]
         
         # If model batched
-        if batched:
+        if self._compiled_network.genn_model.batch_size > 1:
             # Split each stacked array along the batch axis and 
             # chain together resulting in a list, containing a 
             # (time, neuron) matrix for each example
