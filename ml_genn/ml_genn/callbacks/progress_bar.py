@@ -1,4 +1,6 @@
-class BatchProgressBar:
+from .callback import Callback
+
+class BatchProgressBar(Callback):
     def __init__(self):
         self._num_batches = None
         self._progress_bar = None

@@ -1,13 +1,22 @@
 from collections import defaultdict
 from typing import Sequence
 
+from ..callbacks import Callback
+
+from .module import get_object
+
+from ..callbacks import default_callbacks
+
+
 def _filter_callbacks(callbacks: Sequence, method: str):
     return [c for c in callbacks if hasattr(c, method)]
 
 class CallbackList:
     def __init__(self, callbacks: Sequence, **params):
-        self._callbacks = list(callbacks)
-        
+        self._callbacks = [get_object(c, Callback, "Callback", 
+                                      default_callbacks)
+                           for c in callbacks]
+
         # Loop through callbacks, build dictionary of all callbacks
         # of each type and call set_params methods if presetn
         callback_types = defaultdict(list)

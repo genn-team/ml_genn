@@ -1,6 +1,6 @@
 from inspect import Parameter
 
-from copy import deepcopy
+from copy import copy
 from re import compile
 from inspect import isclass, signature
 
@@ -37,10 +37,10 @@ def get_object(obj, base_class, description, dictionary):
     if obj is None:
         return obj
     elif isinstance(obj, base_class):
-        return deepcopy(obj)
+        return copy(obj)
     elif isinstance(obj, str):
         if obj in dictionary:
-            return deepcopy(dictionary[obj])
+            return copy(dictionary[obj])
         else:
             raise RuntimeError(f"{description} object '{obj}' unknown")
     else:

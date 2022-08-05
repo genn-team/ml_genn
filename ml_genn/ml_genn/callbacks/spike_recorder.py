@@ -3,9 +3,10 @@ import numpy as np
 from itertools import chain
 from typing import Sequence, Union
 
+from .callback import Callback
 from ..utils.network import get_underlying_pop
 
-class SpikeRecorder:
+class SpikeRecorder(Callback):
     def __init__(self, pop):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
