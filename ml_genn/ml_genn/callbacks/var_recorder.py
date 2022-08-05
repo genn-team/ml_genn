@@ -1,5 +1,6 @@
 import numpy as np
 
+from itertools import chain
 from typing import Sequence, Union
 
 from ..utils.network import get_underlying_pop
@@ -11,11 +12,8 @@ class VarRecorder:
         self._pop = get_underlying_pop(pop)
         self._var = var
         
-        # Flag to track whether simualtion is batched or not
-        self._in_batch = False
-        
         # Create empty list to hold recorded data
-        self.data = []
+        self._data = [[]]
     
     def set_params(self, compiled_network, **kwargs):
         self._compiled_network = compiled_network
@@ -25,22 +23,37 @@ class VarRecorder:
         pop = self._compiled_network.neuron_populations[self._pop]
         pop.pull_var_from_device(self._var)
         
-        # Add copy of variable data to list
-        data = np.copy(pop.vars[self._var].view)
+        # Add data to newest list
+        self._data[-1].append(np.copy(pop.vars[self._var].view))
         
-        # If we're in a batch add data to the latest batch list
-        if self._in_batch:
-            self.data[-1].append(data)
-        # Otherwise, add data directly to variable list
-        else:
-            self.data.append(data)
-
     def on_batch_begin(self, batch):
-        # Set flag
-        self._in_batch = True
+        # If this isn't the first batch where the constructor 
+        # will have already added a list, add a new list to data
+        if batch > 0:
+            self._data.append([])
         
-        # Add a new list to each variable
-        self.data.append([])
+    @property
+    def data(self):
+        # If simulation is example based
+        batched = (self._compiled_network.genn_model.batch_size > 1)
+
+        # Stack 1D or 2D numpy arrays containing value 
+        # for each timestep in each batch to get 
+        # (time, batch, neuron) or (time, neuron) arrays
+        data = [np.stack(d) for d in self._data]
+        
+        # If model batched
+        if batched:
+            # Split each stacked array along the batch axis and 
+            # chain together resulting in a list, containing a 
+            # (time, neuron) matrix for each example
+            data = list(chain.from_iterable(np.split(d, d.shape[1], axis=1)
+                                            for d in data))
             
-            
-            
+            # Finally, remove the batch axis from each matrix
+            # (which will now always be size 1) and return
+            data = [np.squeeze(d, axis=1) for d in data]
+            return data
+        # Otherwise, return data directly
+        else:
+            return data
