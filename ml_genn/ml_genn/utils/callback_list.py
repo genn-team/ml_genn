@@ -14,7 +14,7 @@ def _filter_callbacks(callbacks: Sequence, method: str):
 class CallbackList:
     def __init__(self, callbacks: Sequence, **params):
         self._callbacks = [get_object(c, Callback, "Callback", 
-                                      default_callbacks)
+                                      default_callbacks, copy=False)
                            for c in callbacks]
 
         # Loop through callbacks, build dictionary of all callbacks
