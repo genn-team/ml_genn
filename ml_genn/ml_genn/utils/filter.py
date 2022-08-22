@@ -3,19 +3,11 @@ import numpy as np
 from numbers import Number
 from typing import Sequence
 
-class Filter:
-    def __init__(self, f, count=None):
+class BatchFilter:
+    def __init__(self, f):
         # If filter is set to a single boolean value, use it directly as mask
         if isinstance(f, bool):
             self._mask = f
-        # If filter is specified as a slice, create mask  
-        # and set elements specified by slice to True
-        elif isinstance(f, slice):
-            if count is None:
-                raise RuntimeError("Filters can only be specified as a slice "
-                                   "if the number of elements is known")
-            self._mask = np.zeros(count, dtype=bool)
-            self._mask[f] = True
         # Otherwise, if filter is specified with array
         elif isinstance(f, (np.ndarray, Sequence)):
             # Convert to numpy
@@ -25,38 +17,78 @@ class Filter:
             # **CHECK** numpy seems to figure this out from lists of 
             # True and False but I can't see this documented anywhere
             if np.issubdtype(array.dtype, bool):
-                if count is not None and array.shape != (count, ):
-                    raise RuntimeError(f"Filters specified as arrays "
-                                       f"of booleans  must contain "
-                                       f"{count} elements")
                 self._mask =  array
             # Otherwise, if it's integer-derived
             elif np.issubdtype(array.dtype, np.integer):
-                max_value = np.amax(array)
-                if np.amin(array) < 0:
-                    raise RuntimeError("Filters specified as arrays "
-                                       "of integers must not contain "
-                                       "values < zero")
-                if count is not None and max_value >= count:
-                    raise RuntimeError(f"Filters specified as arrays "
-                                       f"of integers must not contain "
-                                       f"values >= {count}")
-                
                 # Create suitable mask
-                self._mask = np.zeros((max_value + 1 if count is None 
-                                       else count), dtype=bool)
+                self._mask = np.zeros(np.amax(array) + 1, dtype=bool)
                 self._mask[array] = True
-            
+            else:
+                raise RuntimeError("Unsupported object in bacth filter")
+        else:
+            raise RuntimeError("Unsupported batch filter format")
+
     def __getitem__(self, key):
-        if key < 0:
-            raise IndexError("Filters can only be indexed "
-                             "with positive integers")
-        elif isinstance(self._mask, bool):
+        if isinstance(self._mask, bool):
             return self._mask
         elif key < len(self._mask):
             return self._mask[key]
         else:
             return False
+    
+class NeuronFilter:
+    def __init__(self, f, shape):
+        # Normalize shape
+        shape = shape if isinstance(shape, Sequence) else (shape,)
+        
+        # If filter is set to a single boolean value, use it directly as mask
+        if isinstance(f, bool):
+            self._mask = f            
+        # Otherwise, if filter is specified as a slice, create   
+        # mask and set elements specified by slice to True
+        elif isinstance(f, slice):
+            if len(shape) != 1:
+                raise RuntimeError("Neuron filters can only be specified "
+                                   "as a slice if their shape is 1D")
+            self._mask = np.zeros(shape, dtype=bool)
+            self._mask[f] = True
+        # Otherwise, if filter is specified as a sequence
+        elif isinstance(f, (np.ndarray, Sequence)):
+            # Convert to numpy
+            array = np.asarray(f)
             
+            # If array's dataype is boolean
+            # **CHECK** numpy seems to figure this out from lists of 
+            # True and False but I can't see this documented anywhere
+            if np.issubdtype(array.dtype, bool):
+                if array.shape != shape:
+                    raise RuntimeError(f"Neuron filters specified as arrays "
+                                       f"of booleans must have a "
+                                       f"shape of {shape}")
+                self._mask =  array
+            # Otherwise
+            else:
+                # If array contains objects, check they're all slices
+                if np.issubdtype(array.dtype, np.object_): 
+                    if any(not isinstance(o, slice) for o in array):
+                        raise RuntimeError("Unsupported object in neuron filter")
+                # Otherwise, if array contents aren't integers, give error
+                elif not np.issubdtype(array.dtype, np.integer):
+                    raise RuntimeError("Unsupported neuron filter format")
             
-            
+                # Create suitable mask
+                self._mask = np.zeros(shape, dtype=bool)
+                
+                # Set elements specified by slices or indices to True
+                if len(shape) == 1:
+                    self._mask[array] = True
+                else:
+                    self._mask[tuple(array)] = True
+        else:
+            raise RuntimeError("Unsupported neuronfilter format")
+           
+    def __getitem__(self, key):
+        if isinstance(self._mask, bool):
+            return self._mask
+        else:
+            return self._mask[key]
