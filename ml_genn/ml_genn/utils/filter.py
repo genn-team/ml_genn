@@ -5,9 +5,12 @@ from typing import Sequence
 
 class Filter:
     def __init__(self, f, count=None):
+        # If filter is set to a single boolean value, use it directly as mask
+        if isinstance(f, bool):
+            self._mask = f
         # If filter is specified as a slice, create mask  
         # and set elements specified by slice to True
-        if isinstance(f, slice):
+        elif isinstance(f, slice):
             if count is None:
                 raise RuntimeError("Filters can only be specified as a slice "
                                    "if the number of elements is known")
@@ -48,6 +51,8 @@ class Filter:
         if key < 0:
             raise IndexError("Filters can only be indexed "
                              "with positive integers")
+        elif isinstance(self._mask, bool):
+            return self._mask
         elif key < len(self._mask):
             return self._mask[key]
         else:

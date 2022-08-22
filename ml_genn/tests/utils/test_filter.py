@@ -6,6 +6,10 @@ from pytest import raises
 
 test_mask = [True, False, True, False, True]
 
+def test_bool():
+    f = Filter(True)
+    assert f[100] == True
+
 def test_slice():
     f = Filter(slice(0, None, 2), 5)
     assert np.array_equal(f._mask, test_mask)
