@@ -4,18 +4,23 @@ from itertools import chain
 from typing import Sequence, Union
 
 from .callback import Callback
-from ..utils.filter import ExampleFilter, NeuronFilter
+from ..utils.filter import ExampleFilter
+
+from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 
 class VarRecorder(Callback):
-    def __init__(self, pop, var: str, example_filter=None):
+    def __init__(self, pop, var: str, example_filter=None, neuron_filter=None):
         # Get underlying population
         # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
         self._var = var
         
-        # Create filters
+        # Create example filter
         self._example_filter = ExampleFilter(example_filter)
+        
+        # Create neuron filter mask
+        self._neuron_mask = get_neuron_filter_mask(neuron_filter, self._pop.shape)
 
         # Create empty list to hold recorded data
         self._data = []
@@ -35,10 +40,11 @@ class VarRecorder(Callback):
             pop.pull_var_from_device(self._var)
             
             # Get view, sliced by batch mask if simulation is batched
+            var_view = pop.vars[self._var].view
             if self._batch_size > 1:
-                data_view = pop.vars[self._var].view[self._batch_mask,:]
+                data_view = var_view[self._batch_mask][:,self._neuron_mask]
             else:
-                data_view = pop.vars[self._var].view
+                data_view = var_view[self._neuron_mask]
             
             # If there isn't already list to hold data, add one
             if len(self._data) == 0:

@@ -4,17 +4,23 @@ from itertools import chain
 from typing import Sequence, Union
 
 from .callback import Callback
-from ..utils.filter import ExampleFilter, NeuronFilter
+from ..utils.filter import ExampleFilter
+
+from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 
 class SpikeRecorder(Callback):
-    def __init__(self, pop, example_filter=None):
+    def __init__(self, pop, example_filter=None, neuron_filter=None):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
         
-        # Create filters
+        # Create example filter
         self._example_filter = ExampleFilter(example_filter)
-
+        
+        # Create neuron filter mask
+        self._neuron_mask = get_neuron_filter_mask(neuron_filter, 
+                                                   self._pop.shape)
+        
         # Should this SpikeRecorder be the one responsible for pulling spikes?
         self._pull = False
 
@@ -76,7 +82,8 @@ class SpikeRecorder(Callback):
                                          event_recording_bytes))
 
                 # Calculate start time of recording
-                start_time_ms = (timestep - data.shape[0]) * cn.genn_model.dT
+                dt = cn.genn_model.dT
+                start_time_ms = (timestep - data.shape[0]) * dt
                 if start_time_ms < 0.0:
                     raise Exception("spike_recording_data can only be "
                                     "accessed once buffer is full.")
@@ -89,14 +96,14 @@ class SpikeRecorder(Callback):
                                             
                 # Slice out batches we want
                 data_unpack = data_unpack[:,self._batch_mask,:]
-                
+
                 # Loop through these batches
                 for b in range(data_unpack.shape[1]):
                     # Calculate indices where there are events
-                    events = np.where(data_unpack[:,b,:] == 1)
+                    events = np.where(data_unpack[:,b,self._neuron_mask] == 1)
 
                     # Convert event times to ms
-                    event_times = start_time_ms + (events[0] * cn.genn_model.dT)
+                    event_times = start_time_ms + (events[0] * dt)
 
                     # Add to lists
                     self.spikes[0].append(event_times)
