@@ -1,7 +1,10 @@
+import logging
 import numpy as np
 
 from numbers import Number
 from typing import Sequence
+
+logger = logging.getLogger(__name__)
 
 class ExampleFilter:
     def __init__(self, f):
@@ -20,16 +23,23 @@ class ExampleFilter:
                 self._mask =  array
             # Otherwise, if it's integer-derived
             elif np.issubdtype(array.dtype, np.integer):
+                # Give warning if array isn't ordered
+                if not np.all(array[:-1] <= array[1:]):
+                    logger.warn("Example filters specified as arrays "
+                                "of integers should be sorted otherwise "
+                                "recordings will be returned in "
+                                "different order")
+
                 # Create suitable mask
                 self._mask = np.zeros(np.amax(array) + 1, dtype=bool)
                 self._mask[array] = True
             else:
-                raise RuntimeError("Unsupported object in bacth filter")
+                raise RuntimeError("Unsupported object in example filter")
         elif isinstance(f, (int, np.integer)):
             self._mask = np.zeros(f + 1, dtype=bool)
             self._mask[f] = True
         else:
-            raise RuntimeError("Unsupported batch filter format")
+            raise RuntimeError("Unsupported example filter format")
 
     def get_batch_mask(self, batch, batch_size):
         # If no mask is specified, return array of Trues

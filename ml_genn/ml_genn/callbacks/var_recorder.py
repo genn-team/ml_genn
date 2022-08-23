@@ -4,33 +4,57 @@ from itertools import chain
 from typing import Sequence, Union
 
 from .callback import Callback
+from ..utils.filter import ExampleFilter, NeuronFilter
 from ..utils.network import get_underlying_pop
 
 class VarRecorder(Callback):
-    def __init__(self, pop, var: str):
+    def __init__(self, pop, var: str, example_filter=None):
         # Get underlying population
         # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
         self._var = var
         
+        # Create filters
+        self._example_filter = ExampleFilter(example_filter)
+
         # Create empty list to hold recorded data
-        self._data = [[]]
+        self._data = []
     
     def set_params(self, compiled_network, **kwargs):
+        self._batch_size = compiled_network.genn_model.batch_size
         self._compiled_network = compiled_network
+        
+        # Create default batch mask in case on_batch_begin not called
+        self._batch_mask = np.ones(self._batch_size, dtype=bool)
             
     def on_timestep_end(self, timestep):
-        # Copy variable from device
-        pop = self._compiled_network.neuron_populations[self._pop]
-        pop.pull_var_from_device(self._var)
+        # If anything should be recorded this batch
+        if np.any(self._batch_mask):
+            # Copy variable from device
+            pop = self._compiled_network.neuron_populations[self._pop]
+            pop.pull_var_from_device(self._var)
+            
+            # Get view, sliced by batch mask if simulation is batched
+            if self._batch_size > 1:
+                data_view = pop.vars[self._var].view[self._batch_mask,:]
+            else:
+                data_view = pop.vars[self._var].view
+            
+            # If there isn't already list to hold data, add one
+            if len(self._data) == 0:
+                self._data.append([])
+            
+            # Add copy to newest list
+            self._data[-1].append(np.copy(data_view))
         
-        # Add data to newest list
-        self._data[-1].append(np.copy(pop.vars[self._var].view))
+    def on_batch_begin(self, batch):  
+        # Get mask for examples in this batch
+        self._batch_mask = self._example_filter.get_batch_mask(
+            batch, self._batch_size)
         
-    def on_batch_begin(self, batch):
-        # If this isn't the first batch where the constructor 
-        # will have already added a list, add a new list to data
-        if batch > 0:
+        # If there's anything to record in this 
+        # batch, add list to hold it to data
+        if np.any(self._batch_mask):
             self._data.append([])
         
     @property
@@ -41,7 +65,7 @@ class VarRecorder(Callback):
         data = [np.stack(d) for d in self._data]
         
         # If model batched
-        if self._compiled_network.genn_model.batch_size > 1:
+        if self._batch_size > 1:
             # Split each stacked array along the batch axis and 
             # chain together resulting in a list, containing a 
             # (time, neuron) matrix for each example
