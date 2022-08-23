@@ -86,7 +86,7 @@ with compiled_net:
     # If we should plot any spikes, add spike recorder callback for all populations
     if len(args.plot_sample_spikes) > 0:
         for p in net.populations:
-            callbacks.append(SpikeRecorder(p))
+            callbacks.append(SpikeRecorder(p, example_filter=args.plot_sample_spikes))
 
     # Evaluate ML GeNN modelplot_spikes
     start_time = perf_counter()

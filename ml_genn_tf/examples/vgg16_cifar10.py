@@ -145,7 +145,7 @@ if __name__ == '__main__':
         callbacks = ["batch_progress_bar"]
         if len(args.plot_sample_spikes) > 0:
             for p in net.populations:
-                callbacks.append(SpikeRecorder(p))
+                callbacks.append(SpikeRecorder(p, example_filter=args.plot_sample_spikes))
                 
         # Evaluate ML GeNN model
         start_time = perf_counter()

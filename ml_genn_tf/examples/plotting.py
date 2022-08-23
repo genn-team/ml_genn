@@ -19,16 +19,24 @@ def plot_spikes(callbacks: Sequence, plot_sample_spikes: Sequence, show: bool = 
         # Extract spike times and IDs from callback
         spike_times, spike_ids = c.spikes
         
+        assert len(plot_sample_spikes) == len(spike_times)
+        
         # If we're only plotting one sample, plot
-        if len(plot_sample_spikes) == 1:
-            s = plot_sample_spikes[0]
-            axes[i].scatter(spike_times[s], spike_ids[s], s=2)
+        if len(spike_times) == 1:
+            axes[i].scatter(spike_times[0], spike_ids[0], s=2)
             axes[i].set_ylabel("Neuron")
         # Otherwise, loop through samples and plot
         else:
             axes[i, 0].set_ylabel("Neuron")
-            for j, s in enumerate(plot_sample_spikes):
-                axes[i, j].scatter(spike_times[j], spike_ids[j], s=2)
+            for j, (time, id) in enumerate(zip(spike_times, spike_ids)):
+                axes[i, j].scatter(time, id, s=2)
+    
+    # Label examples
+    if len(plot_sample_spikes) == 1:
+        axes[0].set_title(f"Example {plot_sample_spikes[0]}")
+    else:
+        for j, s in enumerate(plot_sample_spikes):
+            axes[0, j].set_title(f"Example {s}")
     
     # Show if desired
     if show:
