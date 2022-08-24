@@ -48,16 +48,16 @@ def test_avg_pool_conv_2d(in_size, in_chan, out_chan, pool_size, pool_strides,
 
     # Convert and compile ML GeNN model
     converter = Converter()
-    mlg_net, mlg_net_inputs, mlg_net_outputs = converter.convert(tf_model)
+    net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
     
     compiler = converter.create_compiler(prefer_in_memory_connect=prefer_in_memory_connect)
-    compiled_net = compiler.compile(mlg_net, request.keywords.node.name, 
-                                    inputs=mlg_net_inputs, 
-                                    outputs=mlg_net_outputs)
+    compiled_net = compiler.compile(net, request.keywords.node.name, 
+                                    inputs=net_inputs, 
+                                    outputs=net_outputs)
 
     with compiled_net:
         # Evaluate ML GeNN model
-        accuracy = compiled_net.evaluate_numpy({mlg_net_inputs[0]: x},
-                                               {mlg_net_outputs[0]: tf_y},
+        accuracy = compiled_net.evaluate_numpy({net_inputs[0]: x},
+                                               {net_outputs[0]: tf_y},
                                                "mean_square_error")
-    assert accuracy[mlg_net_outputs[0]].result < 1e-03
+    assert accuracy[net_outputs[0]].result < 1e-03
