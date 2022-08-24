@@ -44,7 +44,7 @@ def test_avg_pool_dense_2d(in_size, in_chan, out_size, pool_size,
     net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
     
     compiler = converter.create_compiler(prefer_in_memory_connect=prefer_in_memory_connect)
-    compiled_net = compiler.compile(request.keywords.node.name, 
+    compiled_net = compiler.compile(net, request.keywords.node.name, 
                                     inputs=net_inputs, 
                                     outputs=net_outputs)
 
