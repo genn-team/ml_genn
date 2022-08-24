@@ -1,4 +1,6 @@
+import inspect
 import numpy as np
+import os
 
 from collections import defaultdict, namedtuple
 from pygenn import GeNNModel
@@ -12,6 +14,7 @@ from pygenn.genn_model import (create_custom_custom_update_class,
                                create_custom_postsynaptic_class,
                                create_custom_weight_update_class,
                                init_var)
+from string import digits
 from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
                                    signed_static_pulse_model,
@@ -171,9 +174,22 @@ class Compiler:
         return CompiledNetwork(genn_model, neuron_populations,
                                connection_populations)
 
-    def compile(self, network: Network, name: str, **kwargs):
-        genn_model = GeNNModel("float", name, **self.genn_kwargs)
-
+    def compile(self, network: Network, name: str = None, **kwargs):
+        # If no name is specified
+        if name is None:
+            # Get the parent frame from our current frame 
+            # (whatever called compile)
+            calframe = inspect.getouterframes(inspect.currentframe(), 1)
+            
+            # Extract name and path
+            name = os.path.splitext(os.path.basename(calframe[1][1]))[0]
+        
+        # Strip out any non-alphanumerical characters from name
+        clean_name = "".join(c for c in name if c.isalnum() or c == "_")
+        clean_name = clean_name.lstrip(digits)
+        
+        # Create GeNN model and set basic properties
+        genn_model = GeNNModel("float", clean_name, **self.genn_kwargs)
         genn_model.dT = self.dt
         genn_model.batch_size = self.batch_size
         genn_model._model.set_seed(self.rng_seed)

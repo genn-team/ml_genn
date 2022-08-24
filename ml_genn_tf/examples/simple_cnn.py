@@ -76,8 +76,7 @@ if len(args.plot_sample_spikes) > 0:
 compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
                                      dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                      kernel_profiling=args.kernel_profiling)
-compiled_net = compiler.compile(net, "simple_cnn", inputs=net_inputs, 
-                                outputs=net_outputs)
+compiled_net = compiler.compile(net, inputs=net_inputs, outputs=net_outputs)
 compiled_net.genn_model.timing_enabled = args.kernel_profiling
     
 with compiled_net:

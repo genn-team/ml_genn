@@ -21,7 +21,7 @@ with network:
 
 compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE, 
                              evaluate_timesteps=100)
-compiled_net = compiler.compile(network, "simple_mnist")
+compiled_net = compiler.compile(network)
 
 # Load testing data
 testing_images = np.load("testing_images.npy")
@@ -30,19 +30,8 @@ testing_labels = np.load("testing_labels.npy")
 with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
-    callbacks = [BatchProgressBar(), SpikeRecorder(input)]
     accuracy = compiled_net.evaluate_numpy({input: testing_images * 0.01},
-                                           {output: testing_labels},
-                                           callbacks=callbacks)
+                                           {output: testing_labels})
     end_time = perf_counter()
     print(f"Accuracy = {100 * accuracy[output].result}%")
     print(f"Time = {end_time - start_time}s")
-    
-    
-    input_spike_times, input_spike_ids = callbacks[1].spikes
-    print(len(input_spike_times[0][0]))
-    #print(input_spike_times[0][0], input_spike_ids[0][0])
-    #import matplotlib.pyplot as plt
-    #fig, axis = plt.subplots()
-    #axis.scatter(input_spike_times[0][0], input_spike_ids[0][0])
-    #plt.show()
