@@ -9,8 +9,6 @@ from ml_genn.connectivity import Dense
 @pytest.mark.parametrize(
     "in_size, out_size",
     [(5, 5),
-     (5, 5),
-     (5, 5,),
      (5, 10)])
 def test_dense(in_size, out_size, request):
     x = np.random.randint(0, 2, size=(1, in_size)).astype(np.float64)
