@@ -213,12 +213,12 @@ for (b = 0; b < builderNodes.size(); b++) {
                 }
             }
             
-            buildStage("Running Flake8 (${NODE_NAME})") {
+            buildStage("Running Flake8 on mlGeNN (${NODE_NAME})") {
                 // Run flake8
-                def logFlake8MLGeNN = "flake8_${NODE_NAME}.log";
+                def logFlake8MLGeNN = "ml_genn_flake8_${NODE_NAME}.log";
                 def commandsFlake8MLGeNN = """
                 . ${WORKSPACE}/venv/bin/activate
-                flake8 --format pylint --output-file ${logFlake8MLGeNN} ml_genn
+                flake8 --format pylint --output-file ${logFlake8MLGeNN} ml_genn/ml_genn
                 """
                 def statusFlake8MLGeNN = sh script:commandsFlake8MLGeNN, returnStatus:true;
                 
@@ -226,7 +226,24 @@ for (b = 0; b < builderNodes.size(); b++) {
                 recordIssues enabledForFailure: true, tool: flake8(pattern: logFlake8MLGeNN);
                 
                 if (statusFlake8MLGeNN != 0) {
-                    setBuildStatus("Running Flake8 (${NODE_NAME})", "FAILURE");
+                    setBuildStatus("Running Flake8 on mlGeNN (${NODE_NAME})", "FAILURE");
+                }
+            }
+            
+            buildStage("Running Flake8 on mlGeNN TF (${NODE_NAME})") {
+                // Run flake8
+                def logFlake8MLGeNNTF = "ml_genn_tf_flake8_${NODE_NAME}.log";
+                def commandsFlake8MLGeNNTF = """
+                . ${WORKSPACE}/venv/bin/activate
+                flake8 --format pylint --output-file ${logFlake8MLGeNNTF} ml_genn_tf/ml_genn_tf
+                """
+                def statusFlake8MLGeNNTF = sh script:commandsFlake8MLGeNNTF, returnStatus:true;
+                
+                // Record any issues
+                recordIssues enabledForFailure: true, tool: flake8(pattern: logFlake8MLGeNNTF);
+                
+                if (statusFlake8MLGeNNTF != 0) {
+                    setBuildStatus("Running Flake8 on mlGeNN TF (${NODE_NAME})", "FAILURE");
                 }
             }
         }
