@@ -53,7 +53,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Zip together and evaluate using iterator
         return self.evaluate_batch_iter(list(x.keys()), list(y.keys()),
                                         iter(zip(*(x_batched + y_batched))),
-                                        len(x_batched), metrics, callbacks)
+                                        len(splits), metrics, callbacks)
 
     def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
                             num_batches: Optional[int] = None,
