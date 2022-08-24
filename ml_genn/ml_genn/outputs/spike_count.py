@@ -34,7 +34,7 @@ class SpikeCount(Output):
 
         return model_copy
 
-    def get_output(self, genn_pop, batch_size, shape):
+    def get_output(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull spike count from genn
         genn_pop.pull_var_from_device("Scount")
 

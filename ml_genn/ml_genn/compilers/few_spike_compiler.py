@@ -1,17 +1,14 @@
 import numpy as np
 
 from collections import deque, namedtuple
-from typing import Iterator, Sequence
+from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
-from ..utils.model import CustomUpdateModel
 
-from pygenn.genn_model import create_var_ref
-from .compiler import build_model
 from ..utils.data import get_metrics, get_numpy_size
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
@@ -59,7 +56,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                         len(x_batched), metrics, callbacks)
 
     def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
-                            num_batches: int=None,
+                            num_batches: Optional[int] = None,
                             metrics="sparse_categorical_accuracy",
                             callbacks=[BatchProgressBar()]):
         """ Evaluate an input in iterator format against labels
@@ -72,21 +69,20 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
         # Build metrics
         metrics = get_metrics(metrics, outputs)
-        
+
         # Get the pipeline depth of each output
         y_pipe_depth = {
             o: (self.pop_pipeline_depth[get_underlying_pop(o)]
                 if get_underlying_pop(o) in self.pop_pipeline_depth
                 else 0)
             for o in outputs}
-        
+
         # Create callback list and begin testing
-        num_batches = (None if num_batches is None 
+        num_batches = (None if num_batches is None
                        else num_batches + 1 + max(y_pipe_depth.values()))
         callback_list = CallbackList(callbacks, compiled_network=self,
                                      num_batches=num_batches)
         callback_list.on_test_begin()
-
 
         # Build deque to hold y
         y_pipe_queue = {p: deque(maxlen=d + 1)
@@ -127,7 +123,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 else:
                     for p, y in zip(outputs, batch_y):
                         y_pipe_queue[p].append(y)
-            
+
             # Start batch
             callback_list.on_batch_begin(batch_i)
 
@@ -148,13 +144,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     # Update metrics
                     metrics[o].update(batch_y_true,
                                       batch_y_pred[:len(batch_y_true)])
-            
+
             # End batch
             callback_list.on_batch_end(batch_i, metrics)
 
             # Next batch
             batch_i += 1
-        
+
         # End testing
         callback_list.on_test_end(metrics)
 
@@ -171,7 +167,7 @@ PreCompileOutput = namedtuple("PreCompileOutput",
 class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
-                 prefer_in_memory_connect=True, **genn_kwargs):
+                 prefer_in_memory_connect: bool = True, **genn_kwargs):
         super(FewSpikeCompiler, self).__init__(dt, batch_size, rng_seed,
                                                kernel_profiling,
                                                prefer_in_memory_connect,
@@ -201,7 +197,7 @@ class FewSpikeCompiler(Compiler):
                     # Set upstream delay so all spikes
                     # arrive at correct  pipeline stage
                     source_pop = c().source()
-                    depth_difference = (pipeline_depth
+                    depth_difference = (pipeline_depth 
                                         - next_pipeline_depth[source_pop])
                     con_delay[c()] = depth_difference * self.k
 

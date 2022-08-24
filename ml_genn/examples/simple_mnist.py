@@ -2,7 +2,6 @@ import numpy as np
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
-from ml_genn.callbacks import BatchProgressBar, SpikeRecorder
 from ml_genn.neurons import IntegrateFire, IntegrateFireInput
 from ml_genn.connectivity import Dense
 
@@ -13,13 +12,14 @@ BATCH_SIZE = 128
 # Create sequential model
 network = SequentialNetwork()
 with network:
-    input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784, record_spikes=True)
+    input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784,
+                       record_spikes=True)
     Layer(Dense(weight=np.load("weights_0_1.npy")),
           IntegrateFire(v_thresh=5.0))
     output = Layer(Dense(weight=np.load("weights_1_2.npy")),
                    IntegrateFire(v_thresh=5.0, output="spike_count"))
 
-compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE, 
+compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
                              evaluate_timesteps=100)
 compiled_net = compiler.compile(network)
 

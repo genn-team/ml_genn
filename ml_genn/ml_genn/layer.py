@@ -6,11 +6,11 @@ from .sequential_network import SequentialNetwork
 
 
 class InputLayer:
-    def __init__(self, neuron: NeuronInitializer, shape: Shape = None, 
-                 record_spikes=False):
+    def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
+                 record_spikes: bool = False):
         # Create population and store weak reference in class
-        population = Population(neuron, shape=shape, 
-                                record_spikes=record_spikes, 
+        population = Population(neuron, shape=shape,
+                                record_spikes=record_spikes,
                                 add_to_model=False)
         self.population = ref(population)
 
@@ -19,11 +19,12 @@ class InputLayer:
 
 class Layer:
     def __init__(self, connectivity: ConnectivityInitializer,
-                 neuron: NeuronInitializer, shape: Shape = None, 
-                 synapse: SynapseInitializer = "delta", record_spikes=False):
+                 neuron: NeuronInitializer, shape: Shape = None,
+                 synapse: SynapseInitializer = "delta",
+                 record_spikes: bool = False):
         # Create population and store weak reference in class
-        population = Population(neuron, shape=shape, 
-                                record_spikes=record_spikes, 
+        population = Population(neuron, shape=shape,
+                                record_spikes=record_spikes,
                                 add_to_model=False)
         self.population = ref(population)
 

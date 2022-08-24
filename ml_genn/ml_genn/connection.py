@@ -18,7 +18,7 @@ class Connection:
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta",
-                 add_to_model=True):
+                 add_to_model: bool = True):
         # Store weak references to source and target in class
         self.source = ref(source)
         self.target = ref(target)

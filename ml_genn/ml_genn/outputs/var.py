@@ -25,7 +25,7 @@ class Var(Output):
 
         return model
 
-    def get_output(self, genn_pop, batch_size, shape):
+    def get_output(self, genn_pop, batch_size:int, shape) -> np.ndarray:
         # Pull variable from genn
         genn_pop.pull_var_from_device(self.output_var_name)
 

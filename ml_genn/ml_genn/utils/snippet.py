@@ -1,12 +1,13 @@
 from collections import namedtuple
 from numbers import Number
 
-ConnectivitySnippet = namedtuple("ConnectivitySnippet", 
-                                 ["snippet", "matrix_type", 
+ConnectivitySnippet = namedtuple("ConnectivitySnippet",
+                                 ["snippet", "matrix_type",
                                   "weight", "delay"])
 
-InitializerSnippet = namedtuple("InitializerSnippet", 
+InitializerSnippet = namedtuple("InitializerSnippet",
                                 ["snippet", "param_vals", "egp_vals"])
+
 
 class ConstantValueDescriptor:
     def __set_name__(self, owner, name):
@@ -17,7 +18,7 @@ class ConstantValueDescriptor:
 
     def __set__(self, instance, value):
         if isinstance(value, Number):
-            setattr(instance, f"_{self.name}", value) 
+            setattr(instance, f"_{self.name}", value)
         else:
             raise RuntimeError(f"{self.name} initializers should "
                                f"be specified as numbers")

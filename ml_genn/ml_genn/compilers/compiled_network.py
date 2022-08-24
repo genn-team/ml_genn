@@ -1,9 +1,12 @@
-from typing import Sequence, Union
-from ..population import Population
-from ..layer import InputLayer, Layer
+import numpy as np
+
+from typing import Optional, Sequence, Union
 from ..utils.callback_list import CallbackList
+from ..utils.network import PopulationType
 
 from ..utils.network import get_underlying_pop
+
+OutputType = Union[np.ndarray, Sequence[np.ndarray]]
 
 
 class CompiledNetwork:
@@ -24,8 +27,7 @@ class CompiledNetwork:
             pop.neuron.set_input(self.neuron_populations[pop],
                                  self.genn_model.batch_size, pop.shape, input)
 
-    def get_output(self, outputs: Union[Sequence, Population,
-                                        InputLayer, Layer]):
+    def get_output(self, outputs: Union[Sequence, PopulationType]) -> OutputType:
         if isinstance(outputs, Sequence):
             return [self._get_output(p) for p in outputs]
         else:
@@ -35,14 +37,14 @@ class CompiledNetwork:
         """Perform custom update"""
         self.genn_model.custom_update(name)
 
-    def step_time(self, callback_list: CallbackList=None):
+    def step_time(self, callback_list: Optional[CallbackList] = None):
         """Step the GeNN model
         """
         if callback_list is not None:
             callback_list.on_timestep_begin(self.genn_model.timestep)
-        
+
         self.genn_model.step_time()
-        
+
         if callback_list is not None:
             callback_list.on_timestep_end(self.genn_model.timestep - 1)
 
@@ -65,7 +67,7 @@ class CompiledNetwork:
         assert CompiledNetwork._context is not None
         CompiledNetwork._context = None
 
-    def _get_output(self, pop):
+    def _get_output(self, pop: PopulationType) -> np.ndarray:
         pop = get_underlying_pop(pop)
         return pop.neuron.get_output(self.neuron_populations[pop],
                                      self.genn_model.batch_size, pop.shape)

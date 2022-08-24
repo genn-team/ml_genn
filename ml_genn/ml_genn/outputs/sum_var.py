@@ -51,7 +51,7 @@ class SumVar(Output):
 
         return model_copy
 
-    def get_output(self, genn_pop, batch_size, shape):
+    def get_output(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         sum_var_name = self.output_var_name + "Sum"
 
         # Pull variable from genn

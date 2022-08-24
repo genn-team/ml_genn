@@ -97,7 +97,7 @@ def build_model(model):
 class Compiler:
     def __init__(self, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
-                 prefer_in_memory_connect=True, **genn_kwargs):
+                 prefer_in_memory_connect : bool = True, **genn_kwargs):
         self.dt = dt
         self.batch_size = batch_size
         self.rng_seed = rng_seed
@@ -175,19 +175,19 @@ class Compiler:
                                connection_populations)
 
     def compile(self, network: Network, name: str = None, **kwargs):
-        # If no name is specified
+        # If no name is specifie
         if name is None:
-            # Get the parent frame from our current frame 
+            # Get the parent frame from our current frame
             # (whatever called compile)
             calframe = inspect.getouterframes(inspect.currentframe(), 1)
-            
+
             # Extract name and path
             name = os.path.splitext(os.path.basename(calframe[1][1]))[0]
-        
+
         # Strip out any non-alphanumerical characters from name
         clean_name = "".join(c for c in name if c.isalnum() or c == "_")
         clean_name = clean_name.lstrip(digits)
-        
+
         # Create GeNN model and set basic properties
         genn_model = GeNNModel("float", clean_name, **self.genn_kwargs)
         genn_model.dT = self.dt
@@ -220,10 +220,10 @@ class Compiler:
             genn_pop = genn_model.add_neuron_population(
                 f"Pop{i}", np.prod(pop.shape),
                 genn_neuron_model, param_vals, var_vals)
-            
+
             # Configure spike recording
             genn_pop.spike_recording_enabled = pop.record_spikes
-    
+
             # Configure EGPs
             set_egps(var_vals_egp, genn_pop.vars)
 
