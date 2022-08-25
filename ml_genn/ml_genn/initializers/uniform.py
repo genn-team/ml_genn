@@ -14,7 +14,7 @@ class Uniform(Initializer):
 
     def get_snippet(self):
         return InitializerSnippet("Uniform",
-                                  {"min": self.min, "max": self.max}, {})
+                                  {"min": self.min, "max": self.max})
 
     def __repr__(self):
         return f"(Uniform) Min: {self.min}, Max: {self.max}"

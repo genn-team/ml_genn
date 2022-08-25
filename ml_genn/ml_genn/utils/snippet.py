@@ -6,7 +6,8 @@ ConnectivitySnippet = namedtuple("ConnectivitySnippet",
                                   "weight", "delay"])
 
 InitializerSnippet = namedtuple("InitializerSnippet",
-                                ["snippet", "param_vals", "egp_vals"])
+                                ["snippet", "param_vals", "egp_vals"],
+                                defaults=[{}, {}])
 
 
 class ConstantValueDescriptor:
