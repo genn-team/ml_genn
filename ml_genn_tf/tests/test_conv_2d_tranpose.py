@@ -64,7 +64,7 @@ def test_conv_2d_transpose(in_size, in_chan, out_chan, conv_size,
 
     with compiled_net:
         # Evaluate ML GeNN model
-        mwtrics, _ = compiled_net.evaluate_numpy({input: x},
+        metrics, _ = compiled_net.evaluate_numpy({input: x},
                                                  {output: tf_y},
                                                  "mean_square_error")
     assert metrics[output].result < 1e-03
