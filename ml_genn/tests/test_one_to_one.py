@@ -29,7 +29,7 @@ def test_one_to_one(size, prefer_in_memory_connect, request):
 
     with compiled_net:
         # Evaluate ML GeNN model
-        accuracy = compiled_net.evaluate_numpy({input: x},
-                                               {output: x},
-                                               "mean_square_error")
-    assert accuracy[output].result < 1e-03
+        metrics, _ = compiled_net.evaluate_numpy({input: x},
+                                                 {output: x},
+                                                 "mean_square_error")
+    assert metrics[output].result < 1e-03

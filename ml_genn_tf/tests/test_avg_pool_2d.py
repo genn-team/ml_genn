@@ -45,7 +45,7 @@ def test_avg_pool_2d(in_size, in_chan, pool_size, pool_strides,
         
     with compiled_net:
         # Evaluate ML GeNN model
-        accuracy = compiled_net.evaluate_numpy({net_inputs[0]: x},
-                                               {net_outputs[0]: tf_y},
-                                               "mean_square_error")
-    assert accuracy[net_outputs[0]].result < 1e-03
+        metrics, _ = compiled_net.evaluate_numpy({net_inputs[0]: x},
+                                                 {net_outputs[0]: tf_y},
+                                                 "mean_square_error")
+    assert metrics[net_outputs[0]].result < 1e-03
