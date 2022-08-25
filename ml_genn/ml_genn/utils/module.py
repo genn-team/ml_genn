@@ -1,6 +1,6 @@
 from inspect import Parameter
 
-from copy import deepcopy
+from copy import copy
 from re import compile
 from inspect import isclass, signature
 
@@ -34,14 +34,14 @@ def get_module_classes(globals, base_class):
     return target_dict
 
 
-def get_object(obj, base_class, description, dictionary, copy=True):
+def get_object(obj, base_class, description, dictionary):
     if obj is None:
         return obj
     elif isinstance(obj, base_class):
-        return deepcopy(obj) if copy else obj
+        return copy(obj)
     elif isinstance(obj, str):
         if obj in dictionary:
-            return deepcopy(dictionary[obj])
+            return copy(dictionary[obj])
         else:
             raise RuntimeError(f"{description} object '{obj}' unknown")
     else:

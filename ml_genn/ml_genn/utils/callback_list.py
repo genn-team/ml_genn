@@ -15,7 +15,7 @@ def _filter_callbacks(callbacks: Sequence, method: str) -> Sequence[Callback]:
 class CallbackList:
     def __init__(self, callbacks: Sequence, **params):
         self._callbacks = [get_object(c, Callback, "Callback",
-                                      default_callbacks, copy=False)
+                                      default_callbacks)
                            for c in callbacks]
 
         # Loop through callbacks, build dictionary of all callbacks
@@ -74,3 +74,21 @@ class CallbackList:
 
     def __getitem__(self, index):
         return self._callbacks[index]
+    
+    def get_data(self):
+        # Loop through callbacks
+        cb_data = {}
+        for i, c in enumerate(self._callbacks):
+            # If callback has method to get data
+            if hasattr(c, "get_data"):
+                # Get data
+                key, data = c.get_data()
+
+                # Add data to dictionary, using index of
+                # callback as key if key is not provided
+                key = i if key is None else key
+                if key in cb_data:
+                    raise KeyError(f"Callback data key {key} is not unique")
+                cb_data[key] = data
+
+        return cb_data

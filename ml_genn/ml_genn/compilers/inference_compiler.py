@@ -107,7 +107,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_test_end(metrics)
 
         # Return metrics
-        return metrics
+        return metrics, callback_list.get_data()
 
     def evaluate_batch_iter(
             self, inputs, outputs, data: Iterator, num_batches: int = None,
@@ -163,7 +163,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_test_end(metrics)
 
         # Return metrics
-        return metrics
+        return metrics, callback_list.get_data()
 
     def evaluate_batch(self, x: dict, y: dict,
                        metrics="sparse_categorical_accuracy",
@@ -181,7 +181,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # End testing
         callback_list.on_test_end(metrics)
 
-        return metrics
+        return metrics, callback_list.get_data()
 
     def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
                         callback_list: CallbackList):

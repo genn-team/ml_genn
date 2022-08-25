@@ -9,11 +9,14 @@ from ..utils.network import get_underlying_pop
 
 
 class SpikeRecorder(Callback):
-    def __init__(self, pop: PopulationType,
+    def __init__(self, pop: PopulationType, key=None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
+
+        # Stash key
+        self.key = key
 
         # Create example filter
         self._example_filter = ExampleFilter(example_filter)
@@ -26,7 +29,7 @@ class SpikeRecorder(Callback):
         self._pull = False
 
         # List of spike times and IDs
-        self.spikes = ([], [])
+        self._spikes = ([], [])
 
     def set_params(self, compiled_network, **kwargs):
         # Extract compiled network
@@ -109,5 +112,8 @@ class SpikeRecorder(Callback):
                     event_times = start_time_ms + (events[0] * dt)
 
                     # Add to lists
-                    self.spikes[0].append(event_times)
-                    self.spikes[1].append(events[1])
+                    self._spikes[0].append(event_times)
+                    self._spikes[1].append(events[1])
+
+    def get_data(self):
+        return self.key, self._spikes

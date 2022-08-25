@@ -69,8 +69,9 @@ net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
 
 # If we should plot any spikes, turn on spike recording for all populations
 if len(args.plot_sample_spikes) > 0:
-    for p in net.populations:
-        p.record_spikes = True
+    for l in tf_model.layers:
+        if l in tf_layer_pops:
+            tf_layer_pops[l].record_spikes = True
     
 # Create suitable compiler for model
 compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
@@ -81,19 +82,22 @@ compiled_net.genn_model.timing_enabled = args.kernel_profiling
     
 with compiled_net:
     callbacks = ["batch_progress_bar"]
-    
+
     # If we should plot any spikes, add spike recorder callback for all populations
     if len(args.plot_sample_spikes) > 0:
-        for p in net.populations:
-            callbacks.append(SpikeRecorder(p, example_filter=args.plot_sample_spikes))
+        for l in tf_model.layers:
+            if l in tf_layer_pops:
+                callbacks.append(
+                    SpikeRecorder(tf_layer_pops[l], key=l.name,
+                                  example_filter=args.plot_sample_spikes))
 
     # Evaluate ML GeNN modelplot_spikes
     start_time = perf_counter()
-    accuracy = compiled_net.evaluate_numpy({net_inputs[0]: validate_x},
-                                           {net_outputs[0]: validate_y},
-                                           callbacks=callbacks)
+    metrics, cb_data = compiled_net.evaluate_numpy(
+        {net_inputs[0]: validate_x}, {net_outputs[0]: validate_y},
+        callbacks=callbacks)
     end_time = perf_counter()
-    print(f"Accuracy = {100.0 * accuracy[net_outputs[0]].result}%")
+    print(f"Accuracy = {100.0 * metrics[net_outputs[0]].result}%")
     print(f"Time = {end_time - start_time} s")
     
     if args.kernel_profiling:
@@ -107,5 +111,5 @@ with compiled_net:
     
     # Plot spikes if desired
     if len(args.plot_sample_spikes) > 0:
-        plot_spikes(callbacks, args.plot_sample_spikes)
+        plot_spikes(cb_data, args.plot_sample_spikes)
         

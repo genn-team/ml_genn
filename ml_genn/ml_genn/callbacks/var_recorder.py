@@ -11,13 +11,16 @@ from ..utils.network import get_underlying_pop
 
 
 class VarRecorder(Callback):
-    def __init__(self, pop: PopulationType, var: str,
+    def __init__(self, pop: PopulationType, var: str, key=None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None):
         # Get underlying population
         # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
         self._var = var
+
+        # Stash key
+        self.key = key
 
         # Create example filter
         self._example_filter = ExampleFilter(example_filter)
@@ -67,8 +70,7 @@ class VarRecorder(Callback):
         if np.any(self._batch_mask):
             self._data.append([])
 
-    @property
-    def data(self):
+    def get_data(self):
         # Stack 1D or 2D numpy arrays containing value
         # for each timestep in each batch to get
         # (time, batch, neuron) or (time, neuron) arrays
@@ -85,7 +87,5 @@ class VarRecorder(Callback):
             # Finally, remove the batch axis from each matrix
             # (which will now always be size 1) and return
             data = [np.squeeze(d, axis=1) for d in data]
-            return data
-        # Otherwise, return data directly
-        else:
-            return data
+
+        return self.key, data

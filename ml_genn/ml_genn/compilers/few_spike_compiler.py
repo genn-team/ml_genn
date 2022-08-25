@@ -155,7 +155,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         callback_list.on_test_end(metrics)
 
         # Return metrics
-        return metrics
+        return metrics, callback_list.get_data()
 
 
 # Because we want the converter class to be reusable, we don't want

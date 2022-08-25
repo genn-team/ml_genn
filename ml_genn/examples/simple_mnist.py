@@ -4,7 +4,7 @@ from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import IntegrateFire, IntegrateFireInput
 from ml_genn.connectivity import Dense
-
+from ml_genn.callbacks import VarRecorder
 from time import perf_counter
 
 BATCH_SIZE = 128
@@ -30,8 +30,14 @@ testing_labels = np.load("testing_labels.npy")
 with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
-    accuracy = compiled_net.evaluate_numpy({input: testing_images * 0.01},
-                                           {output: testing_labels})
+    callbacks = ["batch_progress_bar", VarRecorder(input, "V", key="in_v")]
+    metrics, cb_data = compiled_net.evaluate_numpy(
+        {input: testing_images * 0.01}, {output: testing_labels},
+        callbacks=callbacks)
     end_time = perf_counter()
-    print(f"Accuracy = {100 * accuracy[output].result}%")
+    print(f"Accuracy = {100 * metrics[output].result}%")
     print(f"Time = {end_time - start_time}s")
+    
+    import matplotlib.pyplot as plt
+    plt.plot(cb_data["in_v"][0])
+    plt.show()

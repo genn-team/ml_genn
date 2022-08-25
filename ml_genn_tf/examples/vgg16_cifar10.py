@@ -129,8 +129,11 @@ if __name__ == '__main__':
     
     # If we should plot any spikes, turn on spike recording for all populations
     if len(args.plot_sample_spikes) > 0:
-        for p in net.populations:
-            p.record_spikes = True
+        for l in tf_model.layers:
+            if l in tf_layer_pops:
+                callbacks.append(
+                    SpikeRecorder(tf_layer_pops[l], key=l.name,
+                                  example_filter=args.plot_sample_spikes))
 
     # Create suitable compiler for model
     compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
@@ -150,13 +153,11 @@ if __name__ == '__main__':
         # Evaluate ML GeNN model
         start_time = perf_counter()
         num_batches = args.n_test_samples // args.batch_size
-        accuracy = compiled_net.evaluate_batch_iter(net_inputs, 
-                                                    net_outputs,
-                                                    iter(mlg_validate_ds),
-                                                    num_batches=num_batches,
-                                                    callbacks=callbacks)
+        metrics, cb_data = compiled_net.evaluate_batch_iter(
+            net_inputs, net_outputs, iter(mlg_validate_ds),
+            num_batches=num_batches, callbacks=callbacks)
         end_time = perf_counter()
-        print(f"Accuracy = {100.0 * accuracy[net_outputs[0]].result}%")
+        print(f"Accuracy = {100.0 * metrics[net_outputs[0]].result}%")
         print(f"Time = {end_time - start_time} s")
         
         if args.kernel_profiling:
@@ -170,4 +171,4 @@ if __name__ == '__main__':
         
         # Plot spikes if desired
         if len(args.plot_sample_spikes) > 0:
-            plot_spikes(callbacks, args.plot_sample_spikes)
+            plot_spikes(cb_data, args.plot_sample_spikes)
