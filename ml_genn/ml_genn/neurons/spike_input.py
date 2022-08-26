@@ -10,6 +10,22 @@ from ..utils.model import NeuronModel
 
 from ..utils.data import batch_spikes, calc_start_spikes
 
+genn_model = {
+    "var_name_types": [("StartSpike", "unsigned int"),
+                       ("EndSpike", "unsigned int",
+                        VarAccess_READ_ONLY_DUPLICATE)],
+    "extra_global_params": [("SpikeTimes", "scalar*")],
+    "threshold_condition_code":
+        """
+        $(StartSpike) != $(EndSpike) && $(t) >= $(SpikeTimes)[$(StartSpike)]
+        """,
+    "reset_code":
+        """
+        $(StartSpike)++;
+        """,            
+    "is_auto_refractory_required": False}
+
+
 class SpikeInput(Neuron):
     def __init__(self, max_spikes=1000000):
         super(SpikeInput, self).__init__()
@@ -39,20 +55,5 @@ class SpikeInput(Neuron):
         genn_pop.push_var_to_device("EndSpike")
     
     def get_model(self, population, dt):
-        genn_model = {
-            "var_name_types": [("StartSpike", "unsigned int"),
-                               ("EndSpike", "unsigned int",
-                                VarAccess_READ_ONLY_DUPLICATE)],
-            "extra_global_params": [("SpikeTimes", "scalar*")],
-            "threshold_condition_code":
-                """
-                $(StartSpike) != $(EndSpike) && $(t) >= $(SpikeTimes)[$(StartSpike)]
-                """,
-            "reset_code":
-                """
-                $(StartSpike)++;
-                """,            
-            "is_auto_refractory_required": False}
-
         return NeuronModel(genn_model, {}, {"StartSpike": 0, "EndSpike": 0},
                            {"SpikeTimes": np.empty(self.max_spikes)})
