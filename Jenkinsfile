@@ -90,9 +90,9 @@ for (b = 0; b < builderNodes.size(); b++) {
             buildStage("Setup virtualenv (${NODE_NAME})") {
                 // Set up new virtualenv
                 echo "Creating virtualenv";
-                sh "rm -rf ${WORKSPACE}/venv";
-                sh "python3 -m venv ${WORKSPACE}/venv";
                 sh """
+				rm -rf ${WORKSPACE}/venv
+				${env.PYTHON} -m venv ${WORKSPACE}/venv
                 . ${WORKSPACE}/venv/bin/activate
                 pip install -U pip
                 pip install numpy pytest pytest-cov wheel flake8
