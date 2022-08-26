@@ -23,11 +23,21 @@ from ..utils.value import (is_value_constant, is_value_array,
                            is_value_initializer)
 
 WeightUpdateModel = namedtuple("WeightUpdateModel",
-                               ["model", "param_vals", "var_vals"])
+                               ["model", "param_vals", "var_vals",
+                                "pre_var_vals", "post_var_vals", "egp_vals"],
+                                defaults=[{}, {}, {}, {}, {}])
 
 
-def set_egps(var_egps, var_dict):
-    for var, var_egp in var_egps.items():
+def set_egp(egp_vals, egp_dict):
+    for egp, value in egp_vals.items():
+        if isinstance(value, np.ndarray):
+            egp_dict[egp].set_values(value.flatten())
+        else:
+            egp_dict[egp].set_values(value)
+
+
+def set_var_egps(var_egp_vals, var_dict):
+    for var, var_egp in var_egp_vals.items():
         for p, value in var_egp.items():
             if isinstance(value, np.ndarray):
                 var_dict[var].set_extra_global_init_param(p, value.flatten())
@@ -90,8 +100,9 @@ def build_model(model):
             else:
                 var_vals_copy[name] = val
 
-    # Return modified model and; params and var values
-    return model_copy, constant_param_vals, var_vals_copy, var_egp
+    # Return modified model and; params, var values and EGPs
+    return (model_copy, constant_param_vals, var_vals_copy, model.egp_vals,
+            var_egp)
 
 
 class Compiler:
@@ -114,7 +125,7 @@ class Compiler:
     def build_neuron_model(self, pop, model, custom_updates,
                            pre_compile_output):
         # Build model customised for parameters and values
-        model_copy, constant_param_vals, var_vals_copy, var_egp =\
+        model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
             build_model(model)
 
         # Delete negative threshold condition if there is one
@@ -123,16 +134,13 @@ class Compiler:
             del model_copy["negative_threshold_condition_code"]
 
         # Return model and modified param and var values
-        return model_copy, constant_param_vals, var_vals_copy, var_egp
+        return (model_copy, constant_param_vals,
+                var_vals_copy, egp_vals, var_egp)
 
     def build_synapse_model(self, conn, model, custom_updates,
                             pre_compile_output):
         # Build model customised for parameters and values
-        model_copy, constant_param_vals, var_vals_copy, var_egp =\
-            build_model(model)
-
-        # Return model and modified param and var values
-        return model_copy, constant_param_vals, var_vals_copy, var_egp
+        return build_model(model)
 
     def build_weight_update_model(self, connection, weight, delay,
                                   custom_updates, pre_compile_output):
@@ -148,10 +156,10 @@ class Compiler:
         if "negative_threshold_condition_code" in src_neuron_model:
             wum = WeightUpdateModel(
                 (signed_static_pulse_delay_model if het_delay
-                 else signed_static_pulse_model), param_vals, {})
+                 else signed_static_pulse_model), param_vals)
 
             # Build model customised for parameters and values
-            model_copy, constant_param_vals, var_vals_copy, var_egp =\
+            model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
                 build_model(wum)
 
             # Insert negative threshold condition code from neuron model
@@ -160,14 +168,15 @@ class Compiler:
         else:
             wum = WeightUpdateModel(
                 (static_pulse_delay_model if het_delay
-                 else static_pulse_model), param_vals, {})
+                 else static_pulse_model), param_vals)
 
             # Build model customised for parameters and values
-            model_copy, constant_param_vals, var_vals_copy, var_egp =\
+            model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
                 build_model(wum)
 
         # Return model and modified param and var values
-        return model_copy, constant_param_vals, var_vals_copy, {}, {}, var_egp
+        return (model_copy, constant_param_vals, var_vals_copy,
+                wum.pre_var_vals, wum.post_var_vals, egp_vals, var_egp)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, pre_compile_output):
@@ -209,7 +218,7 @@ class Compiler:
 
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
-            neuron_model, param_vals, var_vals, var_vals_egp =\
+            neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(pop, neuron.get_model(pop, self.dt),
                                         custom_updates, pre_compile_output)
 
@@ -225,7 +234,10 @@ class Compiler:
             genn_pop.spike_recording_enabled = pop.record_spikes
 
             # Configure EGPs
-            set_egps(var_vals_egp, genn_pop.vars)
+            set_egp(egp_vals, genn_pop.extra_global_params)
+
+            # Configure var init EGPs
+            set_var_egps(var_egp_vals, genn_pop.vars)
 
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
@@ -235,7 +247,8 @@ class Compiler:
         for i, conn in enumerate(network.connections):
             # Build postsynaptic model
             syn = conn.synapse
-            psm, psm_param_vals, psm_var_vals, psm_var_egp =\
+            (psm, psm_param_vals, psm_var_vals, 
+             psm_egp_vals, psm_var_egp_vals) =\
                 self.build_synapse_model(conn, syn.get_model(conn, self.dt),
                                          custom_updates, pre_compile_output)
 
@@ -253,7 +266,8 @@ class Compiler:
 
             # Build weight update model
             (wum, wum_param_vals, wum_var_vals,
-             wum_pre_var_vals, wum_post_var_vals, wum_var_egp) =\
+             wum_pre_var_vals, wum_post_var_vals, 
+             wum_egp_vals, wum_var_egp_vals) =\
                 self.build_weight_update_model(conn, connect_snippet.weight,
                                                delay, custom_updates,
                                                pre_compile_output)
@@ -277,8 +291,12 @@ class Compiler:
                 connectivity_initialiser=connect_snippet.snippet)
 
             # Configure EGPs
-            set_egps(wum_var_egp, genn_pop.vars)
-            set_egps(psm_var_egp, genn_pop.psm_vars)
+            set_egp(wum_egp_vals, genn_pop.extra_global_params)
+            set_egp(psm_egp_vals, genn_pop.psm_extra_global_params)
+            
+            # Configure var init EGPs
+            set_var_egps(wum_var_egp_vals, genn_pop.vars)
+            set_var_egps(psm_var_egp_vals, genn_pop.psm_vars)
 
             # Add to synapse populations dictionary
             connection_populations[conn] = genn_pop
@@ -286,7 +304,7 @@ class Compiler:
         # Loop through custom updates added to model
         i = 0
         for cu_group, cu_list in custom_updates.items():
-            for model, param_vals, var_vals, var_vals_egp, var_refs in cu_list:
+            for model, param_vals, var_vals, egp_vals, var_egp_vals, var_refs in cu_list:
                 # Create customupdate model
                 genn_cum = create_custom_custom_update_class("CustomUpdate",
                                                              **model)
@@ -299,8 +317,8 @@ class Compiler:
                     f"CU{i}", cu_group,
                     genn_cum, param_vals, var_vals, var_refs)
 
-                # Configure EGPs
-                set_egps(var_vals_egp, genn_cu.vars)
+                # Configure var init EGPs
+                set_var_egps(var_egp_vals, genn_cu.vars)
 
                 # Increment counter
                 i += 1
