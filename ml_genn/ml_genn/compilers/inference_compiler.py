@@ -74,7 +74,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         """
         # Determine the number of elements in x and y
         x_size = get_numpy_size(x)
-        y_size = get_numpy_size(x)
+        y_size = get_numpy_size(y)
 
         # Build metrics
         metrics = get_metrics(metrics, y.keys())

@@ -32,7 +32,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         """
         # Determine the number of elements in x and y
         x_size = get_numpy_size(x)
-        y_size = get_numpy_size(x)
+        y_size = get_numpy_size(y)
 
         if x_size is None:
             raise RuntimeError("Each input population must be "
