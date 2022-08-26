@@ -93,7 +93,7 @@ with compiled_net:
 
     # Evaluate ML GeNN modelplot_spikes
     start_time = perf_counter()
-    metrics, cb_data = compiled_net.evaluate_numpy(
+    metrics, cb_data = compiled_net.evaluate(
         {net_inputs[0]: validate_x}, {net_outputs[0]: validate_y},
         callbacks=callbacks)
     end_time = perf_counter()

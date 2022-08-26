@@ -8,11 +8,12 @@ class MeanSquareError(Metric):
         self.reset()
 
     def update(self, y_true, y_pred):
+        y_true = np.asarray(y_true)
         if y_true.shape != y_pred.shape:
             raise RuntimeError(f"Prediction shape:{y_pred.shape} does "
                                f"not match label shape:{y_true.shape}")
 
-        # Add number of one-hot predictions which match labels to correct
+        # Add mean square error between truth and prediction
         self.sum_mse += np.mean(np.square(y_true - y_pred))
 
         # Add shape of true

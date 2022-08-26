@@ -10,7 +10,7 @@ from ..utils.model import CustomUpdateModel
 from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
-from ..utils.data import batch_numpy, get_metrics, get_numpy_size
+from ..utils.data import batch_dataset, get_metrics, get_dataset_size
 
 
 def _build_reset_model(model, custom_updates, var_ref_creator):
@@ -58,23 +58,25 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
 
 class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, evaluate_timesteps: int):
+                 connection_populations, evaluate_timesteps: int,
+                 reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
             evaluate_timesteps)
-
+        
         self.evaluate_timesteps = evaluate_timesteps
+        self.reset_time_between_batches = reset_time_between_batches
 
-    def evaluate_numpy(self, x: dict, y: dict,
-                       metrics: MetricsType = "sparse_categorical_accuracy",
-                       callbacks=[BatchProgressBar()]):
+    def evaluate(self, x: dict, y: dict,
+                 metrics: MetricsType = "sparse_categorical_accuracy",
+                 callbacks=[BatchProgressBar()]):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
         """
         # Determine the number of elements in x and y
-        x_size = get_numpy_size(x)
-        y_size = get_numpy_size(y)
+        x_size = get_dataset_size(x)
+        y_size = get_dataset_size(y)
 
         # Build metrics
         metrics = get_metrics(metrics, y.keys())
@@ -90,8 +92,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Batch x and y
         batch_size = self.genn_model.batch_size
-        x = batch_numpy(x, batch_size, x_size)
-        y = batch_numpy(y, batch_size, y_size)
+        x = batch_dataset(x, batch_size, x_size)
+        y = batch_dataset(y, batch_size, y_size)
 
         # Create callback list and begin testing
         callback_list = CallbackList(callbacks, compiled_network=self,
@@ -201,6 +203,11 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_batch_begin(batch)
 
         self.custom_update("Reset")
+        
+        # Reset time to 0 if desired
+        if self.reset_time_between_batches:
+            self.genn_model.timestep = 0
+            self.genn_model.t = 0.0
 
         # Apply inputs to model
         self.set_input(x)
@@ -224,12 +231,15 @@ class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
-                 prefer_in_memory_connect=True, **genn_kwargs):
+                 prefer_in_memory_connect=True, 
+                 reset_time_between_batches=True,
+                 **genn_kwargs):
         super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
                                                 kernel_profiling,
                                                 prefer_in_memory_connect,
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
+        self.reset_time_between_batches = reset_time_between_batches
 
     def build_neuron_model(self, pop, model, custom_updates,
                            pre_compile_output):
@@ -254,4 +264,5 @@ class InferenceCompiler(Compiler):
                                 connection_populations, pre_compile_output):
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
-                                        self.evaluate_timesteps)
+                                        self.evaluate_timesteps,
+                                        self.reset_time_between_batches)

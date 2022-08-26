@@ -53,9 +53,8 @@ def test_delay_balancing():
 
     with compiled_net:
         # Evaluate model on x, calculate mean square error with x
-        metrics, _ = compiled_net.evaluate_numpy({input: x},
-                                                 {output: x},
-                                                 "mean_square_error")
+        metrics, _ = compiled_net.evaluate({input: x}, {output: x},
+                                           "mean_square_error")
         assert metrics[output].result < 0.1
     
 if __name__ == '__main__':

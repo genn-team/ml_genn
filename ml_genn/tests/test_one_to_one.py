@@ -12,7 +12,6 @@ from ml_genn.connectivity import OneToOne
      (10, False),
      (100, True),
      (100, False)])
-
 def test_one_to_one(size, prefer_in_memory_connect, request):
     # Generate input tensor
     x = np.random.randint(0, 2, size=(1, size)).astype(np.float64)  
@@ -29,7 +28,6 @@ def test_one_to_one(size, prefer_in_memory_connect, request):
 
     with compiled_net:
         # Evaluate ML GeNN model
-        metrics, _ = compiled_net.evaluate_numpy({input: x},
-                                                 {output: x},
-                                                 "mean_square_error")
+        metrics, _ = compiled_net.evaluate({input: x}, {output: x},
+                                           "mean_square_error")
     assert metrics[output].result < 1e-03

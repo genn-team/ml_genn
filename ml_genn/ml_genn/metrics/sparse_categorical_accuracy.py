@@ -8,6 +8,7 @@ class SparseCategoricalAccuracy(Metric):
         self.reset()
 
     def update(self, y_true, y_pred):
+        y_true = np.asarray(y_true)
         if y_true.shape[0] != y_pred.shape[0]:
             raise RuntimeError(f"Prediction shape:{y_pred.shape} does "
                                f"not match label shape:{y_true.shape}")

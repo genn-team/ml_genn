@@ -9,7 +9,7 @@ from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 
-from ..utils.data import get_metrics, get_numpy_size
+from ..utils.data import get_metrics, get_dataset_size
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
@@ -23,16 +23,16 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
 
-    def evaluate_numpy(self, x: dict, y: dict,
-                       metrics="sparse_categorical_accuracy",
-                       callbacks=[BatchProgressBar()]):
+    def evaluate(self, x: dict, y: dict,
+                 metrics="sparse_categorical_accuracy",
+                 callbacks=[BatchProgressBar()]):
         """ Evaluate an input in numpy format against labels
         accuracy --  dictionary containing accuracy of predictions
                      made by each output Population or Layer
         """
         # Determine the number of elements in x and y
-        x_size = get_numpy_size(x)
-        y_size = get_numpy_size(y)
+        x_size = get_dataset_size(x)
+        y_size = get_dataset_size(y)
 
         if x_size is None:
             raise RuntimeError("Each input population must be "
@@ -45,10 +45,11 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
         # Batch x and y
         # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
-        splits = range(self.genn_model.batch_size, x_size,
-                       self.genn_model.batch_size)
-        x_batched = [np.split(d, splits, axis=0) for d in x.values()]
-        y_batched = [np.split(d, splits, axis=0) for d in y.values()]
+        splits = range(0, x_size, self.genn_model.batch_size)
+        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
+                     for d in x.values()]
+        y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
+                     for d in y.values()]
 
         # Zip together and evaluate using iterator
         return self.evaluate_batch_iter(list(x.keys()), list(y.keys()),

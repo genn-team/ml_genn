@@ -30,14 +30,8 @@ testing_labels = np.load("testing_labels.npy")
 with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
-    callbacks = ["batch_progress_bar", VarRecorder(input, "V", key="in_v")]
-    metrics, cb_data = compiled_net.evaluate_numpy(
-        {input: testing_images * 0.01}, {output: testing_labels},
-        callbacks=callbacks)
+    metrics, _ = compiled_net.evaluate({input: testing_images * 0.01},
+                                       {output: testing_labels})
     end_time = perf_counter()
     print(f"Accuracy = {100 * metrics[output].result}%")
     print(f"Time = {end_time - start_time}s")
-    
-    import matplotlib.pyplot as plt
-    plt.plot(cb_data["in_v"][0])
-    plt.show()

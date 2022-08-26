@@ -32,7 +32,6 @@ def test_dense(in_size, out_size, request):
 
     with compiled_net:
         # Evaluate ML GeNN model
-        metrics, _ = compiled_net.evaluate_numpy({input: x},
-                                                 {output: y_true},
-                                                 "mean_square_error")
+        metrics, _ = compiled_net.evaluate({input: x}, {output: y_true},
+                                           "mean_square_error")
     assert metrics[output].result < 1e-03
