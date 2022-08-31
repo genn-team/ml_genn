@@ -153,7 +153,7 @@ class Compiler:
         # If source neuron model defines a negative threshold condition
         src_pop = connection.source()
         src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt)
-        if "negative_threshold_condition_code" in src_neuron_model:
+        if "negative_threshold_condition_code" in src_neuron_model.model:
             wum = WeightUpdateModel(
                 (signed_static_pulse_delay_model if het_delay
                  else signed_static_pulse_model), param_vals)
@@ -164,7 +164,7 @@ class Compiler:
 
             # Insert negative threshold condition code from neuron model
             model_copy["event_threshold_condition_code"] =\
-                src_neuron_model["negative_threshold_condition_code"]
+                src_neuron_model.model["negative_threshold_condition_code"]
         else:
             wum = WeightUpdateModel(
                 (static_pulse_delay_model if het_delay
