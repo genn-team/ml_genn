@@ -28,26 +28,14 @@ class SumVar(Output):
         # Make copy of model
         model_copy = deepcopy(model)
 
-        # If model doesn't have variables or reset code, add empty
-        # **YUCK**
-        if "var_name_types" not in model_copy.model:
-            model_copy.model["var_name_types"] = []
-        if "sim_code" not in model_copy.model:
-            model_copy.model["sim_code"] = ""
-
         # Determine name of sum variable
         sum_var_name = output_var_name + "Sum"
 
         # Add code to update sum variable
-        model_copy.model["sim_code"] +=\
-            f"\n$({sum_var_name}) += $({output_var_name});\n"
+        model.append_sim_code(f"$({sum_var_name}) += $({output_var_name});")
 
-        # Add sum variable with same type as output variable
-        model_copy.model["var_name_types"].append(
-            (sum_var_name, output_var[1]))
-
-        # Initialise to zero
-        model_copy.var_vals[sum_var_name] = 0
+        # Add sum variable with same type as output variable and initialise to zero
+        model.add_var(sum_var_name, output_var[1], 0)
 
         return model_copy
 

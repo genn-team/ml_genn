@@ -41,17 +41,17 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
 
     # Loop through reset vars
     for name, type, value in reset_vars:
-        # Add variable reference and reset value parameter
-        model.model["var_refs"].append((name, type))
-        model.model["param_name_types"].append((name + "Reset", type))
-
-        # Add parameter value and function to create variable reference
+        # Add variable reference using function to create variable reference
         # **NOTE** we use partial rather than a lambda so name is captured
-        model.param_vals[name + "Reset"] = value
-        model.var_refs[name] = partial(var_ref_creator, name=name)
+        model.add_var_ref(name, type, partial(var_ref_creator, name=name))
+
+        # Add reset value parameter
+        model.add_param(name + "Reset", type, value)
+
+        # Add parameter value and function to create 
 
         # Add code to set var
-        model.model["update_code"] += f"$({name}) = $({name}Reset);\n"
+        model.append_update_code(f"$({name}) = $({name}Reset);")
 
     # Build custom update model customised for parameters and values
     custom_model = build_model(model)

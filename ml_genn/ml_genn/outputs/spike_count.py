@@ -16,21 +16,11 @@ class SpikeCount(Output):
         # Make copy of model
         model_copy = deepcopy(model)
 
-        # If model doesn't have variables or reset code, add empty
-        # **YUCK**
-        if "var_name_types" not in model_copy.model:
-            model_copy.model["var_name_types"] = []
-        if "reset_code" not in model_copy.model:
-            model_copy.model["reset_code"] = ""
-
         # Add code to increment spike count
-        model_copy.model["reset_code"] += "\n$(Scount)++;\n"
+        model_copy.append_reset_code("$(Scount)++;")
 
-        # Add integer spike count variable
-        model_copy.model["var_name_types"].append(("Scount", "unsigned int"))
-
-        # Initialise to zero
-        model_copy.var_vals["Scount"] = 0
+        # Add integer spike count variable and initialise to zero
+        model_copy.add_var("Scount", "unsigned int", 0)
 
         return model_copy
 
