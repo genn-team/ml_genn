@@ -6,6 +6,7 @@ from ..metrics import Metric
 
 from copy import deepcopy
 
+from .module import get_object
 from ..metrics import default_metrics
 
 MetricType = Union[Metric, str]
@@ -15,32 +16,21 @@ MetricsType = Union[dict, MetricType]
 PreprocessedSpikes = namedtuple("PreprocessedSpikes", ["end_spikes", "spike_times"])
 
 
-def get_metric(metric: MetricType) -> Metric:
-    if isinstance(metric, Metric):
-        return deepcopy(metric)
-    elif isinstance(metric, str):
-        if metric in default_metrics:
-            return default_metrics[metric]
-        else:
-            raise RuntimeError(f"Metric '{metric}' unknown")
-    else:
-        raise RuntimeError("Metric should be specified as a "
-                           "string or a Metric object")
-
-
 def get_metrics(metrics: MetricsType, outputs) -> dict:
     # If metrics are already in dictionary form
     if isinstance(metrics, dict):
         # If keys match, process each metric and create new dictionary
         if set(metrics.keys()) == set(outputs):
-            return {o: get_metric(m) for o, m in metrics.items()}
+            return {o: get_object(m, Metric, "Metric", default_metrics) 
+                    for o, m in metrics.items()}
         else:
             raise RuntimeError("Metric dictionary keys should "
                                "match network outputs")
     # Otherwise, create new dictionay with
     # copy of processed metric for each output
     else:
-        return {o: get_metric(metrics) for o in outputs}
+        return {o: get_object(metrics, Metric, "Metric", default_metrics)
+                for o in outputs}
 
 
 def get_dataset_size(data) -> Optional[int]:
