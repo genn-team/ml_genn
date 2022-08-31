@@ -47,3 +47,20 @@ def get_object(obj, base_class, description, dictionary):
     else:
         raise RuntimeError(f"{description} objects should be specified "
                            f"either as a string or a {description} object")
+
+
+def get_object_mapping(obj, keys, base_class, description, dictionary) -> dict:
+    # If metrics are already in dictionary form
+    if isinstance(obj, dict):
+        # If keys match, process each metric and create new dictionary
+        if set(obj.keys()) == set(keys):
+            return {k: get_object(o, base_class, description, dictionary) 
+                    for k, o in obj.items()}
+        else:
+            raise RuntimeError(f"{description} dictionary keys "
+                               f"should match network outputs")
+    # Otherwise, create new dictionay with
+    # copy of processed metric for each output
+    else:
+        return {k: get_object(obj, base_class, description, dictionary)
+                for k in keys}

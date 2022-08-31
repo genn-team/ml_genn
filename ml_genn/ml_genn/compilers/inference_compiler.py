@@ -3,6 +3,7 @@ from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..metrics import Metric
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
@@ -10,7 +11,10 @@ from ..utils.model import CustomUpdateModel
 from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
-from ..utils.data import batch_dataset, get_metrics, get_dataset_size
+from ..utils.data import batch_dataset, get_dataset_size
+from ..utils.module import get_object_mapping
+
+from ..metrics import default_metrics
 
 
 def _build_reset_model(model, custom_updates, var_ref_creator):
@@ -79,7 +83,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         y_size = get_dataset_size(y)
 
         # Build metrics
-        metrics = get_metrics(metrics, y.keys())
+        metrics = get_object_mapping(metrics, y.keys(), Metric, 
+                                     "Metric", default_metrics)
 
         if x_size is None:
             raise RuntimeError("Each input population must be "
@@ -124,7 +129,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
 
         # Build metrics
-        metrics = get_metrics(metrics, outputs)
+        metrics = get_object_mapping(metrics, outputs, Metric, 
+                                     "Metric", default_metrics)
 
         # Create callback list and begin testing
         callback_list = CallbackList(callbacks, compiled_network=self,
@@ -171,7 +177,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
                        metrics="sparse_categorical_accuracy",
                        callbacks=[]):
         # Build metrics
-        metrics = get_metrics(metrics, y.keys())
+        metrics = get_object_mapping(metrics, y.keys(), Metric, 
+                                     "Metric", default_metrics)
 
         # Create callback list and begin testing
         callback_list = CallbackList(callbacks)

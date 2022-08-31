@@ -5,13 +5,17 @@ from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 
-from ..utils.data import get_metrics, get_dataset_size
+from ..utils.data import get_dataset_size
+from ..utils.module import get_object_mapping
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
+
+from ..metrics import default_metrics
 
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
@@ -69,7 +73,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
 
         # Build metrics
-        metrics = get_metrics(metrics, outputs)
+        metrics = get_object_mapping(metrics, outputs, Metric, 
+                                     "Metric", default_metrics)
 
         # Get the pipeline depth of each output
         y_pipe_depth = {
