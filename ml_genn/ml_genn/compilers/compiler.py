@@ -7,6 +7,7 @@ from pygenn import GeNNModel
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
 from .compiled_network import CompiledNetwork
 from ..network import Network
+from ..utils.model import WeightUpdateModel
 
 from copy import deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
@@ -21,11 +22,6 @@ from .weight_update_models import (static_pulse_model,
                                    signed_static_pulse_delay_model)
 from ..utils.value import (is_value_constant, is_value_array,
                            is_value_initializer)
-
-WeightUpdateModel = namedtuple("WeightUpdateModel",
-                               ["model", "param_vals", "var_vals",
-                                "pre_var_vals", "post_var_vals", "egp_vals"],
-                                defaults=[{}, {}, {}, {}, {}])
 
 
 def set_egp(egp_vals, egp_dict):

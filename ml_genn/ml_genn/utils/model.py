@@ -34,13 +34,13 @@ class CustomUpdateModel(Model):
                  var_refs={}, egp_vals={}):
         super(CustomUpdateModel, self).__init__(model, param_vals,
                                                 var_vals, egp_vals)
-        
+
         self.var_refs = var_refs
 
     def add_var_ref(self, name, type, value):
         self._add_to_list("var_refs", (name, type))
         self.var_refs[name] = value
-    
+
     def append_update_code(self, code):
         self._append_code("update_code", code)
 
@@ -48,7 +48,7 @@ class NeuronModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
         super(NeuronModel, self).__init__(model, param_vals, 
                                           var_vals, egp_vals)
-    
+
     def add_additional_input_var(self, name, type, init_val):
         self._add_to_list("additional_input_vars", (name, type, init_val))
 
@@ -63,3 +63,11 @@ class SynapseModel(Model):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
 
+class WeightUpdateModel(Model):
+    def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
+                 post_var_vals={}, egp_vals={}):
+        super(WeightUpdateModel, self).__init__(model, param_vals, 
+                                                var_vals, egp_vals)
+        
+        self.pre_var_vals = pre_var_vals
+        self.post_var_vals = post_var_vals
