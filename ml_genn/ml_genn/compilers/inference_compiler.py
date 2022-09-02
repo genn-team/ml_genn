@@ -48,8 +48,6 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
         # Add reset value parameter
         model.add_param(name + "Reset", type, value)
 
-        # Add parameter value and function to create 
-
         # Add code to set var
         model.append_update_code(f"$({name}) = $({name}Reset);")
 
