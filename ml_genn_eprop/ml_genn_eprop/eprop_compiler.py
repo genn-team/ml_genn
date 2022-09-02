@@ -1,9 +1,14 @@
+import numpy as np
+
+from collections import namedtuple
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..losses import Loss, MeanSquareError, SparseCategoricalAccuracy
 from ..neurons import LeakyIntegrateFire
+from ..outputs import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -14,64 +19,35 @@ from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import build_model
 from ..utils.data import batch_dataset, get_metrics, get_dataset_size
+from ..utils.module import get_object_mapping
 
+from ..losses import default_losses
 
-def _build_reset_model(model, custom_updates, var_ref_creator):
-    # If model has any state variables
-    reset_vars = []
-    if "var_name_types" in model.model:
-        # Loop through them
-        for v in model.model["var_name_types"]:
-            # If variable either has default (read-write)
-            # access or this is explicitly set
-            # **TODO** mechanism to exclude variables from reset
-            if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
-                reset_vars.append((v[0], v[1], model.var_vals[v[0]]))
-
-    # If there's nothing to reset, return
-    if len(reset_vars) == 0:
-        return
-
-    # Create empty model
-    model = CustomUpdateModel(model={"param_name_types": [],
-                                     "var_refs": [],
-                                     "update_code": ""},
-                              param_vals={}, var_vals={}, var_refs={})
-
-    # Loop through reset vars
-    for name, type, value in reset_vars:
-        # Add variable reference and reset value parameter
-        model.model["var_refs"].append((name, type))
-        model.model["param_name_types"].append((name + "Reset", type))
-
-        # Add parameter value and function to create variable reference
-        # **NOTE** we use partial rather than a lambda so name is captured
-        model.param_vals[name + "Reset"] = value
-        model.var_refs[name] = partial(var_ref_creator, name=name)
-
-        # Add code to set var
-        model.model["update_code"] += f"$({name}) = $({name}Reset);\n"
-
-    # Build custom update model customised for parameters and values
-    custom_model = build_model(model)
-
-    # Add to list of custom updates to be applied in "Reset" group
-    custom_updates["Reset"].append(custom_model + (model.var_refs,))
+# Because we want the converter class to be reusable, we don't want
+# the data to be a member, instead we encapsulate it in a tuple
+PreCompileOutput = namedtuple("PreCompileOutput",
+                              ["losses"])
 
 
 class EPropCompiler(Compiler):
-    def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
-                 batch_size: int = 1, rng_seed: int = 0,
-                 kernel_profiling: bool = False,
-                 prefer_in_memory_connect=True, 
-                 reset_time_between_batches=True,
-                 **genn_kwargs):
+    def __init__(self, evaluate_timesteps: int, losses,
+                 dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0,
+                 kernel_profiling: bool = False, **genn_kwargs):
         super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                             kernel_profiling,
-                                            prefer_in_memory_connect,
+                                            prefer_in_memory_connect=False,
                                             **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
-        self.reset_time_between_batches = reset_time_between_batches
+        self.losses = losses
+
+    def pre_compile(self, network, **kwargs):
+        # Build list of output populations
+        outputs = [p for p in network.populations
+                   if p.neuron.output is not None]
+                   
+        return PreCompileOutput(
+            losses = get_object_mapping(self.losses, outputs,
+                                        Loss, "Loss", default_losses)
 
     def build_neuron_model(self, pop, model, custom_updates,
                            pre_compile_output):
@@ -80,31 +56,57 @@ class EPropCompiler(Compiler):
 
         # If population is an output
         if pop.neuron.output is not None:
-            # if REGRESSION add "$(E) = $(Y) - $(YStar);"
-            # else add whole CUDA horror after checking shape
+            if not isinstance(pop.neuron.output, Var):
+                raise NotImplementedError("EProp compiler only supports "
+                                          "neurons with Var outputs")
+
+            # Get loss function associated with this output neuron
+            loss = pre_compile_output.losses[pop]
+
+            # Add state variable to hold error
+            # **NOTE** all loss functions require this!
+            model_copy.add_var("E", "scalar", 0.0)
+
+            # **TODO** bias?
+
+            # If loss function is mean-square
+            if isinstance(loss, MeanSquareError):
+                # Add sim-code to calculate error from difference
+                # between y-star and the output variable
+                out_var_name = pop.neuron.output.output_var_name
+                model_copy.append_sim_code(
+                    f"$(E) = $({out_var_name}) - $(YStar);")
+            # Otherwise, if it's sparse categorical
+            elif isinstance(loss, SparseCategoricalAccuracy):
+                flat_shape = np.prod(pop.shape)
+                
+                # Check shape is valid
+                # **NOTE** we COULD add an elaborate mechanism to
+                # create a GeNN population with next power-of-two
+                # size but, once proper population reductions are
+                # implemented, this issue will go away anyway
+                if flat_shape not in [2, 4, 8, 16, 32]:
+                    raise NotImplementedError("Currently EProp compiler only "
+                                              "supports sparse categorical "
+                                              "loss on output populations "
+                                              "with 2, 4, 8, 16 or 32 neurons")
+                
+                
+            else:
+                raise NotImplementedError("EProp compiler only supports "
+                                          "MeanSquareError and "
+                                          "SparseCategorical loss")
         # Otherwise, if neuron isn't an input
         elif not hasattr(pop.neuron, set_input):
-            # If model doesn't have variables or reset code, add empty
-            # **YUCK**
-            f "additional_input_vars" not in model_copy.model:
-                model_copy.model["additional_input_vars"] = []
-            if "var_name_types" not in model_copy.model:
-                model_copy.model["var_name_types"] = []
-            if "sim_code" not in model_copy.model:
-                model_copy.model["sim_code"] = ""
-            
             # Add additional input variable to receive feedback
-            model_copy.model["additional_input_vars"] +=\
-                [("ISynFeedback", "scalar", 0.0)],
+            model_copy.add_additional_input_var("ISynFeedback", "scalar", 0.0)
             
-            # Add additional state variable to store 
+            # Add state variable to store 
             # feedback and initialise to zero
-            model_copy.model["var_name_types"] += ("E", "scalar")
-            model_copy.var_vals["E"] = 0.0
+            model_copy.add_var("E", "scalar", 0.0)
             
             # Add sim code to store incoming feedback in new state variable
-            model_copy.model["sim_code"] +=\
-                f"\n$(E) = $(ISynFeedback);\n"
+            model_copy.append_sim_code("$(E) = $(ISynFeedback);")
         
         # Build neuron model
         return super(EPropCompiler, self).build_neuron_model(
@@ -125,10 +127,15 @@ class EPropCompiler(Compiler):
         target_neuron = conn.target.neuron
         if isinstance(conn.target, LeakyIntegrateFire):
             if not target_neuron.integrate_during_refrac:
-                raise NotImplementedError("")
+                raise NotImplementedError("EProp compiler only supports "
+                                          "LIF neurons which continue "
+                                          "to integrate during their "
+                                          "refractory period")
             
             if not target.relative_reset:
-                raise NotImplementedError("")
+                raise NotImplementedError("EProp compiler only supports "
+                                          "LIF neurons with a relative "
+                                          "reset mechanism")
             
         return super(EPropCompiler, self).build_weight_update_model(
             conn, weight, delay, custom_updates, pre_compile_output)
