@@ -14,12 +14,21 @@ class BatchProgressBar(Callback):
         self._progress_bar.update(1)
 
     def on_test_begin(self):
-        # Initialise progress bar if required
         self._init_prog_bar()
 
     def on_test_end(self, metrics):
-        self._display_metrics(metrics)
-        self._progress_bar.close()
+        self._close_prog_bar()
+    
+    def on_train_begin(self):
+        self._init_prog_bar()
+
+    def on_train_end(self, metrics):
+        self._close_prog_bar()
+    
+    def on_epoch_begin(self, epoch):
+        # Set description with epoch and reset so batch returns to 0
+        self._progress_bar.set_description(f"Epoch {epoch}")
+        self._progress_bar.reset()
 
     def _init_prog_bar(self):
         # If there's no existing progress bar,
@@ -29,9 +38,14 @@ class BatchProgressBar(Callback):
 
         # Reset progress bar
         self._progress_bar.reset()
+    
+    def _close_prog_bar(self):
+        self._display_metrics(metrics)
+        self._progress_bar.close()
 
     def _display_metrics(self, metrics):
         self._progress_bar.set_postfix_str(
             ",".join(f"{type(m).__name__}: {m.result:.4f}"
                      for m in metrics.values()
                      if m.result is not None))
+

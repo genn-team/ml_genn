@@ -39,6 +39,14 @@ class CallbackList:
             _filter_callbacks(self._callbacks, "on_test_begin")
         self._on_test_end_callbacks =\
             _filter_callbacks(self._callbacks, "on_test_end")
+        self._on_train_begin_callbacks =\
+            _filter_callbacks(self._callbacks, "on_train_begin")
+        self._on_train_end_callbacks =\
+            _filter_callbacks(self._callbacks, "on_train_end")
+        self._on_epoch_begin_callbacks =\
+            _filter_callbacks(self._callbacks, "on_epoch_begin")
+        self._on_epoch_end_callbacks =\
+            _filter_callbacks(self._callbacks, "on_epoch_end")
         self._on_batch_begin_callbacks =\
             _filter_callbacks(self._callbacks, "on_batch_begin")
         self._on_batch_end_callbacks =\
@@ -55,6 +63,22 @@ class CallbackList:
     def on_test_end(self, metrics):
         for c in self._on_test_end_callbacks:
             c.on_test_end(metrics)
+
+    def on_train_begin(self):
+        for c in self._on_train_begin_callbacks:
+            c.on_train_begin()
+
+    def on_train_end(self, metrics):
+        for c in self._on_train_end_callbacks:
+            c.on_train_end(metrics)
+
+    def on_epoch_begin(self, epoch):
+        for c in self._on_epoch_begin_callbacks:
+            c.on_epoch_begin(epoch)
+
+    def on_epoch_end(self, epoch, metrics):
+        for c in self._on_epoch_end_callbacks:
+            c.on_epoch_end(epoch, metrics)
 
     def on_batch_begin(self, batch):
         for c in self._on_batch_begin_callbacks:
