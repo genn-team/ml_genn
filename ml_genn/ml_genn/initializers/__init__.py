@@ -1,4 +1,5 @@
 from .initializer import Initializer
+from .normal import Normal
 from .uniform import Uniform
 from .wrapper import Wrapper
 
