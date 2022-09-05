@@ -1,5 +1,3 @@
+# Ignore HDF5 weights etc
 *.h5
 *.hdf5
-runner_*_Debug.*
-runner_*_Release.*
-*_CODE

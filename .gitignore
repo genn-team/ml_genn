@@ -1,3 +1,11 @@
 __pycache__
+
+# No eggs please!
 /ml_genn/ml_genn.egg-info/
 /ml_genn_tf/ml_genn_tf.egg-info/
+ml_genn_eprop/ml_genn_eprop.egg-info/
+
+# Ignore GeNN generated output
+runner_*_Debug.*
+runner_*_Release.*
+*_CODE
