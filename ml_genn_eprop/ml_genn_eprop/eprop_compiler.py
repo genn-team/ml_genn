@@ -3,7 +3,7 @@ import numpy as np
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
 from ml_genn.compilers import Compiler
-from ml_genn.compilers.compiled_network import CompiledNetwork
+from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
 from ml_genn.callbacks import BatchProgressBar
 from ml_genn.losses import (Loss, MeanSquareError,
                             SparseCategoricalCrossentropy)
@@ -112,7 +112,7 @@ class EPropCompiler(Compiler):
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False, 
-                 **genn_kwargs):
+                 reset_time_between_batches: bool = True, **genn_kwargs):
         super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                             kernel_profiling,
                                             prefer_in_memory_connect=False,
@@ -124,6 +124,7 @@ class EPropCompiler(Compiler):
         self.tau_reg = tau_reg
         self.c_reg = c_reg
         self.f_target = f_target
+        self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, **kwargs):
         # Build list of output populations
@@ -152,15 +153,14 @@ class EPropCompiler(Compiler):
 
             # **TODO** bias?
 
-            # If loss function is mean-square
-            flat_shape = np.prod(pop.shape)
-            if isinstance(loss, MeanSquareError):
-                # Add extra global parameter to store Y* throughout example
-                egp_size = (self.batch_size
-                            * flat_shape
-                            * self.example_timesteps)
-                model_copy.add_egp("YStar", "scalar*", np.empty(egp_size))
+            # Add loss function to neuron model
+            # **THINK** semantics of this i.e. modifying inplace 
+            # seem a bit different than others
+            loss.add_to_neuron(model_copy, pop.shape, 
+                               self.batch_size, self.example_timesteps)
 
+            # If loss function is mean-square
+            if isinstance(loss, MeanSquareError):
                 # Add sim-code to calculate error from difference
                 # between y-star and the output variable
                 out_var_name = pop.neuron.output.output_var_name
@@ -173,6 +173,7 @@ class EPropCompiler(Compiler):
                 # create a GeNN population with next power-of-two
                 # size but, once proper population reductions are
                 # implemented, this issue will go away anyway
+                flat_shape = np.prod(pop.shape)
                 if flat_shape not in [2, 4, 8, 16, 32]:
                     raise NotImplementedError("Currently EProp compiler only "
                                               "supports sparse categorical "
@@ -182,13 +183,13 @@ class EPropCompiler(Compiler):
                 # Add sim-code to copy output to a register
                 out_var_name = pop.neuron.output.output_var_name
                 model_copy.append_sim_code(f"scalar m = $({out_var_name});")
-                
+
                 # Generate sim-code to calculate max reduction
                 mask = (2 ** flat_shape) - 1
                 for i in range(int(np.log2(flat_shape))):
                     model_copy.append_sim_code(
                         f"m = fmax(m, __shfl_xor_sync(0x{mask:X}, m, 0x{2 ** i:X}));")
-                
+
                 # Add sim-code to calculate exponential
                 model_copy.append_sim_code(
                     f"""
@@ -200,18 +201,13 @@ class EPropCompiler(Compiler):
                 for i in range(int(np.log2(flat_shape))):
                     model_copy.append_sim_code(
                         f"sumExpPi +=  __shfl_xor_sync(0x{mask:X}, sumExpPi, 0x{2 ** i:X});")
-                
-                # **TODO** support SparseCategoricalCrossEntropy CategoricalCrossEntropy
-                # Add extra global parameter to store labels for each neuron
-                model_copy.add_egp("Labels", "uint8_t*", 
-                                   np.empty(self.batch_size))
-                
+
                 # Add sim-code to convert label 
                 # to one-hot and calculate error
                 model_copy.append_sim_code(
                     f"""
                     const scalar pi = expPi / sumExpPi;
-                    const scalar piStar = ($(id) == $(Labels)[$(batch)]) ? 1.0 : 0.0;
+                    const scalar piStar = ($(id) == $(YTrue)[$(batch)]) ? 1.0 : 0.0;
                     $(E) = pi - piStar;
                     """)
             else:
@@ -312,7 +308,9 @@ class EPropCompiler(Compiler):
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, pre_compile_output):
-        return CompiledInferenceNetwork(genn_model, neuron_populations,
-                                        connection_populations,
-                                        self.evaluate_timesteps,
-                                        self.reset_time_between_batches)
+        return CompiledTrainingNetwork(genn_model, neuron_populations,
+                                       connection_populations,
+                                       pre_compile_output.losses,
+                                       self._optimiser,
+                                       self.example_timesteps,
+                                       self.reset_time_between_batches)
