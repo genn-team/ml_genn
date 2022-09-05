@@ -1,3 +1,5 @@
+from textwrap import dedent
+
 class Model:
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
         self.model = model
@@ -24,6 +26,7 @@ class Model:
         self.model[name].append(value)
 
     def _append_code(self, name, code):
+        code = dedent(code)
         if name not in self.model:
             self.model[name] = f"{code}\n"
         else:
