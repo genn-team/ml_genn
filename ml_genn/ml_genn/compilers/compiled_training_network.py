@@ -1,24 +1,32 @@
+import random
+
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..utils.callback_list import CallbackList
+from ..utils.data import MetricsType
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, evaluate_timesteps: int,
+                 connection_populations, losses, 
+                 optimiser, example_timesteps: int, 
                  reset_time_between_batches: bool = True):
-        super(CompiledInferenceNetwork, self).__init__(
+        super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            evaluate_timesteps)
+            example_timesteps)
         
-        self.evaluate_timesteps = evaluate_timesteps
+        self.losses = losses
+        self.optimiser = optimiser
+        self.example_timesteps = example_timesteps
         self.reset_time_between_batches = reset_time_between_batches
+        
+        # **YUCK** find optimiser custom updates
+        self._optimizer_custom_updates = [
+            c.pop for c in genn_model.custom_updates.values()
+            if c.pop.get_update_group_name() == "GradientLearn"]
 
-    def evaluate(self, x: dict, y: dict,
-                 metrics: MetricsType = "sparse_categorical_accuracy",
-                 callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in numpy format against labels
-        accuracy --  dictionary containing accuracy of predictions
-                     made by each output Population or Layer
-        """
+    def train(self, x: dict, y: dict, num_epochs: int, shuffle: bool = True,
+              metrics: MetricsType = "sparse_categorical_accuracy",
+              callbacks=[BatchProgressBar()]):
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
         y_size = get_dataset_size(y)
@@ -40,31 +48,42 @@ class CompiledTrainingNetwork(CompiledNetwork):
         batch_size = self.genn_model.batch_size
         x = batch_dataset(x, batch_size, x_size)
         y = batch_dataset(y, batch_size, y_size)
-
+        
+        # Zip together x and y
+        xy = list(zip(x, y))
+        
         # Create callback list and begin testing
         callback_list = CallbackList(callbacks, compiled_network=self,
-                                     num_batches=len(x))
-        callback_list.on_test_begin()
+                                     num_batches=len(xy))
+        callback_list.on_train_begin()
 
-        # Loop through batches and evaluate
-        for batch_i, (x_batch, y_batch) in enumerate(zip(x, y)):
-            self._evaluate_batch(batch_i, x_batch, y_batch,
-                                 metrics, callback_list)
+        # Loop through epochs
+        step_i = 0
+        for e in range(num_epochs):
+            # If we should shuffle, do so
+            if shuffle:
+                random.shuffle(xy)
+
+            callback_list.on_epoch_begin(e)
+
+            # Loop through batches and train
+            for batch_i, (x_batch, y_batch) in enumerate(xy):
+                self._train_batch(batch_i, step_i, x_batch, y_batch,
+                                  metrics, callback_list)
+                step += 1
+
+            callback_list.on_epoch_end(e, metrics)
 
         # End testing
-        callback_list.on_test_end(metrics)
+        callback_list.on_train_end(metrics)
 
         # Return metrics
         return metrics, callback_list.get_data()
-
-    def evaluate_batch_iter(
+    """
+    def train_batch_iter(
             self, inputs, outputs, data: Iterator, num_batches: int = None,
             metrics: MetricsType = "sparse_categorical_accuracy",
             callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in iterator format against labels
-        accuracy --  dictionary containing accuracy of predictions
-                     made by each output Population or Layer
-        """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
@@ -114,9 +133,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
-    def evaluate_batch(self, x: dict, y: dict,
-                       metrics="sparse_categorical_accuracy",
-                       callbacks=[]):
+    def train_batch(self, x: dict, y: dict,
+                    metrics="sparse_categorical_accuracy",
+                    callbacks=[]):
         # Build metrics
         metrics = get_object_mapping(metrics, y.keys(), Metric, 
                                      "Metric", default_metrics)
@@ -132,26 +151,13 @@ class CompiledTrainingNetwork(CompiledNetwork):
         callback_list.on_test_end(metrics)
 
         return metrics, callback_list.get_data()
-
-    def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
-                        callback_list: CallbackList):
-        """ Evaluate a single batch of inputs against labels
-        Args:
-        batch --    index of current batch
-        x --        dict mapping input Population or InputLayer to
-                    array containing one batch of inputs
-        y --        dict mapping output Population or Layer to
-                    array containing one batch of labels
-
-        Returns:
-        correct --  dictionary containing number of correct predictions
-                    made by each output Population or Layer
-        """
+    """
+    def _train_batch(self, batch: int, step: int,
+                     x: dict, y: dict, metrics,
+                     callback_list: CallbackList):
         # Start batch
         callback_list.on_batch_begin(batch)
 
-        self.custom_update("Reset")
-        
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
@@ -160,8 +166,18 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Apply inputs to model
         self.set_input(x)
 
+        # Loop through loss functions
+        for pop, loss in losses.items():
+            # Find corresponding GeNN population
+            pop = get_underlying_pop(pop)
+
+            # Update loss function with target labels
+            loss.set_target(self.neuron_populations[pop], y[pop],
+                            pop.shape, self.genn_model.batch_size,
+                            self.example_timesteps)
+ 
         # Simulate timesteps
-        for t in range(self.evaluate_timesteps):
+        for t in range(self.example_timesteps):
             self.step_time(callback_list)
 
         # Get predictions from model
@@ -170,6 +186,15 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
             metrics[o].update(y_true, out_y_pred[:len(y_true)])
+
+        # Loop through optimiser custom updates and set step
+        # **TODO** mechanism for setting learning rate
+        for c in self._optimizer_custom_updates:
+            self.optimiser.set_step(c, step)
+
+        # Now batch is complete, apply gradients
+        # **YUCK** this needs to be more generic - probably use callbacks
+        model.genn_model.custom_update("GradientLearn")
 
         # End batch
         callback_list.on_batch_end(batch, metrics)
