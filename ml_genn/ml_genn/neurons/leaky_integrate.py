@@ -1,3 +1,5 @@
+import numpy as np
+
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
