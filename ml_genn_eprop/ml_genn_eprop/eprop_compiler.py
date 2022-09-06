@@ -31,7 +31,11 @@ class CompileState:
         self.losses = get_object_mapping(losses, outputs,
                                          Loss, "Loss", default_losses)
         self._tau_mem = None
+        self.feedback_connections = []
     
+    def add_feedback_connection(self, conn):
+        self.feedback_connections.append(conn)
+
     @property
     def tau_mem(self):
         assert self._tau_mem is not None
@@ -291,6 +295,8 @@ class EPropCompiler(Compiler):
                 param_vals={"Alpha": alpha},
                 var_vals={"g": weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0})
+            
+            pre_compile_output.add_feedback_connection(conn)
 
         assert self.batch_size == 1
 
@@ -313,6 +319,14 @@ class EPropCompiler(Compiler):
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, pre_compile_output):
+        # Fuse pre and postsynaptic updates for efficiency
+        genn_model._model.set_fuse_postsynaptic_models(True)
+        genn_model._model.set_fuse_pre_post_weight_update_models(True)
+
+        # Correctly target feedback
+        for c in pre_compile_output.feedback_connections:
+            connection_populations[c].pre_target_var = "ISynFeedback"
+
         return CompiledTrainingNetwork(genn_model, neuron_populations,
                                        connection_populations,
                                        pre_compile_output.losses,
