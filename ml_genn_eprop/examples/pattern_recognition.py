@@ -8,6 +8,7 @@ from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn_eprop import EPropCompiler
 
+from time import perf_counter
 from ml_genn.utils.data import preprocess_spikes
 
 NUM_INPUT = 20
