@@ -17,13 +17,13 @@ class BatchProgressBar(Callback):
         self._init_prog_bar()
 
     def on_test_end(self, metrics):
-        self._close_prog_bar()
+        self._close_prog_bar(metrics)
     
     def on_train_begin(self):
         self._init_prog_bar()
 
     def on_train_end(self, metrics):
-        self._close_prog_bar()
+        self._close_prog_bar(metrics)
     
     def on_epoch_begin(self, epoch):
         # Set description with epoch and reset so batch returns to 0
@@ -39,7 +39,7 @@ class BatchProgressBar(Callback):
         # Reset progress bar
         self._progress_bar.reset()
     
-    def _close_prog_bar(self):
+    def _close_prog_bar(self, metrics):
         self._display_metrics(metrics)
         self._progress_bar.close()
 
