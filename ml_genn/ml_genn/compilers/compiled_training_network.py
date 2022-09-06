@@ -6,8 +6,9 @@ from ..metrics import Metric
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 
-from ..utils.data import get_dataset_size
+from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
+from ..utils.network import get_underlying_pop
 
 from ..metrics import default_metrics
 
@@ -36,7 +37,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
         y_size = get_dataset_size(y)
-        print(x_size, y_size)
+
         # Build metrics
         metrics = get_object_mapping(metrics, y.keys(), Metric, 
                                      "Metric", default_metrics)
@@ -54,7 +55,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         batch_size = self.genn_model.batch_size
         x = batch_dataset(x, batch_size, x_size)
         y = batch_dataset(y, batch_size, y_size)
-        
+
         # Zip together x and y
         xy = list(zip(x, y))
         
@@ -173,7 +174,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.set_input(x)
 
         # Loop through loss functions
-        for pop, loss in losses.items():
+        for pop, loss in self.losses.items():
             # Find corresponding GeNN population
             pop = get_underlying_pop(pop)
 
