@@ -160,12 +160,18 @@ class EPropCompiler(Compiler):
                                self.batch_size, self.example_timesteps)
 
             # If loss function is mean-square
+            flat_shape = np.prod(pop.shape)
             if isinstance(loss, MeanSquareError):
                 # Add sim-code to calculate error from difference
                 # between y-star and the output variable
                 out_var_name = pop.neuron.output.output_var_name
                 model_copy.append_sim_code(
-                    f"$(E) = $({out_var_name}) - $(YStar);")
+                    f"""
+                    const unsigned int timestep = (int)round($(t) / {self.dt});
+                    const unsigned int index = (timestep * {self.batch_size} * {flat_shape})
+                                               + ($(batch) * {flat_shape}) + $(id);
+                    $(E) = $({out_var_name}) - $(YTrue)[index];
+                    """)
             # Otherwise, if it's sparse categorical
             elif isinstance(loss, SparseCategoricalCrossentropy):
                 # Check shape is valid
@@ -173,7 +179,6 @@ class EPropCompiler(Compiler):
                 # create a GeNN population with next power-of-two
                 # size but, once proper population reductions are
                 # implemented, this issue will go away anyway
-                flat_shape = np.prod(pop.shape)
                 if flat_shape not in [2, 4, 8, 16, 32]:
                     raise NotImplementedError("Currently EProp compiler only "
                                               "supports sparse categorical "

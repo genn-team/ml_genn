@@ -2,8 +2,14 @@ import random
 
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..metrics import Metric
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
+
+from ..utils.data import get_dataset_size
+from ..utils.module import get_object_mapping
+
+from ..metrics import default_metrics
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
@@ -30,7 +36,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
         y_size = get_dataset_size(y)
-
+        print(x_size, y_size)
         # Build metrics
         metrics = get_object_mapping(metrics, y.keys(), Metric, 
                                      "Metric", default_metrics)
