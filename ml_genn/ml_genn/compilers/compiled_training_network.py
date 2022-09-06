@@ -28,7 +28,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         
         # **YUCK** find optimiser custom updates
         self._optimizer_custom_updates = [
-            c.pop for c in genn_model.custom_updates.values()
+            c for c in genn_model.custom_updates.values()
             if c.pop.get_update_group_name() == "GradientLearn"]
 
     def train(self, x: dict, y: dict, num_epochs: int, shuffle: bool = True,
@@ -61,7 +61,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         
         # Create callback list and begin testing
         callback_list = CallbackList(callbacks, compiled_network=self,
-                                     num_batches=len(xy))
+                                     num_batches=len(xy), num_epochs=num_epochs)
         callback_list.on_train_begin()
 
         # Loop through epochs
@@ -77,7 +77,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             for batch_i, (x_batch, y_batch) in enumerate(xy):
                 self._train_batch(batch_i, step_i, x_batch, y_batch,
                                   metrics, callback_list)
-                step += 1
+                step_i += 1
 
             callback_list.on_epoch_end(e, metrics)
 
@@ -201,7 +201,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Now batch is complete, apply gradients
         # **YUCK** this needs to be more generic - probably use callbacks
-        model.genn_model.custom_update("GradientLearn")
+        self.genn_model.custom_update("GradientLearn")
 
         # End batch
         callback_list.on_batch_end(batch, metrics)

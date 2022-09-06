@@ -43,9 +43,9 @@ class Adam(Optimiser):
         moment_scale_1 = 1.0 / (1.0 - (self.beta1 ** (step + 1)))
         moment_scale_2 = 1.0 / (1.0 - (self.beta2 ** (step + 1)))
 
-        genn_pop.extra_global_params["Alpha"].view[:] = self.alpha
-        genn_pop.extra_global_params["MomentScale1"].view[:] = moment_scale_1
-        genn_pop.extra_global_params["MomentScale2"].view[:] = moment_scale_2
+        genn_cu.extra_global_params["Alpha"].view[:] = self.alpha
+        genn_cu.extra_global_params["MomentScale1"].view[:] = moment_scale_1
+        genn_cu.extra_global_params["MomentScale2"].view[:] = moment_scale_2
     
     def get_model(self, gradient_ref, var_ref):
         return CustomUpdateModel(
