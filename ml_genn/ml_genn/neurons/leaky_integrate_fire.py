@@ -51,7 +51,7 @@ class LeakyIntegrateFire(Neuron):
         if self.relative_reset:
             genn_model["reset_code"] =\
                 """
-                $(V) -= $(Vreset);
+                $(V) -= ($(Vthresh) - $(Vreset));
                 """
         else:
             genn_model["reset_code"] =\
