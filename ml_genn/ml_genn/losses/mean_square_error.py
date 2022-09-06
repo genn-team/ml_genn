@@ -14,7 +14,8 @@ class MeanSquareError(Loss):
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
                    example_timesteps: int):
         # Check shape
-        expected_shape = (example_timesteps, batch_size) + shape
+        expected_shape = (batch_size, example_timesteps) + shape
+        y_true = np.asarray(y_true)
         if y_true.shape != expected_shape:
             raise RuntimeError(f"Shape of target data for MeanSquareError "
                                f"loss should be {expected_shape}")
