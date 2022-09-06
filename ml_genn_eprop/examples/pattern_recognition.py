@@ -6,12 +6,19 @@ from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
-
 from ml_genn_eprop import EPropCompiler
+
+from ml_genn.utils.data import preprocess_spikes
 
 NUM_INPUT = 20
 NUM_HIDDEN = 256
 NUM_OUTPUT = 3
+
+NUM_FREQ_COMP = 3
+
+IN_GROUP_SIZE = 4
+IN_ACTIVE_ISI = 10
+IN_ACTIVE_INTERVAL = 200
 
 network = Network()
 with network:
@@ -33,3 +40,35 @@ with network:
 compiler = EPropCompiler(example_timesteps=1000, losses="mean_square_error",
                          optimiser=Adam(), c_reg=3.0)
 compiled_net = compiler.compile(network)
+
+# Pick random phases and outputs for the three frequency components 
+# components used to generate patterns for each output neuron
+output_phase = np.random.random((NUM_OUTPUT, NUM_FREQ_COMP)) * 2.0 * np.pi
+output_ampl = 0.5 + (np.random.random((NUM_OUTPUT, NUM_FREQ_COMP)) * (2.0 - 0.5))
+
+# Convert frequencies of each component into row vector
+freq = [2.0, 3.0, 5.0]
+freq_radians = np.multiply(freq, 1.0 * np.pi / 1000.0)
+
+# Calculate sinusoid of each frequency for 
+sinusoids = np.sin(np.outer(np.arange(1000), freq_radians))
+
+# Calculate Y* target
+y_star = np.zeros((1000, 1, NUM_OUTPUT))
+for i in range(NUM_OUTPUT):
+    for c in range(NUM_FREQ_COMP):
+        y_star[:, 0, i] += output_ampl[i, c] * sinusoids[:, c] + output_phase[i, c]
+
+
+# Determine which group each input neuron is in
+in_group = np.arange(NUM_INPUT, dtype=int) // IN_GROUP_SIZE
+
+
+# Fill matrix rows with base spike times
+num_spikes_per_neuron = IN_ACTIVE_INTERVAL // IN_ACTIVE_ISI
+in_spike_times = np.empty((NUM_INPUT, num_spikes_per_neuron))
+in_spike_times[:] = np.arange(0, IN_ACTIVE_INTERVAL, IN_ACTIVE_ISI)
+
+# Shift each spike time by group start
+in_spike_times += np.reshape(in_group * IN_ACTIVE_INTERVAL, (NUM_INPUT, 1))
+
