@@ -78,7 +78,7 @@ with network:
     # Connections
     Connection(input, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_INPUT))))
     Connection(hidden, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
-    Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_INPUT))))
+    Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
 
 compiler = EPropCompiler(example_timesteps=1000, losses="mean_square_error",
                          optimiser=Adam(0.003), c_reg=3.0)
