@@ -173,15 +173,14 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Apply inputs to model
         self.set_input(x)
 
-        # Loop through loss functions
-        for pop, loss in self.losses.items():
-            # Find corresponding GeNN population
-            pop = get_underlying_pop(pop)
-
+        # Loop through outputs
+        for pop, y_true in y.items():
             # Update loss function with target labels
-            loss.set_target(self.neuron_populations[pop], y[pop],
-                            pop.shape, self.genn_model.batch_size,
-                            self.example_timesteps)
+            underlying_pop = get_underlying_pop(pop)
+            self.losses[underlying_pop].set_target(
+                self.neuron_populations[underlying_pop],
+                y_true, underlying_pop.shape, self.genn_model.batch_size,
+                self.example_timesteps)
  
         # Simulate timesteps
         for t in range(self.example_timesteps):
