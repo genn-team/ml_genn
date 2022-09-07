@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class SumVar(Output):
     def __call__(self, model: NeuronModel, output_var_name=None):
-        self.output_var_name = self.output_var_name
+        self.output_var_name = output_var_name
 
         if "var_name_types" not in model.model:
             raise RuntimeError("SumVar output can only be used "
@@ -19,8 +19,8 @@ class SumVar(Output):
 
         # Find output variable
         try:
-            output_var = (v for v in model.model["var_name_types"]
-                          if v[0] == output_var_name)
+            output_var = [v for v in model.model["var_name_types"]
+                          if v[0] == output_var_name]
         except StopIteration:
             raise RuntimeError(f"Model does not variable "
                                f"{output_var_name} to sum")
@@ -32,10 +32,10 @@ class SumVar(Output):
         sum_var_name = output_var_name + "Sum"
 
         # Add code to update sum variable
-        model.append_sim_code(f"$({sum_var_name}) += $({output_var_name});")
+        model_copy.append_sim_code(f"$({sum_var_name}) += $({output_var_name});")
 
         # Add sum variable with same type as output variable and initialise to zero
-        model.add_var(sum_var_name, output_var[1], 0)
+        model_copy.add_var(sum_var_name, output_var[0][1], 0)
 
         return model_copy
 
