@@ -301,9 +301,15 @@ class EPropCompiler(Compiler):
         assert self.batch_size == 1
 
         # Get optimiser model for this connection
+        zero_gradient = (self.batch_size == 1)
         optimiser_model = self._optimiser.get_model(
             lambda _, c_pops: create_wu_var_ref(c_pops[conn], "DeltaG"),
-            lambda _, c_pops: create_wu_var_ref(c_pops[conn], "g"))
+            lambda _, c_pops: create_wu_var_ref(c_pops[conn], "g"),
+            zero_gradient)
+        
+        # If batch size is greater than 1, add gradient reduction
+        if self.batch_size > 1:
+            assert False
 
         # Build and add to list of custom updates
         # to be applied in "GradientLearn" group

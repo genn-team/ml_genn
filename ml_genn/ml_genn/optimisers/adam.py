@@ -1,9 +1,12 @@
-from pygenn.genn_wrapper.Models import VarAccessMode_READ_ONLY
+from pygenn.genn_wrapper.Models import (VarAccessMode_READ_ONLY,
+                                        VarAccessMode_READ_WRITE)
 from .optimiser import Optimiser
 from ..utils.model import CustomUpdateModel
 from ..utils.snippet import ConstantValueDescriptor
 
-    
+from copy import deepcopy
+
+
 genn_model = {
     "var_name_types": [("M", "scalar"), ("V", "scalar")],
     "param_name_types": [("Beta1", "scalar"), ("Beta2", "scalar"),
@@ -47,12 +50,29 @@ class Adam(Optimiser):
         genn_cu.extra_global_params["MomentScale1"].view[:] = moment_scale_1
         genn_cu.extra_global_params["MomentScale2"].view[:] = moment_scale_2
     
-    def get_model(self, gradient_ref, var_ref):
-        return CustomUpdateModel(
-            genn_model,
+    def get_model(self, gradient_ref, var_ref, zero_gradient: bool):
+        model =  CustomUpdateModel(
+            deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,
              "Epsilon": self.epsilon},
             {"M": 0.0, "V": 0.0},
             {"Gradient": gradient_ref, "Variable": var_ref},
             {"Alpha": self.alpha, "FirstMomentScale": 0.0, 
              "SecondMomentScale": 0.0})
+         
+        # If a optimiser than automatically zeros 
+        # gradients should be provided
+        if zero_gradient:
+            # Change variable access model of gradient to read-write
+            model.set_var_ref_access_mode("Gradient",
+                                          VarAccessMode_READ_WRITE)
+
+            # Add update code to zero the gradient
+            model.append_update_code(
+                """
+                // Zero gradient
+                $(Gradient) = 0.0;
+                """)
+
+        # Return model
+        return model
