@@ -144,10 +144,6 @@ class EPropCompiler(Compiler):
 
         # If population is an output
         if pop.neuron.output is not None:
-            if not isinstance(pop.neuron.output, Var):
-                raise NotImplementedError("EProp compiler only supports "
-                                          "neurons with Var outputs")
-
             # Get loss function associated with this output neuron
             loss = pre_compile_output.losses[pop]
 
