@@ -1,7 +1,8 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from ml_genn import Connection, Population, Network
-from ml_genn.callbacks import VarRecorder
+from ml_genn.callbacks import SpikeRecorder, VarRecorder
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
@@ -34,10 +35,10 @@ freq_radians = np.multiply(freq, 1.0 * np.pi / 1000.0)
 sinusoids = np.sin(np.outer(np.arange(1000), freq_radians))
 
 # Calculate Y* target
-y_star = np.zeros((1000, 1, NUM_OUTPUT))
+y_star = np.zeros((1000, NUM_OUTPUT))
 for i in range(NUM_OUTPUT):
     for c in range(NUM_FREQ_COMP):
-        y_star[:, 0, i] += output_ampl[i, c] * sinusoids[:, c] + output_phase[i, c]
+        y_star[:, i] += output_ampl[i, c] * sinusoids[:, c] + output_phase[i, c]
 
 
 # Determine which group each input neuron is in
@@ -61,7 +62,7 @@ network = Network()
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=len(in_spike_ids)),
-                                  NUM_INPUT)
+                                  NUM_INPUT, record_spikes=True)
     hidden = Population(LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
                                            tau_refrac=5.0, 
                                            relative_reset=True,
@@ -82,10 +83,27 @@ compiled_net = compiler.compile(network)
 with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
-    metrics, _ = compiled_net.train({input: in_spikes},
-                                    {output: y_star},
-                                    num_epochs=1000,
-                                    metrics="mean_square_error")
+    callbacks = ["batch_progress_bar", 
+                 VarRecorder(output, "V", key="output_v"),
+                 VarRecorder(output, "E", key="output_e"),
+                 SpikeRecorder(input, key="input_spikes")]
+    metrics, cb_data  = compiled_net.train({input: [in_spikes]},
+                                           {output: [y_star]},
+                                           num_epochs=1000,
+                                           callbacks=callbacks)
     end_time = perf_counter()
-    print(f"Accuracy = {metrics[output].result}")
+    #print(f"Accuracy = {metrics[output].result}")
     print(f"Time = {end_time - start_time}s")
+
+    fig, axes = plt.subplots(3, 5, sharex="col", sharey="row")
+    for i in range(5):
+        for c in range(3):
+            axes[0,i].scatter(cb_data["input_spikes"][0][i * 200],
+                              cb_data["input_spikes"][1][i * 200], s=2)
+            actor = axes[1,i].plot(cb_data["output_v"][i * 200][:,c])[0]
+            axes[1,i].plot(y_star[:,c], linestyle="--", color=actor.get_color())
+            axes[2,i].plot(cb_data["output_e"][i * 200][:,c])
+    axes[0,0].set_ylabel("Input spikes")
+    axes[0,1].set_ylabel("Y")
+    axes[0,2].set_ylabel("E")
+    plt.show()
