@@ -1,3 +1,4 @@
+import mnist
 import numpy as np
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
@@ -12,8 +13,7 @@ BATCH_SIZE = 128
 # Create sequential model
 network = SequentialNetwork()
 with network:
-    input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784,
-                       record_spikes=True)
+    input = InputLayer(IntegrateFireInput(v_thresh=5.0), 784)
     Layer(Dense(weight=np.load("weights_0_1.npy")),
           IntegrateFire(v_thresh=5.0))
     output = Layer(Dense(weight=np.load("weights_1_2.npy")),
@@ -24,8 +24,8 @@ compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
 compiled_net = compiler.compile(network)
 
 # Load testing data
-testing_images = np.load("testing_images.npy")
-testing_labels = np.load("testing_labels.npy")
+testing_images = np.reshape(mnist.test_images(), (-1, 784))
+testing_labels = mnist.test_labels()
 
 with compiled_net:
     # Evaluate model on numpy dataset
