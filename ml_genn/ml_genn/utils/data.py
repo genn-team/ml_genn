@@ -37,7 +37,6 @@ def batch_dataset(data, batch_size, size):
 
     return data_list
 
- 
 def preprocess_spikes(times, ids, num_neurons):
     # Calculate end spikes
     end_spikes = np.cumsum(np.bincount(ids, minlength=num_neurons))
@@ -87,7 +86,27 @@ def preprocess_tonic_spikes(events, ordering, shape, time_scale=1.0 / 1000.0):
     return preprocess_spikes(events["t"] * time_scale, spike_event_ids,
                              num_neurons)
 
-    
+def log_latency_encode_data(data, tau_eff, thresh, max_stimuli_time=None):
+    # Loop through examples
+    spikes = []
+    for i in range(len(data)):
+        # Get boolean mask of spiking neurons
+        spike_vector = data[i] > thresh
+        
+        # Take cumulative sum to get end spikes
+        end_spikes = np.cumsum(spike_vector)
+            
+        # Extract values of spiking pixels
+        spike_pixels = data[i,spike_vector]
+        
+        # Calculate spike times
+        spike_times = tau_eff * np.log(spike_pixels / (spike_pixels - thresh))
+        
+        # Add to list
+        spikes.append(PreprocessedSpikes(end_spikes, spike_times))
+
+    return spikes
+
 def batch_spikes(spikes: Sequence[PreprocessedSpikes], batch_size: int):
     # Check that there aren't more examples than batch size 
     # and that all examples are for same number of neurons
@@ -128,7 +147,6 @@ def batch_spikes(spikes: Sequence[PreprocessedSpikes], batch_size: int):
 
     return PreprocessedSpikes(batch_end_spikes, batch_spike_times)
 
-
 def calc_start_spikes(end_spikes):
     start_spikes = np.empty_like(end_spikes)
     if end_spikes.ndim == 1:
@@ -140,3 +158,9 @@ def calc_start_spikes(end_spikes):
         start_spikes[:, 1:] = end_spikes[:, :-1]
 
     return start_spikes
+
+def calc_max_spikes(spikes):
+    return max(len(p.spike_times) for p in spikes)
+
+def calc_latest_spike_time(spikes):
+    return max(max(p.spike_times) for p in spikes)
