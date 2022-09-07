@@ -1,6 +1,7 @@
 from textwrap import dedent
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 
+
 class Model:
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
         self.model = model
@@ -48,6 +49,7 @@ class Model:
         # Take first two elements of existing var and add access mode
         var_array[var_index] = var_array[var_index][:2] + (access_mode,)
 
+
 class CustomUpdateModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, 
                  var_refs={}, egp_vals={}):
@@ -66,6 +68,7 @@ class CustomUpdateModel(Model):
     def append_update_code(self, code):
         self._append_code("update_code", code)
 
+
 class NeuronModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
         super(NeuronModel, self).__init__(model, param_vals, 
@@ -80,10 +83,12 @@ class NeuronModel(Model):
     def append_reset_code(self, code):
         self._append_code("reset_code", code)
 
+
 class SynapseModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
+
 
 class WeightUpdateModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
