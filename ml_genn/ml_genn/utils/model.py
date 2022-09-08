@@ -31,6 +31,10 @@ class Model:
     def set_var_access_mode(self, name, access_mode):
         self._set_access_model("var_name_types", name, access_mode)
 
+    @property
+    def reset_vars(self):
+        return self._get_reset_vars("var_name_types")
+
     def process(self):
         # Make copy of model
         model_copy = deepcopy(self.model)
@@ -90,6 +94,10 @@ class Model:
         return (model_copy, constant_param_vals, var_vals_copy, 
                 self.egp_vals, var_egp)
 
+    @property
+    def reset_vars(self):
+        return self._get_reset_vars("var_name_types")
+
     def _add_to_list(self, name, value):
         if name not in self.model:
             self.model[name] = []
@@ -112,6 +120,18 @@ class Model:
         
         # Take first two elements of existing var and add access mode
         var_array[var_index] = var_array[var_index][:2] + (access_mode,)
+    
+    def _get_reset_vars(self, name):
+        reset_vars = []
+        if name in self.model:
+            # Loop through them
+            for v in self.model[name]:
+                # If variable either has default (read-write)
+                # access or this is explicitly set
+                # **TODO** mechanism to exclude variables from reset
+                if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
+                    reset_vars.append((v[0], v[1], self.var_vals[v[0]]))
+        return reset_vars
 
 
 class CustomUpdateModel(Model):
@@ -169,3 +189,11 @@ class WeightUpdateModel(Model):
     def process(self):
         return (super(WeightUpdateModel, self).process() 
                 + (self.pre_var_vals, self.post_var_vals))
+
+    @property
+    def reset_pre_vars(self):
+        return self._get_reset_vars("pre_var_name_types")
+
+    @property
+    def reset_post_vars(self):
+        return self._get_reset_vars("post_var_name_types")

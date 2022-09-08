@@ -211,18 +211,8 @@ class CompileState:
             "PSM", self._psm_reset_vars)
 
     def _add_reset_vars(self, model, key, dict):
-        # If model has any state variables
-        reset_vars = []
-        if "var_name_types" in model.model:
-            # Loop through them
-            for v in model.model["var_name_types"]:
-                # If variable either has default (read-write)
-                # access or this is explicitly set
-                # **TODO** mechanism to exclude variables from reset
-                if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
-                    reset_vars.append((v[0], v[1], model.var_vals[v[0]]))
-
         # If are reset variables, add to dictionary
+        reset_vars = model.reset_vars
         if len(reset_vars) > 0:
             dict[key] = reset_vars
     
