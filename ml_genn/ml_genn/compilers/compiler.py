@@ -115,11 +115,11 @@ class Compiler:
     def pre_compile(self, network, **kwargs):
         return None
 
-    def calculate_delay(self, conn, delay, pre_compile_output):
+    def calculate_delay(self, conn, delay, compile_state):
         return delay
 
     def build_neuron_model(self, pop, model, custom_updates,
-                           pre_compile_output):
+                           compile_state):
         # Build model customised for parameters and values
         model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
             build_model(model)
@@ -134,12 +134,12 @@ class Compiler:
                 var_vals_copy, egp_vals, var_egp)
 
     def build_synapse_model(self, conn, model, custom_updates,
-                            pre_compile_output):
+                            compile_state):
         # Build model customised for parameters and values
         return build_model(model)
 
     def build_weight_update_model(self, connection, weight, delay,
-                                  custom_updates, pre_compile_output):
+                                  custom_updates, compile_state):
         # Build parameter values
         param_vals = {"g": weight}
         het_delay = not is_value_constant(delay)
@@ -175,7 +175,7 @@ class Compiler:
                 wum.pre_var_vals, wum.post_var_vals, egp_vals, var_egp)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, pre_compile_output):
+                                connection_populations, compile_state):
         return CompiledNetwork(genn_model, neuron_populations,
                                connection_populations)
 
@@ -201,7 +201,7 @@ class Compiler:
         genn_model.timing_enabled = self.kernel_profiling
 
         # Run any pre-compilation logic
-        pre_compile_output = self.pre_compile(network, **kwargs)
+        compile_state = self.pre_compile(network, **kwargs)
 
         # Loop through populations
         custom_updates = defaultdict(list)
@@ -216,7 +216,7 @@ class Compiler:
             neuron = pop.neuron
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(pop, neuron.get_model(pop, self.dt),
-                                        custom_updates, pre_compile_output)
+                                        custom_updates, compile_state)
 
             # Create custom neuron model
             genn_neuron_model = create_custom_neuron_class("NeuronModel",
@@ -246,7 +246,7 @@ class Compiler:
             (psm, psm_param_vals, psm_var_vals, 
              psm_egp_vals, psm_var_egp_vals) =\
                 self.build_synapse_model(conn, syn.get_model(conn, self.dt),
-                                         custom_updates, pre_compile_output)
+                                         custom_updates, compile_state)
 
             # Create custom postsynaptic model
             genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
@@ -258,7 +258,7 @@ class Compiler:
 
             # Calculate delay
             delay = self.calculate_delay(conn, connect_snippet.delay,
-                                         pre_compile_output)
+                                         compile_state)
 
             # Build weight update model
             (wum, wum_param_vals, wum_var_vals,
@@ -266,7 +266,7 @@ class Compiler:
              wum_egp_vals, wum_var_egp_vals) =\
                 self.build_weight_update_model(conn, connect_snippet.weight,
                                                delay, custom_updates,
-                                               pre_compile_output)
+                                               compile_state)
 
             # Create custom weight update model
             genn_wum = create_custom_weight_update_class("WeightUpdateModel",
@@ -321,4 +321,4 @@ class Compiler:
 
         return self.create_compiled_network(genn_model, neuron_populations,
                                             connection_populations,
-                                            pre_compile_output)
+                                            compile_state)

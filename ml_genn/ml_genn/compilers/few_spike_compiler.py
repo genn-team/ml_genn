@@ -166,8 +166,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
 # Because we want the converter class to be reusable, we don't want
 # the data to be a member, instead we encapsulate it in a tuple
-PreCompileOutput = namedtuple("PreCompileOutput",
-                              ["con_delay", "pop_pipeline_depth"])
+CompileState = namedtuple("CompileState",
+                          ["con_delay", "pop_pipeline_depth"])
 
 
 class FewSpikeCompiler(Compiler):
@@ -213,17 +213,17 @@ class FewSpikeCompiler(Compiler):
                 pop_pipeline_depth[p] = 0
                 next_pipeline_depth[p] = 0
 
-        return PreCompileOutput(con_delay=con_delay,
-                                pop_pipeline_depth=pop_pipeline_depth)
+        return CompileState(con_delay=con_delay,
+                            pop_pipeline_depth=pop_pipeline_depth)
 
-    def calculate_delay(self, conn, delay, pre_compile_output):
+    def calculate_delay(self, conn, delay, compile_state):
         # Check that no delay is already set
         assert is_value_constant(delay) and delay == 0
 
-        return pre_compile_output.con_delay[conn]
+        return compile_state.con_delay[conn]
 
     def build_neuron_model(self, pop, model, custom_updates,
-                           pre_compile_output):
+                           compile_state):
         # Check neuron model is supported
         if not isinstance(pop.neuron, (FewSpikeRelu, FewSpikeReluInput)):
             raise NotImplementedError(
@@ -232,19 +232,19 @@ class FewSpikeCompiler(Compiler):
 
         # Build neuron model
         return super(FewSpikeCompiler, self).build_neuron_model(
-            pop, model, custom_updates, pre_compile_output)
+            pop, model, custom_updates, compile_state)
 
     def build_synapse_model(self, conn, model, custom_updates,
-                            pre_compile_output):
+                            compile_state):
         if not isinstance(conn.synapse, Delta):
             raise NotImplementedError("FewSpike models only "
                                       "support Delta synapses")
 
         return super(FewSpikeCompiler, self).build_synapse_model(
-            conn, model, custom_updates, pre_compile_output)
+            conn, model, custom_updates, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, pre_compile_output):
+                                connection_populations, compile_state):
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
                                        connection_populations, self.k,
-                                       pre_compile_output.pop_pipeline_depth)
+                                       compile_state.pop_pipeline_depth)

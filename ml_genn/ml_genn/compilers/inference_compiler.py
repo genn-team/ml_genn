@@ -247,26 +247,26 @@ class InferenceCompiler(Compiler):
         self.reset_time_between_batches = reset_time_between_batches
 
     def build_neuron_model(self, pop, model, custom_updates,
-                           pre_compile_output):
+                           compile_state):
         _build_reset_model(
             model, custom_updates,
             lambda n_pops, _, name: create_var_ref(n_pops[pop], name))
 
         # Build neuron model
         return super(InferenceCompiler, self).build_neuron_model(
-            pop, model, custom_updates, pre_compile_output)
+            pop, model, custom_updates, compile_state)
 
     def build_synapse_model(self, conn, model, custom_updates,
-                            pre_compile_output):
+                            compile_state):
         _build_reset_model(
             model, custom_updates,
             lambda _, c_pops, name: create_psm_var_ref(c_pops[conn], name))
 
         return super(InferenceCompiler, self).build_synapse_model(
-            conn, model, custom_updates, pre_compile_output)
+            conn, model, custom_updates, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, pre_compile_output):
+                                connection_populations, compile_state):
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
                                         self.evaluate_timesteps,
