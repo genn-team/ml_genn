@@ -8,51 +8,11 @@ from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
 
-from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 
 from ..metrics import default_metrics
-
-
-def _build_reset_model(model, custom_updates, var_ref_creator):
-    # If model has any state variables
-    reset_vars = []
-    if "var_name_types" in model.model:
-        # Loop through them
-        for v in model.model["var_name_types"]:
-            # If variable either has default (read-write)
-            # access or this is explicitly set
-            # **TODO** mechanism to exclude variables from reset
-            if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
-                reset_vars.append((v[0], v[1], model.var_vals[v[0]]))
-
-    # If there's nothing to reset, return
-    if len(reset_vars) == 0:
-        return
-
-    # Create empty model
-    model = CustomUpdateModel(model={"param_name_types": [],
-                                     "var_refs": [],
-                                     "update_code": ""},
-                              param_vals={}, var_vals={}, var_refs={})
-
-    # Loop through reset vars
-    for name, type, value in reset_vars:
-        # Add variable reference using function to create variable reference
-        # **NOTE** we use partial rather than a lambda so name is captured
-        model.add_var_ref(name, type, partial(var_ref_creator, name=name))
-
-        # Add reset value parameter
-        model.add_param(name + "Reset", type, value)
-
-        # Add code to set var
-        model.append_update_code(f"$({name}) = $({name}Reset);")
-
-    # Build custom update model customised for parameters and values
-    # and add to list of custom updates to be applied in "Reset" group
-    custom_updates["Reset"].append(model.process())
 
 
 class CompiledInferenceNetwork(CompiledNetwork):
@@ -228,6 +188,68 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # End batch
         callback_list.on_batch_end(batch, metrics)
 
+class CompileState:
+    def __init__(self):
+        self._neuron_reset_vars = {}
+        self._psm_reset_vars = {}
+    
+    def add_neuron_reset_vars(self, model, pop):
+        self._add_reset_vars(model, pop, self._neuron_reset_vars)
+
+    def add_psm_reset_vars(self, model, conn):
+        self._add_reset_vars(model, conn, self._psm_reset_vars)
+    
+    def create_reset_custom_updates(self, compiler, genn_model,
+                                    neuron_pops, conn_pops):
+        self._create_reset_custom_updates(
+            compiler, genn_model, 
+            lambda key, name: create_var_ref(neuron_pops[key], name),
+            "Neuron", self._neuron_reset_vars)
+        self._create_reset_custom_updates(
+            compiler, genn_model, 
+            lambda key, name: create_psm_var_ref(conn_pops[key], name),
+            "PSM", self._psm_reset_vars)
+
+    def _add_reset_vars(self, model, key, dict):
+        # If model has any state variables
+        reset_vars = []
+        if "var_name_types" in model.model:
+            # Loop through them
+            for v in model.model["var_name_types"]:
+                # If variable either has default (read-write)
+                # access or this is explicitly set
+                # **TODO** mechanism to exclude variables from reset
+                if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
+                    reset_vars.append((v[0], v[1], model.var_vals[v[0]]))
+
+        # If are reset variables, add to dictionary
+        if len(reset_vars) > 0:
+            dict[key] = reset_vars
+    
+    def _create_reset_custom_updates(self, compiler, genn_model,
+                                     var_ref_creator, suffix, dict):
+        # Loop through variables to reset associated with each key
+        for i, (key, reset_vars) in enumerate(dict.items()):
+            # Create empty model
+            model = CustomUpdateModel(model={"param_name_types": [],
+                                             "var_refs": [],
+                                             "update_code": ""},
+                                      param_vals={}, var_vals={}, var_refs={})
+
+            # Loop through reset vars
+            for name, type, value in reset_vars:
+                # Add variable reference using function to create variable reference
+                model.add_var_ref(name, type, var_ref_creator(key, name))
+
+                # Add reset value parameter
+                model.add_param(name + "Reset", type, value)
+
+                # Add code to set var
+                model.append_update_code(f"$({name}) = $({name}Reset);")
+                
+            # Add custom update
+            compiler.add_custom_update(genn_model, model, 
+                                       "Reset", f"CUReset{suffix}{i}")
 
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
@@ -243,27 +265,31 @@ class InferenceCompiler(Compiler):
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
 
-    def build_neuron_model(self, pop, model, custom_updates,
-                           compile_state):
-        _build_reset_model(
-            model, custom_updates,
-            lambda n_pops, _, name: create_var_ref(n_pops[pop], name))
+    def pre_compile(self, network, **kwargs):
+        return CompileState()
+
+    def build_neuron_model(self, pop, model, compile_state):
+        # Add any neuron reset variables to compile state
+        compile_state.add_neuron_reset_vars(model, pop)
 
         # Build neuron model
         return super(InferenceCompiler, self).build_neuron_model(
-            pop, model, custom_updates, compile_state)
+            pop, model, compile_state)
 
-    def build_synapse_model(self, conn, model, custom_updates,
-                            compile_state):
-        _build_reset_model(
-            model, custom_updates,
-            lambda _, c_pops, name: create_psm_var_ref(c_pops[conn], name))
+    def build_synapse_model(self, conn, model, compile_state):
+        # Add any PSM reset variables to compile state
+        compile_state.add_psm_reset_vars(model, conn)
 
         return super(InferenceCompiler, self).build_synapse_model(
-            conn, model, custom_updates, compile_state)
+            conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
+        # Create custom updates to implement variable reset
+        compile_state.create_reset_custom_updates(self, genn_model,
+                                                  neuron_populations,
+                                                  connection_populations)
+
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
                                         self.evaluate_timesteps,
