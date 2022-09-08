@@ -14,14 +14,13 @@ class SparseCategoricalCrossentropy(Loss):
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
                    example_timesteps: int):
         # Check shape
-        expected_shape = (batch_size,)
-        if y_true.shape != expected_shape:
-            raise RuntimeError(f"Shape of target data for "
+        if y_true.ndim != 1 or len(y_true) > batch_size:
+            raise RuntimeError(f"Length of target data for "
                                f"SparseCategoricalCrossentropy loss should "
-                               f"be {expected_shape}")
+                               f"be < {batch_size}")
         
         # Copy flattened y_true into view
-        genn_pop.extra_global_params["YTrue"].view[:] = y_true.flatten()
+        genn_pop.extra_global_params["YTrue"].view[:len(y_true)] = y_true
         
         # Push YTrue to device
         genn_pop.push_extra_global_param_to_device("YTrue")
