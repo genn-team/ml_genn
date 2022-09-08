@@ -13,15 +13,13 @@ from copy import deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
                                create_custom_neuron_class,
                                create_custom_postsynaptic_class,
-                               create_custom_weight_update_class,
-                               init_var)
+                               create_custom_weight_update_class)
 from string import digits
 from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
                                    signed_static_pulse_model,
                                    signed_static_pulse_delay_model)
-from ..utils.value import (is_value_constant, is_value_array,
-                           is_value_initializer)
+from ..utils.value import is_value_constant
 
 
 def set_egp(egp_vals, egp_dict):
@@ -39,66 +37,6 @@ def set_var_egps(var_egp_vals, var_dict):
                 var_dict[var].set_extra_global_init_param(p, value.flatten())
             else:
                 var_dict[var].set_extra_global_init_param(p, value)
-
-
-def build_model(model):
-    # Make copy of model
-    model_copy = deepcopy(model.model)
-
-    # Remove param names and types from copy of model (those that will "
-    # be implemented as GeNN parameters will live in param_names)
-    if "param_name_types" in model_copy:
-        param_name_types = model_copy["param_name_types"]
-        del model_copy["param_name_types"]
-    else:
-        param_name_types = []
-
-    # If there aren't any variables already, add dictionary
-    if "var_name_types" not in model_copy:
-        model_copy["var_name_types"] = []
-
-    # Convert any initializers to GeNN
-    var_vals_copy = {}
-    var_egp = {}
-    for name, val in model.var_vals.items():
-        if is_value_initializer(val):
-            snippet = val.get_snippet()
-            var_vals_copy[name] = init_var(snippet.snippet,
-                                           snippet.param_vals)
-            var_egp[name] = snippet.egp_vals
-        elif is_value_array(val):
-            var_vals_copy[name] = val.flatten()
-        else:
-            var_vals_copy[name] = val
-
-    # Loop through parameters in model
-    model_copy["param_names"] = []
-    constant_param_vals = {}
-    for name, ptype in param_name_types:
-        # Get value
-        val = model.param_vals[name]
-
-        # If value is a plain number, add it's name to parameter names
-        if is_value_constant(val):
-            model_copy["param_names"].append(name)
-            constant_param_vals[name] = val
-        # Otherwise, turn it into a (read-only) variable
-        else:
-            model_copy["var_name_types"].append((name, ptype,
-                                                 VarAccess_READ_ONLY))
-            if is_value_initializer(val):
-                snippet = val.get_snippet()
-                var_vals_copy[name] = init_var(snippet.snippet,
-                                               snippet.param_vals)
-                var_egp[name] = snippet.egp_vals
-            elif is_value_array(val):
-                var_vals_copy[name] = val.flatten()
-            else:
-                var_vals_copy[name] = val
-
-    # Return modified model and; params, var values and EGPs
-    return (model_copy, constant_param_vals, var_vals_copy, model.egp_vals,
-            var_egp)
 
 
 class Compiler:
@@ -120,23 +58,19 @@ class Compiler:
 
     def build_neuron_model(self, pop, model, custom_updates,
                            compile_state):
-        # Build model customised for parameters and values
-        model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
-            build_model(model)
+        model_copy = deepcopy(model)
 
         # Delete negative threshold condition if there is one
         # (this gets incorporated into weight update model)
-        if "negative_threshold_condition_code" in model_copy:
-            del model_copy["negative_threshold_condition_code"]
+        if "negative_threshold_condition_code" in model_copy.model:
+            del model_copy.model["negative_threshold_condition_code"]
 
-        # Return model and modified param and var values
-        return (model_copy, constant_param_vals,
-                var_vals_copy, egp_vals, var_egp)
+        return model_copy
 
     def build_synapse_model(self, conn, model, custom_updates,
                             compile_state):
         # Build model customised for parameters and values
-        return build_model(model)
+        return model
 
     def build_weight_update_model(self, connection, weight, delay,
                                   custom_updates, compile_state):
@@ -151,28 +85,18 @@ class Compiler:
         src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt)
         if "negative_threshold_condition_code" in src_neuron_model.model:
             wum = WeightUpdateModel(
-                (signed_static_pulse_delay_model if het_delay
-                 else signed_static_pulse_model), param_vals)
-
-            # Build model customised for parameters and values
-            model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
-                build_model(wum)
+                (deepcopy(signed_static_pulse_delay_model) if het_delay
+                 else deepcopy(signed_static_pulse_model)), param_vals)
 
             # Insert negative threshold condition code from neuron model
-            model_copy["event_threshold_condition_code"] =\
+            wum.model["event_threshold_condition_code"] =\
                 src_neuron_model.model["negative_threshold_condition_code"]
+            
+            return wum
         else:
-            wum = WeightUpdateModel(
-                (static_pulse_delay_model if het_delay
-                 else static_pulse_model), param_vals)
-
-            # Build model customised for parameters and values
-            model_copy, constant_param_vals, var_vals_copy, egp_vals, var_egp =\
-                build_model(wum)
-
-        # Return model and modified param and var values
-        return (model_copy, constant_param_vals, var_vals_copy,
-                wum.pre_var_vals, wum.post_var_vals, egp_vals, var_egp)
+            return WeightUpdateModel(
+                (deepcopy(static_pulse_delay_model) if het_delay
+                 else deepcopy(static_pulse_model)), param_vals)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
@@ -216,7 +140,8 @@ class Compiler:
             neuron = pop.neuron
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(pop, neuron.get_model(pop, self.dt),
-                                        custom_updates, compile_state)
+                                        custom_updates, 
+                                        compile_state).process()
 
             # Create custom neuron model
             genn_neuron_model = create_custom_neuron_class("NeuronModel",
@@ -246,7 +171,8 @@ class Compiler:
             (psm, psm_param_vals, psm_var_vals, 
              psm_egp_vals, psm_var_egp_vals) =\
                 self.build_synapse_model(conn, syn.get_model(conn, self.dt),
-                                         custom_updates, compile_state)
+                                         custom_updates,
+                                         compile_state).process()
 
             # Create custom postsynaptic model
             genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
@@ -262,11 +188,11 @@ class Compiler:
 
             # Build weight update model
             (wum, wum_param_vals, wum_var_vals,
-             wum_pre_var_vals, wum_post_var_vals, 
-             wum_egp_vals, wum_var_egp_vals) =\
+             wum_egp_vals, wum_var_egp_vals,
+             wum_pre_var_vals, wum_post_var_vals) =\
                 self.build_weight_update_model(conn, connect_snippet.weight,
                                                delay, custom_updates,
-                                               compile_state)
+                                               compile_state).process()
 
             # Create custom weight update model
             genn_wum = create_custom_weight_update_class("WeightUpdateModel",

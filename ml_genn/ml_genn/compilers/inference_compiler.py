@@ -10,7 +10,6 @@ from ..utils.model import CustomUpdateModel
 
 from functools import partial
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
-from .compiler import build_model
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 
@@ -52,10 +51,8 @@ def _build_reset_model(model, custom_updates, var_ref_creator):
         model.append_update_code(f"$({name}) = $({name}Reset);")
 
     # Build custom update model customised for parameters and values
-    custom_model = build_model(model)
-
-    # Add to list of custom updates to be applied in "Reset" group
-    custom_updates["Reset"].append(custom_model + (model.var_refs,))
+    # and add to list of custom updates to be applied in "Reset" group
+    custom_updates["Reset"].append(model.process())
 
 
 class CompiledInferenceNetwork(CompiledNetwork):
