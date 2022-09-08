@@ -7,7 +7,7 @@ from pygenn import GeNNModel
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
 from .compiled_network import CompiledNetwork
 from ..network import Network
-from ..utils.model import WeightUpdateModel
+from ..utils.model import CustomUpdateModel, WeightUpdateModel
 
 from copy import deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
@@ -37,6 +37,25 @@ def set_var_egps(var_egp_vals, var_dict):
                 var_dict[var].set_extra_global_init_param(p, value.flatten())
             else:
                 var_dict[var].set_extra_global_init_param(p, value)
+
+def create_reset_custom_update(reset_vars, var_ref_creator):
+    # Create empty model
+    model = CustomUpdateModel(model={"param_name_types": [],
+                                     "var_refs": [],
+                                     "update_code": ""},
+                              param_vals={}, var_vals={}, var_refs={})
+
+    # Loop through reset vars
+    for name, type, value in reset_vars:
+        # Add variable reference using function to create variable reference
+        model.add_var_ref(name, type, var_ref_creator(name))
+
+        # Add reset value parameter
+        model.add_param(name + "Reset", type, value)
+
+        # Add code to set var
+        model.append_update_code(f"$({name}) = $({name}Reset);")
+    return model
 
 
 class Compiler:

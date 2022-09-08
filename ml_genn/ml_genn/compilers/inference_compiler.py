@@ -9,6 +9,7 @@ from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
 
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
+from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 
@@ -188,58 +189,46 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # End batch
         callback_list.on_batch_end(batch, metrics)
 
+
 class CompileState:
     def __init__(self):
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
     
     def add_neuron_reset_vars(self, model, pop):
-        self._add_reset_vars(model, pop, self._neuron_reset_vars)
+        reset_vars = model.reset_vars
+        if len(reset_vars) > 0:
+            self._neuron_reset_vars[pop] = reset_vars
 
     def add_psm_reset_vars(self, model, conn):
-        self._add_reset_vars(model, conn, self._psm_reset_vars)
+        reset_vars = model.reset_vars
+        if len(reset_vars) > 0:
+            self._psm_reset_vars[conn] = reset_vars
     
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops, conn_pops):
-        self._create_reset_custom_updates(
-            compiler, genn_model, 
-            lambda key, name: create_var_ref(neuron_pops[key], name),
-            "Neuron", self._neuron_reset_vars)
-        self._create_reset_custom_updates(
-            compiler, genn_model, 
-            lambda key, name: create_psm_var_ref(conn_pops[key], name),
-            "PSM", self._psm_reset_vars)
+        # Loop through neuron variables to reset
+        for i, (pop, reset_vars) in enumerate(self._neuron_reset_vars.items()):
+            # Create reset model
+            model = create_reset_custom_update(
+                reset_vars,
+                lambda name: create_var_ref(neuron_pops[pop], name))
 
-    def _add_reset_vars(self, model, key, dict):
-        # If are reset variables, add to dictionary
-        reset_vars = model.reset_vars
-        if len(reset_vars) > 0:
-            dict[key] = reset_vars
-    
-    def _create_reset_custom_updates(self, compiler, genn_model,
-                                     var_ref_creator, suffix, dict):
-        # Loop through variables to reset associated with each key
-        for i, (key, reset_vars) in enumerate(dict.items()):
-            # Create empty model
-            model = CustomUpdateModel(model={"param_name_types": [],
-                                             "var_refs": [],
-                                             "update_code": ""},
-                                      param_vals={}, var_vals={}, var_refs={})
-
-            # Loop through reset vars
-            for name, type, value in reset_vars:
-                # Add variable reference using function to create variable reference
-                model.add_var_ref(name, type, var_ref_creator(key, name))
-
-                # Add reset value parameter
-                model.add_param(name + "Reset", type, value)
-
-                # Add code to set var
-                model.append_update_code(f"$({name}) = $({name}Reset);")
-                
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
-                                       "Reset", f"CUReset{suffix}{i}")
+                                       "Reset", f"CUResetNeuron{i}")
+
+        # Loop through psm variables to reset
+        for i, (conn, reset_vars) in enumerate(self._psm_reset_vars.items()):
+            # Create reset model
+            model = create_reset_custom_update(
+                reset_vars,
+                lambda name: create_psm_var_ref(conn_pops[conn], name))
+
+            # Add custom update
+            compiler.add_custom_update(genn_model, model, 
+                                       "Reset", f"CUResetPSM{i}")
+
 
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
