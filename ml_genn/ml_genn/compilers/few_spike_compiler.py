@@ -222,8 +222,7 @@ class FewSpikeCompiler(Compiler):
 
         return compile_state.con_delay[conn]
 
-    def build_neuron_model(self, pop, model, custom_updates,
-                           compile_state):
+    def build_neuron_model(self, pop, model, compile_state):
         # Check neuron model is supported
         if not isinstance(pop.neuron, (FewSpikeRelu, FewSpikeReluInput)):
             raise NotImplementedError(
@@ -232,16 +231,15 @@ class FewSpikeCompiler(Compiler):
 
         # Build neuron model
         return super(FewSpikeCompiler, self).build_neuron_model(
-            pop, model, custom_updates, compile_state)
+            pop, model, compile_state)
 
-    def build_synapse_model(self, conn, model, custom_updates,
-                            compile_state):
+    def build_synapse_model(self, conn, model, compile_state):
         if not isinstance(conn.synapse, Delta):
             raise NotImplementedError("FewSpike models only "
                                       "support Delta synapses")
 
         return super(FewSpikeCompiler, self).build_synapse_model(
-            conn, model, custom_updates, compile_state)
+            conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
