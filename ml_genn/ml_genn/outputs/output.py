@@ -1,2 +1,4 @@
 class Output:
-    pass
+    @property
+    def reset_vars(self):
+        return []

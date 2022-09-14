@@ -18,6 +18,7 @@ from ml_genn.utils.model import CustomUpdateModel, WeightUpdateModel
 
 from copy import deepcopy
 from pygenn.genn_model import create_var_ref, create_wu_var_ref
+from ml_genn.compilers.compiler import create_reset_custom_update
 from ml_genn.utils.module import get_object, get_object_mapping
 from ml_genn.utils.value import is_value_constant
 
@@ -32,6 +33,25 @@ class CompileState:
         self._tau_mem = None
         self.feedback_connections = []
         self.optimiser_connections = []
+        self._neuron_reset_vars = {}
+    
+    def add_neuron_output_reset_vars(self, pop):
+        reset_vars = pop.neuron.output.reset_vars
+        if len(reset_vars) > 0:
+            self._neuron_reset_vars[pop] = reset_vars
+
+    def create_reset_custom_updates(self, compiler, genn_model,
+                                    neuron_pops):
+        # Loop through neuron variables to reset
+        for i, (pop, reset_vars) in enumerate(self._neuron_reset_vars.items()):
+            # Create reset model
+            model = create_reset_custom_update(
+                reset_vars,
+                lambda name: create_var_ref(neuron_pops[pop], name))
+
+            # Add custom update
+            compiler.add_custom_update(genn_model, model, 
+                                       "Reset", f"CUResetNeuron{i}")
 
     @property
     def tau_mem(self):
@@ -148,6 +168,9 @@ class EPropCompiler(Compiler):
 
         # If population is an output
         if pop.neuron.output is not None:
+            # Add any output reset variables to compile state
+            compile_state.add_neuron_output_reset_vars(pop)
+
             # Get loss function associated with this output neuron
             loss = compile_state.losses[pop]
 
@@ -349,6 +372,10 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates[c] = self.add_custom_update(
                 genn_model, optimiser_model,
                 "GradientLearn", f"CUGradientLearn{i}")
+        
+        # Create custom updates to implement variable reset
+        compile_state.create_reset_custom_updates(self, genn_model,
+                                                  neuron_populations)
 
         return CompiledTrainingNetwork(genn_model, neuron_populations,
                                        connection_populations,

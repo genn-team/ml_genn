@@ -164,6 +164,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
                      callback_list: CallbackList):
         # Start batch
         callback_list.on_batch_begin(batch)
+        
+        # Reset
+        # **YUCK** this needs to be more generic - probably use callbacks
+        self.genn_model.custom_update("Reset")
 
         # Reset time to 0 if desired
         if self.reset_time_between_batches:

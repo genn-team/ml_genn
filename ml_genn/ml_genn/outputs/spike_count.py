@@ -31,3 +31,7 @@ class SpikeCount(Output):
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars["Scount"].view,
                           (batch_size,) + shape)
+
+    @property
+    def reset_vars(self):
+        return [("Scount", "unsigned int", 0)]
