@@ -10,12 +10,6 @@ class Neuron:
         super(Neuron, self).__init__(**kwargs)
         self.output = get_object(output, Output, "Output", default_outputs)
 
-    def add_output_logic(self, model, output_var_name=None):
-        if self.output is not None:
-            return self.output(model, output_var_name)
-        else:
-            return model
-
     def get_output(self, genn_pop, batch_size: int, shape):
         if self.output is None:
             raise RuntimeError("Cannot get output from neuron "

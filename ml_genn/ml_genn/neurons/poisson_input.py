@@ -31,4 +31,4 @@ class PoissonInput(Neuron, InputBase):
                 $(Input_pre) < 0.0 && spike
                 """
 
-        return NeuronModel(genn_model, {}, {"Input": 0.0})
+        return NeuronModel(genn_model, None, {}, {"Input": 0.0})

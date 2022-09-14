@@ -107,5 +107,4 @@ class LeakyIntegrateFire(Neuron):
                 """
 
         # Return model
-        return self.add_output_logic(
-            NeuronModel(genn_model, param_vals, var_vals), "V")
+        return NeuronModel(genn_model, "V", param_vals, var_vals)

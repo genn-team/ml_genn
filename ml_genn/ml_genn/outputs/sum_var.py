@@ -7,32 +7,33 @@ from copy import deepcopy
 
 
 class SumVar(Output):
-    def __call__(self, model: NeuronModel, output_var_name=None):
-        self.output_var_name = output_var_name
+    def add_output_logic(self, model: NeuronModel):
+        self.output_var_name = model.output_var_name
 
         if "var_name_types" not in model.model:
             raise RuntimeError("SumVar output can only be used "
                                "with models with state variables")
-        if output_var_name is None:
+        if self.output_var_name is None:
             raise RuntimeError("SumVar output requires that models "
                                "specify an output variable name")
 
         # Find output variable
         try:
             output_var = [v for v in model.model["var_name_types"]
-                          if v[0] == output_var_name]
+                          if v[0] == self.output_var_name]
         except StopIteration:
             raise RuntimeError(f"Model does not variable "
-                               f"{output_var_name} to sum")
+                               f"{self.output_var_name} to sum")
 
         # Make copy of model
         model_copy = deepcopy(model)
 
         # Determine name of sum variable
-        sum_var_name = output_var_name + "Sum"
+        sum_var_name = self.output_var_name + "Sum"
 
         # Add code to update sum variable
-        model_copy.append_sim_code(f"$({sum_var_name}) += $({output_var_name});")
+        model_copy.append_sim_code(
+            f"$({sum_var_name}) += $({self.output_var_name});")
 
         # Add sum variable with same type as output variable and initialise to zero
         model_copy.add_var(sum_var_name, output_var[0][1], 0)

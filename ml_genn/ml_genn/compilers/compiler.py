@@ -57,6 +57,12 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
         model.append_update_code(f"$({name}) = $({name}Reset);")
     return model
 
+def get_neuron_model_with_output(pop, dt):
+    neuron_model = pop.neuron.get_model(pop, dt)
+    if pop.neuron.output is None:
+        return neuron_model
+    else:
+        return pop.neuron.output.add_output_logic(neuron_model)
 
 class Compiler:
     def __init__(self, dt: float = 1.0, batch_size: int = 1,
@@ -173,8 +179,9 @@ class Compiler:
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
-                self.build_neuron_model(pop, neuron.get_model(pop, self.dt),
-                                        compile_state).process()
+                self.build_neuron_model(
+                    pop, get_neuron_model_with_output(pop, self.dt),
+                    compile_state).process()
 
             # Create custom neuron model
             genn_neuron_model = create_custom_neuron_class("NeuronModel",

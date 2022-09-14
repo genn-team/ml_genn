@@ -28,8 +28,7 @@ class LeakyIntegrate(Neuron):
         self.tau_mem = tau_mem
 
     def get_model(self, population, dt):
-        return self.add_output_logic(
-            NeuronModel(genn_model,
-                        {"Alpha": np.exp(-dt / self.tau_mem), 
-                         "Bias": self.bias},
-                        {"V": self.v}), "V")
+        return NeuronModel(genn_model, "V",
+                           {"Alpha": np.exp(-dt / self.tau_mem), 
+                            "Bias": self.bias},
+                           {"V": self.v})

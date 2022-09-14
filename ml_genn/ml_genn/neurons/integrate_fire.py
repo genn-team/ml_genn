@@ -34,7 +34,6 @@ class IntegrateFire(Neuron):
         self.v = v
 
     def get_model(self, population, dt):
-        return self.add_output_logic(
-            NeuronModel(genn_model,
-                        {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
-                        {"V": self.v}), "V")
+        return NeuronModel(genn_model, "V",
+                           {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
+                           {"V": self.v})

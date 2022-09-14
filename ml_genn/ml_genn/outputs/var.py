@@ -5,23 +5,23 @@ from ..utils.model import NeuronModel
 
 
 class Var(Output):
-    def __call__(self, model: NeuronModel, output_var_name=None):
-        self.output_var_name = output_var_name
+    def add_output_logic(self, model: NeuronModel):
+        self.output_var_name = model.output_var_name
 
         if "var_name_types" not in model.model:
             raise RuntimeError("Var output can only be used "
                                "with models with state variables")
-        if output_var_name is None:
+        if self.output_var_name is None:
             raise RuntimeError("Var output requires that models "
                                "specify an output variable name")
 
         # Find output variable
         try:
             output_var = (v for v in model.model["var_name_types"]
-                          if v[0] == output_var_name)
+                          if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not variable "
-                               f"{output_var_name} to read")
+                               f"{self.output_var_name} to read")
 
         return model
 

@@ -154,8 +154,7 @@ class FewSpikeRelu(Neuron):
         scale = self.alpha * 2**(-self.k)
 
         model = genn_model_upstream_signed if source_signed else genn_model
-        return self.add_output_logic(
-            NeuronModel(model,
-                        {"K": self.k, "Scale": scale,
-                         "SrcScale": source_scale},
-                        {"Fx": 0.0, "V": 0.0}), "Fx")
+        return NeuronModel(model, "Fx",
+                          {"K": self.k, "Scale": scale,
+                           "SrcScale": source_scale},
+                          {"Fx": 0.0, "V": 0.0})

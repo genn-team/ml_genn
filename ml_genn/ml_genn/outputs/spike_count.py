@@ -7,7 +7,7 @@ from copy import deepcopy
 
 
 class SpikeCount(Output):
-    def __call__(self, model: NeuronModel, output_var_name=None):
+    def add_output_logic(self, model: NeuronModel):
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
             raise RuntimeError("SpikeCount output can only "

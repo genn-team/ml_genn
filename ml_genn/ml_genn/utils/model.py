@@ -156,9 +156,12 @@ class CustomUpdateModel(Model):
 
 
 class NeuronModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
+    def __init__(self, model, output_var_name, 
+                 param_vals={}, var_vals={}, egp_vals={}):
         super(NeuronModel, self).__init__(model, param_vals, 
                                           var_vals, egp_vals)
+        
+        self.output_var_name = output_var_name
 
     def add_additional_input_var(self, name, type, init_val):
         self._add_to_list("additional_input_vars", (name, type, init_val))
