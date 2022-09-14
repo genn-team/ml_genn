@@ -1,4 +1,7 @@
+from typing import Sequence
+
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
+                                        VarAccess_READ_WRITE,
                                         VarAccessMode_READ_WRITE)
 
 from copy import deepcopy
@@ -20,7 +23,7 @@ class Model:
         self.param_vals[name] = value
 
     def add_var(self, name, type, value,
-                access_mode=VarAccessMode_READ_WRITE):
+                access_mode=VarAccess_READ_WRITE):
         self._add_to_list("var_name_types", (name, type, access_mode))
         self.var_vals[name] = value
 
@@ -30,10 +33,6 @@ class Model:
     
     def set_var_access_mode(self, name, access_mode):
         self._set_access_model("var_name_types", name, access_mode)
-
-    @property
-    def reset_vars(self):
-        return self._get_reset_vars("var_name_types")
 
     def process(self):
         # Make copy of model
@@ -96,7 +95,7 @@ class Model:
 
     @property
     def reset_vars(self):
-        return self._get_reset_vars("var_name_types")
+        return self._get_reset_vars("var_name_types", self.var_vals)
 
     def _add_to_list(self, name, value):
         if name not in self.model:
@@ -121,7 +120,7 @@ class Model:
         # Take first two elements of existing var and add access mode
         var_array[var_index] = var_array[var_index][:2] + (access_mode,)
     
-    def _get_reset_vars(self, name):
+    def _get_reset_vars(self, name, var_vals):
         reset_vars = []
         if name in self.model:
             # Loop through them
@@ -130,22 +129,8 @@ class Model:
                 # access or this is explicitly set
                 # **TODO** mechanism to exclude variables from reset
                 if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
-                    reset_vars.append((v[0], v[1], self.var_vals[v[0]]))
+                    reset_vars.append((v[0], v[1], var_vals[v[0]]))
         return reset_vars
-    
-    def __add__(self, other):
-        # Make a copy of our model
-        model = deepcopy(self.model)
-        
-        # Loop through all entries in other's model
-        for key, value in other.model.items():
-            if key in model:
-                # * if lists, extend with other
-                # * if string, extend
-                # * otherwise, give error if values differ
-            # Otherwise, 
-            else:
-                model[key] = value
 
 
 class CustomUpdateModel(Model):
@@ -206,8 +191,8 @@ class WeightUpdateModel(Model):
 
     @property
     def reset_pre_vars(self):
-        return self._get_reset_vars("pre_var_name_types")
+        return self._get_reset_vars("pre_var_name_types", self.pre_var_vals)
 
     @property
     def reset_post_vars(self):
-        return self._get_reset_vars("post_var_name_types")
+        return self._get_reset_vars("post_var_name_types", self.post_var_vals)
