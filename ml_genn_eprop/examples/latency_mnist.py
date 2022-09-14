@@ -22,7 +22,7 @@ training_spikes = log_latency_encode_data(mnist.train_images(), 20.0, 51, 100)
 network = SequentialNetwork()
 with network:
     # Populations
-    input = InputLayer(SpikeInput(max_spikes=calc_max_spikes(training_spikes)),
+    input = InputLayer(SpikeInput(max_spikes=128 * calc_max_spikes(training_spikes)),
                                   NUM_INPUT)
     hidden = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_INPUT))),
                    LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
@@ -37,7 +37,7 @@ with network:
 max_example_time = calc_latest_spike_time(training_spikes)
 compiler = EPropCompiler(example_timesteps=int(np.ceil(max_example_time)),
                          losses="sparse_categorical_crossentropy",
-                         optimiser="adam")
+                         optimiser="adam", batch_size=128)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
@@ -45,7 +45,7 @@ with compiled_net:
     start_time = perf_counter()
     metrics, cb_data  = compiled_net.train({input: training_spikes},
                                            {output: training_labels},
-                                           num_epochs=50)
+                                           num_epochs=50, shuffle=False)
     end_time = perf_counter()
     print(f"Accuracy = {100 * metrics[output].result}%")
     print(f"Time = {end_time - start_time}s")

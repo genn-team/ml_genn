@@ -132,6 +132,20 @@ class Model:
                 if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
                     reset_vars.append((v[0], v[1], self.var_vals[v[0]]))
         return reset_vars
+    
+    def __add__(self, other):
+        # Make a copy of our model
+        model = deepcopy(self.model)
+        
+        # Loop through all entries in other's model
+        for key, value in other.model.items():
+            if key in model:
+                # * if lists, extend with other
+                # * if string, extend
+                # * otherwise, give error if values differ
+            # Otherwise, 
+            else:
+                model[key] = value
 
 
 class CustomUpdateModel(Model):
