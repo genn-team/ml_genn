@@ -201,46 +201,15 @@ class EPropCompiler(Compiler):
                     """)
             # Otherwise, if it's sparse categorical
             elif isinstance(loss, SparseCategoricalCrossentropy):
-                # Check shape is valid
-                # **NOTE** we COULD add an elaborate mechanism to
-                # create a GeNN population with next power-of-two
-                # size but, once proper population reductions are
-                # implemented, this issue will go away anyway
-                if flat_shape not in [2, 4, 8, 16, 32]:
-                    raise NotImplementedError("Currently EProp compiler only "
-                                              "supports sparse categorical "
-                                              "loss on output populations "
-                                              "with 2, 4, 8, 16 or 32 neurons")
-
                 # Add sim-code to copy output to a register
                 out_var_name = pop.neuron.output.output_var_name
-                model_copy.append_sim_code(f"scalar m = $({out_var_name});")
-
-                # Generate sim-code to calculate max reduction
-                mask = (2 ** flat_shape) - 1
-                for i in range(int(np.log2(flat_shape))):
-                    model_copy.append_sim_code(
-                        f"m = fmax(m, __shfl_xor_sync(0x{mask:X}, m, 0x{2 ** i:X}));")
-
-                # Add sim-code to calculate exponential
-                model_copy.append_sim_code(
-                    f"""
-                    const scalar expPi = exp($({out_var_name}) - m);
-                    scalar sumExpPi = expPi;
-                    """)
-
-                # Generate sim-code to generate second sum reduction
-                for i in range(int(np.log2(flat_shape))):
-                    model_copy.append_sim_code(
-                        f"sumExpPi +=  __shfl_xor_sync(0x{mask:X}, sumExpPi, 0x{2 ** i:X});")
-
+                
                 # Add sim-code to convert label 
                 # to one-hot and calculate error
                 model_copy.append_sim_code(
                     f"""
-                    const scalar pi = expPi / sumExpPi;
                     const scalar piStar = ($(id) == $(YTrue)[$(batch)]) ? 1.0 : 0.0;
-                    $(E) = pi - piStar;
+                    $(E) = $({out_var_name}) - piStar;
                     """)
             else:
                 raise NotImplementedError("EProp compiler only supports "

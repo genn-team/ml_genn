@@ -171,7 +171,24 @@ class NeuronModel(Model):
 
     def append_reset_code(self, code):
         self._append_code("reset_code", code)
+    
+    @property
+    def output_var(self):
+        # Check model has variables and that
+        # output variable name is specified
+        if "var_name_types" not in self.model:
+            raise RuntimeError("Model has no state variables")
+        if self.output_var_name is None:
+            raise RuntimeError("Output variable not specified")
 
+        # Find output variable
+        output_var = [v for v in self.model["var_name_types"]
+                      if v[0] == self.output_var_name]
+        if len(output_var) == 0:
+            raise RuntimeError(f"Output variable "
+                               f"{self.output_var_name} missing")
+        assert len(output_var) == 1
+        return output_var[0]
 
 class SynapseModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):

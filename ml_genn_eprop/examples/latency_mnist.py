@@ -31,7 +31,7 @@ with network:
                                       integrate_during_refrac=True),
                    NUM_HIDDEN)
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
-                   LeakyIntegrate(tau_mem=20.0, output="sum_var"),
+                   LeakyIntegrate(tau_mem=20.0, softmax=True, output="sum_var"),
                    NUM_OUTPUT)
 
 max_example_time = calc_latest_spike_time(training_spikes)

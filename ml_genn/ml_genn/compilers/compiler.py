@@ -62,6 +62,56 @@ def get_neuron_model_with_output(pop, dt):
     if pop.neuron.output is None:
         return neuron_model
     else:
+        if pop.neuron.softmax:
+            # Get output variable from neuron model
+            output_var = neuron_model.output_var
+            
+            # Check shape is valid
+            # **NOTE** we COULD add an elaborate mechanism to
+            # create a GeNN population with next power-of-two
+            # size but, once proper population reductions are
+            # implemented, this issue will go away anyway
+            flat_shape = np.prod(pop.shape)
+            if flat_shape not in [2, 4, 8, 16, 32]:
+                raise NotImplementedError("Currently Softmax output only "
+                                          "supports populations with "
+                                          "2, 4, 8, 16 or 32 neurons")
+
+            # Add sim-code to copy output to a register
+            neuron_model.append_sim_code(
+                f"scalar m = $({output_var[0]});")
+
+            # Generate sim-code to calculate max reduction
+            mask = (2 ** flat_shape) - 1
+            for i in range(int(np.log2(flat_shape))):
+                neuron_model.append_sim_code(
+                    f"m = fmax(m, __shfl_xor_sync(0x{mask:X}, m, 0x{2 ** i:X}));")
+
+            # Add sim-code to calculate exponential
+            neuron_model.append_sim_code(
+                f"""
+                const scalar expPi = exp($({output_var[0]}) - m);
+                scalar sumExpPi = expPi;
+                """)
+
+            # Generate sim-code to generate second sum reduction
+            for i in range(int(np.log2(flat_shape))):
+                neuron_model.append_sim_code(
+                    f"sumExpPi +=  __shfl_xor_sync(0x{mask:X}, sumExpPi, 0x{2 ** i:X});")
+
+            # Add sim-code to store softmax in variable name
+            softmax_var_name = output_var[0] + "Softmax"
+            neuron_model.append_sim_code(
+                f"$({softmax_var_name}) = expPi / sumExpPi;")
+
+            # Add sum variable with same type as 
+            # output variable and initialise to zero
+            neuron_model.add_var(softmax_var_name, output_var[1], 0)
+            
+            # Finally, point output variable at new softmax'd output
+            neuron_model.output_var_name = softmax_var_name
+        
+        # Add output logic to model
         return pop.neuron.output.add_output_logic(neuron_model)
 
 class Compiler:

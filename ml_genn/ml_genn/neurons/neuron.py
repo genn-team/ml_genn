@@ -6,8 +6,9 @@ from ..outputs import default_outputs
 
 
 class Neuron:
-    def __init__(self, output=None, **kwargs):
+    def __init__(self, softmax=False, output=None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
+        self.softmax = softmax
         self.output = get_object(output, Output, "Output", default_outputs)
 
     def get_output(self, genn_pop, batch_size: int, shape):

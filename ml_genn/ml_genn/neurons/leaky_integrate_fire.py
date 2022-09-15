@@ -17,8 +17,9 @@ class LeakyIntegrateFire(Neuron):
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
                  tau_refrac: InitValue = None, relative_reset: bool = True,
-                 integrate_during_refrac: bool = True, output=None):
-        super(LeakyIntegrateFire, self).__init__(output)
+                 integrate_during_refrac: bool = True, 
+                 softmax: bool = False, output=None):
+        super(LeakyIntegrateFire, self).__init__(softmax, output)
 
         self.v_thresh = v_thresh
         self.v_reset = v_reset
