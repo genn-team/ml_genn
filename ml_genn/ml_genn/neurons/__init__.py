@@ -1,3 +1,4 @@
+from .adaptive_leaky_integrate_fire import AdaptiveLeakyIntegrateFire
 from .binary_spike_input import BinarySpikeInput
 from .few_spike_relu import FewSpikeRelu
 from .few_spike_relu_input import FewSpikeReluInput

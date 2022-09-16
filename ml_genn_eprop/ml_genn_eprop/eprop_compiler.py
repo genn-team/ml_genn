@@ -9,7 +9,7 @@ from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
 from ml_genn.callbacks import BatchProgressBar
 from ml_genn.losses import (Loss, MeanSquareError,
                             SparseCategoricalCrossentropy)
-from ml_genn.neurons import LeakyIntegrateFire
+from ml_genn.neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
 from ml_genn.optimisers import Optimiser
 from ml_genn.outputs import Var
 from ml_genn.synapses import Delta
@@ -32,6 +32,7 @@ class CompileState:
         self.losses = get_object_mapping(losses, outputs,
                                          Loss, "Loss", default_losses)
         self._tau_mem = None
+        self._tau_adapt = None
         self.feedback_connections = []
         self.optimiser_connections = []
         self._neuron_reset_vars = {}
@@ -53,7 +54,7 @@ class CompileState:
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetNeuron{i}")
-    
+
     @property
     def is_reset_custom_update_required(self):
         return len(self._neuron_reset_vars) > 0
@@ -63,12 +64,27 @@ class CompileState:
         assert self._tau_mem is not None
 
         return self._tau_mem
-    
+
     @tau_mem.setter
     def tau_mem(self, tau_mem):
         if self._tau_mem is None:
             self._tau_mem = tau_mem
         if self._tau_mem != tau_mem:
+            raise NotImplementedError("EProp compiler doesn't "
+                                      "support neurons with "
+                                      "different time constants")
+
+    @property
+    def tau_adapt(self):
+        assert self._tau_adapt is not None
+
+        return self._tau_adapt
+
+    @tau_mem.setter
+    def tau_adapt(self, tau_adapt):
+        if self._tau_adapt is None:
+            self._tau_adapt = tau_adapt
+        if self._tau_adapt != tau_adapt:
             raise NotImplementedError("EProp compiler doesn't "
                                       "support neurons with "
                                       "different time constants")
@@ -112,6 +128,58 @@ eprop_lif_model = {
     $(eFiltered) = eFiltered;
     """}
 
+eprop_alif_model = {
+    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"), 
+                         ("Beta", "scalar"), ("Rho", "scalar"), 
+                         ("FTarget", "scalar"), ("AlphaFAv", "scalar")],
+    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
+                       ("eFiltered", "scalar"), ("epsilonA", "scalar"),
+                       ("DeltaG", "scalar")],
+    "pre_var_name_types": [("ZFilter", "scalar")],
+    "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
+
+    "pre_spike_code": """
+    $(ZFilter) += 1.0;
+    """,
+    "pre_dynamics_code": """
+    $(ZFilter) *= $(Alpha);
+    """,
+
+    "post_spike_code": """
+    $(FAvg) += (1.0 - $(AlphaFAv));
+    """,
+    "post_dynamics_code": """
+    $(FAvg) *= $(AlphaFAv);
+    if ($(RefracTime_post) > 0.0) {
+      $(Psi) = 0.0;
+    }
+    else {
+      $(Psi) = (1.0 / $(Vthresh_post)) * 0.3 * fmax(0.0, 1.0 - fabs(($(V_post) - ($(Vthresh_post) + ($(Beta_post) * $(A_post)))) / $(Vthresh_post)));
+    }
+    """,
+
+    "sim_code": """
+    $(addToInSyn, $(g));
+    """,
+    "synapse_dynamics_code": """
+    // Calculate some common factors in e and epsilon update
+    scalar epsilonA = $(epsilonA);
+    const scalar psiZFilter = $(Psi) * $(ZFilter);
+    const scalar psiBetaEpsilonA = $(Psi) * $(Beta) * epsilonA;
+    
+    // Calculate e and episilonA
+    const scalar e = psiZFilter  - psiBetaEpsilonA;
+    $(epsilonA) = psiZFilter + (($(Rho) * epsilonA) - psiBetaEpsilonA);
+    
+    // Calculate filtered version of eligibility trace
+    scalar eFiltered = $(eFiltered);
+    eFiltered = (eFiltered * $(Alpha)) + e;
+    
+    // Apply weight update
+    $(DeltaG) += (eFiltered * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
+    $(eFiltered) = eFiltered;
+    """}
+
 output_learning_model = {
     "param_name_types": [("Alpha", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
@@ -144,8 +212,9 @@ gradient_batch_reduce_model = {
 class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
-                 f_target: float = 10.0, dt: float = 1.0, batch_size: int = 1,
-                 rng_seed: int = 0, kernel_profiling: bool = False, 
+                 f_target: float = 10.0, beta: float = 0.0174,
+                 dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0,
+                 kernel_profiling: bool = False, 
                  reset_time_between_batches: bool = True, **genn_kwargs):
         super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                             kernel_profiling,
@@ -158,6 +227,7 @@ class EPropCompiler(Compiler):
         self.tau_reg = tau_reg
         self.c_reg = c_reg
         self.f_target = f_target
+        self.beta = beta
         self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, **kwargs):
@@ -232,18 +302,19 @@ class EPropCompiler(Compiler):
             # Add sim code to store incoming feedback in new state variable
             model_copy.append_sim_code("$(E) = $(ISynFeedback);")
             
-            if isinstance(pop.neuron, LeakyIntegrateFire):
+            if isinstance(pop.neuron, (AdaptiveLeakyIntegrateFire,
+                                       LeakyIntegrateFire)):
                 # Check EProp constraints
                 # **THINK** could these just be warnings?
                 if not pop.neuron.integrate_during_refrac:
                     raise NotImplementedError("EProp compiler only supports "
-                                              "LIF neurons which continue "
-                                              "to integrate during their "
-                                              "refractory period")
+                                              "LIF/ALIF neurons which "
+                                              "continue to integrate during "
+                                              "their refractory period")
                 if not pop.neuron.relative_reset:
                     raise NotImplementedError("EProp compiler only supports "
-                                              "LIF neurons with a relative "
-                                              "reset mechanism")
+                                              "LIF/ALIF neurons with a "
+                                              "relative reset mechanism")
 
                 # Set 
                 compile_state.tau_mem = pop.neuron.tau_mem
@@ -268,15 +339,28 @@ class EPropCompiler(Compiler):
             raise NotImplementedError("EProp compiler only "
                                       "support heterogeneous delays")
         
-        # Calculate decay time constants
+        # Calculate membrane persistence
         alpha = np.exp(-self.dt / compile_state.tau_mem)
-        
+
         # If target neuron is LIF, create weight update model with eProp
         target_neuron = conn.target().neuron
         if isinstance(target_neuron, LeakyIntegrateFire):
             wum = WeightUpdateModel(
                 model=eprop_lif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
+                            "FTarget": (self.f_target * self.dt) / 1000.0, 
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
+                var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
+                pre_var_vals={"ZFilter": 0.0},
+                post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+        elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
+            # Calculate adaptation variable persistence
+            rho = np.exp(-self.dt / compile_state.tau_adapt)
+            
+            wum = WeightUpdateModel(
+                model=eprop_alif_model,
+                param_vals={"CReg": self.c_reg, "Alpha": alpha,
+                            "Beta": self.beta, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
                 var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
