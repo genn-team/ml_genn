@@ -129,9 +129,9 @@ eprop_lif_model = {
     """}
 
 eprop_alif_model = {
-    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"), 
-                         ("Beta", "scalar"), ("Rho", "scalar"), 
-                         ("FTarget", "scalar"), ("AlphaFAv", "scalar")],
+    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"),
+                         ("Rho", "scalar"), ("FTarget", "scalar"),
+                         ("AlphaFAv", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
                        ("eFiltered", "scalar"), ("epsilonA", "scalar"),
                        ("DeltaG", "scalar")],
@@ -165,7 +165,7 @@ eprop_alif_model = {
     // Calculate some common factors in e and epsilon update
     scalar epsilonA = $(epsilonA);
     const scalar psiZFilter = $(Psi) * $(ZFilter);
-    const scalar psiBetaEpsilonA = $(Psi) * $(Beta) * epsilonA;
+    const scalar psiBetaEpsilonA = $(Psi) * $(Beta_post) * epsilonA;
     
     // Calculate e and episilonA
     const scalar e = psiZFilter  - psiBetaEpsilonA;
@@ -212,8 +212,8 @@ gradient_batch_reduce_model = {
 class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
-                 f_target: float = 10.0, beta: float = 0.0174,
-                 dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0,
+                 f_target: float = 10.0, dt: float = 1.0, 
+                 batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False, 
                  reset_time_between_batches: bool = True, **genn_kwargs):
         super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
@@ -227,7 +227,6 @@ class EPropCompiler(Compiler):
         self.tau_reg = tau_reg
         self.c_reg = c_reg
         self.f_target = f_target
-        self.beta = beta
         self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, **kwargs):
@@ -342,7 +341,7 @@ class EPropCompiler(Compiler):
         # Calculate membrane persistence
         alpha = np.exp(-self.dt / compile_state.tau_mem)
 
-        # If target neuron is LIF, create weight update model with eProp
+        # If target neuron is LIF, create weight update model with eProp LIF
         target_neuron = conn.target().neuron
         if isinstance(target_neuron, LeakyIntegrateFire):
             wum = WeightUpdateModel(
@@ -353,17 +352,18 @@ class EPropCompiler(Compiler):
                 var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+        # Otherise, if it's ALIF, create weight update model with eProp ALIF
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
             rho = np.exp(-self.dt / compile_state.tau_adapt)
             
             wum = WeightUpdateModel(
                 model=eprop_alif_model,
-                param_vals={"CReg": self.c_reg, "Alpha": alpha,
-                            "Beta": self.beta, "Rho": rho, 
+                param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
-                var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
+                var_vals={"g": weight, "eFiltered": 0.0,
+                          "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
         # Otherwise, if target neuron is output, create 
