@@ -2,7 +2,7 @@ from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
-from ..callbacks import BatchProgressBar
+from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..metrics import Metric
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -19,12 +19,14 @@ from ..metrics import default_metrics
 class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, evaluate_timesteps: int,
+                 base_callbacks: list, 
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
             evaluate_timesteps)
         
         self.evaluate_timesteps = evaluate_timesteps
+        self.base_callbacks = base_callbacks
         self.reset_time_between_batches = reset_time_between_batches
 
     def evaluate(self, x: dict, y: dict,
@@ -57,7 +59,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
         y = batch_dataset(y, batch_size, y_size)
 
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, compiled_network=self,
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
                                      num_batches=len(x))
         callback_list.on_test_begin()
 
@@ -89,7 +92,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                      "Metric", default_metrics)
 
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, compiled_network=self,
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
                                      num_batches=num_batches)
         callback_list.on_test_begin()
 
@@ -137,7 +141,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                      "Metric", default_metrics)
 
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks)
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
+                                     num_batches=1)
         callback_list.on_test_begin()
 
         # Evaluate batch and return metrics
@@ -165,8 +171,6 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Start batch
         callback_list.on_batch_begin(batch)
 
-        self.custom_update("Reset")
-        
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
@@ -268,8 +272,10 @@ class InferenceCompiler(Compiler):
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
                                                   connection_populations)
-
+        
+        base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
                                         self.evaluate_timesteps,
+                                        base_callbacks,
                                         self.reset_time_between_batches)

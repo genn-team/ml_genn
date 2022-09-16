@@ -1,4 +1,6 @@
 from .callback import Callback
+from .custom_update import (CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd,
+                            CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd)
 from .optimiser_param_schedule import OptimiserParamSchedule
 from .progress_bar import BatchProgressBar
 from .spike_recorder import SpikeRecorder

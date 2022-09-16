@@ -16,6 +16,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, losses, 
                  optimiser, example_timesteps: int, 
+                 base_callbacks: list,
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
@@ -24,6 +25,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.losses = losses
         self.optimiser = optimiser
         self.example_timesteps = example_timesteps
+        self.base_callbacks = base_callbacks
         self.reset_time_between_batches = reset_time_between_batches
         
         # **YUCK** find optimiser custom updates
@@ -60,8 +62,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
         xy = list(zip(x, y))
         
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, compiled_network=self,
-                                     num_batches=len(xy), num_epochs=num_epochs)
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
+                                     num_batches=len(xy), 
+                                     num_epochs=num_epochs)
         callback_list.on_train_begin()
 
         # Loop through epochs
@@ -100,7 +104,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
                                      "Metric", default_metrics)
 
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks, compiled_network=self,
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
                                      num_batches=num_batches)
         callback_list.on_test_begin()
 
@@ -148,7 +153,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                                      "Metric", default_metrics)
 
         # Create callback list and begin testing
-        callback_list = CallbackList(callbacks)
+        callback_list = CallbackList(self.base_callbacks + callbacks)
         callback_list.on_test_begin()
 
         # Evaluate batch and return metrics
@@ -201,10 +206,6 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # **TODO** mechanism for setting learning rate
         for c in self._optimizer_custom_updates:
             self.optimiser.set_step(c, step)
-
-        # Now batch is complete, apply gradients
-        # **YUCK** this needs to be more generic - probably use callbacks
-        self.genn_model.custom_update("GradientLearn")
 
         # End batch
         callback_list.on_batch_end(batch, metrics)

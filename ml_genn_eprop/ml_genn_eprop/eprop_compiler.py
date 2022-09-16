@@ -3,6 +3,7 @@ import numpy as np
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_BATCH_SUM)
+from ml_genn.callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
 from ml_genn.compilers import Compiler
 from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
 from ml_genn.callbacks import BatchProgressBar
@@ -52,6 +53,10 @@ class CompileState:
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetNeuron{i}")
+    
+    @property
+    def is_reset_custom_update_required(self):
+        return len(self._neuron_reset_vars) > 0
 
     @property
     def tau_mem(self):
@@ -345,10 +350,20 @@ class EPropCompiler(Compiler):
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
+        
+        #
+        base_callbacks = []
+        if len(optimiser_custom_updates) > 0:
+            base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
+            if self.batch_size > 1:
+                base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
+        if compile_state.is_reset_custom_update_required:
+            base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         return CompiledTrainingNetwork(genn_model, neuron_populations,
                                        connection_populations,
                                        compile_state.losses,
                                        self._optimiser,
                                        self.example_timesteps,
+                                       base_callbacks,
                                        self.reset_time_between_batches)
