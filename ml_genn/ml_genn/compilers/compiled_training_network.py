@@ -17,6 +17,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                  connection_populations, losses, 
                  optimiser, example_timesteps: int, 
                  base_callbacks: list,
+                 optimiser_custom_updates: list,
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
@@ -26,12 +27,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.optimiser = optimiser
         self.example_timesteps = example_timesteps
         self.base_callbacks = base_callbacks
+        self.optimiser_custom_updates = optimiser_custom_updates
         self.reset_time_between_batches = reset_time_between_batches
-        
-        # **YUCK** find optimiser custom updates
-        self._optimizer_custom_updates = [
-            c for c in genn_model.custom_updates.values()
-            if c.pop.get_update_group_name() == "GradientLearn"]
 
     def train(self, x: dict, y: dict, num_epochs: int, shuffle: bool = True,
               metrics: MetricsType = "sparse_categorical_accuracy",
@@ -169,10 +166,6 @@ class CompiledTrainingNetwork(CompiledNetwork):
                      callback_list: CallbackList):
         # Start batch
         callback_list.on_batch_begin(batch)
-        
-        # Reset
-        # **YUCK** this needs to be more generic - probably use callbacks
-        self.genn_model.custom_update("Reset")
 
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
@@ -203,8 +196,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             metrics[o].update(y_true, out_y_pred[:len(y_true)])
 
         # Loop through optimiser custom updates and set step
-        # **TODO** mechanism for setting learning rate
-        for c in self._optimizer_custom_updates:
+        for c in self.optimiser_custom_updates:
             self.optimiser.set_step(c, step)
 
         # End batch

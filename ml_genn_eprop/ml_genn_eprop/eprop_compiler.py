@@ -351,7 +351,7 @@ class EPropCompiler(Compiler):
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
         
-        #
+        # Build list of base callbacks
         base_callbacks = []
         if len(optimiser_custom_updates) > 0:
             base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
@@ -360,10 +360,8 @@ class EPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
-        return CompiledTrainingNetwork(genn_model, neuron_populations,
-                                       connection_populations,
-                                       compile_state.losses,
-                                       self._optimiser,
-                                       self.example_timesteps,
-                                       base_callbacks,
-                                       self.reset_time_between_batches)
+        return CompiledTrainingNetwork(
+            genn_model, neuron_populations, connection_populations,
+            compile_state.losses, self._optimiser, self.example_timesteps,
+            base_callbacks, list(optimiser_custom_updates.values()),
+            self.reset_time_between_batches)
