@@ -65,13 +65,16 @@ def get_neuron_model_with_output(pop, dt):
         if pop.neuron.softmax:
             # Get output variable from neuron model
             output_var = neuron_model.output_var
-            
+
+            # **YUCK** on Windows, numpy.prod will return np.int32
+            # which results in a mask of -1 after subsequent calculations
+            flat_shape = int(np.prod(pop.shape))
+
             # Check shape is valid
             # **NOTE** we COULD add an elaborate mechanism to
             # create a GeNN population with next power-of-two
             # size but, once proper population reductions are
             # implemented, this issue will go away anyway
-            flat_shape = np.prod(pop.shape)
             if flat_shape not in [2, 4, 8, 16, 32]:
                 raise NotImplementedError("Currently Softmax output only "
                                           "supports populations with "
