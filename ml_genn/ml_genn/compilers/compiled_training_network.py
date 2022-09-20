@@ -1,4 +1,4 @@
-import random
+import numpy as np
 
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -6,7 +6,7 @@ from ..metrics import Metric
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 
-from ..utils.data import batch_dataset, get_dataset_size
+from ..utils.data import batch_dataset, get_dataset_size, permute_dataset
 from ..utils.module import get_object_mapping
 from ..utils.network import get_underlying_pop
 
@@ -50,32 +50,35 @@ class CompiledTrainingNetwork(CompiledNetwork):
         if x_size != y_size:
             raise RuntimeError("Number of inputs and labels must match")
 
-        # Batch x and y
-        batch_size = self.genn_model.batch_size
-        x = batch_dataset(x, batch_size, x_size)
-        y = batch_dataset(y, batch_size, y_size)
-
-        # Zip together x and y
-        xy = list(zip(x, y))
-        
         # Create callback list and begin testing
+        batch_size = self.genn_model.batch_size
+        num_batches = (x_size + batch_size - 1) // batch_size;
         callback_list = CallbackList(self.base_callbacks + callbacks,
                                      compiled_network=self,
-                                     num_batches=len(xy), 
+                                     num_batches=num_batches, 
                                      num_epochs=num_epochs)
         callback_list.on_train_begin()
 
         # Loop through epochs
         step_i = 0
         for e in range(num_epochs):
-            # If we should shuffle, do so
+            # If we should shuffle
             if shuffle:
-                random.shuffle(xy)
+                # Generate random permutation
+                indices = np.random.permutation(x_size)
+
+                # Permute x and y
+                x = permute_dataset(x, indices)
+                y = permute_dataset(y, indices)
+
+            # Batch x and y
+            xy_batched = zip(batch_dataset(x, batch_size, x_size),
+                             batch_dataset(y, batch_size, y_size))
 
             callback_list.on_epoch_begin(e)
 
             # Loop through batches and train
-            for batch_i, (x_batch, y_batch) in enumerate(xy):
+            for batch_i, (x_batch, y_batch) in enumerate(xy_batched):
                 self._train_batch(batch_i, step_i, x_batch, y_batch,
                                   metrics, callback_list)
                 step_i += 1

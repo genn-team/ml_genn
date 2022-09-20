@@ -37,6 +37,21 @@ def batch_dataset(data, batch_size, size):
 
     return data_list
 
+def permute_dataset(data, indices):
+    # Check indices are correct shape
+    assert len(indices) == get_dataset_size(data)
+
+    # Shuffle each value, using numpy fa
+    shuffled_data = {}
+    for k, v in data.items():
+        # **TODO** better type check
+        if isinstance(v, np.ndarray):
+            shuffled_data[k] = v[indices]
+        else:
+            shuffled_data[k] = [v[i] for i in indices]
+    
+    return shuffled_data
+
 def preprocess_spikes(times, ids, num_neurons):
     # Calculate end spikes
     end_spikes = np.cumsum(np.bincount(ids, minlength=num_neurons))

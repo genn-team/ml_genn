@@ -65,7 +65,8 @@ with compiled_net:
     start_time = perf_counter()
     metrics, cb_data  = compiled_net.train({input: spikes},
                                            {output: labels},
-                                           num_epochs=50)
+                                           num_epochs=50,
+                                           shuffle=True)
     end_time = perf_counter()
     print(f"Accuracy = {100 * metrics[output].result}%")
     print(f"Time = {end_time - start_time}s")
