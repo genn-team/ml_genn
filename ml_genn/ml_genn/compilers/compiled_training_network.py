@@ -75,6 +75,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
             xy_batched = zip(batch_dataset(x, batch_size, x_size),
                              batch_dataset(y, batch_size, y_size))
 
+            # Reset metrics at start of each epoch
+            for m in metrics.values():
+                m.reset()
+
             callback_list.on_epoch_begin(e)
 
             # Loop through batches and train
