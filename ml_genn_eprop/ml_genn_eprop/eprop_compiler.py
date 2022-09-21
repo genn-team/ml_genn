@@ -7,8 +7,7 @@ from ml_genn.callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
 from ml_genn.compilers import Compiler
 from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
 from ml_genn.callbacks import BatchProgressBar
-from ml_genn.losses import (Loss, MeanSquareError,
-                            SparseCategoricalCrossentropy)
+from ml_genn.losses import Loss
 from ml_genn.neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
 from ml_genn.optimisers import Optimiser
 from ml_genn.synapses import Delta
@@ -259,35 +258,12 @@ class EPropCompiler(Compiler):
             loss.add_to_neuron(model_copy, pop.shape, 
                                self.batch_size, self.example_timesteps)
 
-            # If loss function is mean-square
-            flat_shape = np.prod(pop.shape)
-            if isinstance(loss, MeanSquareError):
-                # Add sim-code to calculate error from difference
-                # between y-star and the output variable
-                out_var_name = model_copy.output_var_name
-                model_copy.append_sim_code(
-                    f"""
-                    const unsigned int timestep = (int)round($(t) / {self.dt});
-                    const unsigned int index = (timestep * {self.batch_size} * {flat_shape})
-                                               + ($(batch) * {flat_shape}) + $(id);
-                    $(E) = $({out_var_name}) - $(YTrue)[index];
-                    """)
-            # Otherwise, if it's sparse categorical
-            elif isinstance(loss, SparseCategoricalCrossentropy):
-                # Add sim-code to copy output to a register
-                out_var_name = model_copy.output_var_name
-                
-                # Add sim-code to convert label 
-                # to one-hot and calculate error
-                model_copy.append_sim_code(
-                    f"""
-                    const scalar piStar = ($(id) == $(YTrue)[$(batch)]) ? 1.0 : 0.0;
-                    $(E) = $({out_var_name}) - piStar;
-                    """)
-            else:
-                raise NotImplementedError("EProp compiler only supports "
-                                          "MeanSquareError and "
-                                          "SparseCategorical loss")
+            # Add sim-code to calculate error
+            model_copy.append_sim_code(
+                f"""
+                $(E) = $({model_copy.output_var_name}) - yTrue;
+                """)
+
         # Otherwise, if neuron isn't an input
         elif not hasattr(pop.neuron, "set_input"):
             # Add additional input variable to receive feedback

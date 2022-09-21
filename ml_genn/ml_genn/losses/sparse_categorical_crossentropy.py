@@ -10,7 +10,13 @@ class SparseCategoricalCrossentropy(Loss):
         # Add extra global parameter to store labels for each neuron
         model.add_egp("YTrue", "uint8_t*", 
                       np.empty(batch_size))
-    
+
+        # Add sim-code to convert label to one-hot
+        model.append_sim_code(
+            f"""
+            const scalar yTrue = ($(id) == $(YTrue)[$(batch)]) ? 1.0 : 0.0;
+            """)
+
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
                    example_timesteps: int):
         # Check shape

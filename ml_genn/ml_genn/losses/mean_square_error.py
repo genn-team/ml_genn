@@ -8,9 +8,19 @@ class MeanSquareError(Loss):
     def add_to_neuron(self, model: NeuronModel, shape, 
                       batch_size: int, example_timesteps: int):
         # Add extra global parameter to store Y* throughout example
-        egp_size = (example_timesteps * batch_size * np.prod(shape))
+        flat_shape = np.prod(shape)
+        egp_size = (example_timesteps * batch_size * flat_shape)
         model.add_egp("YTrue", "scalar*", np.empty(egp_size))
     
+        # Add sim-code to read out correct yTrue value 
+        model.append_sim_code(
+            f"""
+            const unsigned int timestep = (int)round($(t) / DT);
+            const unsigned int index = (timestep * {batch_size} * {flat_shape})
+                                       + ($(batch) * {flat_shape}) + $(id);
+            const scalar yTrue = $(YTrue)[index];
+            """)
+
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
                    example_timesteps: int):
         # Check shape
