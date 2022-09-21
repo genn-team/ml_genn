@@ -223,7 +223,7 @@ class Compiler:
 
         # Loop through populations
         neuron_populations = {}
-        for i, pop in enumerate(network.populations):
+        for pop in network.populations:
             # Check population has shape
             if pop.shape is None:
                 raise RuntimeError("All populations need to have "
@@ -241,7 +241,7 @@ class Compiler:
                                                            **neuron_model)
             # Add neuron population
             genn_pop = genn_model.add_neuron_population(
-                f"Pop{i}", np.prod(pop.shape),
+                pop.name, np.prod(pop.shape),
                 genn_neuron_model, param_vals, var_vals)
 
             # Configure spike recording
@@ -258,7 +258,7 @@ class Compiler:
 
         # Loop through connections
         connection_populations = {}
-        for i, conn in enumerate(network.connections):
+        for conn in network.connections:
             # Build postsynaptic model
             syn = conn.synapse
             (psm, psm_param_vals, psm_var_vals, 
@@ -295,7 +295,7 @@ class Compiler:
 
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
-                f"Syn{i}", connect_snippet.matrix_type, axonal_delay,
+                conn.name, connect_snippet.matrix_type, axonal_delay,
                 neuron_populations[conn.source()],
                 neuron_populations[conn.target()],
                 genn_wum, wum_param_vals, wum_var_vals,

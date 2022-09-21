@@ -1,4 +1,5 @@
-from typing import Union
+from itertools import count
+from typing import Optional, Union
 from weakref import ref
 from .connectivity import Connectivity
 from .network import Network
@@ -15,10 +16,12 @@ ConnectivityInitializer = Union[Connectivity, str]
 
 
 class Connection:
+    _new_id = count()
+
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
-                 synapse: SynapseInitializer = "delta",
-                 add_to_model: bool = True):
+                 synapse: SynapseInitializer = "delta", 
+                 name: Optional[str] = None, add_to_model: bool = True):
         # Store weak references to source and target in class
         self.source = ref(source)
         self.target = ref(target)
@@ -26,6 +29,10 @@ class Connection:
         self.connectivity = deepcopy(connectivity)
         self.synapse = get_object(synapse, Synapse, "Synapse",
                                   default_synapses)
+
+        # Generate unique name if required
+        self.name = (f"Conn{next(Connection._new_id)}" if name is None
+                     else name)
 
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists
