@@ -1,16 +1,16 @@
 import numpy as np
 
-from .output import Output
+from .readout import Readout
 from ..utils.model import NeuronModel
 
 from copy import deepcopy
 
 
-class SpikeCount(Output):
-    def add_output_logic(self, model: NeuronModel):
+class SpikeCount(Readout):
+    def add_readout_logic(self, model: NeuronModel):
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
-            raise RuntimeError("SpikeCount output can only "
+            raise RuntimeError("SpikeCount readout can only "
                                "be used with spiking models")
 
         # Make copy of model
@@ -24,7 +24,7 @@ class SpikeCount(Output):
 
         return model_copy
 
-    def get_output(self, genn_pop, batch_size: int, shape) -> np.ndarray:
+    def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull spike count from genn
         genn_pop.pull_var_from_device("Scount")
 

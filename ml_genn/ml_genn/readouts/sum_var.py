@@ -1,20 +1,20 @@
 import numpy as np
 
-from .output import Output
+from .readout import Readout
 from ..utils.model import NeuronModel
 
 from copy import deepcopy
 
 
-class SumVar(Output):
-    def add_output_logic(self, model: NeuronModel):
+class SumVar(Readout):
+    def add_readout_logic(self, model: NeuronModel):
         self.output_var_name = model.output_var_name
 
         if "var_name_types" not in model.model:
-            raise RuntimeError("SumVar output can only be used "
+            raise RuntimeError("SumVar readout can only be used "
                                "with models with state variables")
         if self.output_var_name is None:
-            raise RuntimeError("SumVar output requires that models "
+            raise RuntimeError("SumVar readout requires that models "
                                "specify an output variable name")
 
         # Find output variable
@@ -41,7 +41,7 @@ class SumVar(Output):
 
         return model_copy
 
-    def get_output(self, genn_pop, batch_size: int, shape) -> np.ndarray:
+    def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         sum_var_name = self.output_var_name + "Sum"
 
         # Pull variable from genn
