@@ -145,7 +145,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     batch_y_true = y_pipe_queue[o].popleft()
 
                     # Get predictions from model
-                    batch_y_pred = self.get_output(o)
+                    batch_y_pred = self.get_readout(o)
 
                     # Update metrics
                     metrics[o].update(batch_y_true,

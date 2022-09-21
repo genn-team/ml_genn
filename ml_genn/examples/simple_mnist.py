@@ -17,7 +17,7 @@ with network:
     Layer(Dense(weight=np.load("weights_0_1.npy")),
           IntegrateFire(v_thresh=5.0))
     output = Layer(Dense(weight=np.load("weights_1_2.npy")),
-                   IntegrateFire(v_thresh=5.0, output="spike_count"))
+                   IntegrateFire(v_thresh=5.0, readout="spike_count"))
 
 compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
                              evaluate_timesteps=100)

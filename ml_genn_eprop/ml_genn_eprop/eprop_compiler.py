@@ -11,7 +11,6 @@ from ml_genn.losses import (Loss, MeanSquareError,
                             SparseCategoricalCrossentropy)
 from ml_genn.neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
 from ml_genn.optimisers import Optimiser
-from ml_genn.outputs import Var
 from ml_genn.synapses import Delta
 from ml_genn.utils.callback_list import CallbackList
 from ml_genn.utils.data import MetricsType
@@ -28,8 +27,8 @@ from ml_genn.losses import default_losses
 
 
 class CompileState:
-    def __init__(self, losses, outputs):
-        self.losses = get_object_mapping(losses, outputs,
+    def __init__(self, losses, readouts):
+        self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
         self._tau_mem = None
         self._tau_adapt = None
@@ -37,8 +36,8 @@ class CompileState:
         self.optimiser_connections = []
         self._neuron_reset_vars = {}
     
-    def add_neuron_output_reset_vars(self, pop):
-        reset_vars = pop.neuron.output.reset_vars
+    def add_neuron_readout_reset_vars(self, pop):
+        reset_vars = pop.neuron.readout.reset_vars
         if len(reset_vars) > 0:
             self._neuron_reset_vars[pop] = reset_vars
 
@@ -231,19 +230,19 @@ class EPropCompiler(Compiler):
 
     def pre_compile(self, network, **kwargs):
         # Build list of output populations
-        outputs = [p for p in network.populations
-                   if p.neuron.output is not None]
+        readouts = [p for p in network.populations
+                    if p.neuron.readout is not None]
                    
-        return CompileState(self.losses, outputs)
+        return CompileState(self.losses, readouts)
 
     def build_neuron_model(self, pop, model, compile_state):
         # Make copy of model
         model_copy = deepcopy(model)
 
-        # If population is an output
-        if pop.neuron.output is not None:
+        # If population has a readout i.e. it's an output
+        if pop.neuron.readout is not None:
             # Add any output reset variables to compile state
-            compile_state.add_neuron_output_reset_vars(pop)
+            compile_state.add_neuron_readout_reset_vars(pop)
 
             # Get loss function associated with this output neuron
             loss = compile_state.losses[pop]
@@ -265,7 +264,7 @@ class EPropCompiler(Compiler):
             if isinstance(loss, MeanSquareError):
                 # Add sim-code to calculate error from difference
                 # between y-star and the output variable
-                out_var_name = pop.neuron.output.output_var_name
+                out_var_name = model_copy.output_var_name
                 model_copy.append_sim_code(
                     f"""
                     const unsigned int timestep = (int)round($(t) / {self.dt});
@@ -276,7 +275,7 @@ class EPropCompiler(Compiler):
             # Otherwise, if it's sparse categorical
             elif isinstance(loss, SparseCategoricalCrossentropy):
                 # Add sim-code to copy output to a register
-                out_var_name = pop.neuron.output.output_var_name
+                out_var_name = model_copy.output_var_name
                 
                 # Add sim-code to convert label 
                 # to one-hot and calculate error
@@ -366,9 +365,9 @@ class EPropCompiler(Compiler):
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
-        # Otherwise, if target neuron is output, create 
+        # Otherwise, if target neuron is readout, create 
         # weight update model with simple output learning rule
-        elif target_neuron.output is not None:
+        elif target_neuron.readout is not None:
             wum = WeightUpdateModel(
                 model=output_learning_model,
                 param_vals={"Alpha": alpha},

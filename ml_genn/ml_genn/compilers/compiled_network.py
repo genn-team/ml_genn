@@ -27,11 +27,11 @@ class CompiledNetwork:
             pop.neuron.set_input(self.neuron_populations[pop],
                                  self.genn_model.batch_size, pop.shape, input)
 
-    def get_output(self, outputs: Union[Sequence, PopulationType]) -> OutputType:
+    def get_readout(self, outputs: Union[Sequence, PopulationType]) -> OutputType:
         if isinstance(outputs, Sequence):
-            return [self._get_output(p) for p in outputs]
+            return [self._get_readout(p) for p in outputs]
         else:
-            return self._get_output(outputs)
+            return self._get_readout(outputs)
 
     def custom_update(self, name: str):
         """Perform custom update"""
@@ -67,7 +67,7 @@ class CompiledNetwork:
         assert CompiledNetwork._context is not None
         CompiledNetwork._context = None
 
-    def _get_output(self, pop: PopulationType) -> np.ndarray:
+    def _get_readout(self, pop: PopulationType) -> np.ndarray:
         pop = get_underlying_pop(pop)
-        return pop.neuron.get_output(self.neuron_populations[pop],
-                                     self.genn_model.batch_size, pop.shape)
+        return pop.neuron.get_readout(self.neuron_populations[pop],
+                                      self.genn_model.batch_size, pop.shape)

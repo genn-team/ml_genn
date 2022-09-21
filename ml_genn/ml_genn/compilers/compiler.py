@@ -59,7 +59,7 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
 def get_neuron_model_with_output(pop, dt):
     neuron_model = pop.neuron.get_model(pop, dt)
-    if pop.neuron.output is None:
+    if pop.neuron.readout is None:
         return neuron_model
     else:
         if pop.neuron.softmax:
@@ -115,7 +115,7 @@ def get_neuron_model_with_output(pop, dt):
             neuron_model.output_var_name = softmax_var_name
         
         # Add output logic to model
-        return pop.neuron.output.add_output_logic(neuron_model)
+        return pop.neuron.readout.add_readout_logic(neuron_model)
 
 class Compiler:
     def __init__(self, dt: float = 1.0, batch_size: int = 1,

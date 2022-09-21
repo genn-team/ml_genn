@@ -184,7 +184,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
             self.step_time(callback_list)
 
         # Get predictions from model
-        y_pred = self.get_output(list(y.keys()))
+        y_pred = self.get_readout(list(y.keys()))
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):

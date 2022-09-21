@@ -21,8 +21,8 @@ class LeakyIntegrate(Neuron):
 
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, 
-                 softmax: bool = False, output=None):
-        super(LeakyIntegrate, self).__init__(softmax, output)
+                 softmax: bool = False, readout=None):
+        super(LeakyIntegrate, self).__init__(softmax, readout)
 
         self.v = v
         self.bias = bias

@@ -99,8 +99,8 @@ class FewSpikeRelu(Neuron):
     alpha = ConstantValueDescriptor()
 
     def __init__(self, k: int = 10, alpha: float = 25,
-                 softmax: bool = False, output=None):
-        super(FewSpikeRelu, self).__init__(softmax, output)
+                 softmax: bool = False, readout=None):
+        super(FewSpikeRelu, self).__init__(softmax, readout)
         self.k = k
         self.alpha = alpha
 

@@ -22,8 +22,8 @@ class AdaptiveLeakyIntegrateFire(Neuron):
                  tau_mem: InitValue = 20.0, tau_refrac: InitValue = None,
                  tau_adapt: InitValue = 2000.0, relative_reset: bool = True,
                  integrate_during_refrac: bool = True, softmax: bool = False,
-                 output=None):
-        super(AdaptiveLeakyIntegrateFire, self).__init__(softmax, output)
+                 readout=None):
+        super(AdaptiveLeakyIntegrateFire, self).__init__(softmax, readout)
 
         self.v_thresh = v_thresh
         self.v_reset = v_reset

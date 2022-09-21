@@ -5,7 +5,6 @@ import tensorflow as tf
 from collections import namedtuple
 from ml_genn.compilers import FewSpikeCompiler
 from ml_genn.neurons import FewSpikeRelu, FewSpikeReluInput
-from ml_genn.outputs import Var
 from .converter import Converter
 
 from copy import copy
@@ -40,7 +39,7 @@ class FewSpike(Converter):
         alpha = (pre_conv_alpha[tf_layer] if tf_layer in pre_conv_alpha
                  else self.alpha)
         return FewSpikeRelu(self.k, alpha, 
-                            output="var" if is_output else None)
+                            readout="var" if is_output else None)
     
     def pre_convert(self, tf_model):
         # If any normalisation data was provided

@@ -31,7 +31,7 @@ with network:
                                       integrate_during_refrac=True),
                    NUM_HIDDEN)
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
-                   LeakyIntegrate(tau_mem=20.0, softmax=True, output="sum_var"),
+                   LeakyIntegrate(tau_mem=20.0, softmax=True, readout="sum_var"),
                    NUM_OUTPUT)
 
 max_example_time = calc_latest_spike_time(training_spikes)
@@ -45,7 +45,7 @@ with compiled_net:
     start_time = perf_counter()
     metrics, cb_data  = compiled_net.train({input: training_spikes},
                                            {output: training_labels},
-                                           num_epochs=50, shuffle=False)
+                                           num_epochs=50, shuffle=True)
     end_time = perf_counter()
     print(f"Accuracy = {100 * metrics[output].result}%")
     print(f"Time = {end_time - start_time}s")

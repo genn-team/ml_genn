@@ -72,7 +72,7 @@ with network:
                                            relative_reset=True,
                                            integrate_during_refrac=True),
                         NUM_HIDDEN, record_spikes=True)
-    output = Population(LeakyIntegrate(tau_mem=20.0, output="var"),
+    output = Population(LeakyIntegrate(tau_mem=20.0, readout="var"),
                         NUM_OUTPUT)
     
     # Connections

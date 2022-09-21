@@ -36,7 +36,7 @@ class DataNorm(Converter):
         logger.debug(f"layer {tf_layer.name}: threshold={threshold}")
               
         return IntegrateFire(v_thresh=threshold,
-                             output="spike_count" if is_output else None)
+                             readout="spike_count" if is_output else None)
 
     def pre_convert(self, tf_model):
         # NOTE: Data-Norm only normalises an initial sequential portion of
