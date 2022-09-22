@@ -16,8 +16,6 @@ ConnectivityInitializer = Union[Connectivity, str]
 
 
 class Connection:
-    _new_id = count()
-
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta", 
@@ -31,7 +29,7 @@ class Connection:
                                   default_synapses)
 
         # Generate unique name if required
-        self.name = (f"Conn{next(Connection._new_id)}" if name is None
+        self.name = (f"Conn_{source.name}_{target.name}" if name is None
                      else name)
 
         # Add weak references to ourselves to source
@@ -46,3 +44,6 @@ class Connection:
         # Add connection to model
         if add_to_model:
             Network.add_connection(self)
+
+    def __str__(self):
+        return self.name

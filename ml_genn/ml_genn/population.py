@@ -44,3 +44,6 @@ class Population:
             Network.add_population(self)
 
     # **TODO** shape setter which validate shape with neuron parameters etc
+
+    def __str__(self):
+        return self.name
