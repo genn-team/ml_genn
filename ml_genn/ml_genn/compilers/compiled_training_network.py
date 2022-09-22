@@ -168,6 +168,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         return metrics, callback_list.get_data()
     """
+    def save(self, keys=(), serialiser="numpy"):
+        pass
+    
     def _train_batch(self, batch: int, step: int,
                      x: dict, y: dict, metrics,
                      callback_list: CallbackList):
