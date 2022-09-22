@@ -121,7 +121,7 @@ class Model:
     
     def _set_access_model(self, name, var, access_mode):
         # Find var
-        var_index = self._get_list_index(name, var)
+        var_index = self._search_list(name, var)
         
         # Take first two elements of existing var and add access mode
         var_array = self.model[name]
