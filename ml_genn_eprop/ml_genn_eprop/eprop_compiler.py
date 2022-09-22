@@ -32,8 +32,10 @@ class CompileState:
         self._tau_mem = None
         self._tau_adapt = None
         self.feedback_connections = []
-        self.optimiser_connections = []
+        self.weight_optimiser_connections = []
+        self.bias_optimiser_populations = []
         self._neuron_reset_vars = {}
+        self.checkpoint_vars = {}
     
     def add_neuron_readout_reset_vars(self, pop):
         reset_vars = pop.neuron.readout.reset_vars
@@ -210,9 +212,9 @@ gradient_batch_reduce_model = {
 class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
-                 f_target: float = 10.0, dt: float = 1.0, 
-                 batch_size: int = 1, rng_seed: int = 0,
-                 kernel_profiling: bool = False, 
+                 f_target: float = 10.0, train_output_bias: bool = True,
+                 dt: float = 1.0, batch_size: int = 1,
+                 rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True, **genn_kwargs):
         super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                             kernel_profiling,
@@ -225,6 +227,7 @@ class EPropCompiler(Compiler):
         self.tau_reg = tau_reg
         self.c_reg = c_reg
         self.f_target = f_target
+        self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, **kwargs):
@@ -250,8 +253,6 @@ class EPropCompiler(Compiler):
             # **NOTE** all loss functions require this!
             model_copy.add_var("E", "scalar", 0.0)
 
-            # **TODO** bias?
-
             # Add loss function to neuron model
             # **THINK** semantics of this i.e. modifying inplace 
             # seem a bit different than others
@@ -263,6 +264,22 @@ class EPropCompiler(Compiler):
                 f"""
                 $(E) = $({model_copy.output_var_name}) - yTrue;
                 """)
+
+            # If we should train output biases
+            if self.train_output_bias:
+                # Convert Bias parameter into variable
+                # **THINK** do we want some sort of duck-type to get bias var
+                # or add something to model to say which variable is bias
+                model_copy.make_param_var("Bias")
+        
+                # Add DeltaBias
+                model_copy.add_var("DeltaBias", "scalar", 0.0)
+                
+                # Add sim-code to update DeltaBias
+                model_copy.append_sim_code("$(DeltaBias) += $(E);")
+                
+                # Add population to list of those with biases to optimise
+                compile_state.bias_optimiser_populations.append(pop)
 
         # Otherwise, if neuron isn't an input
         elif not hasattr(pop.neuron, "set_input"):
@@ -327,6 +344,7 @@ class EPropCompiler(Compiler):
                 var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+            # **TODO** feedback of source and target different
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
@@ -341,6 +359,7 @@ class EPropCompiler(Compiler):
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+            # **TODO** feedback of source and target different
         # Otherwise, if target neuron is readout, create 
         # weight update model with simple output learning rule
         elif target_neuron.readout is not None:
@@ -354,7 +373,7 @@ class EPropCompiler(Compiler):
             compile_state.feedback_connections.append(conn)
         
         # Add connection to list of connections to optimise
-        compile_state.optimiser_connections.append(conn)
+        compile_state.weight_optimiser_connections.append(conn)
 
         # Return weight update model
         return wum
@@ -369,42 +388,22 @@ class EPropCompiler(Compiler):
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "ISynFeedback"
         
-        # Loop through connections to optimise
-        optimiser_custom_updates = {}
-        for i, c in enumerate(compile_state.optimiser_connections):
+        # Add optimisers to connection weights that require them
+        optimiser_custom_updates = []
+        for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
-            
-            # If batch size is greater than 1
-            if self.batch_size > 1:
-                # Create custom update model to reduce DeltaG into a variable 
-                reduction_optimiser_model = CustomUpdateModel(
-                    gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
-                    {"Gradient": create_wu_var_ref(genn_pop, "DeltaG")})
-                
-                # Add GeNN custom update to model
-                genn_reduction = self.add_custom_update(
-                    genn_model, reduction_optimiser_model, 
-                    "GradientBatchReduce", f"CUBatchReduce{i}")
-                
-                # Create optimiser model without gradient zeroing
-                # logic, connected to reduced gradient
-                optimiser_model = self._optimiser.get_model(
-                    create_wu_var_ref(genn_reduction, "ReducedGradient"),
-                    create_wu_var_ref(genn_pop, "g"),
-                    False)
-            # Otherwise
-            else:
-                # Create optimiser model with gradient zeroing 
-                # logic, connected directly to population
-                optimiser_model = self._optimiser.get_model(
-                    create_wu_var_ref(genn_pop, "DeltaG"),
-                    create_wu_var_ref(genn_pop, "g"),
-                    True)
-
-            # Add GeNN custom update to model
-            optimiser_custom_updates[c] = self.add_custom_update(
-                genn_model, optimiser_model,
-                "GradientLearn", f"CUGradientLearn{i}")
+            optimiser_custom_updates.append(
+                self._create_optimiser_custom_update(
+                    f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
+                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
+        
+        # Add optimisers to population biases that require them
+        for i, p in enumerate(compile_state.bias_optimiser_populations):
+            genn_pop = neuron_populations[p]
+            optimiser_custom_updates.append(
+                self._create_optimiser_custom_update(
+                    f"Bias{i}", create_var_ref(genn_pop, "Bias"),
+                    create_var_ref(genn_pop, "DeltaBias"), genn_model))
         
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
@@ -422,5 +421,39 @@ class EPropCompiler(Compiler):
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
-            base_callbacks, list(optimiser_custom_updates.values()),
+            base_callbacks, optimiser_custom_updates,
             self.reset_time_between_batches)
+
+    def _create_optimiser_custom_update(self, name_suffix, var_ref,
+                                        gradient_ref, genn_model):
+        # If batch size is greater than 1
+        if self.batch_size > 1:
+            # Create custom update model to reduce DeltaG into a variable 
+            reduction_optimiser_model = CustomUpdateModel(
+                gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
+                {"Gradient": gradient_ref})
+            
+            # Add GeNN custom update to model
+            genn_reduction = self.add_custom_update(
+                genn_model, reduction_optimiser_model, 
+                "GradientBatchReduce", "CUBatchReduce" + name_suffix)
+            wu = genn_reduction.custom_wu_update
+            reduced_gradient = (create_wu_var_ref(genn_reduction,
+                                                  "ReducedGradient") if wu
+                                else create_var_ref(genn_reduction, 
+                                                    "ReducedGradient"))
+            # Create optimiser model without gradient zeroing
+            # logic, connected to reduced gradient
+            optimiser_model = self._optimiser.get_model(reduced_gradient, 
+                                                        var_ref, False)
+        # Otherwise
+        else:
+            # Create optimiser model with gradient zeroing 
+            # logic, connected directly to population
+            optimiser_model = self._optimiser.get_model(
+                gradient_ref, var_ref, True)
+
+        # Add GeNN custom update to model
+        return self.add_custom_update(genn_model, optimiser_model,
+                                      "GradientLearn",
+                                      "CUGradientLearn" + name_suffix)

@@ -34,6 +34,10 @@ class Model:
     def set_var_access_mode(self, name, access_mode):
         self._set_access_model("var_name_types", name, access_mode)
 
+    def make_param_var(self, param_name, access_mode=VarAccess_READ_ONLY):
+        self._make_param_var("var_name_types", param_name, 
+                             self.param_vals, self.var_vals, access_mode)
+
     def process(self):
         # Make copy of model
         model_copy = deepcopy(self.model)
@@ -97,6 +101,12 @@ class Model:
     def reset_vars(self):
         return self._get_reset_vars("var_name_types", self.var_vals)
 
+    def _search_list(self, name, value):
+        item = [(i, p) for i, p in enumerate(self.model[name])
+                if p[0] == value]
+        assert len(item) == 1
+        return item[0]
+    
     def _add_to_list(self, name, value):
         if name not in self.model:
             self.model[name] = []
@@ -111,15 +121,26 @@ class Model:
     
     def _set_access_model(self, name, var, access_mode):
         # Find var
-        var_array = self.model[name]
-        var_index = [i for i, v in enumerate(var_array)
-                     if v[0] == var]
-        assert len(var_index) == 1
-        var_index = var_index[0]
+        var_index = self._get_list_index(name, var)
         
         # Take first two elements of existing var and add access mode
+        var_array = self.model[name]
         var_array[var_index] = var_array[var_index][:2] + (access_mode,)
-    
+
+    def _make_param_var(self, var_name, param_name, 
+                        param_vals, var_vals, access_mode):
+        # Search for parameter definition
+        param_index, param = self._search_list("param_name_types", param_name)
+
+        # Remove parameter
+        self.model["param_name_types"].pop(param_index)
+        
+        # Add variable to replace it
+        self._add_to_list(var_name, param[:2] + (access_mode,))
+        
+        # Remove parameter value and add into var vals
+        var_vals[param_name] = param_vals.pop(param_name)
+
     def _get_reset_vars(self, name, var_vals):
         reset_vars = []
         if name in self.model:
@@ -156,7 +177,7 @@ class CustomUpdateModel(Model):
 
 
 class NeuronModel(Model):
-    def __init__(self, model, output_var_name, 
+    def __init__(self, model, output_var_name,
                  param_vals={}, var_vals={}, egp_vals={}):
         super(NeuronModel, self).__init__(model, param_vals, 
                                           var_vals, egp_vals)
@@ -182,13 +203,9 @@ class NeuronModel(Model):
             raise RuntimeError("Output variable not specified")
 
         # Find output variable
-        output_var = [v for v in self.model["var_name_types"]
-                      if v[0] == self.output_var_name]
-        if len(output_var) == 0:
-            raise RuntimeError(f"Output variable "
-                               f"{self.output_var_name} missing")
-        assert len(output_var) == 1
-        return output_var[0]
+        _, output_var = self._search_list("var_name_types",
+                                          self.output_var_name)
+        return output_var
 
 class SynapseModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
