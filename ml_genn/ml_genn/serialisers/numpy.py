@@ -1,3 +1,4 @@
+import numpy as np
 from glob import glob
 from os import path
 

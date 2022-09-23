@@ -15,6 +15,6 @@ class Checkpoint(Callback):
 
     def on_epoch_end(self, epoch, metrics):
         # If we should checkpoint this epoch
-        if (epoch % epoch_interval) == 0:
+        if (epoch % self.epoch_interval) == 0:
             self._compiled_network.save((epoch,), self.serialiser)
 

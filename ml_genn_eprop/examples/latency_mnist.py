@@ -43,9 +43,11 @@ compiled_net = compiler.compile(network)
 with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
+    callbacks = ["batch_progress_bar", "checkpoint"]
     metrics, cb_data  = compiled_net.train({input: training_spikes},
                                            {output: training_labels},
-                                           num_epochs=50, shuffle=True)
+                                           num_epochs=50, shuffle=True,
+                                           callbacks=callbacks)
     end_time = perf_counter()
     print(f"Accuracy = {100 * metrics[output].result}%")
     print(f"Time = {end_time - start_time}s")

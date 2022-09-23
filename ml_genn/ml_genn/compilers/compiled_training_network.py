@@ -183,7 +183,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         for c, v in self.checkpoint_connection_vars:
             genn_pop = self.connection_populations[c]
             genn_pop.pull_var_from_device(v)
-            serialiser.serialise(keys + (c, v), genn_pop.vars[v].view)
+            serialiser.serialise(keys + (c, v), genn_pop.get_var_values(v))
 
         # Loop through population variables to checkpoint
         for p, v in self.checkpoint_population_vars:

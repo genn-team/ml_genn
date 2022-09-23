@@ -283,7 +283,7 @@ class EPropCompiler(Compiler):
                 compile_state.bias_optimiser_populations.append(pop)
 
                 # Add bias to list of checkpoint vars
-                compile_state.checkpoint_population_vars.append((pop, "g"))
+                compile_state.checkpoint_population_vars.append((pop, "Bias"))
 
         # Otherwise, if neuron isn't an input
         elif not hasattr(pop.neuron, "set_input"):
