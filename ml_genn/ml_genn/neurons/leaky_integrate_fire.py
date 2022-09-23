@@ -8,11 +8,11 @@ from ..utils.value import is_value_initializer
 
 
 class LeakyIntegrateFire(Neuron):
-    v_thresh = ValueDescriptor()
-    v_reset = ValueDescriptor()
-    v = ValueDescriptor()
-    tau_mem = ValueDescriptor()
-    tau_refrac = ValueDescriptor()
+    v_thresh = ValueDescriptor("Vthresh")
+    v_reset = ValueDescriptor("Vreset")
+    v = ValueDescriptor("V")
+    tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
+    tau_refrac = ValueDescriptor("TauRefrac")
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
@@ -29,12 +29,6 @@ class LeakyIntegrateFire(Neuron):
         self.relative_reset = relative_reset
         self.integrate_during_refrac = integrate_during_refrac
 
-        if is_value_initializer(self.tau_mem):
-            raise NotImplementedError("Leaky integrate and fire neuron "
-                                      "model not currently support "
-                                      "tau_mem values specified using "
-                                      "Initialiser objects")
-
     def get_model(self, population, dt):
         # Build basic model
         genn_model = {
@@ -43,9 +37,6 @@ class LeakyIntegrateFire(Neuron):
                                  ("Alpha", "scalar")],
             "threshold_condition_code": "$(V) >= $(Vthresh)",
             "is_auto_refractory_required": False}
-        param_vals = {"Vthresh": self.v_thresh, "Vreset": self.v_reset,
-                      "Alpha": np.exp(-dt / self.tau_mem)}
-        var_vals = {"V": self.v}
 
         # Build reset code depending on whether
         # reset should be relative or not
@@ -65,10 +56,6 @@ class LeakyIntegrateFire(Neuron):
             # Add state variable and parameter to control refractoryness
             genn_model["var_name_types"].append(("RefracTime", "scalar"))
             genn_model["param_name_types"].append(("TauRefrac", "scalar"))
-
-            # Initialize
-            param_vals["TauRefrac"] = self.tau_refrac
-            var_vals["RefracTime"] = 0.0
 
             # Build correct sim code depending on whether
             # we should integrate during refractory period
@@ -108,4 +95,6 @@ class LeakyIntegrateFire(Neuron):
                 """
 
         # Return model
-        return NeuronModel(genn_model, "V", param_vals, var_vals)
+        var_vals = {} if self.tau_refrac is None else {"RefracTime": 0.0}
+        return NeuronModel.from_val_descriptors(genn_model, "V", self, dt,
+                                                var_vals=var_vals)

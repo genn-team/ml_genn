@@ -24,9 +24,9 @@ genn_model = {
 
 
 class IntegrateFireInput(Neuron, InputBase):
-    v_thresh = ValueDescriptor
-    v_reset = ValueDescriptor
-    v = ValueDescriptor
+    v_thresh = ValueDescriptor("Vthresh")
+    v_reset = ValueDescriptor("Vreset")
+    v = ValueDescriptor("V")
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0):
@@ -37,6 +37,5 @@ class IntegrateFireInput(Neuron, InputBase):
         self.v = v
 
     def get_model(self, population, dt):
-        return NeuronModel(genn_model, None,
-                           {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
-                           {"V": self.v, "Input": 0.0})
+        return NeuronModel.from_val_descriptors(genn_model, None, self, dt,
+                                                var_vals={"Input": 0.0})

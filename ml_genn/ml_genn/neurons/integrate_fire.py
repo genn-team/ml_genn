@@ -2,6 +2,7 @@ from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
+
 genn_model = {
     "var_name_types": [("V", "scalar")],
     "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar")],
@@ -21,9 +22,9 @@ genn_model = {
 
 
 class IntegrateFire(Neuron):
-    v_thresh = ValueDescriptor()
-    v_reset = ValueDescriptor()
-    v = ValueDescriptor()
+    v_thresh = ValueDescriptor("Vthresh")
+    v_reset = ValueDescriptor("Vreset")
+    v = ValueDescriptor("V")
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, softmax: bool = False, readout=None):
@@ -34,6 +35,4 @@ class IntegrateFire(Neuron):
         self.v = v
 
     def get_model(self, population, dt):
-        return NeuronModel(genn_model, "V",
-                           {"Vthresh": self.v_thresh, "Vreset": self.v_reset},
-                           {"V": self.v})
+        return NeuronModel.from_val_descriptors(genn_model, "V", self, dt)

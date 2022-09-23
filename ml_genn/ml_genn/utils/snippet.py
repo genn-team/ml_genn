@@ -15,7 +15,12 @@ class ConstantValueDescriptor:
         self.name = name
 
     def __get__(self, instance, owner):
-        return getattr(instance, f"_{self.name}")
+        # If descriptor is accessed as a class attribute, return it
+        if instance is None:
+            return self
+        # Otherwise, return attribute value
+        else:
+            return getattr(instance, f"_{self.name}")
 
     def __set__(self, instance, value):
         if isinstance(value, Number):

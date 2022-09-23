@@ -18,7 +18,7 @@ genn_model = {
         """}
         
 class Exponential(Synapse):
-    tau = ValueDescriptor()
+    tau = ValueDescriptor("ExpDecay", lambda val, dt: np.exp(-dt / val))
     
     def __init__(self, tau:InitValue=5.0):
         super(Exponential, self).__init__()
@@ -31,5 +31,4 @@ class Exponential(Synapse):
                                       " using Initialiser objects")
 
     def get_model(self, connection, dt):
-        return SynapseModel(genn_model, 
-                            {"ExpDecay": np.exp(-dt / self.tau.value)}, {})
+        return SynapseModel.from_val_descriptors(genn_model, self, dt)

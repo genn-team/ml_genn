@@ -7,7 +7,7 @@ from ..utils.value import is_value_array
 
 class Connectivity:
     weight = ValueDescriptor()
-    delay = ValueDescriptor
+    delay = ValueDescriptor()
 
     def __init__(self, weight: InitValue, delay: InitValue):
         self.weight = weight

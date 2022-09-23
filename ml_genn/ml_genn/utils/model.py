@@ -7,8 +7,8 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 from copy import deepcopy
 from textwrap import dedent
 from pygenn.genn_model import init_var
-from .value import (is_value_constant, is_value_array,
-                    is_value_initializer)
+from .value import (get_values, is_value_constant,
+                    is_value_array, is_value_initializer)
 
 class Model:
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
@@ -193,6 +193,15 @@ class NeuronModel(Model):
     def append_reset_code(self, code):
         self._append_code("reset_code", code)
     
+    @staticmethod
+    def from_val_descriptors(model, output_var_name, inst, dt,
+                             param_vals={}, var_vals={}, egp_vals={}):
+        return NeuronModel(
+            model, output_var_name, 
+            get_values(inst, model["param_name_types"], dt, param_vals),
+            get_values(inst, model["var_name_types"], dt, var_vals),
+            egp_vals)
+
     @property
     def output_var(self):
         # Check model has variables and that
@@ -211,6 +220,15 @@ class SynapseModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
+    
+    @staticmethod
+    def from_val_descriptors(model, inst, dt, 
+                             param_vals={}, var_vals={}, egp_vals={}):
+        return SynapseModel(
+            model, 
+            get_values(inst, model["param_name_types"], dt, param_vals),
+            get_values(inst, model["var_name_types"], dt, var_vals), 
+            egp_vals)
 
 
 class WeightUpdateModel(Model):

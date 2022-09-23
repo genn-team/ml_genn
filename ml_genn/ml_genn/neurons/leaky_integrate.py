@@ -15,9 +15,9 @@ genn_model = {
 
 
 class LeakyIntegrate(Neuron):
-    v = ValueDescriptor()
-    bias = ValueDescriptor()
-    tau_mem = ValueDescriptor()
+    v = ValueDescriptor("V")
+    bias = ValueDescriptor("Bias")
+    tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
 
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, 
@@ -29,7 +29,4 @@ class LeakyIntegrate(Neuron):
         self.tau_mem = tau_mem
 
     def get_model(self, population, dt):
-        return NeuronModel(genn_model, "V",
-                           {"Alpha": np.exp(-dt / self.tau_mem), 
-                            "Bias": self.bias},
-                           {"V": self.v})
+        return NeuronModel.from_val_descriptors(genn_model, "V", self, dt)
