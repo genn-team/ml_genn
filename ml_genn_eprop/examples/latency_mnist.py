@@ -59,6 +59,7 @@ if TRAIN:
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
 else:
+    # Load network state from final checkpoint
     network.load((15,))
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
