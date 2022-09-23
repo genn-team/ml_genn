@@ -1,14 +1,10 @@
 from .callback import Callback
-from ..serialisers import Serialiser
-from ..utils.module import get_object
 
-from ..serialisers import default_serialisers
 
 class Checkpoint(Callback):
     def __init__(self, serialiser="numpy", epoch_interval=1,
                  weights=True, delays=False):
-        self.serialiser = get_object(serialiser, Serialiser, "Serialiser",
-                                     default_serialisers)
+        self.serialiser = serialiser
         self.epoch_interval = epoch_interval
         self.weights = weights
         self.delays = delays

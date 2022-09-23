@@ -3,14 +3,16 @@ import numpy as np
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..metrics import Metric
+from ..serialisers import Serialiser
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 
 from ..utils.data import batch_dataset, get_dataset_size, permute_dataset
-from ..utils.module import get_object_mapping
+from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 
 from ..metrics import default_metrics
+from ..serialisers import default_serialisers
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
@@ -18,6 +20,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
                  optimiser, example_timesteps: int, 
                  base_callbacks: list,
                  optimiser_custom_updates: list,
+                 checkpoint_connection_vars: list,
+                 checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
@@ -28,6 +32,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.example_timesteps = example_timesteps
         self.base_callbacks = base_callbacks
         self.optimiser_custom_updates = optimiser_custom_updates
+        self.checkpoint_connection_vars = checkpoint_connection_vars
+        self.checkpoint_population_vars = checkpoint_population_vars
         self.reset_time_between_batches = reset_time_between_batches
 
     def train(self, x: dict, y: dict, num_epochs: int, shuffle: bool = True,
@@ -169,8 +175,22 @@ class CompiledTrainingNetwork(CompiledNetwork):
         return metrics, callback_list.get_data()
     """
     def save(self, keys=(), serialiser="numpy"):
-        pass
-    
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through connection variables to checkpoint
+        for c, v in self.checkpoint_connection_vars:
+            genn_pop = self.connection_populations[c]
+            genn_pop.pull_var_from_device(v)
+            serialiser.serialise(keys + (c, v), genn_pop.vars[v].view)
+
+        # Loop through population variables to checkpoint
+        for p, v in self.checkpoint_population_vars:
+            genn_pop = self.neuron_populations[p]
+            genn_pop.pull_var_from_device(v)
+            serialiser.serialise(keys + (c, v), genn_pop.vars[v].view)
+
     def _train_batch(self, batch: int, step: int,
                      x: dict, y: dict, metrics,
                      callback_list: CallbackList):

@@ -35,7 +35,8 @@ class CompileState:
         self.weight_optimiser_connections = []
         self.bias_optimiser_populations = []
         self._neuron_reset_vars = {}
-        self.checkpoint_vars = {}
+        self.checkpoint_connection_vars = []
+        self.checkpoint_population_vars = []
     
     def add_neuron_readout_reset_vars(self, pop):
         reset_vars = pop.neuron.readout.reset_vars
@@ -281,6 +282,9 @@ class EPropCompiler(Compiler):
                 # Add population to list of those with biases to optimise
                 compile_state.bias_optimiser_populations.append(pop)
 
+                # Add bias to list of checkpoint vars
+                compile_state.checkpoint_population_vars.append((pop, "g"))
+
         # Otherwise, if neuron isn't an input
         elif not hasattr(pop.neuron, "set_input"):
             # Add additional input variable to receive feedback
@@ -371,7 +375,10 @@ class EPropCompiler(Compiler):
 
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
-        
+
+        # Add weights to list of checkpoint vars
+        compile_state.checkpoint_connection_vars.append((conn, "g"))
+
         # Add connection to list of connections to optimise
         compile_state.weight_optimiser_connections.append(conn)
 
@@ -422,7 +429,8 @@ class EPropCompiler(Compiler):
             genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
             base_callbacks, optimiser_custom_updates,
-            self.reset_time_between_batches)
+            compile_state.checkpoint_connection_vars,
+            compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):

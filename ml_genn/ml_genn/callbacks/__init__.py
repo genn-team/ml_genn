@@ -1,4 +1,5 @@
 from .callback import Callback
+from .checkpoint import Checkpoint
 from .custom_update import (CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd,
                             CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd)
 from .optimiser_param_schedule import OptimiserParamSchedule
