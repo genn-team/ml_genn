@@ -1,5 +1,7 @@
 from .serialisers import Serialiser
+
 from .utils.module import get_object
+from .utils.value import set_values
 
 from .serialisers import default_serialisers
 
@@ -23,25 +25,30 @@ class Network:
             raise RuntimeError("Connection must be created "
                                "inside a ``with network:`` block")
         Network._context.connections.append(conn)
-    
-    def load(self, keys=(), serialiser="numpy", weights=True, delays=False):
+
+    def load(self, keys=(), serialiser="numpy"):
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)
 
         # Loop through connections
         for c in self.connections:
-            # If weights should be serialised, deserialise into connectivity
-            if weights:
-                weight_keys = keys + (c, "weight")
-                c.connectivity.weight = serialiser.deserialise(weight_keys)
+            # Deserialize everthing relating to connection
+            state = serialiser.deserialise_all(keys + (c,))
             
-            # If weights should be serialised, deserialise into connectivity
-            if delays:
-                delay_keys = keys + (c, "delay")
-                c.connectivity.delay = serialiser.deserialise(delay_keys)
+            # **HACK** for now, assume single serialised variable is weight
+            if len(state) > 0:
+                assert len(state) == 1
+                c.connectivity.weight = next(iter(state.values()))
         
-        # **TODO** mechanism for marking trainable population variables
+        # Loop through populations
+        for p in self.populations:
+            # Deserialize everthing relating to population
+            state = serialiser.deserialise_all(keys + (p,))
+
+            # Set any variables in neuron
+            # **TODO** also synapse, also give error if variable was not found
+            set_values(p.neuron, state)
 
     def __enter__(self):
         if Network._context is not None:

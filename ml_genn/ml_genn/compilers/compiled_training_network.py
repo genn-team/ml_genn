@@ -189,7 +189,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         for p, v in self.checkpoint_population_vars:
             genn_pop = self.neuron_populations[p]
             genn_pop.pull_var_from_device(v)
-            serialiser.serialise(keys + (c, v), genn_pop.vars[v].view)
+            serialiser.serialise(keys + (p, v), genn_pop.vars[v].view)
 
     def _train_batch(self, batch: int, step: int,
                      x: dict, y: dict, metrics,

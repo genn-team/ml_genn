@@ -211,6 +211,10 @@ class Compiler:
         clean_name = "".join(c for c in name if c.isalnum() or c == "_")
         clean_name = clean_name.lstrip(digits)
 
+        # Add name of compiler type to name
+        # **THINK** should this include compiler parameters?
+        clean_name += type(self).__name__
+
         # Create GeNN model and set basic properties
         genn_model = GeNNModel("float", clean_name, **self.genn_kwargs)
         genn_model.dT = self.dt

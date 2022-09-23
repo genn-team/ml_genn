@@ -73,17 +73,36 @@ def is_value_initializer(value):
     return isinstance(value, Initializer)
 
 
+# **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def get_values(inst, name_types, dt, vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
-    
+
     # Build dictionary mapping GeNN names to var descriptors
-    descriptors = {d.genn_name: d  for n, d in descriptors 
+    descriptors = {d.genn_name: d  for n, d in descriptors
                    if (isinstance(d, ValueDescriptor)
                        and d.genn_name is not None)}
-    
+
     # Return map of GeNN names and transformed values provided by descriptor
     vals.update({v[0]: descriptors[v[0]].get_transformed(inst, dt)
                  for v in name_types
                  if v[0] in descriptors})
     return vals
+
+
+# **THINK** should maybe a method in a base class for Neuron/Synapse etc
+def set_values(inst, vals):
+    # Get descriptors
+    descriptors = getmembers(type(inst), isdatadescriptor)
+
+    # Build dictionary mapping GeNN names to var descriptors
+    descriptors = {d.genn_name: d  for n, d in descriptors
+                   if (isinstance(d, ValueDescriptor)
+                       and d.genn_name is not None)}
+    
+    # Loop through values
+    for n, v in vals.items():
+        # If there is a descriptor matching 
+        # this name, use it to set variable
+        if n in descriptors:
+            descriptors[n].__set__(inst, v)

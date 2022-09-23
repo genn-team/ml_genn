@@ -19,12 +19,20 @@ class Numpy(Serialiser):
         
         # Loop through files under keys
         data = {}
-        for f in glob(self._get_filename(keys, "_*.npy")):
-            pass
+        for f in glob(self._get_filename(keys, "-*.npy")):
+            # Extract file title without path or extension from filename
+            title = path.splitext(path.split(f)[1])[0]
+
+            # Split title into keys and slice out those that we seperated
+            file_keys = title.split("-")[len(keys):]
+
+            # Add file to dictionary with this key
+            assert len(file_keys) == 1
+            data[file_keys[0]] = np.load(f)
         return data
 
     def _get_file_title(self, keys):
-        return "_".join(str(x) for x in keys)
+        return "-".join(str(x) for x in keys)
 
     def _get_filename(self, keys, suffix):
         return path.join(self.path,
