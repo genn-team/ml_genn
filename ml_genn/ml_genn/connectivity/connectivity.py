@@ -1,11 +1,13 @@
 import numpy as np
 
+from abc import ABC
 from ..utils.value import InitValue, ValueDescriptor
 
+from abc import abstractmethod
 from ..utils.value import is_value_array
 
 
-class Connectivity:
+class Connectivity(ABC):
     weight = ValueDescriptor()
     delay = ValueDescriptor()
 
@@ -20,3 +22,11 @@ class Connectivity:
                 and np.shape(weight_array) != np.shape(delay_array)):
             raise RuntimeError("If weights and delays are specified as "
                                "arrays, they should be the same shape")
+
+    @abstractmethod
+    def connect(self, source, target):
+        pass
+
+    @abstractmethod
+    def get_snippet(self, connection, prefer_in_memory: bool):
+        pass

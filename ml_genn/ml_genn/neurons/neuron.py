@@ -1,16 +1,22 @@
+from abc import ABC
 from ..readouts import Readout
 
+from abc import abstractmethod
 from ..utils.module import get_object
 
 from ..readouts import default_readouts
 
 
-class Neuron:
+class Neuron(ABC):
     def __init__(self, softmax=False, readout=None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
         self.softmax = softmax
         self.readout = get_object(readout, Readout, "Readout",
                                   default_readouts)
+
+    @abstractmethod
+    def get_model(self, population, dt):
+        pass
 
     def get_readout(self, genn_pop, batch_size: int, shape):
         if self.readout is None:
