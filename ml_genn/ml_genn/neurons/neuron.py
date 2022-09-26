@@ -5,7 +5,10 @@ from abc import abstractmethod
 from ..utils.module import get_object
 
 from ..readouts import default_readouts
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from .. import Population
 
 class Neuron(ABC):
     def __init__(self, softmax=False, readout=None, **kwargs):
@@ -15,7 +18,7 @@ class Neuron(ABC):
                                   default_readouts)
 
     @abstractmethod
-    def get_model(self, population, dt):
+    def get_model(self, population: "Population", dt: float):
         pass
 
     def get_readout(self, genn_pop, batch_size: int, shape):

@@ -9,6 +9,7 @@ from .synapses import Synapse
 from copy import deepcopy
 from .utils.module import get_object
 
+from .connectivity import default_connectivity
 from .synapses import default_synapses
 
 SynapseInitializer = Union[Synapse, str]
@@ -24,7 +25,8 @@ class Connection:
         self.source = ref(source)
         self.target = ref(target)
 
-        self.connectivity = deepcopy(connectivity)
+        self.connectivity = get_object(connectivity, Connectivity, 
+                                       "Connectivity", default_connectivity)
         self.synapse = get_object(synapse, Synapse, "Synapse",
                                   default_synapses)
 

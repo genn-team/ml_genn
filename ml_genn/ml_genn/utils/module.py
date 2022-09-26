@@ -1,4 +1,5 @@
 from inspect import Parameter
+from typing import Any, Dict, Mapping, Optional, Type, TypeVar
 
 from copy import copy
 from re import compile
@@ -8,12 +9,13 @@ from inspect import isclass, signature
 camel_to_snake_pattern = compile(r"(?<!^)(?=[A-Z])")
 
 
-def get_module_classes(globals, base_class):
+def get_module_classes(globals: Mapping[str, Any],
+                       base_class: Type) -> Dict[str, Any]:
     # Loop through names of objects in module
     target_dict = {}
     for name, obj in globals.items():
         # If object is a class derived from
-        # base class,but not base class itself
+        # base class, but not base class itself
         if (isclass(obj) and issubclass(obj, base_class)
                 and obj != base_class):
             # Inspect class constructor to get parameters
@@ -33,8 +35,10 @@ def get_module_classes(globals, base_class):
                 target_dict[snake_name] = obj()
     return target_dict
 
+T = TypeVar("T")
 
-def get_object(obj, base_class, description, dictionary):
+def get_object(obj, base_class: Type[T], description: str,
+               dictionary: Mapping[str, T]) -> Optional[T]:
     if obj is None:
         return obj
     elif isinstance(obj, base_class):
@@ -49,7 +53,7 @@ def get_object(obj, base_class, description, dictionary):
                            f"either as a string or a {description} object")
 
 
-def get_object_mapping(obj, keys, base_class, description, dictionary) -> dict:
+def get_object_mapping(obj, keys, base_class: Type, description:str, dictionary) -> dict:
     # If metrics are already in dictionary form
     if isinstance(obj, dict):
         # If keys match, process each metric and create new dictionary

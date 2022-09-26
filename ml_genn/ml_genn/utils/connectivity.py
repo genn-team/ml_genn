@@ -1,8 +1,14 @@
 import numpy as np
 
 from enum import Enum
+from typing import Sequence, Tuple, Union
 from ..initializers import Initializer
 from ..utils.snippet import InitializerSnippet
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .. import Population
 
 
 class PadMode(Enum):
@@ -20,7 +26,7 @@ class KernelInit(Initializer):
         return InitializerSnippet("Kernel", {}, {"kernel": self.kernel})
 
 
-def get_conv_same_padding(in_size, conv_size, stride):
+def get_conv_same_padding(in_size: int, conv_size: int, stride: int) -> int:
     # Calculate padding following approach described at
     # https://github.com/tensorflow/tensorflow/blob/v2.7.0/tensorflow/python/ops/nn_ops.py#L48-L88
     if (in_size % stride == 0):
@@ -28,8 +34,8 @@ def get_conv_same_padding(in_size, conv_size, stride):
     else:
         return max(conv_size - (in_size % stride), 0) // 2
 
-
-def get_param_2d(name, param, default=None):
+def get_param_2d(name: str, param: Union[None, int, Sequence[int]],
+                 default=Tuple[int, int]) -> Tuple[int, int]:
     if param is None:
         if default is not None:
             return default
@@ -48,7 +54,8 @@ def get_param_2d(name, param, default=None):
     else:
         raise TypeError(f"{name}: incorrect type: {type(param)}")
 
-def update_target_shape(target, output_shape: tuple, flatten_out: bool):
+def update_target_shape(target: "Population", output_shape: Sequence[int],
+                        flatten_out: bool):
     # If no target shape is set, set to either flattened
     # or un-modified output shape depending on flag
     flat_output_shape = (np.prod(output_shape),)

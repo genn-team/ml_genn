@@ -6,6 +6,11 @@ from ..utils.value import InitValue, ValueDescriptor
 from abc import abstractmethod
 from ..utils.value import is_value_array
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .. import Connection, Population
+
 
 class Connectivity(ABC):
     weight = ValueDescriptor()
@@ -24,9 +29,9 @@ class Connectivity(ABC):
                                "arrays, they should be the same shape")
 
     @abstractmethod
-    def connect(self, source, target):
+    def connect(self, source: "Population", target: "Population"):
         pass
 
     @abstractmethod
-    def get_snippet(self, connection, prefer_in_memory: bool):
+    def get_snippet(self, connection: "Connection", prefer_in_memory: bool):
         pass

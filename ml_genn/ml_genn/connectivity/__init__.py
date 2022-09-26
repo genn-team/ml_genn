@@ -7,3 +7,7 @@ from .conv_2d_transpose import Conv2DTranspose
 from .dense import Dense
 from .fixed_probability import FixedProbability
 from .one_to_one import OneToOne
+
+from ..utils.module import get_module_classes
+
+default_connectivity = get_module_classes(globals(), Connectivity)

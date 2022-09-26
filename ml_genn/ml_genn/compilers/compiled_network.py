@@ -1,12 +1,12 @@
 import numpy as np
 
-from typing import Optional, Sequence, Union
+from typing import List, Mapping, Optional, Sequence, Union
 from ..utils.callback_list import CallbackList
 from ..utils.network import PopulationType
 
 from ..utils.network import get_underlying_pop
 
-OutputType = Union[np.ndarray, Sequence[np.ndarray]]
+OutputType = Union[np.ndarray, List[np.ndarray]]
 
 
 class CompiledNetwork:

@@ -7,7 +7,7 @@ class InputBase:
 
         self.var_name = var_name
 
-    def set_input(self, genn_pop, batch_size, shape, input):
+    def set_input(self, genn_pop, batch_size: int, shape, input):
         # Ensure input is something convertable to a numpy array
         input = np.asarray(input)
 

@@ -10,6 +10,11 @@ from ..utils.model import NeuronModel
 
 from ..utils.data import batch_spikes, calc_start_spikes
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .. import Population
+
 genn_model = {
     "var_name_types": [("StartSpike", "unsigned int"),
                        ("EndSpike", "unsigned int",
@@ -32,7 +37,7 @@ class SpikeInput(Neuron):
 
         self.max_spikes = max_spikes
     
-    def set_input(self, genn_pop, batch_size, shape,
+    def set_input(self, genn_pop, batch_size: int, shape,
                   input: Union[PreprocessedSpikes, Sequence[PreprocessedSpikes]]):
         # Batch spikes
         batched_spikes = batch_spikes(input, batch_size)
@@ -54,7 +59,7 @@ class SpikeInput(Neuron):
         genn_pop.push_var_to_device("StartSpike")
         genn_pop.push_var_to_device("EndSpike")
     
-    def get_model(self, population, dt):
+    def get_model(self, population: "Population", dt: float):
         return NeuronModel(genn_model, None, {}, 
                            {"StartSpike": 0, "EndSpike": 0},
                            {"SpikeTimes": np.empty(self.max_spikes)})

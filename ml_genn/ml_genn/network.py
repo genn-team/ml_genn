@@ -1,9 +1,17 @@
+from typing import Union
 from .serialisers import Serialiser
 
 from .utils.module import get_object
 from .utils.value import set_values
 
 from .serialisers import default_serialisers
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import Connection, Population
+
+SerialiserInitializer = Union[Serialiser, str]
+
 
 class Network:
     _context = None
@@ -13,20 +21,20 @@ class Network:
         self.connections = []
 
     @staticmethod
-    def add_population(pop):
+    def add_population(pop: "Population"):
         if Network._context is None:
             raise RuntimeError("Population must be created "
                                "inside a ``with network:`` block")
         Network._context.populations.append(pop)
 
     @staticmethod
-    def add_connection(conn):
+    def add_connection(conn: "Connection"):
         if Network._context is None:
             raise RuntimeError("Connection must be created "
                                "inside a ``with network:`` block")
         Network._context.connections.append(conn)
 
-    def load(self, keys=(), serialiser="numpy"):
+    def load(self, keys=(), serialiser: SerialiserInitializer = "numpy"):
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)

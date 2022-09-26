@@ -1,8 +1,11 @@
-from typing import Sequence
+import numpy as np
 
+from numbers import Number
+from typing import Any, MutableMapping, Sequence, Union
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_READ_WRITE,
                                         VarAccessMode_READ_WRITE)
+from .value import Value
 
 from copy import deepcopy
 from textwrap import dedent
@@ -10,31 +13,38 @@ from pygenn.genn_model import init_var
 from .value import (get_values, is_value_constant,
                     is_value_array, is_value_initializer)
 
+EGPValue = Union[Number, Sequence[Number], np.ndarray]
+
+
 class Model:
-    def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
+    def __init__(self, model: MutableMapping[str, Any],
+                 param_vals: MutableMapping[str, Value] = {},
+                 var_vals: MutableMapping[str, Value] = {},
+                 egp_vals: MutableMapping[str, EGPValue] = {}):
         self.model = model
     
         self.param_vals = param_vals
         self.var_vals = var_vals
         self.egp_vals = egp_vals
     
-    def add_param(self, name, type, value):
+    def add_param(self, name: str, type: str, value: Value):
         self._add_to_list("param_name_types", (name, type))
         self.param_vals[name] = value
 
-    def add_var(self, name, type, value,
-                access_mode=VarAccess_READ_WRITE):
+    def add_var(self, name: str, type: str, value: Value,
+                access_mode: int = VarAccess_READ_WRITE):
         self._add_to_list("var_name_types", (name, type, access_mode))
         self.var_vals[name] = value
 
-    def add_egp(self, name, type, value):
+    def add_egp(self, name: str, type: str, value: EGPValue):
         self._add_to_list("extra_global_params", (name, type))
         self.egp_vals[name] = value
     
-    def set_var_access_mode(self, name, access_mode):
+    def set_var_access_mode(self, name: str, access_mode: int):
         self._set_access_model("var_name_types", name, access_mode)
 
-    def make_param_var(self, param_name, access_mode=VarAccess_READ_ONLY):
+    def make_param_var(self, param_name: str, 
+                       access_mode: int = VarAccess_READ_ONLY):
         self._make_param_var("var_name_types", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
@@ -101,25 +111,25 @@ class Model:
     def reset_vars(self):
         return self._get_reset_vars("var_name_types", self.var_vals)
 
-    def _search_list(self, name, value):
+    def _search_list(self, name: str, value: str):
         item = [(i, p) for i, p in enumerate(self.model[name])
                 if p[0] == value]
         assert len(item) == 1
         return item[0]
     
-    def _add_to_list(self, name, value):
+    def _add_to_list(self, name: str, value):
         if name not in self.model:
             self.model[name] = []
         self.model[name].append(value)
 
-    def _append_code(self, name, code):
+    def _append_code(self, name: str, code: str):
         code = dedent(code)
         if name not in self.model:
             self.model[name] = f"{code}\n"
         else:
             self.model[name] += f"\n{code}\n"
     
-    def _set_access_model(self, name, var, access_mode):
+    def _set_access_model(self, name: str, var: str, access_mode):
         # Find var
         var_index, _ = self._search_list(name, var)
         
@@ -127,7 +137,7 @@ class Model:
         var_array = self.model[name]
         var_array[var_index] = var_array[var_index][:2] + (access_mode,)
 
-    def _make_param_var(self, var_name, param_name, 
+    def _make_param_var(self, var_name: str, param_name: str,
                         param_vals, var_vals, access_mode):
         # Search for parameter definition
         param_index, param = self._search_list("param_name_types", param_name)
@@ -141,7 +151,7 @@ class Model:
         # Remove parameter value and add into var vals
         var_vals[param_name] = param_vals.pop(param_name)
 
-    def _get_reset_vars(self, name, var_vals):
+    def _get_reset_vars(self, name: str, var_vals):
         reset_vars = []
         if name in self.model:
             # Loop through them

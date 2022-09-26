@@ -9,8 +9,8 @@ from inspect import getmembers, isdatadescriptor
 
 from ..initializers import default_initializers
 
-InitValue = Union[Number, Sequence[Number], np.ndarray, Initializer, str]
-
+Value = Union[Number, Sequence[Number], np.ndarray, Initializer]
+InitValue = Union[Value, str]
 
 class ValueDescriptor:
     def __init__(self, genn_name: str = None, value_transform = None):
