@@ -28,6 +28,7 @@ author = "James Turner, Jamie Knight"
 # extensions coming with Sphinx (named "sphinx.ext.*") or your custom
 # ones.
 extensions = ["sphinx.ext.autodoc",
+              "sphinx_autodoc_typehints",
               "sphinx.ext.napoleon"]
 
 napoleon_google_docstring = False

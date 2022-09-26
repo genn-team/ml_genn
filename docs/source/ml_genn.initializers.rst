@@ -12,6 +12,14 @@ ml\_genn.initializers.initializer module
    :undoc-members:
    :show-inheritance:
 
+ml\_genn.initializers.normal module
+-----------------------------------
+
+.. automodule:: ml_genn.initializers.normal
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ml\_genn.initializers.uniform module
 ------------------------------------
 
@@ -27,7 +35,6 @@ ml\_genn.initializers.wrapper module
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Module contents
 ---------------

@@ -28,7 +28,6 @@ ml\_genn.synapses.synapse module
    :undoc-members:
    :show-inheritance:
 
-
 Module contents
 ---------------
 

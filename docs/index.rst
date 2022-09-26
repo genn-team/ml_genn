@@ -15,6 +15,7 @@ Welcome to mlGeNN's documentation!
    :titlesonly:
 
    mlGeNN reference <source/ml_genn>
+   mlGeNN eProp reference <source/ml_genn_eprop>
    mlGeNN TF reference <source/ml_genn_tf>
 
 

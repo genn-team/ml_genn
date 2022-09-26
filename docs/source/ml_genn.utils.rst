@@ -28,6 +28,14 @@ ml\_genn.utils.data module
    :undoc-members:
    :show-inheritance:
 
+ml\_genn.utils.filter module
+----------------------------
+
+.. automodule:: ml_genn.utils.filter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ml\_genn.utils.model module
 ---------------------------
 
@@ -52,14 +60,6 @@ ml\_genn.utils.network module
    :undoc-members:
    :show-inheritance:
 
-ml\_genn.utils.plotting module
-------------------------------
-
-.. automodule:: ml_genn.utils.plotting
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 ml\_genn.utils.snippet module
 -----------------------------
 
@@ -75,7 +75,6 @@ ml\_genn.utils.value module
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Module contents
 ---------------

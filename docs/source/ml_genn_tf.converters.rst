@@ -52,7 +52,6 @@ ml\_genn\_tf.converters.spike\_norm module
    :undoc-members:
    :show-inheritance:
 
-
 Module contents
 ---------------
 

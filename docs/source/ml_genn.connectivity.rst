@@ -84,7 +84,6 @@ ml\_genn.connectivity.sparse\_base module
    :undoc-members:
    :show-inheritance:
 
-
 Module contents
 ---------------
 

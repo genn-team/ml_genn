@@ -12,6 +12,14 @@ ml\_genn.compilers.compiled\_network module
    :undoc-members:
    :show-inheritance:
 
+ml\_genn.compilers.compiled\_training\_network module
+-----------------------------------------------------
+
+.. automodule:: ml_genn.compilers.compiled_training_network
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ml\_genn.compilers.compiler module
 ----------------------------------
 
@@ -43,7 +51,6 @@ ml\_genn.compilers.weight\_update\_models module
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Module contents
 ---------------

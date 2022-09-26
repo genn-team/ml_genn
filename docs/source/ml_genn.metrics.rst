@@ -28,7 +28,6 @@ ml\_genn.metrics.sparse\_categorical\_accuracy module
    :undoc-members:
    :show-inheritance:
 
-
 Module contents
 ---------------
 

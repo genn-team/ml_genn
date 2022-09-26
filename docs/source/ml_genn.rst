@@ -5,14 +5,18 @@ Subpackages
 -----------
 
 .. toctree::
+   :maxdepth: 4
 
    ml_genn.callbacks
    ml_genn.compilers
    ml_genn.connectivity
    ml_genn.initializers
+   ml_genn.losses
    ml_genn.metrics
    ml_genn.neurons
-   ml_genn.outputs
+   ml_genn.optimisers
+   ml_genn.readouts
+   ml_genn.serialisers
    ml_genn.synapses
    ml_genn.utils
 
@@ -58,7 +62,6 @@ ml\_genn.sequential\_network module
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Module contents
 ---------------

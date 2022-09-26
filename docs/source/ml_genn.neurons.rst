@@ -4,6 +4,14 @@ ml\_genn.neurons package
 Submodules
 ----------
 
+ml\_genn.neurons.adaptive\_leaky\_integrate\_fire module
+--------------------------------------------------------
+
+.. automodule:: ml_genn.neurons.adaptive_leaky_integrate_fire
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ml\_genn.neurons.binary\_spike\_input module
 --------------------------------------------
 
@@ -52,6 +60,14 @@ ml\_genn.neurons.integrate\_fire\_input module
    :undoc-members:
    :show-inheritance:
 
+ml\_genn.neurons.leaky\_integrate module
+----------------------------------------
+
+.. automodule:: ml_genn.neurons.leaky_integrate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ml\_genn.neurons.leaky\_integrate\_fire module
 ----------------------------------------------
 
@@ -83,7 +99,6 @@ ml\_genn.neurons.spike\_input module
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Module contents
 ---------------
