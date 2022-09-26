@@ -28,11 +28,10 @@ author = "James Turner, Jamie Knight"
 # extensions coming with Sphinx (named "sphinx.ext.*") or your custom
 # ones.
 extensions = ["sphinx.ext.autodoc",
-              "sphinx_autodoc_typehints",
-              "sphinx.ext.napoleon"]
+              "sphinx.ext.napoleon",
+              "sphinx_autodoc_typehints"]
 
-napoleon_google_docstring = False
-napoleon_use_param = False
+napoleon_use_param = True
 napoleon_use_ivar = True
 
 # Add any paths that contain templates here, relative to this directory.
