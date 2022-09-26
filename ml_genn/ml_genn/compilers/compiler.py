@@ -5,9 +5,12 @@ import os
 from collections import defaultdict, namedtuple
 from pygenn import GeNNModel
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
+from typing import Optional
 from .compiled_network import CompiledNetwork
-from ..network import Network
-from ..utils.model import CustomUpdateModel, WeightUpdateModel
+from .. import Connection, Population, Network
+from ..utils.model import (CustomUpdateModel, NeuronModel,
+                           SynapseModel, WeightUpdateModel)
+from ..utils.value import InitValue
 
 from copy import deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
@@ -57,7 +60,7 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
         model.append_update_code(f"$({name}) = $({name}Reset);")
     return model
 
-def get_neuron_model_with_output(pop, dt):
+def get_neuron_model_with_output(pop: Population, dt: float):
     neuron_model = pop.neuron.get_model(pop, dt)
     if pop.neuron.readout is None:
         return neuron_model
@@ -128,13 +131,14 @@ class Compiler:
         self.prefer_in_memory_connect = prefer_in_memory_connect
         self.genn_kwargs = genn_kwargs
 
-    def pre_compile(self, network, **kwargs):
+    def pre_compile(self, network: Network, **kwargs):
         return None
 
-    def calculate_delay(self, conn, delay, compile_state):
+    def calculate_delay(self, conn: Connection, delay, compile_state):
         return delay
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state):
         model_copy = deepcopy(model)
 
         # Delete negative threshold condition if there is one
@@ -144,11 +148,13 @@ class Compiler:
 
         return model_copy
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state):
         # Build model customised for parameters and values
         return model
 
-    def build_weight_update_model(self, connection, weight, delay,
+    def build_weight_update_model(self, connection: Connection,
+                                  weight: InitValue, delay: InitValue,
                                   compile_state):
         # Build parameter values
         param_vals = {"g": weight}
@@ -174,7 +180,9 @@ class Compiler:
                 (deepcopy(static_pulse_delay_model) if het_delay
                  else deepcopy(static_pulse_model)), param_vals)
     
-    def add_custom_update(self, genn_model, model, group, name):
+    def add_custom_update(self, genn_model: GeNNModel,
+                          model: CustomUpdateModel,
+                          group: str, name: str):
         # Process model
         (cu_model, cu_param_vals, cu_var_vals,
          cu_egp_vals, cu_var_egp_vals, cu_var_refs) = model.process()
@@ -197,7 +205,7 @@ class Compiler:
         return CompiledNetwork(genn_model, neuron_populations,
                                connection_populations)
 
-    def compile(self, network: Network, name: str = None, **kwargs):
+    def compile(self, network: Network, name: Optional[str] = None, **kwargs):
         # If no name is specifie
         if name is None:
             # Get the parent frame from our current frame
