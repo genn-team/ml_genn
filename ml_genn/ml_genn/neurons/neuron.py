@@ -1,5 +1,7 @@
 from abc import ABC
+from typing import Optional
 from ..readouts import Readout
+from ..utils.model import NeuronModel
 
 from abc import abstractmethod
 from ..utils.module import get_object
@@ -11,17 +13,43 @@ if TYPE_CHECKING:
     from .. import Population
 
 class Neuron(ABC):
-    def __init__(self, softmax=False, readout=None, **kwargs):
+    """Base class for all neuron models
+    
+    Parameters:
+        softmax: Should softmax of output should be computed
+        readout: Object used to provide a readout from neuron
+    """
+    def __init__(self, softmax: bool = False, 
+                 readout: Optional[Readout] = None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
         self.softmax = softmax
         self.readout = get_object(readout, Readout, "Readout",
                                   default_readouts)
 
     @abstractmethod
-    def get_model(self, population: "Population", dt: float):
+    def get_model(self, population: "Population", dt: float) -> NeuronModel:
+        """Gets model implementing this neuron
+        
+        Parameters:
+            population: Population this neuron is to be attached to
+            dt : Timestep of simulation (in ms)
+
+        Returns:
+            NeuronModel: PyGeNN implementation of neuron
+        """
         pass
 
     def get_readout(self, genn_pop, batch_size: int, shape):
+        """Use readout object associated with neuon to
+        read output from PyGeNN neuron group
+        
+        Parameters:
+            genn_pop: PyGeNN neuron group
+            batch_size: Batch size of compiled model
+            shape: Shape of population
+        Returns:
+            Numpy array containing read out value
+        """
         if self.readout is None:
             raise RuntimeError("Cannot get readout from neuron "
                                "without readout strategy")

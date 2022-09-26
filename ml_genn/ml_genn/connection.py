@@ -17,6 +17,15 @@ ConnectivityInitializer = Union[Connectivity, str]
 
 
 class Connection:
+    """A connection between two populations
+    
+    Parameters:
+        source:         Source population
+        target:         Target population
+        connectivity:   Type of connectivity to connect populations
+        synapse:        What type of synapse shaping to 
+                        apply to input delivered via this connection
+    """
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta", 
