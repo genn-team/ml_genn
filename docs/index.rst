@@ -36,7 +36,7 @@ computational savings over rate-based networks17.
 
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 3
     :titlesonly:
 
     usage/building_networks
