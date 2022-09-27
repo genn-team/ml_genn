@@ -9,6 +9,7 @@ Welcome to mlGeNN's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+   usage/building_networks
 
 .. toctree::
    :maxdepth: 1
