@@ -2,7 +2,7 @@ ml_genn_tf
 ==========
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 1
 
    ml_genn_tf
    setup

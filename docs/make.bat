@@ -25,9 +25,9 @@ if errorlevel 9009 (
 	exit /b 1
 )
 
-sphinx-apidoc --force -o source\ ..\ml_genn
-sphinx-apidoc --force -o source\ ..\ml_genn_eprop
-sphinx-apidoc --force -o source\ ..\ml_genn_tf
+sphinx-apidoc --maxdepth 1 --force -o source\ ..\ml_genn
+sphinx-apidoc --maxdepth 1 --force -o source\ ..\ml_genn_eprop
+sphinx-apidoc --maxdepth 1 --force -o source\ ..\ml_genn_tf
 
 %SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%
 goto end
