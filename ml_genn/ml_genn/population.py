@@ -24,6 +24,14 @@ NeuronInitializer = Union[Neuron, str]
 
 
 class Population:
+    """A population of neurons
+    
+    Attributes:
+        neuron:         Source population
+        shape:         Target population
+        name:           Name of connection (only really used 
+                        for debugging purposes)
+    """
     _new_id = count()
     
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
@@ -31,8 +39,8 @@ class Population:
                  add_to_model: bool = True):
         self.neuron = get_object(neuron, Neuron, "Neuron", default_neurons)
         self.shape = _get_shape(shape)
-        self.incoming_connections = []
-        self.outgoing_connections = []
+        self._incoming_connections = []
+        self._outgoing_connections = []
         self.record_spikes = record_spikes
 
         # Generate unique name if required
@@ -44,6 +52,14 @@ class Population:
             Network.add_population(self)
 
     # **TODO** shape setter which validate shape with neuron parameters etc
+
+    @property
+    def incoming_connections(self):
+        return self._incoming_connections
+
+    @property
+    def outgoing_connections(self):
+        return self._outgoing_connections
 
     def __str__(self):
         return self.name

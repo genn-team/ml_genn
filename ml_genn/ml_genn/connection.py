@@ -19,20 +19,20 @@ ConnectivityInitializer = Union[Connectivity, str]
 class Connection:
     """A connection between two populations
     
-    Parameters:
-        source:         Source population
-        target:         Target population
+    Attributes:
         connectivity:   Type of connectivity to connect populations
         synapse:        What type of synapse shaping to 
                         apply to input delivered via this connection
+        name:           Name of connection (only really used 
+                        for debugging purposes)
     """
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta", 
                  name: Optional[str] = None, add_to_model: bool = True):
         # Store weak references to source and target in class
-        self.source = ref(source)
-        self.target = ref(target)
+        self._source = ref(source)
+        self._target = ref(target)
 
         self.connectivity = get_object(connectivity, Connectivity, 
                                        "Connectivity", default_connectivity)
@@ -45,8 +45,8 @@ class Connection:
 
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists
-        source.outgoing_connections.append(ref(self))
-        target.incoming_connections.append(ref(self))
+        source._outgoing_connections.append(ref(self))
+        target._incoming_connections.append(ref(self))
 
         # Run connectivity-specific connection logic
         # e.g. automatically-calculating population sizes
@@ -55,6 +55,16 @@ class Connection:
         # Add connection to model
         if add_to_model:
             Network.add_connection(self)
+
+    @property
+    def source(self):
+        """Source population"""
+        return self._source
+
+    @property
+    def target(self):
+        """Target population"""
+        return self._target
 
     def __str__(self):
         return self.name

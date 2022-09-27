@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class Neuron(ABC):
     """Base class for all neuron models
     
-    Parameters:
+    Attributes:
         softmax: Should softmax of output should be computed
         readout: Object used to provide a readout from neuron
     """
@@ -30,7 +30,7 @@ class Neuron(ABC):
     def get_model(self, population: "Population", dt: float) -> NeuronModel:
         """Gets model implementing this neuron
         
-        Parameters:
+        Args:
             population: Population this neuron is to be attached to
             dt : Timestep of simulation (in ms)
 
@@ -43,7 +43,7 @@ class Neuron(ABC):
         """Use readout object associated with neuon to
         read output from PyGeNN neuron group
         
-        Parameters:
+        Args:
             genn_pop: PyGeNN neuron group
             batch_size: Batch size of compiled model
             shape: Shape of population
