@@ -20,6 +20,8 @@ class Connection:
     """A connection between two populations
     
     Attributes:
+        source:         Source population
+        target:         Target population
         connectivity:   Type of connectivity to connect populations
         synapse:        What type of synapse shaping to 
                         apply to input delivered via this connection
@@ -58,13 +60,12 @@ class Connection:
 
     @property
     def source(self):
-        """Source population"""
-        return self._source
+    	"""
+    	return self._source
 
     @property
     def target(self):
-        """Target population"""
-        return self._target
+    	return self._target
 
     def __str__(self):
         return self.name

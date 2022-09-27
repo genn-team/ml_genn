@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC
 from typing import Optional
 from ..readouts import Readout
@@ -17,17 +19,15 @@ class Neuron(ABC):
     
     Attributes:
         softmax: Should softmax of output should be computed
-        readout: Object used to provide a readout from neuron
     """
     def __init__(self, softmax: bool = False, 
                  readout: Optional[Readout] = None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
         self.softmax = softmax
-        self.readout = get_object(readout, Readout, "Readout",
-                                  default_readouts)
+        self.readout = readout
 
     @abstractmethod
-    def get_model(self, population: "Population", dt: float) -> NeuronModel:
+    def get_model(self, population: Population, dt: float) -> NeuronModel:
         """Gets model implementing this neuron
         
         Args:
@@ -47,6 +47,7 @@ class Neuron(ABC):
             genn_pop: PyGeNN neuron group
             batch_size: Batch size of compiled model
             shape: Shape of population
+
         Returns:
             Numpy array containing read out value
         """
@@ -55,3 +56,19 @@ class Neuron(ABC):
                                "without readout strategy")
         else:
             return self.readout.get_readout(genn_pop, batch_size, shape)
+    
+    @property
+    def readout(self):
+        """Optional object which can be used to
+        provide a readout from neuron
+        
+        Can be specified as either a Readout object or, 
+        for built in readout models whose constructors 
+        require no arguments, a string e.g. "spike_count"
+        """
+        return self._readout
+    
+    @readout.setter
+    def readout(self, r):
+        self._readout = get_object(r, Readout, "Readout",
+                                   default_readouts)

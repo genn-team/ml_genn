@@ -14,6 +14,8 @@ def _filter_callbacks(callbacks: Sequence[Callback],
 
 
 class CallbackList:
+    """Class used internally to efficiently handle lists of callback objects
+    """
     def __init__(self, callbacks: Sequence[Callback], **params):
         self._callbacks = [get_object(c, Callback, "Callback",
                                       default_callbacks)

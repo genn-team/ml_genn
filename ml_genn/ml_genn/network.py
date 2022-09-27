@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Union
 from .serialisers import Serialiser
 
@@ -14,25 +16,17 @@ SerialiserInitializer = Union[Serialiser, str]
 
 
 class Network:
+    """Unstructured network model
+    
+    Attributes:
+        populations:    List of all populations in network
+        connections:    List of all connections in network
+    """
     _context = None
 
     def __init__(self):
         self.populations = []
         self.connections = []
-
-    @staticmethod
-    def add_population(pop: "Population"):
-        if Network._context is None:
-            raise RuntimeError("Population must be created "
-                               "inside a ``with network:`` block")
-        Network._context.populations.append(pop)
-
-    @staticmethod
-    def add_connection(conn: "Connection"):
-        if Network._context is None:
-            raise RuntimeError("Connection must be created "
-                               "inside a ``with network:`` block")
-        Network._context.connections.append(conn)
 
     def load(self, keys=(), serialiser: SerialiserInitializer = "numpy"):
         # Create serialiser
@@ -57,6 +51,21 @@ class Network:
             # Set any variables in neuron
             # **TODO** also synapse, also give error if variable was not found
             set_values(p.neuron, state)
+
+    @staticmethod
+    def _add_population(pop: Population):
+        if Network._context is None:
+            raise RuntimeError("Population must be created "
+                               "inside a ``with network:`` block")
+        Network._context.populations.append(pop)
+
+    @staticmethod
+    def _add_connection(conn: Connection):
+        if Network._context is None:
+            raise RuntimeError("Connection must be created "
+                               "inside a ``with network:`` block")
+        Network._context.connections.append(conn)
+
 
     def __enter__(self):
         if Network._context is not None:
