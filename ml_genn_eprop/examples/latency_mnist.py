@@ -19,11 +19,12 @@ NUM_OUTPUT = 16
 BATCH_SIZE = 128
 
 TRAIN = True
+KERNEL_PROFILING = False
 
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 spikes = log_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
-    20.0, 51, 100)
+    20.0, 51)
 
 network = SequentialNetwork()
 with network:
@@ -44,7 +45,8 @@ max_example_timesteps = int(np.ceil(calc_latest_spike_time(spikes)))
 if TRAIN:
     compiler = EPropCompiler(example_timesteps=max_example_timesteps,
                              losses="sparse_categorical_crossentropy",
-                             optimiser="adam", batch_size=BATCH_SIZE)
+                             optimiser="adam", batch_size=BATCH_SIZE,
+                             kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
     with compiled_net:
@@ -53,11 +55,22 @@ if TRAIN:
         callbacks = ["batch_progress_bar", "checkpoint"]
         metrics, _  = compiled_net.train({input: spikes},
                                          {output: labels},
-                                         num_epochs=50, shuffle=True,
+                                         num_epochs=1, shuffle=True,
                                          callbacks=callbacks)
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
+
+        if KERNEL_PROFILING:
+            print(f"Neuron update time = {compiled_net.genn_model.neuron_update_time}")
+            print(f"Presynaptic update time = {compiled_net.genn_model.presynaptic_update_time}")
+            print(f"Synapse dynamics time = {compiled_net.genn_model.synapse_dynamics_time}")
+            print(f"Gradient batch reduce time = {compiled_net.genn_model.get_custom_update_time('GradientBatchReduce')}")
+            print(f"Gradient learn time = {compiled_net.genn_model.get_custom_update_time('GradientLearn')}")
+            print(f"Reset time = {compiled_net.genn_model.get_custom_update_time('Reset')}")
+            print(f"Softmax1 time = {compiled_net.genn_model.get_custom_update_time('Softmax1')}")
+            print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('Softmax2')}")
+            print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('Softmax3')}")
 else:
     # Load network state from final checkpoint
     network.load((15,))
