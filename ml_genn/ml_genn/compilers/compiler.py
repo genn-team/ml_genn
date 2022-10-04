@@ -4,7 +4,10 @@ import os
 
 from collections import defaultdict, namedtuple
 from pygenn import GeNNModel
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY
+from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY, 
+                                        VarAccess_REDUCE_NEURON_MAX,
+                                        VarAccess_REDUCE_NEURON_SUM,
+                                        VarAccessMode_READ_ONLY)
 from typing import Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
@@ -16,7 +19,8 @@ from copy import deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
                                create_custom_neuron_class,
                                create_custom_postsynaptic_class,
-                               create_custom_weight_update_class)
+                               create_custom_weight_update_class,
+                               create_var_ref)
 from string import digits
 from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
@@ -24,6 +28,32 @@ from .weight_update_models import (static_pulse_model,
                                    signed_static_pulse_delay_model)
 from ..utils.value import is_value_constant
 
+# First pass of softmax - calculate max
+softmax_1_model = {
+    "var_name_types": [("MaxVal", "scalar", VarAccess_REDUCE_NEURON_MAX)],
+    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY)],
+    "update_code": """
+    $(MaxVal) = $(Val);
+    """}
+
+# Second pass of softmax - calculate scaled sum of exp(value)
+softmax_2_model = {
+    "var_name_types": [("SumExpVal", "scalar", VarAccess_REDUCE_NEURON_SUM)],
+    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
+                 ("MaxVal", "scalar", VarAccessMode_READ_ONLY)],
+    "update_code": """
+    $(SumExpVal) = exp($(Val) - $(MaxVal));
+    """}
+
+# Third pass of softmax - calculate softmax value
+softmax_3_model = {
+    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
+                 ("MaxVal", "scalar", VarAccessMode_READ_ONLY),
+                 ("SumExpVal", "scalar", VarAccessMode_READ_ONLY),
+                 ("SoftmaxVal", "scalar")],
+    "update_code": """
+    $(SoftmaxVal) = exp($(Val) - $(MaxVal)) / $(SumExpVal);
+    """}
 
 def set_egp(egp_vals, egp_dict):
     for egp, value in egp_vals.items():
@@ -59,66 +89,6 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
         # Add code to set var
         model.append_update_code(f"$({name}) = $({name}Reset);")
     return model
-
-def get_neuron_model_with_output(pop: Population, dt: float):
-    neuron_model = pop.neuron.get_model(pop, dt)
-    if pop.neuron.readout is None:
-        return neuron_model
-    else:
-        if pop.neuron.softmax:
-            # Get output variable from neuron model
-            output_var = neuron_model.output_var
-
-            # **YUCK** on Windows, numpy.prod will return np.int32
-            # which results in a mask of -1 after subsequent calculations
-            flat_shape = int(np.prod(pop.shape))
-
-            # Check shape is valid
-            # **NOTE** we COULD add an elaborate mechanism to
-            # create a GeNN population with next power-of-two
-            # size but, once proper population reductions are
-            # implemented, this issue will go away anyway
-            if flat_shape not in [2, 4, 8, 16, 32]:
-                raise NotImplementedError("Currently Softmax output only "
-                                          "supports populations with "
-                                          "2, 4, 8, 16 or 32 neurons")
-
-            # Add sim-code to copy output to a register
-            neuron_model.append_sim_code(
-                f"scalar m = $({output_var[0]});")
-
-            # Generate sim-code to calculate max reduction
-            mask = (2 ** flat_shape) - 1
-            for i in range(int(np.log2(flat_shape))):
-                neuron_model.append_sim_code(
-                    f"m = fmax(m, __shfl_xor_sync(0x{mask:X}, m, 0x{2 ** i:X}));")
-
-            # Add sim-code to calculate exponential
-            neuron_model.append_sim_code(
-                f"""
-                const scalar expPi = exp($({output_var[0]}) - m);
-                scalar sumExpPi = expPi;
-                """)
-
-            # Generate sim-code to generate second sum reduction
-            for i in range(int(np.log2(flat_shape))):
-                neuron_model.append_sim_code(
-                    f"sumExpPi +=  __shfl_xor_sync(0x{mask:X}, sumExpPi, 0x{2 ** i:X});")
-
-            # Add sim-code to store softmax in variable name
-            softmax_var_name = output_var[0] + "Softmax"
-            neuron_model.append_sim_code(
-                f"$({softmax_var_name}) = expPi / sumExpPi;")
-
-            # Add sum variable with same type as 
-            # output variable and initialise to zero
-            neuron_model.add_var(softmax_var_name, output_var[1], 0)
-            
-            # Finally, point output variable at new softmax'd output
-            neuron_model.output_var_name = softmax_var_name
-        
-        # Add output logic to model
-        return pop.neuron.readout.add_readout_logic(neuron_model)
 
 class Compiler:
     def __init__(self, dt: float = 1.0, batch_size: int = 1,
@@ -201,9 +171,10 @@ class Compiler:
         return genn_cu
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations, 
+                                compile_state, softmax):
         return CompiledNetwork(genn_model, neuron_populations,
-                               connection_populations)
+                               connection_populations, softmax)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
         # If no name is specifie
@@ -235,6 +206,7 @@ class Compiler:
 
         # Loop through populations
         neuron_populations = {}
+        softmax = False
         for pop in network.populations:
             # Check population has shape
             if pop.shape is None:
@@ -243,9 +215,29 @@ class Compiler:
 
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
+            neuron_model = neuron.get_model(pop, self.dt)
+            if neuron.readout is not None:
+                if neuron.softmax:
+                    # Get output variable from neuron model
+                    output_var = neuron_model.output_var
+
+                    # Add softmax variable with same type as 
+                    # output variable and initialise to zero
+                    softmax_var_name = output_var[0] + "Softmax"
+                    neuron_model.add_var(softmax_var_name, output_var[1], 0)
+
+                    # Finally, point output variable at new softmax'd output
+                    neuron_model.output_var_name = softmax_var_name
+                    
+                    # Set softmax flag
+                    softmax = True
+
+                # Add output logic to model
+                neuron_model = neuron.readout.add_readout_logic(neuron_model)
+
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(
-                    pop, get_neuron_model_with_output(pop, self.dt),
+                    pop, neuron_model,
                     compile_state).process()
 
             # Create custom neuron model
@@ -267,6 +259,42 @@ class Compiler:
 
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
+
+            # If neuron has softmax output
+            if neuron.readout is not None and neuron.softmax:
+                # Create custom update model to implement 
+                # first softmax pass and add to model
+                softmax_1 = CustomUpdateModel(
+                    softmax_1_model, {}, {"MaxVal": 0.0},
+                    {"Val": create_var_ref(genn_pop, output_var[0])})
+
+                genn_softmax_1 = self.add_custom_update(
+                    genn_model, softmax_1, 
+                    "Softmax1", "CUSoftmax1" + pop.name)
+
+                # Create custom update model to implement 
+                # second softmax pass and add to model
+                softmax_2 = CustomUpdateModel(
+                    softmax_2_model, {}, {"SumExpVal": 0.0},
+                    {"Val": create_var_ref(genn_pop, output_var[0]),
+                     "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
+
+                genn_softmax_2 = self.add_custom_update(
+                    genn_model, softmax_2, 
+                    "Softmax2", "CUSoftmax2" + pop.name)
+
+                # Create custom update model to implement 
+                # third softmax pass and add to model
+                softmax_3 = CustomUpdateModel(
+                    softmax_3_model, {}, {},
+                    {"Val": create_var_ref(genn_pop, output_var[0]),
+                     "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
+                     "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
+                     "SoftmaxVal": create_var_ref(genn_pop, softmax_var_name)})
+
+                self.add_custom_update(
+                    genn_model, softmax_3, 
+                    "Softmax3", "CUSoftmax3" + pop.name)
 
         # Loop through connections
         connection_populations = {}
@@ -328,4 +356,4 @@ class Compiler:
 
         return self.create_compiled_network(genn_model, neuron_populations,
                                             connection_populations,
-                                            compile_state)
+                                            compile_state, softmax)

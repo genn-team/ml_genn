@@ -16,17 +16,16 @@ from ..serialisers import default_serialisers
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, losses, 
-                 optimiser, example_timesteps: int, 
-                 base_callbacks: list,
+                 connection_populations, softmax, losses,
+                 optimiser, example_timesteps: int, base_callbacks: list,
                  optimiser_custom_updates: list,
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            example_timesteps)
-        
+            softmax, example_timesteps)
+
         self.losses = losses
         self.optimiser = optimiser
         self.example_timesteps = example_timesteps

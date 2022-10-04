@@ -13,10 +13,12 @@ class CompiledNetwork:
     _context = None
 
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, num_recording_timesteps=None):
+                 connection_populations, softmax,
+                 num_recording_timesteps=None):
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
         self.connection_populations = connection_populations
+        self.softmax = softmax
         self.num_recording_timesteps = num_recording_timesteps
 
     def set_input(self, inputs: dict):
@@ -44,6 +46,12 @@ class CompiledNetwork:
             callback_list.on_timestep_begin(self.genn_model.timestep)
 
         self.genn_model.step_time()
+
+        # Calculate softmax if required
+        if self.softmax:
+            self.genn_model.custom_update("Softmax1")
+            self.genn_model.custom_update("Softmax2")
+            self.genn_model.custom_update("Softmax3")
 
         if callback_list is not None:
             callback_list.on_timestep_end(self.genn_model.timestep - 1)

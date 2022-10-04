@@ -386,7 +386,8 @@ class EPropCompiler(Compiler):
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations,
+                                compile_state, softmax):
         # Fuse pre and postsynaptic updates for efficiency
         genn_model._model.set_fuse_postsynaptic_models(True)
         genn_model._model.set_fuse_pre_post_weight_update_models(True)
@@ -426,7 +427,7 @@ class EPropCompiler(Compiler):
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         return CompiledTrainingNetwork(
-            genn_model, neuron_populations, connection_populations,
+            genn_model, neuron_populations, connection_populations, softmax,
             compile_state.losses, self._optimiser, self.example_timesteps,
             base_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,

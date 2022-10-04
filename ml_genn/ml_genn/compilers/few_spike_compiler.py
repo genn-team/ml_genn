@@ -20,9 +20,11 @@ from ..metrics import default_metrics
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, k: int, pop_pipeline_depth: dict):
+                 connection_populations, softmax,
+                 k: int, pop_pipeline_depth: dict):
         super(CompiledFewSpikeNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations, k)
+            genn_model, neuron_populations, connection_populations,
+            softmax, k)
 
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
@@ -242,7 +244,9 @@ class FewSpikeCompiler(Compiler):
             conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations, 
+                                compile_state, softmax):
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
-                                       connection_populations, self.k,
+                                       connection_populations, 
+                                       softmax, self.k,
                                        compile_state.pop_pipeline_depth)
