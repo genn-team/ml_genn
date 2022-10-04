@@ -18,7 +18,7 @@ NUM_HIDDEN = 100
 NUM_OUTPUT = 16
 BATCH_SIZE = 128
 
-TRAIN = False
+TRAIN = True
 
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 spikes = log_latency_encode_data(
@@ -52,9 +52,9 @@ if TRAIN:
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", "checkpoint"]
         metrics, _  = compiled_net.train({input: spikes},
-                                        {output: labels},
-                                        num_epochs=50, shuffle=True,
-                                        callbacks=callbacks)
+                                         {output: labels},
+                                         num_epochs=50, shuffle=True,
+                                         callbacks=callbacks)
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
