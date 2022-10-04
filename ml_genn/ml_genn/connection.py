@@ -54,7 +54,7 @@ class Connection:
 
         # Add connection to model
         if add_to_model:
-            Network.add_connection(self)
+            Network._add_connection(self)
 
     @property
     def source(self):

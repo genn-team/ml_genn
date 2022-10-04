@@ -10,7 +10,7 @@ class SequentialNetwork(Network):
         self.layers = []
 
     @staticmethod
-    def add_input_layer(layer, population):
+    def _add_input_layer(layer, population):
         if SequentialNetwork._context is None:
             raise RuntimeError("InputLayer must be created "
                                "inside a ``with sequential_network:`` block")
@@ -18,7 +18,7 @@ class SequentialNetwork(Network):
         SequentialNetwork._context.populations.append(population)
 
     @staticmethod
-    def add_layer(layer, population, connection):
+    def _add_layer(layer, population, connection):
         if SequentialNetwork._context is None:
             raise RuntimeError("Layer must be created "
                                "inside a ``with sequential_network:`` block")

@@ -15,7 +15,7 @@ class InputLayer:
                                 name=name, add_to_model=False)
         self.population = ref(population)
 
-        SequentialNetwork.add_input_layer(self, population)
+        SequentialNetwork._add_input_layer(self, population)
 
 
 class Layer:
@@ -41,4 +41,4 @@ class Layer:
             connection = None
             self.connection = None
 
-        SequentialNetwork.add_layer(self, population, connection)
+        SequentialNetwork._add_layer(self, population, connection)
