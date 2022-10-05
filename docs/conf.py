@@ -10,9 +10,11 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath("."))
+import os
+import sys
+sys.path.insert(0, os.path.abspath("../ml_genn/ml_genn"))
+sys.path.insert(0, os.path.abspath("../ml_genn_eprop/ml_genn_eprop"))
+sys.path.insert(0, os.path.abspath("../ml_genn_tf/ml_genn_tf"))
 
 
 # -- Project information -----------------------------------------------------
