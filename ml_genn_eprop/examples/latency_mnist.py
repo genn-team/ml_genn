@@ -15,8 +15,9 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
 
 NUM_INPUT = 784
 NUM_HIDDEN = 100
-NUM_OUTPUT = 16
+NUM_OUTPUT = 10
 BATCH_SIZE = 128
+NUM_EPOCHS = 10
 
 TRAIN = True
 KERNEL_PROFILING = False
@@ -33,7 +34,7 @@ with network:
                                   NUM_INPUT)
     hidden = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_INPUT))),
                    LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
-                                      tau_refrac=5.0, 
+                                      tau_refrac=5.0,
                                       relative_reset=True,
                                       integrate_during_refrac=True),
                    NUM_HIDDEN)
@@ -55,7 +56,7 @@ if TRAIN:
         callbacks = ["batch_progress_bar", "checkpoint"]
         metrics, _  = compiled_net.train({input: spikes},
                                          {output: labels},
-                                         num_epochs=1, shuffle=True,
+                                         num_epochs=NUM_EPOCHS, shuffle=True,
                                          callbacks=callbacks)
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
@@ -73,7 +74,7 @@ if TRAIN:
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('Softmax3')}")
 else:
     # Load network state from final checkpoint
-    network.load((15,))
+    network.load((NUM_EPOCHS - 1,))
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  batch_size=BATCH_SIZE)

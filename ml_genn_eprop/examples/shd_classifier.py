@@ -13,7 +13,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 NUM_HIDDEN = 256
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 
 # Get SHD dataset
 dataset = SHD(save_to='./data', train=True)
@@ -35,7 +35,6 @@ print(f"Max spikes {max_spikes}, latest spike time {latest_spike_time}")
 # and round up outputs to power-of-two
 num_input = int(np.prod(dataset.sensor_size))
 num_output = len(dataset.classes)
-padded_num_output = int(2**(np.ceil(np.log2(num_output))))
 
 network = Network()
 with network:
@@ -48,8 +47,8 @@ with network:
                                                    integrate_during_refrac=True),
                         NUM_HIDDEN)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", softmax=True),
-                        padded_num_output)
-    
+                        num_output)
+
     # Connections
     Connection(input, hidden, Dense(Normal(sd=1.0 / np.sqrt(num_input))))
     Connection(hidden, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
@@ -57,15 +56,17 @@ with network:
 
 compiler = EPropCompiler(example_timesteps=int(np.ceil(latest_spike_time)),
                          losses="sparse_categorical_crossentropy", 
-                         optimiser="adam")
+                         optimiser="adam", batch_size=BATCH_SIZE)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
     # Evaluate model on SHD
     start_time = perf_counter()
+    callbacks = ["batch_progress_bar", "checkpoint"]
     metrics, cb_data  = compiled_net.train({input: spikes},
                                            {output: labels},
                                            num_epochs=50,
+                                           callbacks=callbacks,
                                            shuffle=True)
     end_time = perf_counter()
     print(f"Accuracy = {100 * metrics[output].result}%")
