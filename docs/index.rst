@@ -41,6 +41,8 @@ computational savings over rate-based networks17.
 
     usage/building_networks
     usage/callbacks_recording
+    usage/metrics
+    usage/converting_tf
 
     mlGeNN reference <source/ml_genn>
     mlGeNN eProp reference <source/ml_genn_eprop>

@@ -43,7 +43,7 @@ you need to set the `record_spikes=True` keyword argument on :class:`~population
 
 Filtering
 ---------
-When you're dealing with large models/datasets, recording everything uses a lot of 
+When dealing with large models/datasets, recording everything uses a lot of 
 memory and slows the simulation down significantly. You can address this by adding 
 filtering kwargs to :class:`~callbacks.spike_recorder.SpikeRecorder` and 
 :class:`~callbacks.var_recorder.VarRecorder` objects. Example filters let you
@@ -64,11 +64,11 @@ Similarly, neuron filters let you select which neurons to record from:
     SpikeRecorder(input, neuron_filter=[True]*10) # Only record from the first 10 neurons in a 1D population
     SpikeRecorder(input, neuron_filter=np.s_[0::2]) # Only record from every other neuron in a 1D population
 
-Because, in networks including convolution neural networks, populations can have 
+Because, in networks such as convolution neural networks, populations can have 
 multidimensional shapes this syntax also extends to multiple dimensions in the same w
 ay as numpy arrays, for example:
 
 ..  code-block:: python
 
-    SpikeRecorder(input, neuron_filter=([16, 20], [16, 20])        # Record neurons(16,16) and (20, 20) in 2D population
+    SpikeRecorder(input, neuron_filter=([16, 20], [16, 20])     # Record neurons(16,16) and (20, 20) in 2D population
     SpikeRecorder(input, neuron_filter=np.index_exp[2:4,2:4])   # Record neurons (2,2), (2,3), (3,2) and (3,3) in 2D population

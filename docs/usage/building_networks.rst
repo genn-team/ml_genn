@@ -19,13 +19,13 @@ context manager so a network with two populations of neurons could be simply cre
     
         Connection(a, b, Dense(1.0))
 
-For simplicity, in this example, built in neuron models are specified using strings.
-However, if you wish to override some of the default model parameters, use a model
-that does not have default parameters or use a model not built into mlGeNN, you can 
-also specify a neuron model using a :class:`~neurons.neuron.Neuron` class instance. 
-For example, if we wished for the poisson population to emit positive and negative 
-spikes for positive and negative input values and for the integrate-and-fire neuron
-to have a higher firing threshold we could instantiate 
+For simplicity, in this example, built in neuron models with default parameters are 
+specified using strings. However, if you wish to override some of the default model 
+parameters, use a model that does not have default parameters or use a model not 
+built into mlGeNN, you can also specify a neuron model using a :class:`~neurons.neuron.Neuron` 
+class instance. For example, if we wished for the poisson population to emit positive 
+and negative spikes for positive and negative input values and for the integrate-and-fire 
+neuron to have a higher firing threshold we could instantiate 
 :class:`~neurons.poisson_input.PoissonInput` and :class:`~neurons.integrate_fire.IntegrateFire`
 objects ourselves like:
 
