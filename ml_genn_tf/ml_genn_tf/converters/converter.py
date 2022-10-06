@@ -396,7 +396,8 @@ class Converter:
             # for each build step
             for config in config_steps:
                 # build population
-                mlg_pop = Population(config.neurons, config.shape)
+                mlg_pop = Population(config.neurons, config.shape,
+                                     name=config.tf_layer.name)
                 
                 # add population to layer lookup
                 tf_layer_pops[config.tf_layer] = mlg_pop
