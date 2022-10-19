@@ -12,9 +12,10 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath("../ml_genn/ml_genn"))
-sys.path.insert(0, os.path.abspath("../ml_genn_eprop/ml_genn_eprop"))
-sys.path.insert(0, os.path.abspath("../ml_genn_tf/ml_genn_tf"))
+
+sys.path.insert(0, os.path.abspath("../ml_genn"))
+sys.path.insert(0, os.path.abspath("../ml_genn_eprop"))
+sys.path.insert(0, os.path.abspath("../ml_genn_tf"))
 
 
 # -- Project information -----------------------------------------------------
