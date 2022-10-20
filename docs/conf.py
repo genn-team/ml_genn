@@ -12,9 +12,10 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath("../ml_genn/ml_genn"))
-sys.path.insert(0, os.path.abspath("../ml_genn_eprop/ml_genn_eprop"))
-sys.path.insert(0, os.path.abspath("../ml_genn_tf/ml_genn_tf"))
+
+sys.path.insert(0, os.path.abspath("../ml_genn"))
+sys.path.insert(0, os.path.abspath("../ml_genn_eprop"))
+sys.path.insert(0, os.path.abspath("../ml_genn_tf"))
 
 
 # -- Project information -----------------------------------------------------
@@ -29,9 +30,11 @@ author = "James Turner, Jamie Knight"
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named "sphinx.ext.*") or your custom
 # ones.
-extensions = ["sphinx.ext.autodoc",
-              "sphinx.ext.napoleon",
-              "sphinx_autodoc_typehints"]
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx_autodoc_typehints",
+]
 
 napoleon_use_param = True
 napoleon_use_ivar = True
@@ -44,6 +47,8 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+# Mock imports for readthedocs
+autodoc_mock_imports = ["pygenn", "tensorflow"]
 
 # -- Options for HTML output -------------------------------------------------
 
