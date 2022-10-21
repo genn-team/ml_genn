@@ -40,6 +40,24 @@ class Model:
         self._add_to_list("extra_global_params", (name, type))
         self.egp_vals[name] = value
     
+    def convert_param_to_egp(self, param_name: str):
+        # Search for parameter definition
+        param_index, param = self._search_list("param_name_types", param_name)
+
+        # Remove parameter from model
+        self.model["param_name_types"].pop(param_index)
+
+        # Remove parameter value from dictionary
+        param_val = self.param_vals.pop(param_name)
+
+        # Give error if value is an initialiser
+        if is_value_initializer(param_val):
+            raise RuntimeError("Parameters with values specified with "
+                               "initialisers cannot be converted to EGPs.")
+
+        # Add EGP to replace it
+        self.add_egp(param_name, param[1], param_val)
+        
     def set_var_access_mode(self, name: str, access_mode: int):
         self._set_access_model("var_name_types", name, access_mode)
 
