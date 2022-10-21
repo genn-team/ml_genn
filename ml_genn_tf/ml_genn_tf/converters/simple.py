@@ -23,7 +23,7 @@ class Simple(Converter):
 
     def create_neurons(self, tf_layer, pre_compile_output, is_output):
         return IntegrateFire(v_thresh=1.0, 
-                             output="spike_count" if is_output else None)
+                             readout="spike_count" if is_output else None)
 
     def pre_convert(self, tf_model):
         pass
