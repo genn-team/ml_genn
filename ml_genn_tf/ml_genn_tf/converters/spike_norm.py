@@ -1,173 +1,161 @@
-import tensorflow as tf
+import logging
 import numpy as np
-from tqdm import tqdm
+import tensorflow as tf
 
-from ml_genn.layers import InputType
-from ml_genn.layers import IFNeurons
-from ml_genn.layers import SpikeInputNeurons
-from ml_genn.layers import PoissonInputNeurons
-from ml_genn.layers import IFInputNeurons
+from collections import namedtuple
+from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY_SHARED_NEURON,
+                                        VarAccess_REDUCE_BATCH_MAX, 
+                                        VarAccessMode_READ_ONLY,
+                                        VarAccessMode_REDUCE_MAX)
+from ml_genn.callbacks import CustomUpdateOnTimestepEnd
+from ml_genn.compilers import InferenceCompiler
+from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
+                             IntegrateFireInput, PoissonInput)
+from ml_genn.utils.model import CustomUpdateModel
+from .converter import Converter
+from .enum import InputType
 
-class SpikeNorm(object):
-    def __init__(self, norm_data, norm_time, signed_input=False, 
-                 input_type=InputType.POISSON):
-        self.norm_data = norm_data
-        self.norm_time = norm_time
-        self.signed_input = signed_input
-        self.input_type = InputType(input_type)
+from copy import deepcopy
+from pygenn.genn_model import create_var_ref
+from ml_genn.utils.network import get_network_dag
 
-    def validate_tf_layer(self, tf_layer, config):
-        if isinstance(tf_layer, (
-                tf.keras.layers.Dense,
-                tf.keras.layers.Conv2D)):
+logger = logging.getLogger(__name__)
 
-            if tf_layer.use_bias:
-                # no bias tensors allowed
-                raise NotImplementedError('Spike-Norm converter: bias tensors not supported')
+# First pass of threshold update - calculate max across batches and zero
+threshold_1_model = {
+    "var_name_types": [("MaxV", "scalar", VarAccess_REDUCE_BATCH_MAX),
+                       ("Vthresh", "scalar", VarAccess_READ_ONLY_SHARED_NEURON)],
+    "var_refs": [("V", "scalar")],
+    "update_code": """
+    $(MaxV) = fmax($(V), $(Vthresh));
+    $(V) = 0.0;
+    """}
 
-            if config.is_output:
-                # ReLU and softmax activation allowd in output layers
-                if (not tf_layer.activation is tf.keras.activations.relu and
-                    not tf_layer.activation is tf.keras.activations.softmax):
-                    raise NotImplementedError(
-                        'Spike-Norm converter: output layer must have ReLU or softmax activation')
+# Second pass of threshold update - calculate max across neurons
+threshold_2_model = {
+    "var_refs": [("MaxV", "scalar", VarAccessMode_READ_ONLY),
+                 ("Vthresh", "scalar", VarAccessMode_REDUCE_MAX)],
+    "update_code": """
+    $(Vthresh) = $(MaxV);
+    """}
 
-            elif config.has_activation:
-                # ReLU activation allowed everywhere
-                if not tf_layer.activation is tf.keras.activations.relu:
-                    raise NotImplementedError(
-                        'Spike-Norm converter: hidden layers must have ReLU activation')
+class NormCompiler(InferenceCompiler):
+    def build_neuron_model(self, pop, model, compile_state):
+        # If neuron is an integrate and fire model i.e. not an input layer
+        if isinstance(pop.neuron, IntegrateFire):
+            # Make a copy of model with threshold
+            # parameter implemented as EGP 
+            model = deepcopy(model)
+            model.convert_param_to_egp("Vthresh")
+            
+            # Set it's value to infinity
+            model.egp_vals["Vthresh"] = np.inf
 
-        elif isinstance(tf_layer, tf.keras.layers.Activation):
-            if config.is_output:
-                # ReLU and softmax activation allowd in output layers
-                if (not tf_layer.activation is tf.keras.activations.relu and
-                    not tf_layer.activation is tf.keras.activations.softmax):
-                    raise NotImplementedError(
-                        'Spike-Norm converter: output layer must have ReLU or softmax activation')
+        # Build neuron model
+        return super(NormCompiler, self).build_neuron_model(
+            pop, model, compile_state)
 
-            else:
-                # ReLU activation allowed everywhere
-                if not tf_layer.activation is tf.keras.activations.relu:
-                    raise NotImplementedError(
-                        'Spike-Norm converter: hidden layers must have ReLU activation')
-
-        elif isinstance(tf_layer, tf.keras.layers.ReLU):
-            # ReLU activation allowed everywhere
-            pass
-
-        elif isinstance(tf_layer, tf.keras.layers.Softmax):
-            # softmax activation only allowed for output layers
-            if not config.is_output:
-                raise NotImplementedError(
-                    'Spike-Norm converter: only output layers may use softmax')
+    def create_compiled_network(self, genn_model, neuron_populations,
+                                connection_populations,
+                                compile_state, softmax):
+        # Loop through model populations
+        pop_threshold_custom_updates = {}
+        for pop, genn_pop in neuron_populations.items():
+            if isinstance(pop.neuron, IntegrateFire):
+                # Create custom update model to implement 
+                # first threshold calculation pass and add to model
+                threshold_1 = CustomUpdateModel(
+                    threshold_1_model, {}, 
+                    {"MaxV": 0.0, "Vthresh": 0.0}, 
+                    {"V": create_var_ref(genn_pop, "V")})
+                genn_threshold_1 = self.add_custom_update(
+                    genn_model, threshold_1, 
+                    "UpdateThresh1" + pop.name, "CUThreshold1" + pop.name)
+                
+                # Create custom update model to implement 
+                # second threshold calculation pass and add to model
+                threshold_2 = CustomUpdateModel(
+                    threshold_2_model, {}, {}, 
+                    {"MaxV": create_var_ref(genn_threshold_1, "MaxV"),
+                     "Vthresh": create_var_ref(genn_threshold_1, "Vthresh")})
+                genn_threshold_2 = self.add_custom_update(
+                    genn_model, threshold_2, 
+                    "UpdateThresh2" + pop.name, "CUThreshold2" + pop.name)
+                 
+                pop_threshold_custom_updates[pop] = genn_threshold_1
+        # Superclass
+        compiled_net = super(NormCompiler, self).create_compiled_network(
+            genn_model, neuron_populations, connection_populations, 
+            compile_state, softmax)
         
-        elif isinstance(tf_layer, tf.keras.layers.GlobalAveragePooling2D):
-            # global average pooling allowed
-            pass
-        elif isinstance(tf_layer, tf.keras.layers.AveragePooling2D):
-            if tf_layer.padding != 'valid':
-                raise NotImplementedError(
-                    'Spike-Norm converter: only valid padding is supported for pooling layers')
+        # **YUCK** monkey patch compiled network with dictionary of custom 
+        # updates responsible for calculating each population's thresholds
+        compiled_net.pop_threshold_custom_updates =\
+            pop_threshold_custom_updates
+        return compiled_net
 
-        else:
-            # no other layers allowed
-            raise NotImplementedError(
-                'Spike-Norm converter: {} layers are not supported'.format(
-                    tf_layer.__class__.__name__))
-
-    def create_input_neurons(self, pre_convert_output):
-        if self.input_type == InputType.SPIKE:
-            return SpikeInputNeurons(signed_spikes=self.signed_input)
-        elif self.input_type == InputType.POISSON:
-            return PoissonInputNeurons(signed_spikes=self.signed_input)
-        elif self.input_type == InputType.IF:
-            return IFInputNeurons()
-
-    def create_neurons(self, tf_layer, pre_convert_output):
-        return IFNeurons(threshold=1.0)
-
-    def pre_convert(self, tf_model):
-        pass
+def spike_normalise(net, net_inputs, net_outputs, norm_data,
+                    evaluate_timesteps: int, num_batches: int = None,
+                    dt: float = 1.0, batch_size: int = 1,
+                    rng_seed: int = 0, kernel_profiling: bool = False,
+                    prefer_in_memory_connect=True,
+                    reset_time_between_batches=True, **genn_kwargs):
+    # Don't allow models with multiple input layers
+    if len(net_inputs) != 1:
+        raise NotImplementedError("Spike norm does not support "
+                                  "models with multiple input layers")
     
-    def pre_compile(self, mlg_network):
-        pass
+    # Create normalisation compiler
+    compiler = NormCompiler(evaluate_timesteps, dt, batch_size, rng_seed,
+                            kernel_profiling, prefer_in_memory_connect,
+                            reset_time_between_batches, **genn_kwargs)
+    
+    # Use it to compile network
+    compiled_net = compiler.compile(net, inputs=net_inputs, outputs=net_outputs)
+    
+    # Topologically sort model 
+    dag = get_network_dag(net_inputs, net_outputs)
 
-    """
-    TODO move to custom compiler
-    def post_compile(self, mlg_network):
-        g_model = mlg_model.g_model
+    # As we might give up optimising before the end,
+    # set all population's 'final' thresholds to 1
+    final_thresholds = {p: 1.0 
+                        for p in dag 
+                        if isinstance(p.neuron, IntegrateFire)}
 
-        # Don't allow models with multiple input layers
-        if len(mlg_model.inputs) != 1:
-            raise NotImplementedError(
-                'Spike-Norm converter: models with multiple input layers not supported')
-
-        final_thresholds = {}
-
-        # Set layer thresholds high initially
-        for layer in mlg_model.layers[1:]:
-            if layer in mlg_model.inputs:
-                continue
-
-            layer.neurons.set_threshold(np.inf)
-            final_thresholds[layer] = np.float64(1.0)
-
-        # For each layer (these *should* be topologically sorted)
-        for layer in mlg_model.layers:
-            if layer in mlg_model.inputs:
-                continue
-
+    # Load compiled network
+    with compiled_net:
+        # Loop through populations
+        for pop in dag:
             # Break at branch (many outbound)
-            if len(layer.downstream_synapses) > 1:
+            if len(pop.outgoing_connections) > 1:
                 break
 
-            norm_data_iter = iter(self.norm_data[0])
-
-            threshold = np.float64(0.0)
-
-            # For each sample presentation
-            progress = tqdm(leave=False)
-            for batch_data, _ in norm_data_iter:
-                progress.set_description(f'layer <{layer.name}>')
-
-                batch_data = np.array(batch_data)
-                batch_size = batch_data.shape[0]
-
-                # Set new input
-                mlg_model.reset()
-                mlg_model.set_input_batch([batch_data])
-
-                # Main simulation loop
-                while g_model.t < self.norm_time:
-                    # Step time
-                    mlg_model.step_time()
-
-                    # Get maximum activation
-                    nrn = layer.neurons.nrn
-                    nrn.pull_var_from_device('Vmem')
-                    if nrn.vars['Vmem'].view.ndim == 1:
-                        output_view = nrn.vars['Vmem'].view[np.newaxis]
-                    else:
-                        output_view = nrn.vars['Vmem'].view[:batch_size]
-                    threshold = np.max([threshold, output_view.max()])
-                    output_view[:] = np.float64(0.0)
-                    nrn.push_var_to_device('Vmem')
-
-                progress.update(batch_size)
-
-            progress.close()
-
-            # Update this layer's threshold
-            layer.neurons.set_threshold(threshold)
-            final_thresholds[layer] = threshold
-
-        # For each layer (these *should* be topologically sorted)
-        for layer in mlg_model.layers:
-            if layer in mlg_model.inputs:
+            # Skip any non-integrate and fire layers
+            if not isinstance(pop.neuron, IntegrateFire):
                 continue
 
-            # Update this layer's threshold
-            layer.neurons.set_threshold(final_thresholds[layer])
-            print('layer <{}> threshold: {}'.format(layer.name, layer.neurons.threshold))
-    """
+            # Evaluate normalisation data triggering the custom updates to
+            # calculate the threshold for this layer after each timestep
+            # **YUCK** it would be kinda nice to turn off metrics here
+            callbacks=["batch_progress_bar", 
+                       CustomUpdateOnTimestepEnd("UpdateThresh1" + pop.name),
+                       CustomUpdateOnTimestepEnd("UpdateThresh2" + pop.name)]
+            compiled_net.evaluate_batch_iter(net_inputs, net_outputs,
+                                             iter(norm_data),
+                                             num_batches=num_batches,
+                                             callbacks=callbacks)
+            
+            # Get threshold calculated for this layer across whole dataset
+            threshold_cu = compiled_net.pop_threshold_custom_updates[pop]
+            threshold_cu.pull_var_from_device("Vthresh")
+            final_thresh = threshold_cu.vars["Vthresh"].view[0][0]
+            
+            # Set this threshold in this population's EGP
+            genn_pop = compiled_net.neuron_populations[pop]
+            genn_pop.extra_global_params["Vthresh"].view[:] = final_thresh
+
+            # Copy it into final threshold dictionary
+            final_thresholds[pop] = final_thresh
+    
+    for p, f in final_thresholds.items():
+        

@@ -51,9 +51,6 @@ def parse_arguments(model_description="ML GeNN model"):
                             signed_input=signed_input,
                             norm_data=[norm_data],
                             input_type=args.input_type)
-        #elif args.converter == "spike-norm":
-        #    return SpikeNorm(norm_data=[norm_data], norm_time=norm_time, 
-        #                     signed_input=signed_input, input_type=args.input_type)
         else:
             return Simple(evaluate_timesteps=evaluate_timesteps,
                           signed_input=signed_input,

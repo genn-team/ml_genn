@@ -4,7 +4,7 @@ import numpy as np
 from tensorflow.keras import models, layers, datasets
 
 from ml_genn.callbacks import SpikeRecorder
-
+from ml_genn_tf.converters.spike_norm import spike_normalise
 from arguments import parse_arguments
 from plotting import plot_spikes
 from time import perf_counter
@@ -66,6 +66,12 @@ converter = args.build_converter(mlg_norm_ds, signed_input=False,
 
 # Convert and compile ML GeNN model
 net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
+
+if args.converter == "spike-norm":
+    spike_normalise(net, net_inputs, net_outputs, mlg_norm_ds, evaluate_timesteps=T,
+                    num_batches=int(np.ceil(args.n_norm_samples / args.batch_size)),
+                    dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed,
+                    kernel_profiling=args.kernel_profiling)
 
 # If we should plot any spikes, turn on spike recording for all populations
 if len(args.plot_sample_spikes) > 0:
