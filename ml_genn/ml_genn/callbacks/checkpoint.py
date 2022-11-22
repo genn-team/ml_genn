@@ -2,12 +2,9 @@ from .callback import Callback
 
 
 class Checkpoint(Callback):
-    def __init__(self, serialiser="numpy", epoch_interval=1,
-                 weights=True, delays=False):
+    def __init__(self, serialiser="numpy", epoch_interval=1):
         self.serialiser = serialiser
         self.epoch_interval = epoch_interval
-        self.weights = weights
-        self.delays = delays
 
     def set_params(self, compiled_network, **kwargs):
         # Extract compiled network
