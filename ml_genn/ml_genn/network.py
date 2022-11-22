@@ -38,10 +38,10 @@ class Network:
             # Deserialize everthing relating to connection
             state = serialiser.deserialise_all(keys + (c,))
             
-            # **HACK** for now, assume single serialised variable is weight
-            if len(state) > 0:
-                assert len(state) == 1
-                c.connectivity.weight = next(iter(state.values()))
+            # Set any variables in copnnectivity
+            # **TODO** synapse
+            # **TODO** give error/warning if variable not found
+            set_values(c.connectivity, state)
         
         # Loop through populations
         for p in self.populations:
@@ -49,7 +49,7 @@ class Network:
             state = serialiser.deserialise_all(keys + (p,))
 
             # Set any variables in neuron
-            # **TODO** also synapse, also give error if variable was not found
+            # **TODO** give error if variable was not found
             set_values(p.neuron, state)
 
     @staticmethod

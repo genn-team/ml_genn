@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 
 class Connectivity(ABC):
-    weight = ValueDescriptor()
-    delay = ValueDescriptor()
+    weight = ValueDescriptor("g")
+    delay = ValueDescriptor("d")
 
     def __init__(self, weight: InitValue, delay: InitValue):
         self.weight = weight
