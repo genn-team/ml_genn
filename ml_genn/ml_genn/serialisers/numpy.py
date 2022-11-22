@@ -1,12 +1,16 @@
+import os
 import numpy as np
 from glob import glob
-from os import path
 
 from .serialiser import Serialiser
 
 class Numpy(Serialiser):
     def __init__(self, path: str = ""):
         self.path = path
+        
+        # If a path is specified which doesn't exist, create it
+        if self.path != "" and not os.path.exists(self.path):
+            os.makedirs(self.path)
 
     def serialise(self, keys, data):
         np.save(self._get_filename(keys, ".npy"), data)
@@ -21,7 +25,7 @@ class Numpy(Serialiser):
         data = {}
         for f in glob(self._get_filename(keys, "-*.npy")):
             # Extract file title without path or extension from filename
-            title = path.splitext(path.split(f)[1])[0]
+            title = os.path.splitext(os.path.split(f)[1])[0]
 
             # Split title into keys and slice out those that we seperated
             file_keys = title.split("-")[len(keys):]
@@ -35,5 +39,5 @@ class Numpy(Serialiser):
         return "-".join(str(x) for x in keys)
 
     def _get_filename(self, keys, suffix):
-        return path.join(self.path,
-                         self._get_file_title(keys) + suffix)
+        return os.path.join(self.path,
+                            self._get_file_title(keys) + suffix)
