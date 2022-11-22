@@ -4,7 +4,7 @@ from time import perf_counter
 import tensorflow as tf
 from tensorflow_addons.optimizers import SGDW
 
-from ml_genn.utils import parse_arguments
+from arguments import parse_arguments
 from imagenet_dataset import *
 
 data_path = os.path.expanduser('/mnt/data0/imagenet')
