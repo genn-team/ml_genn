@@ -3,10 +3,12 @@ import matplotlib.pyplot as plt
 import mnist
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
+from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.serialisers import Numpy
 from ml_genn_eprop import EPropCompiler
 
 from time import perf_counter
@@ -27,6 +29,7 @@ spikes = log_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
     20.0, 51)
 
+serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
@@ -53,7 +56,7 @@ if TRAIN:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        callbacks = ["batch_progress_bar", "checkpoint"]
+        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         metrics, _  = compiled_net.train({input: spikes},
                                          {output: labels},
                                          num_epochs=NUM_EPOCHS, shuffle=True,
@@ -74,7 +77,7 @@ if TRAIN:
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('Softmax3')}")
 else:
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,))
+    network.load((NUM_EPOCHS - 1,), serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  batch_size=BATCH_SIZE)
