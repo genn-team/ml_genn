@@ -3,12 +3,14 @@ from six import iteritems
 from time import perf_counter
 import tensorflow as tf
 
-from ml_genn import Model
-from ml_genn.utils import parse_arguments, raster_plot
+from ml_genn.callbacks import SpikeRecorder
+
+from arguments import parse_arguments
+from plotting import plot_spikes
 from vgg16_imagenet_train_tf import vgg16
 from imagenet_dataset import *
 
-data_path = os.path.expanduser('/mnt/data0/imagenet')
+data_path = os.path.expanduser('/usr/local/share/imagenet/shards/')
 train_path = os.path.join(data_path, 'train')
 validate_path = os.path.join(data_path, 'validation')
 checkpoint_path = './vgg16_imagenet_checkpoints'
@@ -34,7 +36,7 @@ if __name__ == '__main__':
     mlg_validate_ds = mlg_validate_ds.take(args.n_test_samples)
     mlg_validate_ds = mlg_validate_ds.batch(args.batch_size)
     mlg_validate_ds = mlg_validate_ds.prefetch(tf.data.AUTOTUNE)
-
+    
     # Create and compile TF model
     with tf.device('/CPU:0'):
         tf_model = vgg16()
@@ -44,28 +46,54 @@ if __name__ == '__main__':
     # Create a suitable converter to convert TF model to ML GeNN
     K = 10
     T = 2500
-    converter = args.build_converter(mlg_norm_ds, signed_input=True, K=10, norm_time=2500)
+    converter = args.build_converter(mlg_norm_ds, signed_input=True, 
+                                     k=K, evaluate_timesteps=T)
 
     # Convert and compile ML GeNN model
-    mlg_model = Model.convert_tf_model(
-        tf_model, converter=converter, connectivity_type=args.connectivity_type,
-        dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed,
-        kernel_profiling=args.kernel_profiling)
+    net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
 
-    # Evaluate ML GeNN model
-    time = K if args.converter == 'few-spike' else T
-    mlg_eval_start_time = perf_counter()
-    acc, spk_i, spk_t = mlg_model.evaluate_batched(
-        mlg_validate_ds, time, save_samples=args.save_samples)
-    print("MLG evaluation time: %f" % (perf_counter() - mlg_eval_start_time))
+    # If we should plot any spikes, turn on spike recording for all populations
+    if len(args.plot_sample_spikes) > 0:
+        for l in tf_model.layers:
+            if l in tf_layer_pops:
+                callbacks.append(
+                    SpikeRecorder(tf_layer_pops[l], key=l.name,
+                                  example_filter=args.plot_sample_spikes))
 
-    if args.kernel_profiling:
-        print("Kernel profiling:")
-        for n, t in iteritems(mlg_model.get_kernel_times()):
-            print("\t%s: %fs" % (n, t))
-
-    # Report ML GeNN model results
-    print(f'Accuracy of VGG16 GeNN model: {acc[0]}%')
-    if args.plot:
-        neurons = [l.neurons.nrn for l in mlg_model.layers]
-        raster_plot(spk_i, spk_t, neurons, time=time)
+    # Create suitable compiler for model
+    compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
+                                         dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
+                                         kernel_profiling=args.kernel_profiling)
+    compiled_net = compiler.compile(net, inputs=net_inputs, 
+                                    outputs=net_outputs)
+    compiled_net.genn_model.timing_enabled = args.kernel_profiling
+    
+    with compiled_net:
+        # If we should plot any spikes, add spike recorder callback for all populations
+        callbacks = ["batch_progress_bar"]
+        if len(args.plot_sample_spikes) > 0:
+            for p in net.populations:
+                callbacks.append(SpikeRecorder(p, example_filter=args.plot_sample_spikes))
+                
+        # Evaluate ML GeNN model
+        start_time = perf_counter()
+        num_batches = args.n_test_samples // args.batch_size
+        metrics, cb_data = compiled_net.evaluate_batch_iter(
+            net_inputs, net_outputs, iter(mlg_validate_ds),
+            num_batches=num_batches, callbacks=callbacks)
+        end_time = perf_counter()
+        print(f"Accuracy = {100.0 * metrics[net_outputs[0]].result}%")
+        print(f"Time = {end_time - start_time} s")
+        
+        if args.kernel_profiling:
+            reset_time = compiled_net.genn_model.get_custom_update_time("Reset")
+            print(f"Kernel profiling:\n"
+                  f"\tinit_time: {compiled_net.genn_model.init_time} s\n"
+                  f"\tinit_sparse_time: {compiled_net.genn_model.init_sparse_time} s\n"
+                  f"\tneuron_update_time: {compiled_net.genn_model.neuron_update_time} s\n"
+                  f"\tpresynaptic_update_time: {compiled_net.genn_model.presynaptic_update_time} s\n"
+                  f"\tcustom_update_reset_time: {reset_time} s")
+        
+        # Plot spikes if desired
+        if len(args.plot_sample_spikes) > 0:
+            plot_spikes(cb_data, args.plot_sample_spikes)
