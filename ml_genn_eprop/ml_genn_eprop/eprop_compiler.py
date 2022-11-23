@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 
 from typing import Iterator, Sequence
@@ -23,6 +24,8 @@ from ml_genn.utils.value import is_value_constant
 
 from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
+
+logger = logging.getLogger(__name__)
 
 
 class CompileState:
@@ -377,7 +380,7 @@ class EPropCompiler(Compiler):
         # within same strongly connected component
         if (not hasattr(conn.source().neuron, "set_input")
                 and conn.source() != conn.target()):
-            print(f"Adding feedback for {conn}")
+            logger.debug(f"Adding feedback for {conn}")
             
             # Add code to pass back error to synapse dynamics
             wum.append_synapse_dynamics("$(addToPre, $(g) * $(E_post));")
