@@ -2,6 +2,7 @@ import numpy as np
 
 from ml_genn import Connection, Population, Network
 from ml_genn.callbacks import Checkpoint
+from ml_genn.compilers import InferenceCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import (LeakyIntegrate, AdaptiveLeakyIntegrateFire,
@@ -18,7 +19,7 @@ NUM_HIDDEN = 256
 BATCH_SIZE = 512
 NUM_EPOCHS = 50
 
-TRAIN = True
+TRAIN = False
 KERNEL_PROFILING = False
 
 # Get SHD dataset
@@ -53,20 +54,13 @@ with network:
                                                    relative_reset=True,
                                                    integrate_during_refrac=True),
                         NUM_HIDDEN)
-    hidden2 = Population(AdaptiveLeakyIntegrateFire(v_thresh=0.6,
-                                                    tau_refrac=5.0,
-                                                    relative_reset=True,
-                                                    integrate_during_refrac=True),
-                         NUM_HIDDEN)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", softmax=True),
                         num_output)
 
     # Connections
     Connection(input, hidden, Dense(Normal(sd=1.0 / np.sqrt(num_input))))
     Connection(hidden, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
-    Connection(hidden, hidden2, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
-    Connection(hidden2, hidden2, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
-    Connection(hidden2, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
+    Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
 
 if TRAIN:
     compiler = EPropCompiler(example_timesteps=int(np.ceil(latest_spike_time)),
@@ -77,7 +71,7 @@ if TRAIN:
     with compiled_net:
         # Evaluate model on SHD
         start_time = perf_counter()
-        callbacks = ["batch_progress_bar", "checkpoint"]
+        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         metrics, _  = compiled_net.train({input: spikes},
                                          {output: labels},
                                          num_epochs=50,
@@ -88,9 +82,9 @@ if TRAIN:
         print(f"Time = {end_time - start_time}s")
 else:
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,), Checkpoint(serialiser))
+    network.load((NUM_EPOCHS - 1,), serialiser)
 
-    compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
+    compiler = InferenceCompiler(evaluate_timesteps=int(np.ceil(latest_spike_time)),
                                  batch_size=BATCH_SIZE)
     compiled_net = compiler.compile(network)
 
