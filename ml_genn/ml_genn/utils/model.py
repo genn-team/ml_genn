@@ -268,6 +268,12 @@ class WeightUpdateModel(Model):
         self.pre_var_vals = pre_var_vals
         self.post_var_vals = post_var_vals
     
+    def append_synapse_dynamics(self, code):
+        self._append_code("synapse_dynamics_code", code)
+    
+    def append_sim_code(self, code):
+        self._append_code("sim_code", code)
+        
     def process(self):
         return (super(WeightUpdateModel, self).process() 
                 + (self.pre_var_vals, self.post_var_vals))

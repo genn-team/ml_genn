@@ -199,7 +199,6 @@ output_learning_model = {
     """,
     "synapse_dynamics_code": """
     $(DeltaG) += $(ZFilter) * $(E_post);
-    $(addToPre, $(g) * $(E_post));
     """}
 
 gradient_batch_reduce_model = {
@@ -341,21 +340,20 @@ class EPropCompiler(Compiler):
         target_neuron = conn.target().neuron
         if isinstance(target_neuron, LeakyIntegrateFire):
             wum = WeightUpdateModel(
-                model=eprop_lif_model,
+                model=deepcopy(eprop_lif_model),
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
                 var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
-            # **TODO** feedback of source and target different
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
             rho = np.exp(-self.dt / compile_state.tau_adapt)
             
             wum = WeightUpdateModel(
-                model=eprop_alif_model,
+                model=deepcopy(eprop_alif_model),
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
@@ -363,16 +361,27 @@ class EPropCompiler(Compiler):
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
-            # **TODO** feedback of source and target different
         # Otherwise, if target neuron is readout, create 
         # weight update model with simple output learning rule
         elif target_neuron.readout is not None:
             wum = WeightUpdateModel(
-                model=output_learning_model,
+                model=deepcopy(output_learning_model),
                 param_vals={"Alpha": alpha},
                 var_vals={"g": weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0})
 
+        # If connection doens't come directly from 
+        # input and isn't a self-connection
+        # **THINK** this isn't quite the correct recurrent connection test.
+        # Should test something more like whether source and target are
+        # within same strongly connected component
+        if (not hasattr(conn.source().neuron, "set_input")
+                and conn.source() != conn.target()):
+            print(f"Adding feedback for {conn}")
+            
+            # Add code to pass back error to synapse dynamics
+            wum.append_synapse_dynamics("$(addToPre, $(g) * $(E_post));")
+            
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
 
