@@ -85,7 +85,7 @@ else:
     network.load((NUM_EPOCHS - 1,), serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=int(np.ceil(latest_spike_time)),
-                                 batch_size=BATCH_SIZE)
+                                 reset_vars_between_batches=False, batch_size=BATCH_SIZE)
     compiled_net = compiler.compile(network)
 
     with compiled_net:

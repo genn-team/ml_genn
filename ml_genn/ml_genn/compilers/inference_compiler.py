@@ -199,8 +199,9 @@ class CompileState:
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
     
-    def add_neuron_reset_vars(self, model, pop):
-        reset_vars = model.reset_vars
+    def add_neuron_reset_vars(self, model, pop, reset_model_vars):
+        reset_vars = (model.reset_vars if reset_model_vars
+                      else pop.neuron.readout.reset_vars)
         if len(reset_vars) > 0:
             self._neuron_reset_vars[pop] = reset_vars
 
@@ -240,6 +241,7 @@ class InferenceCompiler(Compiler):
                  kernel_profiling: bool = False,
                  prefer_in_memory_connect=True, 
                  reset_time_between_batches=True,
+                 reset_vars_between_batches=True,
                  **genn_kwargs):
         super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
                                                 kernel_profiling,
@@ -247,13 +249,15 @@ class InferenceCompiler(Compiler):
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
+        self.reset_vars_between_batches = reset_vars_between_batches
 
     def pre_compile(self, network, **kwargs):
         return CompileState()
 
     def build_neuron_model(self, pop, model, compile_state):
         # Add any neuron reset variables to compile state
-        compile_state.add_neuron_reset_vars(model, pop)
+        compile_state.add_neuron_reset_vars(model, pop,
+                                            self.reset_vars_between_batches)
 
         # Build neuron model
         return super(InferenceCompiler, self).build_neuron_model(
@@ -261,7 +265,8 @@ class InferenceCompiler(Compiler):
 
     def build_synapse_model(self, conn, model, compile_state):
         # Add any PSM reset variables to compile state
-        compile_state.add_psm_reset_vars(model, conn)
+        if self.reset_vars_between_batches:
+            compile_state.add_psm_reset_vars(model, conn)
 
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, compile_state)
