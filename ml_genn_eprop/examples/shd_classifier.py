@@ -54,7 +54,7 @@ with network:
                                                    relative_reset=True,
                                                    integrate_during_refrac=True),
                         NUM_HIDDEN)
-    output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", softmax=True),
+    output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", softmax=TRAIN),
                         num_output)
 
     # Connections
@@ -89,6 +89,8 @@ else:
     compiled_net = compiler.compile(network)
 
     with compiled_net:
+        compiled_net.evaluate({input: spikes}, {output: labels})
+        
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         metrics, _  = compiled_net.evaluate({input: spikes},
