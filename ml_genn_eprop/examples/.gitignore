@@ -1,5 +1,0 @@
-# Ignore tonic data directory
-data
-
-# Ignore checkpoint directories
-*_checkpoints

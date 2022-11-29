@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 from ml_genn import Connection, Population, Network
 from ml_genn.callbacks import (OptimiserParamSchedule, SpikeRecorder,
                                VarRecorder)
+from ml_genn.compilers import EPropCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
-from ml_genn_eprop import EPropCompiler
 
 from time import perf_counter
 from ml_genn.utils.data import preprocess_spikes

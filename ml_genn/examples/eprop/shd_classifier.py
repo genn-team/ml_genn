@@ -2,13 +2,12 @@ import numpy as np
 
 from ml_genn import Connection, Population, Network
 from ml_genn.callbacks import Checkpoint
-from ml_genn.compilers import InferenceCompiler
+from ml_genn.compilers import EPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import (LeakyIntegrate, AdaptiveLeakyIntegrateFire,
                              SpikeInput)
 from ml_genn.serialisers import Numpy
-from ml_genn_eprop import EPropCompiler
 from tonic.datasets import SHD
 
 from time import perf_counter
