@@ -84,7 +84,7 @@ class CompileState:
 
         return self._tau_adapt
 
-    @tau_mem.setter
+    @tau_adapt.setter
     def tau_adapt(self, tau_adapt):
         if self._tau_adapt is None:
             self._tau_adapt = tau_adapt
@@ -313,8 +313,10 @@ class EPropCompiler(Compiler):
                                               "LIF/ALIF neurons with a "
                                               "relative reset mechanism")
 
-                # Set 
+                # Set global time constants from neuron model
                 compile_state.tau_mem = pop.neuron.tau_mem
+                if isinstance(pop.neuron, AdaptiveLeakyIntegrateFire):
+                    compile_state.tau_adapt = pop.neuron.tau_adapt
             else:
                 raise NotImplementedError(f"EProp compiler doesn't support "
                                           f"{type(pop.neuron).__name__} "
@@ -373,7 +375,7 @@ class EPropCompiler(Compiler):
                 var_vals={"g": weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0})
 
-        # If connection doens't come directly from 
+        # If connection doesn't come directly from 
         # input and isn't a self-connection
         # **THINK** this isn't quite the correct recurrent connection test.
         # Should test something more like whether source and target are
