@@ -18,7 +18,7 @@ NUM_HIDDEN = 256
 BATCH_SIZE = 512
 NUM_EPOCHS = 50
 
-TRAIN = False
+TRAIN = True
 KERNEL_PROFILING = False
 
 # Get SHD dataset
