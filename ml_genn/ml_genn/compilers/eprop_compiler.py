@@ -434,9 +434,9 @@ class EPropCompiler(Compiler):
         # Build list of base callbacks
         base_callbacks = []
         if len(optimiser_custom_updates) > 0:
-            base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
             if self.batch_size > 1:
                 base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
+            base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
         if compile_state.is_reset_custom_update_required:
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
