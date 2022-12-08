@@ -27,6 +27,15 @@ from ml_genn.losses import default_losses
 
 logger = logging.getLogger(__name__)
 
+def _has_connection_to_output(pop):
+    # Loop through population's outgoing connections
+    for c in pop.outgoing_connections:
+        # If target of connection has a readout 
+        # i.e. it's an output, return true
+        if c().target().neuron.readout is not None:
+            return True
+    
+    return False
 
 class CompileState:
     def __init__(self, losses, readouts):
@@ -74,7 +83,7 @@ class CompileState:
         if self._tau_mem is None:
             self._tau_mem = tau_mem
         if self._tau_mem != tau_mem:
-            raise NotImplementedError("EProp compiler doesn't "
+            raise NotImplementedError("E-prop compiler doesn't "
                                       "support neurons with "
                                       "different time constants")
 
@@ -89,7 +98,7 @@ class CompileState:
         if self._tau_adapt is None:
             self._tau_adapt = tau_adapt
         if self._tau_adapt != tau_adapt:
-            raise NotImplementedError("EProp compiler doesn't "
+            raise NotImplementedError("E-prop compiler doesn't "
                                       "support neurons with "
                                       "different time constants")
 
@@ -202,6 +211,7 @@ output_learning_model = {
     """,
     "synapse_dynamics_code": """
     $(DeltaG) += $(ZFilter) * $(E_post);
+    $(addToPre, $(g) * $(E_post));
     """}
 
 gradient_batch_reduce_model = {
@@ -287,8 +297,14 @@ class EPropCompiler(Compiler):
                 # Add bias to list of checkpoint vars
                 compile_state.checkpoint_population_vars.append((pop, "Bias"))
 
-        # Otherwise, if neuron isn't an input
+        # Otherwise, if neuron isn't an input i.e. it's hidden
         elif not hasattr(pop.neuron, "set_input"):
+            # Check hidden population is connected directly to output
+            if not _has_connection_to_output(pop):
+                raise RuntimeError("In models trained with e-prop, all "
+                                   "hidden populations must be directly "
+                                   "connected to an output population")
+
             # Add additional input variable to receive feedback
             model_copy.add_additional_input_var("ISynFeedback", "scalar", 0.0)
             
@@ -299,26 +315,24 @@ class EPropCompiler(Compiler):
             # Add sim code to store incoming feedback in new state variable
             model_copy.append_sim_code("$(E) = $(ISynFeedback);")
             
+            # If neuron model is LIF or ALIF
             if isinstance(pop.neuron, (AdaptiveLeakyIntegrateFire,
                                        LeakyIntegrateFire)):
-                # Check EProp constraints
-                # **THINK** could these just be warnings?
+                # Check e-prop constraints
                 if not pop.neuron.integrate_during_refrac:
-                    raise NotImplementedError("EProp compiler only supports "
-                                              "LIF/ALIF neurons which "
-                                              "continue to integrate during "
-                                              "their refractory period")
+                    logging.warning("E-prop learning works best with (A)LIF "
+                                    "neurons which continue to integrate "
+                                    "during their refractory period")
                 if not pop.neuron.relative_reset:
-                    raise NotImplementedError("EProp compiler only supports "
-                                              "LIF/ALIF neurons with a "
-                                              "relative reset mechanism")
+                    logging.warning("E-prop learning works best with (A)LIF "
+                                    "neurons with a relative reset mechanism")
 
                 # Set global time constants from neuron model
                 compile_state.tau_mem = pop.neuron.tau_mem
                 if isinstance(pop.neuron, AdaptiveLeakyIntegrateFire):
                     compile_state.tau_adapt = pop.neuron.tau_adapt
             else:
-                raise NotImplementedError(f"EProp compiler doesn't support "
+                raise NotImplementedError(f"E-prop compiler doesn't support "
                                           f"{type(pop.neuron).__name__} "
                                           f"neurons")
         
@@ -327,7 +341,7 @@ class EPropCompiler(Compiler):
 
     def build_synapse_model(self, conn, model, compile_state):
         if not isinstance(conn.synapse, Delta):
-            raise NotImplementedError("EProp compiler only "
+            raise NotImplementedError("E-prop compiler only "
                                       "supports Delta synapses")
 
         # Return model
@@ -335,7 +349,7 @@ class EPropCompiler(Compiler):
     
     def build_weight_update_model(self, conn, weight, delay, compile_state):
         if not is_value_constant(delay):
-            raise NotImplementedError("EProp compiler only "
+            raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
         
         # Calculate membrane persistence
@@ -345,7 +359,7 @@ class EPropCompiler(Compiler):
         target_neuron = conn.target().neuron
         if isinstance(target_neuron, LeakyIntegrateFire):
             wum = WeightUpdateModel(
-                model=deepcopy(eprop_lif_model),
+                model=eprop_lif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
@@ -358,7 +372,7 @@ class EPropCompiler(Compiler):
             rho = np.exp(-self.dt / compile_state.tau_adapt)
             
             wum = WeightUpdateModel(
-                model=deepcopy(eprop_alif_model),
+                model=eprop_alif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
@@ -370,23 +384,11 @@ class EPropCompiler(Compiler):
         # weight update model with simple output learning rule
         elif target_neuron.readout is not None:
             wum = WeightUpdateModel(
-                model=deepcopy(output_learning_model),
+                model=output_learning_model,
                 param_vals={"Alpha": alpha},
                 var_vals={"g": weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0})
 
-        # If connection doesn't come directly from 
-        # input and isn't a self-connection
-        # **THINK** this isn't quite the correct recurrent connection test.
-        # Should test something more like whether source and target are
-        # within same strongly connected component
-        if (not hasattr(conn.source().neuron, "set_input")
-                and conn.source() != conn.target()):
-            logger.debug(f"Adding feedback for {conn}")
-            
-            # Add code to pass back error to synapse dynamics
-            wum.append_synapse_dynamics("$(addToPre, $(g) * $(E_post));")
-            
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
 
