@@ -343,6 +343,13 @@ class Compiler:
                 genn_psm, psm_param_vals, psm_var_vals,
                 connectivity_initialiser=connect_snippet.snippet)
 
+            # If connectivity snippet has pre and postsynaptic
+            # indices, set them in synapse group
+            if (connect_snippet.pre_ind is not None 
+                and connect_snippet.post_ind is not None):
+                    genn_pop.set_sparse_connections(connect_snippet.pre_ind,
+                                                    connect_snippet.post_ind)
+
             # Configure EGPs
             set_egp(wum_egp_vals, genn_pop.extra_global_params)
             set_egp(psm_egp_vals, genn_pop.psm_extra_global_params)

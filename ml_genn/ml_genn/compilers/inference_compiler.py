@@ -219,7 +219,6 @@ class CompileState:
                                     neuron_pops, conn_pops):
         # Loop through neuron variables to reset
         for i, (pop, reset_vars) in enumerate(self._neuron_reset_vars.items()):
-            print(pop, reset_vars)
             # Create reset model
             model = create_reset_custom_update(
                 reset_vars,

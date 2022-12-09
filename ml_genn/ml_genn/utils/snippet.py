@@ -3,7 +3,9 @@ from numbers import Number
 
 ConnectivitySnippet = namedtuple("ConnectivitySnippet",
                                  ["snippet", "matrix_type",
-                                  "weight", "delay"])
+                                  "weight", "delay", 
+                                  "pre_ind", "post_ind"],
+                                 defaults=[None, None])
 
 InitializerSnippet = namedtuple("InitializerSnippet",
                                 ["snippet", "param_vals", "egp_vals"],

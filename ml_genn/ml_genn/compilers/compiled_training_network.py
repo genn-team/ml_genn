@@ -2,6 +2,7 @@ import numpy as np
 
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..connectivity.sparse_base import SparseBase
 from ..metrics import Metric
 from ..serialisers import Serialiser
 from ..utils.callback_list import CallbackList
@@ -34,6 +35,11 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.checkpoint_connection_vars = checkpoint_connection_vars
         self.checkpoint_population_vars = checkpoint_population_vars
         self.reset_time_between_batches = reset_time_between_batches
+        
+        # Build set of synapse groups with checkpoint variables
+        self.checkpoint_synapse_groups = set(
+            connection_populations[c] 
+            for c, _ in self.checkpoint_connection_vars)
 
     def train(self, x: dict, y: dict, num_epochs: int, shuffle: bool = True,
               metrics: MetricsType = "sparse_categorical_accuracy",
@@ -99,85 +105,35 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Return metrics
         return metrics, callback_list.get_data()
-    """
-    def train_batch_iter(
-            self, inputs, outputs, data: Iterator, num_batches: int = None,
-            metrics: MetricsType = "sparse_categorical_accuracy",
-            callbacks=[BatchProgressBar()]):
-        # Convert inputs and outputs to tuples
-        inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
-        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
 
-        # Build metrics
-        metrics = get_object_mapping(metrics, outputs, Metric, 
-                                     "Metric", default_metrics)
+    def save_connectivity(self, keys=(), serialiser="numpy"):
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through connections and their corresponding synapse groups
+        for c, genn_pop in self.connection_populations.items():
+            # If synapse group has ragged connectivity, download  
+            # connectivity and save pre and postsynaptic indices
+            if genn_pop.is_ragged:
+                genn_pop.pull_connectivity_from_device()
+                serialiser.serialise(keys + (c, "pre_ind"),
+                                     genn_pop.get_sparse_pre_inds())
+                serialiser.serialise(keys + (c, "post_ind"),
+                                     genn_pop.get_sparse_post_inds())
 
-        # Create callback list and begin testing
-        callback_list = CallbackList(self.base_callbacks + callbacks,
-                                     compiled_network=self,
-                                     num_batches=num_batches)
-        callback_list.on_test_begin()
-
-        # Loop through data
-        batch_i = 0
-        while True:
-            # Attempt to get next batch of data,
-            # break if none remains
-            try:
-                batch_x, batch_y = next(data)
-            except StopIteration:
-                break
-
-            # Set x as input
-            # **YUCK** this isn't quite right as batch_x
-            # could also have outer dimension
-            if len(inputs) == 1:
-                x = {inputs[0]: batch_x}
-            else:
-                x = {p: x for p, x in zip(inputs, batch_x)}
-
-            # Add each y to correct queue(s)
-            # **YUCK** this isn't quite right as batch_y
-            # could also have outer dimension
-            if len(outputs) == 1:
-                y = {outputs[0]: batch_y}
-            else:
-                y = {p: y for p, x in zip(outputs, batch_y)}
-
-            # Evaluate batch
-            self._evaluate_batch(batch_i, x, y, metrics, callback_list)
-            batch_i += 1
-
-        # End testing
-        callback_list.on_test_end(metrics)
-
-        # Return metrics
-        return metrics, callback_list.get_data()
-
-    def train_batch(self, x: dict, y: dict,
-                    metrics="sparse_categorical_accuracy",
-                    callbacks=[]):
-        # Build metrics
-        metrics = get_object_mapping(metrics, y.keys(), Metric, 
-                                     "Metric", default_metrics)
-
-        # Create callback list and begin testing
-        callback_list = CallbackList(self.base_callbacks + callbacks)
-        callback_list.on_test_begin()
-
-        # Evaluate batch and return metrics
-        self._evaluate_batch(0, x, y, metrics, callback_list)
-
-        # End testing
-        callback_list.on_test_end(metrics)
-
-        return metrics, callback_list.get_data()
-    """
     def save(self, keys=(), serialiser="numpy"):
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)
         
+        # Loop through synapse groups with variables to be checkpointed
+        for genn_pop in self.checkpoint_synapse_groups:
+            # If synapse group has ragged connectivity, download  
+            # connectivity so variables can be accessed correctly
+            if genn_pop.is_ragged:
+                genn_pop.pull_connectivity_from_device()
+                
         # Loop through connection variables to checkpoint
         for c, v in self.checkpoint_connection_vars:
             genn_pop = self.connection_populations[c]

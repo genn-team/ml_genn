@@ -13,7 +13,7 @@ Value = Union[Number, Sequence[Number], np.ndarray, Initializer]
 InitValue = Union[Value, str]
 
 class ValueDescriptor:
-    def __init__(self, genn_name: str = None, value_transform = None):
+    def __init__(self, genn_name: str, value_transform = None):
         self.genn_name = genn_name
         self.value_transform = value_transform
     

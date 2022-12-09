@@ -5,7 +5,7 @@ import mnist
 from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EPropCompiler, InferenceCompiler
-from ml_genn.connectivity import Dense
+from ml_genn.connectivity import Dense,FixedProbability
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.serialisers import Numpy
@@ -19,7 +19,7 @@ NUM_HIDDEN = 100
 NUM_OUTPUT = 10
 BATCH_SIZE = 128
 NUM_EPOCHS = 10
-
+SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = False
 
@@ -34,11 +34,13 @@ with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
                                   NUM_INPUT)
-    hidden = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_INPUT))),
-                   LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
-                                      tau_refrac=5.0,
-                                      relative_reset=True,
-                                      integrate_during_refrac=True),
+    initial_hidden_weight = Normal(sd=1.0 / np.sqrt(NUM_INPUT))
+    connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
+                    else FixedProbability(SPARSITY, initial_hidden_weight))
+    hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
+                                                    tau_refrac=5.0,
+                                                    relative_reset=True,
+                                                    integrate_during_refrac=True),
                    NUM_HIDDEN)
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
                    LeakyIntegrate(tau_mem=20.0, softmax=True, readout="sum_var"),
@@ -60,6 +62,8 @@ if TRAIN:
                                          {output: labels},
                                          num_epochs=NUM_EPOCHS, shuffle=True,
                                          callbacks=callbacks)
+        compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
+        
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")

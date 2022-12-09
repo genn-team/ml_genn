@@ -231,7 +231,7 @@ class EPropCompiler(Compiler):
                  reset_time_between_batches: bool = True, **genn_kwargs):
         super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                             kernel_profiling,
-                                            prefer_in_memory_connect=False,
+                                            prefer_in_memory_connect=True,
                                             **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses
