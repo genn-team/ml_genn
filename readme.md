@@ -47,7 +47,7 @@ from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import EPropCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
-from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, PoissonInput
+from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire
 
 # load dataset
 ...
@@ -56,11 +56,10 @@ network = SequentialNetwork()
 with network:
     # Populations
     input = InputLayer("poisson_input", 768)
-    initial_hidden_weight = 
-    hidden = Layer(Dense(Normal(sd=1.0 / np.sqrt(768))),
-                   LeakyIntegrateFire(relative_reset=True,
-                                      integrate_during_refrac=True),
-                   128)
+    Layer(Dense(Normal(sd=1.0 / np.sqrt(768))),
+                LeakyIntegrateFire(relative_reset=True,
+                                   integrate_during_refrac=True),
+                128)
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(128))),
                    LeakyIntegrate(softmax=True, readout="sum_var"),
                    10)
@@ -71,8 +70,10 @@ compiler = EPropCompiler(example_timesteps=200,
 compiled_net = compiler.compile(network)
 
 with compiled_net:
-    metrics, _  = compiled_net.train({input: spikes},
-                                     {output: labels},
+    metrics, _  = compiled_net.train({input: x},
+                                     {output: y},
                                      num_epochs=10, shuffle=True)
     print(f"Accuracy = {100 * metrics[output].result}%")
 ```
+
+For further examples, please see the examples/eprop folder.
