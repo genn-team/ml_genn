@@ -26,7 +26,6 @@ if errorlevel 9009 (
 )
 
 sphinx-apidoc --maxdepth 1 --force -o source\ ..\ml_genn
-sphinx-apidoc --maxdepth 1 --force -o source\ ..\ml_genn_eprop
 sphinx-apidoc --maxdepth 1 --force -o source\ ..\ml_genn_tf
 
 %SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%

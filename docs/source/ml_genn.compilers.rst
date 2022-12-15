@@ -28,6 +28,14 @@ ml\_genn.compilers.compiler module
    :undoc-members:
    :show-inheritance:
 
+ml\_genn.compilers.eprop\_compiler module
+-----------------------------------------
+
+.. automodule:: ml_genn.compilers.eprop_compiler
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ml\_genn.compilers.few\_spike\_compiler module
 ----------------------------------------------
 
