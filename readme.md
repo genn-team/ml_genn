@@ -40,7 +40,7 @@ with compiled_net:
 ```
 For further examples, please see the examples/tf folder.
 
-### Training an SNN using eProp
+### Training an SNN using e-prop
 The following example illustrates how to train a simple SNN with the e-prop learning rule ([Bellec, Scherr et al., 2020](http://dx.doi.org/10.1038/s41467-020-17236-y)):
 ```python
 from ml_genn import InputLayer, Layer, SequentialNetwork
