@@ -69,7 +69,7 @@ def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
  
 # **TODO** maybe this could be a static from_tonic method 
 def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
-                            shape: Tuple, 
+                            shape: Tuple,
                             time_scale=1.0 / 1000.0) -> PreprocessedSpikes:
     # Calculate cumulative sum of each neuron's spike count
     num_neurons = np.product(shape) 

@@ -156,6 +156,3 @@ def spike_normalise(net, net_inputs, net_outputs, norm_data,
 
             # Copy it into final threshold dictionary
             final_thresholds[pop] = final_thresh
-    
-    for p, f in final_thresholds.items():
-        

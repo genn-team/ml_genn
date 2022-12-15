@@ -33,8 +33,14 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                  metrics="sparse_categorical_accuracy",
                  callbacks=[BatchProgressBar()]):
         """ Evaluate an input in numpy format against labels
-        accuracy --  dictionary containing accuracy of predictions
-                     made by each output Population or Layer
+
+        Args:
+            x:          Dictionary of inputs to inject 
+                        into input neuron populations.
+            y:          Dictionary of labels to compare to
+                        readout from output neuron population.
+            metrics:    Metrics to calculate.
+            callbacks:  List of callbacks to run during evaluation.
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
@@ -67,8 +73,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                             metrics="sparse_categorical_accuracy",
                             callbacks=[BatchProgressBar()]):
         """ Evaluate an input in iterator format against labels
-        accuracy --  dictionary containing accuracy of predictions
-                     made by each output Population or Layer
+        Args:
+            x:          Dictionary of inputs to inject 
+                        into input neuron populations.
+            y:          Dictionary of labels to compare to
+                        readout from output neuron population.
+            metrics:    Metrics to calculate.
+            callbacks:  List of callbacks to run during evaluation.
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
