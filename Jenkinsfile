@@ -165,7 +165,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     sh "rm -f ${messagesTests}";
                     def commandsTest = """
                     . ${WORKSPACE}/venv/bin/activate
-                    pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml:${coverageMLGeNN} --junitxml ml_genn_${NODE_NAME}.xml 1>>\"${messagesTests}\" 2>&1
+                    pytest -v --cov ../ml_genn --cov ../ml_genn_tf --cov-report=xml:${coverageMLGeNN} --junitxml ml_genn_${NODE_NAME}.xml 1>>\"${messagesTests}\" 2>&1
                     """;
                     def statusTests = sh script:commandsTest, returnStatus:true;
                     archive messagesTests;
