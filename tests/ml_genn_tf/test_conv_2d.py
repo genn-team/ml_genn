@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import pytest
-from converter import Converter
+from .converter import Converter
 
 @pytest.mark.parametrize(
     "in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, prefer_in_memory_connect", 

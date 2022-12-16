@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import ml_genn as mlg
 import pytest
-from converter import Converter
+from .converter import Converter
 
 @pytest.mark.parametrize(
     "in_size, in_chan, out_size, pool_size, pool_strides, prefer_in_memory_connect", 

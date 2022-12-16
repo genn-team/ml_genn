@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import pytest
 
-from converter import Converter
+from .converter import Converter
 from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import IntegrateFire, BinarySpikeInput
