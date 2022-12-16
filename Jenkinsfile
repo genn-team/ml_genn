@@ -184,15 +184,9 @@ for (b = 0; b < builderNodes.size(); b++) {
             
             buildStage("Uploading coverage (${NODE_NAME})") {
                 withCredentials([string(credentialsId: "codecov_token_ml_genn", variable: "CODECOV_TOKEN")]) {
-                    // Download codecov uploader and make executable
-                    sh """
-                    curl -Os https://uploader.codecov.io/latest/linux/codecov
-                    chmod +x codecov
-                    """
-                    
+
                     // **NOTE** groovy would expand ${CODECOV_TOKEN} which would mean it could, for example, be strace'd
                     // see https://www.jenkins.io/doc/book/pipeline/jenkinsfile/#string-interpolation
-                    //sh './codecov -t $CODECOV_TOKEN -f ' + coverageMLGeNN
                     sh 'curl -s https://codecov.io/bash | bash -s - -n ' + env.NODE_NAME + ' -f ' + coverageMLGeNN + ' -t $CODECOV_TOKEN';
                 }
             }
