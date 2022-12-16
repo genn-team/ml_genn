@@ -1,5 +1,7 @@
-from ml_genn.utils.model import (CustomUpdateModel, NeuronModel,
-                                 SynapseModel, WeightUpdateModel)
+import numpy as np
+
+from ml_genn.initializers import Uniform
+from ml_genn.utils.model import (NeuronModel, WeightUpdateModel)
 
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_READ_WRITE)
@@ -7,13 +9,25 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 from pytest import raises
 
 def test_process():
-    pass
+    nm = NeuronModel({"param_name_types": [("P1", "scalar"),
+                                           ("P2", "scalar"),
+                                           ("P3", "scalar")],
+                      "var_name_types": [("V", "scalar")]},
+                     "V", {"P1": 3.0, "P2": np.arange(4), "P3": Uniform()},
+                     {"V": 1.0})
+    
+    model_copy, constant_param_vals, var_vals, _, _ = nm.process()
+    
+    assert "P1" in constant_param_vals
+    assert "P2" in var_vals
+    assert "P3" in var_vals
+    assert "V" in var_vals
 
 def test_reset_vars():
     nm = NeuronModel({"var_name_types": [("V", "scalar"),
                                          ("VRW", "scalar", VarAccess_READ_WRITE),
                                          ("VRO", "int", VarAccess_READ_ONLY)]},
-                    {}, {"V": 1.0, "VRW": 2.0, "VRO": 3.0})
+                    "V", {}, {"V": 1.0, "VRW": 2.0, "VRO": 3.0})
     reset_vars = nm.reset_vars
     assert len(reset_vars) == 2
     assert reset_vars[0] == ("V", "scalar", 1.0)
