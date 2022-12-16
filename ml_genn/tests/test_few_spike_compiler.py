@@ -27,7 +27,7 @@ def test_delay_balancing():
         
         dense_b3_1 = Population(hidden_neuron, 1)
         
-        output = Population(FewSpikeRelu(k=8, alpha=5.0, output="var"), 1)
+        output = Population(FewSpikeRelu(k=8, alpha=5.0, readout="var"), 1)
         
         # Connect input to output via block 1
         Connection(input, dense_b1_1, hidden_connectivity)

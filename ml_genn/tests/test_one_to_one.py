@@ -21,7 +21,7 @@ def test_one_to_one(size, prefer_in_memory_connect, request):
     with network:
         input = InputLayer(BinarySpikeInput(), size)
         output = Layer(OneToOne(weight=1.0), 
-                       IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), output="var"))
+                       IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), readout="var"))
 
     compiler = InferenceCompiler(evaluate_timesteps=2)
     compiled_net = compiler.compile(network, request.keywords.node.name)

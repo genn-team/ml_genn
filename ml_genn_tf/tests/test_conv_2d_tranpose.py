@@ -57,7 +57,7 @@ def test_conv_2d_transpose(in_size, in_chan, out_chan, conv_size,
         input = InputLayer(BinarySpikeInput(),  (in_size, in_size, in_chan))
         output = Layer(Conv2DTranspose(w, out_chan, conv_size, conv_strides=conv_strides, 
                                        conv_padding=conv_padding), 
-                       IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), output="var"))
+                       IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), readout="var"))
 
     compiler = InferenceCompiler(evaluate_timesteps=2)
     compiled_net = compiler.compile(network, request.keywords.node.name)

@@ -16,7 +16,7 @@ class Converter(Converter):
     def create_neurons(self, tf_layer, pre_convert_output, is_output):
         if is_output:
             v_thresh = np.float64(np.finfo(np.float32).max)
-            return IntegrateFire(v_thresh=v_thresh, output="var")
+            return IntegrateFire(v_thresh=v_thresh, readout="var")
         else:
             return IntegrateFire(v_thresh=1.0)
 

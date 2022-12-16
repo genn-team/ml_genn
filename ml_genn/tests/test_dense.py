@@ -24,7 +24,7 @@ def test_dense(in_size, out_size, request):
     with network:
         input = InputLayer(BinarySpikeInput(), in_size)
         output = Layer(Dense(weight=w), 
-                       IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), output="var"),
+                       IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), readout="var"),
                        out_size)
 
     compiler = InferenceCompiler(evaluate_timesteps=2)
