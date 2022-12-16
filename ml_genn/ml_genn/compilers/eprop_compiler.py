@@ -34,7 +34,7 @@ def _has_connection_to_output(pop):
         # i.e. it's an output, return true
         if c().target().neuron.readout is not None:
             return True
-    
+
     return False
 
 class CompileState:
@@ -49,7 +49,7 @@ class CompileState:
         self._neuron_reset_vars = {}
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
-    
+
     def add_neuron_readout_reset_vars(self, pop):
         reset_vars = pop.neuron.readout.reset_vars
         if len(reset_vars) > 0:
@@ -179,11 +179,11 @@ eprop_alif_model = {
     scalar epsilonA = $(epsilonA);
     const scalar psiZFilter = $(Psi) * $(ZFilter);
     const scalar psiBetaEpsilonA = $(Psi) * $(Beta_post) * epsilonA;
-    
+
     // Calculate e and episilonA
     const scalar e = psiZFilter  - psiBetaEpsilonA;
     $(epsilonA) = psiZFilter + (($(Rho) * epsilonA) - psiBetaEpsilonA);
-    
+
     // Calculate filtered version of eligibility trace
     scalar eFiltered = $(eFiltered);
     eFiltered = (eFiltered * $(Alpha)) + e;
@@ -247,7 +247,7 @@ class EPropCompiler(Compiler):
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
-                   
+
         return CompileState(self.losses, readouts)
 
     def build_neuron_model(self, pop, model, compile_state):
@@ -284,13 +284,13 @@ class EPropCompiler(Compiler):
                 # **THINK** do we want some sort of duck-type to get bias var
                 # or add something to model to say which variable is bias
                 model_copy.make_param_var("Bias")
-        
+
                 # Add DeltaBias
                 model_copy.add_var("DeltaBias", "scalar", 0.0)
-                
+
                 # Add sim-code to update DeltaBias
                 model_copy.append_sim_code("$(DeltaBias) += $(E);")
-                
+
                 # Add population to list of those with biases to optimise
                 compile_state.bias_optimiser_populations.append(pop)
 
@@ -307,25 +307,25 @@ class EPropCompiler(Compiler):
 
             # Add additional input variable to receive feedback
             model_copy.add_additional_input_var("ISynFeedback", "scalar", 0.0)
-            
+
             # Add state variable to store 
             # feedback and initialise to zero
             model_copy.add_var("E", "scalar", 0.0)
-            
+
             # Add sim code to store incoming feedback in new state variable
             model_copy.append_sim_code("$(E) = $(ISynFeedback);")
-            
+
             # If neuron model is LIF or ALIF
             if isinstance(pop.neuron, (AdaptiveLeakyIntegrateFire,
                                        LeakyIntegrateFire)):
                 # Check e-prop constraints
                 if not pop.neuron.integrate_during_refrac:
-                    logging.warning("E-prop learning works best with (A)LIF "
-                                    "neurons which continue to integrate "
-                                    "during their refractory period")
+                    logger.warning("E-prop learning works best with (A)LIF "
+                                   "neurons which continue to integrate "
+                                   "during their refractory period")
                 if not pop.neuron.relative_reset:
-                    logging.warning("E-prop learning works best with (A)LIF "
-                                    "neurons with a relative reset mechanism")
+                    logger.warning("E-prop learning works best with (A)LIF "
+                                   "neurons with a relative reset mechanism")
 
                 # Set global time constants from neuron model
                 compile_state.tau_mem = pop.neuron.tau_mem
@@ -335,7 +335,7 @@ class EPropCompiler(Compiler):
                 raise NotImplementedError(f"E-prop compiler doesn't support "
                                           f"{type(pop.neuron).__name__} "
                                           f"neurons")
-        
+
         # Build neuron model and return
         return model_copy
 

@@ -1,8 +1,11 @@
+import logging
 import os
 import numpy as np
 from glob import glob
 
 from .serialiser import Serialiser
+
+logger = logging.getLogger(__name__)
 
 class Numpy(Serialiser):
     def __init__(self, path: str = ""):
@@ -20,12 +23,14 @@ class Numpy(Serialiser):
     
     def deserialise_all(self, keys):
         title = self._get_file_title(keys)
-        
+        logger.info(f"Deserialising {title}")
+
         # Loop through files under keys
         data = {}
         for f in glob(self._get_filename(keys, "-*.npy")):
             # Extract file title without path or extension from filename
             title = os.path.splitext(os.path.split(f)[1])[0]
+            logger.info(f"\tLoading from {f}")
 
             # Split title into keys and slice out those that we seperated
             file_keys = title.split("-")[len(keys):]

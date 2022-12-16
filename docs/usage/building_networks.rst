@@ -15,7 +15,7 @@ context manager so a network with two populations of neurons could be simply cre
     network = Network()
     with network:
         a = Population("poisson_input", 100)
-        b = Population("integrate_fire", 100, output="spike_count")
+        b = Population("integrate_fire", 100, readout="spike_count")
     
         Connection(a, b, Dense(1.0))
 
@@ -37,7 +37,7 @@ objects ourselves like:
     network = Network()
     with network:
         a = Population(PoissonInput(signed_spikes=True), 100)
-        b = Population(IntegrateFire(v_thresh=2.0), 100, output="spike_count")
+        b = Population(IntegrateFire(v_thresh=2.0), 100, readout="spike_count")
     
         Connection(a, b, Dense(1.0))
 
@@ -62,5 +62,5 @@ specifying them more tersely.
     network = SequentialNetwork()
     with network:
         a = InputLayer("poisson_input", 100)
-        b = Layer(Dense(1.0), "integrate_fire", 100, output="spike_count")
+        b = Layer(Dense(1.0), "integrate_fire", 100, readout="spike_count")
 
