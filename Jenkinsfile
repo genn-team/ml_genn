@@ -136,65 +136,49 @@ for (b = 0; b < builderNodes.size(); b++) {
                 }
             }
 
-            def coverageMLGeNN = "${WORKSPACE}/coverage_${NODE_NAME}.xml";
-            buildStage("Running mlGeNN tests (${NODE_NAME})") {
+            buildStage("Installing mlGeNN (${NODE_NAME})") {
+                def messagesMLGeNN = "ml_genn_${NODE_NAME}.txt";
+                sh "rm -f ${messagesMLGeNN}";
+
                 dir("ml_genn") {
                     // Install ML GeNN
                     sh """
                     . ${WORKSPACE}/venv/bin/activate
                     pip install .
                     """;
-
-                    dir("tests") {
-                        // Run ML GeNN test suite
-                        def messagesMLGeNN = "ml_genn_${NODE_NAME}.txt";
-                        sh "rm -f ${messagesMLGeNN}";
-                        def commandsMLGeNN = """
-                        . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml:${coverageMLGeNN} --junitxml ml_genn_${NODE_NAME}.xml  1>>\"${messagesMLGeNN}\" 2>&1
-                        """;
-                        def statusMLGeNN = sh script:commandsMLGeNN, returnStatus:true;
-                        archive messagesMLGeNN;
-                        if (statusMLGeNN != 0) {
-                            setBuildStatus("Running mlGeNN tests (${NODE_NAME})", "FAILURE");
-                        }
-                    }
                 }
-            }
-            
-            buildStage("Running mlGeNN TF tests (${NODE_NAME})") {
+
                 dir("ml_genn_tf") {
                     // Install ML GeNN
                     sh """
                     . ${WORKSPACE}/venv/bin/activate
                     pip install .
                     """;
+                }
+            }
 
-                    dir("tests") {
-                        // Run ML GeNN test suite
-                        def messagesMLGeNNTF = "ml_genn_tf_${NODE_NAME}.txt";
-                        sh "rm -f ${messagesMLGeNNTF}";
-                        def commandsMLGeNNTF = """
-                        . ${WORKSPACE}/venv/bin/activate
-                        pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml:${coverageMLGeNN} --cov-append --junitxml ml_genn_tf_${NODE_NAME}.xml  1>>\"${messagesMLGeNNTF}\" 2>&1
-                        """;
-                        def statusMLGeNNTF = sh script:commandsMLGeNNTF, returnStatus:true;
-                        archive messagesMLGeNNTF;
-                        if (statusMLGeNNTF != 0) {
-                            setBuildStatus("Running mlGeNN TF tests (${NODE_NAME})", "FAILURE");
-                        }
+            def coverageMLGeNN = "${WORKSPACE}/coverage_${NODE_NAME}.xml";
+            buildStage("Running tests (${NODE_NAME})") {
+                dir("tests") {
+                    // Run ML GeNN test suite
+                    def messagesTests = "tests_${NODE_NAME}.txt";
+                    sh "rm -f ${messagesTests}";
+                    def commandsTest = """
+                    . ${WORKSPACE}/venv/bin/activate
+                    pytest -v --cov ml_genn --cov ml_genn_tf --cov-report=xml:${coverageMLGeNN} --junitxml ml_genn_${NODE_NAME}.xml 1>>\"${messagesMLGeNN}\" 2>&1
+                    """;
+                    def statusTests = sh script:commandsTest, returnStatus:true;
+                    archive messagesTests;
+                    if (statusTests != 0) {
+                        setBuildStatus("Running tests (${NODE_NAME})", "FAILURE");
                     }
                 }
             }
 
             buildStage("Gathering test results (${NODE_NAME})") {
                 // Process JUnit test output
-                dir("ml_genn/tests") {
+                dir("tests") {
                     junit "ml_genn_${NODE_NAME}.xml";
-                }
-                
-                dir("ml_genn_tf/tests") {
-                    junit "ml_genn_tf_${NODE_NAME}.xml";
                 }
             }
             
