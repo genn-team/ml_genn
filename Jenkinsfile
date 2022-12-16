@@ -144,7 +144,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     // Install ML GeNN
                     sh """
                     . ${WORKSPACE}/venv/bin/activate
-                    pip install .
+                    python setup.py develop
                     """;
                 }
 
@@ -152,7 +152,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     // Install ML GeNN
                     sh """
                     . ${WORKSPACE}/venv/bin/activate
-                    pip install .
+                    python setup.py develop
                     """;
                 }
             }
