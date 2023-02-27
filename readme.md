@@ -1,4 +1,4 @@
-[![Build Status](https://gen-ci.inf.sussex.ac.uk/buildStatus/icon?job=GeNN/ml_genn/master)](https://gen-ci.inf.sussex.ac.uk/job/GeNN/job/ml_genn/job/master/) [![Docs](https://readthedocs.org/projects/ml-genn/badge)](https://ml-genn.readthedocs.io) [![codecov](https://codecov.io/gh/genn-team/ml_genn/branch/master/graph/badge.svg?token=8X5YC1Z0YN)](https://codecov.io/gh/genn-team/ml_genn)
+[![Build Status](https://gen-ci.inf.sussex.ac.uk/buildStatus/icon?job=GeNN/ml_genn/master)](https://gen-ci.inf.sussex.ac.uk/job/GeNN/job/ml_genn/job/master/) [![Docs](https://readthedocs.org/projects/ml-genn/badge)](https://ml-genn.readthedocs.io) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7681736.svg)](https://doi.org/10.5281/zenodo.7681736) [![codecov](https://codecov.io/gh/genn-team/ml_genn/branch/master/graph/badge.svg?token=8X5YC1Z0YN)](https://codecov.io/gh/genn-team/ml_genn)
 
 # mlGeNN
 A library for deep learning with Spiking Neural Networks (SNN)powered by [GeNN](http://genn-team.github.io/genn/), a GPU enhanced Neuronal Network simulation environment.
