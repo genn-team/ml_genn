@@ -8,7 +8,7 @@ from ..utils.network import PopulationType
 
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
-
+from ..utils.value import get_genn_var_name
 
 class VarRecorder(Callback):
     def __init__(self, pop: PopulationType, var: str, key=None,
@@ -17,7 +17,9 @@ class VarRecorder(Callback):
         # Get underlying population
         # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
-        self._var = var
+
+        # Get the name of the GeNN variable corresponding to var
+        self._var = get_genn_var_name(self._pop.neuron, var)
 
         # Stash key
         self.key = key
