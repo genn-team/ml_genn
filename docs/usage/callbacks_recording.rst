@@ -9,13 +9,13 @@ objects (or the names of default-constructable callbacks in the same style as ne
 models etc) which defaults to a list containing a :class:`~callbacks.progress_bar.BatchProgressBar`
 to show inference progress. However, you could additionally add a :class:`~callbacks.var_recorder.VarRecorder`
 callback to a model (where `input` is a :class:`~population.Population` object with a
-neuron model that has a state variable called `V`):
+neuron model that has a state variable called `v`):
 
 ..  code-block:: python
 
     from ml_genn.callbacks import VarRecorder
     ...
-    callbacks = ["batch_progress_bar", VarRecorder(input, "V", key="v_input")]
+    callbacks = ["batch_progress_bar", VarRecorder(input, "v", key="v_input")]
     metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01}, {output: testing_labels},
                                               callbacks=callbacks)
 
