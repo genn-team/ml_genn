@@ -94,7 +94,7 @@ with compiled_net:
     # Evaluate model on numpy dataset
     start_time = perf_counter()
     callbacks = ["batch_progress_bar", 
-                 VarRecorder(output, "V", key="output_v"),
+                 VarRecorder(output, "v", key="output_v"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
