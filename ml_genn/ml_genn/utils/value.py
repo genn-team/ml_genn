@@ -72,6 +72,7 @@ def is_value_array(value):
 def is_value_initializer(value):
     return isinstance(value, Initializer)
 
+
 # **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def get_genn_var_name(inst, name):
     # Get attribute from instance type
@@ -82,6 +83,7 @@ def get_genn_var_name(inst, name):
         return d.genn_name
     else:
         raise RuntimeError(f"'{name}' is not a ValueDescriptor")
+
 
 # **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def get_values(inst, name_types, dt, vals={}):
