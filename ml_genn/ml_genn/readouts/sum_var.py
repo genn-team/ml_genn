@@ -36,7 +36,8 @@ class SumVar(Readout):
         model_copy.append_sim_code(
             f"$({sum_var_name}) += $({self.output_var_name});")
 
-        # Add sum variable with same type as output variable and initialise to zero
+        # Add sum variable with same type as output
+        # variable and initialise to zero
         model_copy.add_var(sum_var_name, self.output_var_type, 0)
 
         return model_copy
@@ -50,7 +51,7 @@ class SumVar(Readout):
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars[sum_var_name].view,
                           (batch_size,) + shape)
-    
+
     @property
     def reset_vars(self):
         return [(self.output_var_name + "Sum", self.output_var_type, 0.0)]

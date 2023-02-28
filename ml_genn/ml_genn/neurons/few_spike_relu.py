@@ -27,7 +27,7 @@ genn_model = {
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
         $(Fx) += ($(Isyn) * d);
-        
+
         // If this is the first timestep, apply input
         // **NOTE** this cannot be done in custom update as it
         // needs to occur in the middle of neuron update
@@ -156,6 +156,6 @@ class FewSpikeRelu(Neuron):
 
         model = genn_model_upstream_signed if source_signed else genn_model
         return NeuronModel(model, "Fx",
-                          {"K": self.k, "Scale": scale,
-                           "SrcScale": source_scale},
-                          {"Fx": 0.0, "V": 0.0})
+                           {"K": self.k, "Scale": scale,
+                            "SrcScale": source_scale},
+                           {"Fx": 0.0, "V": 0.0})
