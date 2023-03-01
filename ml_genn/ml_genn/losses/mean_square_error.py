@@ -16,8 +16,8 @@ class MeanSquareError(Loss):
         model.append_sim_code(
             f"""
             const unsigned int timestep = (int)round($(t) / DT);
-            const unsigned int index = (timestep * {batch_size} * {flat_shape})
-                                       + ($(batch) * {flat_shape}) + $(id);
+            const unsigned int index = (timestep * $(num_batch) * $(num))
+                                       + ($(batch) * $(num)) + $(id);
             const scalar yTrue = $(YTrue)[index];
             """)
 
