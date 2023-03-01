@@ -147,6 +147,13 @@ class Model:
         else:
             self.model[name] += f"\n{code}\n"
     
+    def _prepend_code(self, name: str, code: str):
+        code = dedent(code)
+        if name not in self.model:
+            self.model[name] = f"{code}\n"
+        else:
+            self.model[name] = f"{code}\n" + self.model[name]
+    
     def _set_access_model(self, name: str, var: str, access_mode):
         # Find var
         var_index, _ = self._search_list(name, var)
@@ -217,9 +224,15 @@ class NeuronModel(Model):
 
     def append_sim_code(self, code):
         self._append_code("sim_code", code)
+    
+    def prepend_sim_code(self, code):
+        self._prepend_code("sim_code", code)
 
     def append_reset_code(self, code):
         self._append_code("reset_code", code)
+    
+    def prepend_reset_code(self, code):
+        self._prepend_code("reset_code", code)
     
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst, dt,
@@ -273,7 +286,10 @@ class WeightUpdateModel(Model):
     
     def append_sim_code(self, code):
         self._append_code("sim_code", code)
-        
+    
+    def append_event_code(self, code):
+        self._append_code("event_code", code)
+
     def process(self):
         return (super(WeightUpdateModel, self).process() 
                 + (self.pre_var_vals, self.post_var_vals))
