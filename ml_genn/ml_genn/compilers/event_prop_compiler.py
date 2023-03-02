@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 
+from string import Template
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_BATCH_SUM)
@@ -37,10 +38,9 @@ class CompileState:
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
 
-    def add_neuron_readout_reset_vars(self, pop):
-        reset_vars = pop.neuron.readout.reset_vars
-        if len(reset_vars) > 0:
-            self._neuron_reset_vars[pop] = reset_vars
+    def add_neuron_reset_vars(self, pop, reset_vars):
+        reset_vars += pop.neuron.readout.reset_vars
+        self._neuron_reset_vars[pop] = reset_vars
 
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops):
@@ -50,7 +50,32 @@ class CompileState:
             model = create_reset_custom_update(
                 reset_vars,
                 lambda name: create_var_ref(neuron_pops[pop], name))
+            
+            # Add references to ring buffer offsets
+            model.add_var_ref("RingReadOffset", "int",
+                              create_var_ref(neuron_pops[pop],
+                                             "RingReadOffset"))
+            model.add_var_ref("RingWriteOffset", "int", 
+                              create_var_ref(neuron_pops[pop],
+                                             "RingWriteOffset"))
+            model.add_var_ref("RingForwardStartOffset", "int", 
+                              create_var_ref(neuron_pops[pop],
+                                             "RingForwardStartOffset"))
+            model.add_var_ref("RingBackwardEndOffset", "int", 
+                              create_var_ref(neuron_pops[pop],
+                                             "RingBackwardEndOffset"))
 
+            # Add additional update code to update ring buffer offsets
+            model.append_update_code(
+                f"""
+                $(RingReadOffset) = $(RingWriteOffset) - 1;
+                if ($(RingReadOffset) < 0) {{
+                    $(RingReadOffset) = {compiler.max_spikes - 1};
+                }}
+                $(RingBackwardEndOffset) = $(RingForwardStartOffset);
+                $(RingForwardStartOffset) = $(RingReadOffset)
+                """)
+            
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetNeuron{i}")
@@ -83,6 +108,51 @@ gradient_batch_reduce_model = {
     $(Gradient) = 0;
     """}
 
+# Template used to generate backward passes for neurons
+neuron_backward_pass = Template(
+    """
+    const int ringOffset = ($$(batch) * $$(num) * $max_spikes) + ($$(id) * $max_spikes);
+    const int backT = $example_time - $$(t) - DT;
+    
+    // Backward pass
+    $dynamics
+    if ($$(BackSpike)) {
+        $transition
+        
+        // Decrease read pointer
+        $$(RingReadOffset)--;
+        if ($$(RingReadOffset) < 0) {
+            $$(RingReadOffset) = $max_spikes - 1;
+        }
+        $$(BackSpike) = false;
+    }
+    // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
+    if (fabs(backT - $$(RingSpikeTime)[ringOffset + $$(RingReadOffset)] - DT) < 1e-3*DT) {
+        $$(BackSpike) = true;
+    }
+
+    // Forward pass
+    """)
+
+# Template used to generate reset code for neurons
+neuron_reset = Template(
+    """
+    if($$(RingWriteOffset) != $$(RingBackwardEndOffset)) {
+        // Write spike time and I-V to tape
+        $$(RingSpikeTime)[ringOffset + $$(RingWriteOffset)] = $(t);
+        $write
+        $$(RingWriteIndex)++;
+        
+        // Loop around if we've reached end of circular buffer
+        if ($$(RingWriteOffset) >= $max_spikes) {{
+            $$(RingWriteOffset) = 0;
+        }
+    }
+    else {
+        //printf("%f: hidden: ImV buffer violation in neuron %d, fwd_start: %d, new_fwd_start: %d, rp_ImV: %d, wp_ImV: %d\\n", $(t), $(id), $(fwd_start), $(new_fwd_start), $(rp_ImV), $(wp_ImV));
+        // assert(0);
+    }
+    """)
 
 class EventPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
@@ -114,7 +184,7 @@ class EventPropCompiler(Compiler):
         if pop.neuron.readout is not None:
 
             # Add any output reset variables to compile state
-            compile_state.add_neuron_readout_reset_vars(pop)
+            compile_state.add_neuron_reset_vars(pop)
 
             # Get loss function associated with this output neuron
             loss = compile_state.losses[pop]
@@ -134,68 +204,96 @@ class EventPropCompiler(Compiler):
                 f"""
                 $(E) = $({model_copy.output_var_name}) - yTrue;
                 """)
-        # Otherwise, if neuron is an input
-        elif not hasattr(pop.neuron, "set_input"):
-            pass
-        # Otherwise i.e. it's hidden
+        # Otherwise, it's either an input or a hidden neuron
         else:
-            # Add additional input variable to receive feedback
-            model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
-
+            # Add variables to hold offsets for reading and writing ring variables
+            model_copy.add_var("RingWriteOffset", "int", 0)
+            model_copy.add_var("RingReadOffset", "int", 0)
+            
+            # Add variables to hold offsets where this neuron
+            # started writing to ring during the forward
+            # pass and where backward pass data ends
+            model_copy.add_var("RingForwardStartOffset", "int", 0)
+            model_copy.add_var("RingBackwardEndOffset", "int", 0)
+            
             # Add variable to hold backspike flag
             model_copy.add_var("BackSpike", "bool", False)
+                
+            # Add EGP for spike time ring variables
+            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            model_copy.add_egp("RingSpikeTime", "scalar*", np.empty(ring_size))
             
-            # Add read and write indices for tape variables
-            model_copy.add_var("TapeWriteIndex", "int", 0)
-            model_copy.add_var("TapeReadIndex", "int", 0)
-            
-            # Add EGP for spike time tape variables
-            model_copy.add_egp("TapeSpikeTime", "scalar*", 
-                               np.empty(self.batch_size * self.max_spikes))
+            # If neuron is an input
+            if hasattr(pop.neuron, "set_input"):
+                 # Add reset logic to reset any state 
+                 # variables from the original model
+                compile_state.add_neuron_reset_vars(pop, model.reset_vars)
 
-            # If neuron model is LIF
-            if isinstance(pop.neuron, LeakyIntegrateFire):
-                # Check EventProp constraints
-                if pop.neuron.integrate_during_refrac:
-                    logger.warning("EventProp learning works best with LIF "
-                                   "neurons which do not continue to integrate "
-                                   "during their refractory period")
-                if pop.neuron.relative_reset:
-                    logger.warning("EventProp learning works best with LIF "
-                                   "neurons with an absolute reset mechanism")
-                
-                # Add EGP for IMinusV tape variables
-                model_copy.add_egp("TapeIMinusV", "scalar*", 
-                                   np.empty(self.batch_size * self.max_spikes))
-                
+                # Add code to start of sim code to run 
+                # backwards pass and handle back spikes
                 model_copy.prepend_sim_code(
-                    f"""
-                    const int bufferOffset = $(batch) * ((int)$(N_neurons))*((int) $(N_max_spike)) + $(id) * ((int) $(N_max_spike));
-                    """)
-                # Prepend (as it accesses the pre-reset value of V) 
-                # code to write spike time and I-V to tape
+                    neuron_backward_pass.substitute(
+                        max_spikes=self.max_spikes,
+                        example_time=(self.example_timesteps * self.DT),
+                        dynamics="",
+                        transition=""))
+                
+                # Prepend code to reset to write spike time to ring buffer
                 model_copy.prepend_reset_code(
-                    f"""
-                    if($(TapeWriteIndex) != $(fwd_start)) {{
-                        // Write spike time and I-V to tape
-                        $(TapeSpikeTime)[buf_idx + $(TapeWriteIndex)] = $(t);
-                        $(TapeIMinusV)[buf_idx + $(TapeWriteIndex)] = $(Isyn) - $(V);
-                        $(TapeWriteIndex)++;
-                        
-                        // Loop around if we've reached end of circular buffer
-                        if ($(TapeWriteIndex) >= {self.max_spikes}) {{
-                            $(TapeWriteIndex) = 0;
-                        }}
-                    }}
-                    else {{
-                        //printf("%f: hidden: ImV buffer violation in neuron %d, fwd_start: %d, new_fwd_start: %d, rp_ImV: %d, wp_ImV: %d\\n", $(t), $(id), $(fwd_start), $(new_fwd_start), $(rp_ImV), $(wp_ImV));
-                        // assert(0);
-                    }}
-                    """)
+                    neuron_reset.substitute(
+                        max_spikes=self.max_spikes,
+                        write=""))
+            # Otherwise i.e. it's hidden
             else:
-                raise NotImplementedError(
-                    f"EventProp compiler doesn't support "
-                    f"{type(pop.neuron).__name__} neurons")
+                # Add additional input variable to receive feedback
+                model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
+                
+                # If neuron model is LIF
+                if isinstance(pop.neuron, LeakyIntegrateFire):
+                    # Check EventProp constraints
+                    if pop.neuron.integrate_during_refrac:
+                        logger.warning("EventProp learning works best with LIF "
+                                       "neurons which do not continue to integrate "
+                                       "during their refractory period")
+                    if pop.neuron.relative_reset:
+                        logger.warning("EventProp learning works best with LIF "
+                                       "neurons with an absolute reset mechanism")
+                    
+                    # Add adjoint state variables
+                    model_copy.add_var("LambdaV", "scalar", 0.0)
+                    model_copy.add_var("LambdaI", "scalar", 0.0)
+                    
+                    # Add EGP for IMinusV ring variables
+                    model_copy.add_egp("RingIMinusV", "scalar*", np.empty(ring_size))
+                    
+                    # Add reset logic to reset adjoint state variables 
+                    # as well as any state variables from the original model
+                    compile_state.add_neuron_reset_vars(
+                        pop, model.reset_vars + [("LambdaV", "scalar", 0.0),
+                                                 ("LambdaI", "scalar", 0.0)])
+                
+                    # Add code to start of sim code to run backwards pass 
+                    # and handle back spikes with correct LIF dynamics
+                    model_copy.prepend_sim_code(
+                        neuron_backward_pass.substitute(
+                            max_spikes=self.max_spikes,
+                            example_time=(self.example_timesteps * self.DT),
+                            dynamics="""
+                            $(LambdaI) = $(tau_m) / ($(tau_syn) - $(tau_m)) * $(LambdaV) * (exp(-DT/$(tau_syn)) - $(Alpha)) + $(LambdaI) * exp(-DT/$(tau_syn));
+                            $(LambdaV) *= $(Alpha);
+                            """,
+                            transition="$(LambdaV) += ((1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * $(Vthresh) * $(LambdaV)) + $(RevISyn);"))
+                    
+                    # Prepend (as it accesses the pre-reset value of V) 
+                    # code to reset t[ write spike time and I-V to ring buffer
+                    model_copy.prepend_reset_code(
+                        neuron_reset.substitute(
+                            max_spikes=self.max_spikes,
+                            write="$(RingIMinusV)[ringOffset + $(RingWriteOffset)] = $(Isyn) - $(V);"))
+                    else:
+                        raise NotImplementedError(
+                            f"EventProp compiler doesn't support "
+                            f"{type(pop.neuron).__name__} neurons")
 
         # Build neuron model and return
         return model_copy
