@@ -226,8 +226,8 @@ class NeuronModel(Model):
                              param_vals={}, var_vals={}, egp_vals={}):
         return NeuronModel(
             model, output_var_name, 
-            get_values(inst, model["param_name_types"], dt, param_vals),
-            get_values(inst, model["var_name_types"], dt, var_vals),
+            get_values(inst, model.get("param_name_types", []), dt, param_vals),
+            get_values(inst, model.get("var_name_types", []), dt, var_vals),
             egp_vals)
 
     @property
@@ -254,8 +254,8 @@ class SynapseModel(Model):
                              param_vals={}, var_vals={}, egp_vals={}):
         return SynapseModel(
             model, 
-            get_values(inst, model["param_name_types"], dt, param_vals),
-            get_values(inst, model["var_name_types"], dt, var_vals), 
+            get_values(inst, model.get("param_name_types", []), dt, param_vals),
+            get_values(inst, model.get("var_name_types", []), dt, var_vals),
             egp_vals)
 
 
