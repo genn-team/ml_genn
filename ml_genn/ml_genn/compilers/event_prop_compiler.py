@@ -263,8 +263,8 @@ class EventPropCompiler(Compiler):
             
             # If neuron is an input
             if hasattr(pop.neuron, "set_input"):
-                 # Add reset logic to reset any state 
-                 # variables from the original model
+                # Add reset logic to reset any state 
+                # variables from the original model
                 compile_state.add_neuron_reset_vars(pop, model.reset_vars)
 
                 # Add code to start of sim code to run 
@@ -285,7 +285,7 @@ class EventPropCompiler(Compiler):
             else:
                 # Add additional input variable to receive feedback
                 model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
-                
+                    
                 # If neuron model is LIF
                 if isinstance(pop.neuron, LeakyIntegrateFire):
                     # Check EventProp constraints
@@ -296,6 +296,28 @@ class EventPropCompiler(Compiler):
                     if pop.neuron.relative_reset:
                         logger.warning("EventProp learning works best with LIF "
                                        "neurons with an absolute reset mechanism")
+        
+                    # Loop through incoming connections
+                    tau_syn = None
+                    for conn in pop.incoming_connections:
+                        # If synapse model isn't exponential, give error
+                        if not isinstance(conn.synapse, Exponential):
+                            raise NotImplementedError(
+                                "EventProp compiler only supports "
+                                "Exponential synapses")
+                        
+                        # Update tau_syn
+                        if tau_syn is None:
+                            tau_syn = conn.synapse.tau
+                        if tau_syn != conn.synapse.tau:
+                            raise NotImplementedError("EventProp compiler doesn't"
+                                                      " support neurons whose "
+                                                      "incoming synapses have "
+                                                      "different time constants")
+                    assert tau_syn is not None
+                    
+                    # Add parameter with synaptic decay constant
+                    model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn)
                     
                     # Add adjoint state variables
                     model_copy.add_var("LambdaV", "scalar", 0.0)
@@ -303,6 +325,11 @@ class EventPropCompiler(Compiler):
                     
                     # Add EGP for IMinusV ring variables
                     model_copy.add_egp("RingIMinusV", "scalar*", np.empty(ring_size))
+                    
+                    # Add parameter for scaling factor
+                    tau_mem = pop.neuron.tau_mem
+                    model_copy.add_param("A", "scalar", 
+                                         tau_mem / (tau_syn - tau_mem))
                     
                     # Add reset logic to reset adjoint state variables 
                     # as well as any state variables from the original model
@@ -317,7 +344,7 @@ class EventPropCompiler(Compiler):
                             max_spikes=self.max_spikes,
                             example_time=(self.example_timesteps * self.DT),
                             dynamics="""
-                            $(LambdaI) = $(tau_m) / ($(tau_syn) - $(tau_m)) * $(LambdaV) * (exp(-DT/$(tau_syn)) - $(Alpha)) + $(LambdaI) * exp(-DT/$(tau_syn));
+                            $(LambdaI) = $(A) * $(LambdaV) * $(Beta) - $(Alpha)) + $(LambdaI) * $(Beta);
                             $(LambdaV) *= $(Alpha);
                             """,
                             transition="$(LambdaV) += ((1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * $(Vthresh) * $(LambdaV)) + $(RevISyn);"))
@@ -337,6 +364,8 @@ class EventPropCompiler(Compiler):
         return model_copy
 
     def build_synapse_model(self, conn, model, compile_state):
+        # **NOTE** this is probably not necessary as 
+        # it's also checked in build_neuron_model
         if not isinstance(conn.synapse, Exponential):
             raise NotImplementedError("EventProp compiler only "
                                       "supports Exponential synapses")
@@ -388,7 +417,7 @@ class EventPropCompiler(Compiler):
                     create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
         
         # Create custom updates to implement variable reset
-        #compile_state.create_reset_custom_updates(self, genn_model,
+        compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
         
         # Build list of base callbacks
@@ -397,8 +426,8 @@ class EventPropCompiler(Compiler):
             if self.batch_size > 1:
                 base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
-        #if compile_state.is_reset_custom_update_required:
-        #    base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+        if compile_state.is_reset_custom_update_required:
+            base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations, softmax,
