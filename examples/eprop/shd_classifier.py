@@ -22,7 +22,7 @@ TRAIN = True
 KERNEL_PROFILING = False
 
 # Get SHD dataset
-dataset = SHD(save_to='./data', train=TRAIN)
+dataset = SHD(save_to='../data', train=TRAIN)
 
 # Preprocess
 spikes = []

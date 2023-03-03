@@ -1,0 +1,8 @@
+# Ignore downloaded Tonic data
+data
+
+# Ignore output folders from code generation
+**/*_CODE
+
+# Ignore checkpoint folders
+**/*_checkpoints
