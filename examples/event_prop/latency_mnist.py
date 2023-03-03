@@ -42,7 +42,7 @@ with network:
                                                     tau_refrac=5.0),
                    NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
-                   LeakyIntegrate(tau_mem=20.0, softmax=True, readout="sum_var"),
+                   LeakyIntegrate(tau_mem=20.0, softmax=False, readout="sum_var"),
                    NUM_OUTPUT, Exponential(5.0))
 
 max_example_timesteps = int(np.ceil(calc_latest_spike_time(spikes)))
