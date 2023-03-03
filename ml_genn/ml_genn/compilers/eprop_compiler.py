@@ -4,23 +4,23 @@ import numpy as np
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_BATCH_SUM)
-from ml_genn.callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
-from ml_genn.compilers import Compiler
-from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
-from ml_genn.callbacks import BatchProgressBar
-from ml_genn.losses import Loss
-from ml_genn.neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
-from ml_genn.optimisers import Optimiser
-from ml_genn.synapses import Delta
-from ml_genn.utils.callback_list import CallbackList
-from ml_genn.utils.data import MetricsType
-from ml_genn.utils.model import CustomUpdateModel, WeightUpdateModel
+from . import Compiler
+from .compiled_training_network import CompiledTrainingNetwork
+from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
+                         CustomUpdateOnBatchEnd)
+from ..losses import Loss
+from ..neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
+from ..optimisers import Optimiser
+from ..synapses import Delta
+from ..utils.callback_list import CallbackList
+from ..utils.data import MetricsType
+from ..utils.model import CustomUpdateModel, WeightUpdateModel
 
 from copy import deepcopy
 from pygenn.genn_model import create_var_ref, create_wu_var_ref
-from ml_genn.compilers.compiler import create_reset_custom_update
-from ml_genn.utils.module import get_object, get_object_mapping
-from ml_genn.utils.value import is_value_constant
+from .compiler import create_reset_custom_update
+from ..utils.module import get_object, get_object_mapping
+from ..utils.value import is_value_constant
 
 from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
