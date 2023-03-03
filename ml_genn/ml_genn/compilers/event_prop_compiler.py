@@ -4,13 +4,16 @@ import numpy as np
 from string import Template
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
-                                        VarAccess_REDUCE_BATCH_SUM)
+                                        VarAccess_REDUCE_BATCH_SUM,
+                                        VarAccess_REDUCE_NEURON_MAX,
+                                        VarAccess_REDUCE_NEURON_SUM,
+                                        VarAccessMode_READ_ONLY)
 from ml_genn.callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
 from ml_genn.compilers import Compiler
 from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
 from ml_genn.callbacks import BatchProgressBar
-from ml_genn.losses import Loss
-from ml_genn.neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
+from ml_genn.losses import Loss, SparseCategoricalCrossentropy
+from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire
 from ml_genn.optimisers import Optimiser
 from ml_genn.synapses import Exponential
 from ml_genn.utils.callback_list import CallbackList
@@ -67,6 +70,27 @@ logger = logging.getLogger(__name__)
 # read and write offsets check for wraparound, this can continue forever
 # **NOTE** due to the inprecision of ASCII diagramming there are out-by-one errors in the above
 
+def _get_tau_syn(pop):
+    # Loop through incoming connections
+    tau_syn = None
+    for conn in pop.incoming_connections:
+        # If synapse model isn't exponential, give error
+        if not isinstance(conn.synapse, Exponential):
+            raise NotImplementedError(
+                "EventProp compiler only supports "
+                "Exponential synapses")
+        
+        # Update tau_syn
+        if tau_syn is None:
+            tau_syn = conn.synapse.tau
+        if tau_syn != conn.synapse.tau:
+            raise NotImplementedError("EventProp compiler doesn't"
+                                      " support neurons whose "
+                                      "incoming synapses have "
+                                      "different time constants")
+    assert tau_syn is not None
+    return tau_syn
+                
 class CompileState:
     def __init__(self, losses, readouts):
         self.losses = get_object_mapping(losses, readouts,
@@ -75,7 +99,11 @@ class CompileState:
         self._neuron_reset_vars = {}
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
-
+        self.batch_softmax_populations = []
+    
+    def add_batch_softmax_population(self, pop, input_var, output_var):
+        self.batch_softmax_populations.append((pop, input_var, output_var))
+    
     def add_neuron_reset_vars(self, pop, reset_vars):
         reset_vars += pop.neuron.readout.reset_vars
         self._neuron_reset_vars[pop] = reset_vars
@@ -220,29 +248,90 @@ class EventPropCompiler(Compiler):
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
+            # Check loss function is compatible
+            if not isinstance(compile_state.losses[pop], 
+                              SparseCategoricalCrossentropy):
+                raise NotImplementedError(
+                    f"EventProp compiler doesn't support "
+                    f"{type(loss).__name__} loss")
+            
+            # Check built in softmax isn't enabled
+            # **HACK** REALLY softmax IS enabled but
+            # we don't want built in implementation
+            if pop.neuron.softmax:
+                raise NotImplementedError(
+                    f"EventProp compiler doesn't support "
+                    f"{type(loss).__name__} loss")
+                
+            # Add extra global parameter to store labels for each neuron
+            # **HACK** we don't want to call add_to_neuron on loss function as
+            # it will add unwanted code to end of neuron but we do want this
+            model_copy.add_egp("YTrue", "uint8_t*", 
+                              np.empty(batch_size))
+            
+            # If neuron model is a leaky integrator
+            if isinstance(pop.neuron, LeakyIntegrate):
+                # Get tau_syn from population's incoming connections
+                tau_syn = _get_tau_syn(pop)
+                
+                # Add adjoint state variables
+                model_copy.add_var("LambdaV", "scalar", 0.0)
+                model_copy.add_var("LambdaI", "scalar", 0.0)
+                
+                # Add state variable to hold softmax of output
+                model_copy.add_var("Softmax", "scalar", 0.0)
+                
+                # Add state variable to hold sum of V
+                model_copy.add_var("SumV", "scalar", 0.0)
+                
+                # Add parameter with synaptic decay constant
+                model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn)
+                
+                # Add parameter for scaling factor
+                tau_mem = pop.neuron.tau_mem
+                model_copy.add_param("TauM", "scalar", tau_mem)
+                model_copy.add_param("A", "scalar", 
+                                     tau_mem / (tau_syn - tau_mem))
+                
+                # Add reset logic to reset adjoint state variables 
+                # as well as any state variables from the original model
+                compile_state.add_neuron_reset_vars(
+                    pop, model.reset_vars + [("LambdaV", "scalar", 0.0),
+                                             ("LambdaI", "scalar", 0.0),
+                                             ("SumV", "scalar", 0.0)])
+            
+                # Add code to start of sim code to run backwards pass 
+                model_copy.prepend_sim_code(
+                    f"""
+                    const int backT = {self.example_timesteps * self.dt} - $$(t) - DT;
+                    
+                    // Backward pass
+                    // **NOTE** this is leaky integrator specific
+                    $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
+                    $(LambdaV) *= $(Alpha);
+                    
+                    // **NOTE** loop condition depends on loss function
+                    if ($(trial) > 0) {{
+                        // **YUCK** again this is copy-pasted from softmax loss
+                        const scalar g = ($(id) == $(YTrue)[$(batch)]) ? (1.0 - $(Softmax)) : $(Softmax);
+                        $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                    }}
+                    
+                    // Forward pass
+                    // **NOTE** this comes from loss being sum
+                    $(SumV) += ($(V) / {self.example_timesteps * self.dt}) * DT; // simple Euler
+                    """)
+                
+                # Add population to list of those requiring a per-batch softmax
+                self.compile_state.add_batch_softmax_population(pop, "SumV", "Softmax")
+            # Otherwise, neuron type is unsupported
+            else:
+                raise NotImplementedError(
+                    f"EventProp compiler doesn't support "
+                    f"{type(pop.neuron).__name__} neurons")
 
-            # Add any output reset variables to compile state
-            compile_state.add_neuron_reset_vars(pop)
-
-            # Get loss function associated with this output neuron
-            loss = compile_state.losses[pop]
-
-            # Add state variable to hold error
-            # **NOTE** all loss functions require this!
-            model_copy.add_var("E", "scalar", 0.0)
-
-            # Add loss function to neuron model
-            # **THINK** semantics of this i.e. modifying inplace 
-            # seem a bit different than others
-            loss.add_to_neuron(model_copy, pop.shape, 
-                               self.batch_size, self.example_timesteps)
-
-            # Add sim-code to calculate error
-            model_copy.append_sim_code(
-                f"""
-                $(E) = $({model_copy.output_var_name}) - yTrue;
-                """)
         # Otherwise, it's either an input or a hidden neuron
+        # i.e. it requires a ring-buffer
         else:
             # Add variables to hold offsets for reading and writing ring variables
             model_copy.add_var("RingWriteOffset", "int", 0)
@@ -297,24 +386,8 @@ class EventPropCompiler(Compiler):
                         logger.warning("EventProp learning works best with LIF "
                                        "neurons with an absolute reset mechanism")
         
-                    # Loop through incoming connections
-                    tau_syn = None
-                    for conn in pop.incoming_connections:
-                        # If synapse model isn't exponential, give error
-                        if not isinstance(conn.synapse, Exponential):
-                            raise NotImplementedError(
-                                "EventProp compiler only supports "
-                                "Exponential synapses")
-                        
-                        # Update tau_syn
-                        if tau_syn is None:
-                            tau_syn = conn.synapse.tau
-                        if tau_syn != conn.synapse.tau:
-                            raise NotImplementedError("EventProp compiler doesn't"
-                                                      " support neurons whose "
-                                                      "incoming synapses have "
-                                                      "different time constants")
-                    assert tau_syn is not None
+                    # Get tau_syn from population's incoming connections
+                    tau_syn = _get_tau_syn(pop)
                     
                     # Add parameter with synaptic decay constant
                     model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn)
@@ -344,7 +417,7 @@ class EventPropCompiler(Compiler):
                             max_spikes=self.max_spikes,
                             example_time=(self.example_timesteps * self.DT),
                             dynamics="""
-                            $(LambdaI) = $(A) * $(LambdaV) * $(Beta) - $(Alpha)) + $(LambdaI) * $(Beta);
+                            $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
                             $(LambdaV) *= $(Alpha);
                             """,
                             transition="$(LambdaV) += ((1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * $(Vthresh) * $(LambdaV)) + $(RevISyn);"))
@@ -355,10 +428,11 @@ class EventPropCompiler(Compiler):
                         neuron_reset.substitute(
                             max_spikes=self.max_spikes,
                             write="$(RingIMinusV)[ringOffset + $(RingWriteOffset)] = $(Isyn) - $(V);"))
-                    else:
-                        raise NotImplementedError(
-                            f"EventProp compiler doesn't support "
-                            f"{type(pop.neuron).__name__} neurons")
+                # Otherwise, neuron type is unsupported
+                else:
+                    raise NotImplementedError(
+                        f"EventProp compiler doesn't support "
+                        f"{type(pop.neuron).__name__} neurons")
 
         # Build neuron model and return
         return model_copy
@@ -416,6 +490,12 @@ class EventPropCompiler(Compiler):
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
         
+        # Add softmax custom updates for each population that requires them
+        for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
+            genn_pop = neuron_populations[p]
+            self.add_softmax_custom_updates(genn_model, genn_pop,
+                                            i, o, p.name, "Batch")
+
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
@@ -426,6 +506,14 @@ class EventPropCompiler(Compiler):
             if self.batch_size > 1:
                 base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
+        
+        # If softmax calculation is required at end of batch, add callbacks
+        if len(compile_state.batch_softmax_populations) > 0:
+            base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax1"))
+            base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax2"))
+            base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax3"))
+
+        # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
