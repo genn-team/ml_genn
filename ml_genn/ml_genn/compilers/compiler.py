@@ -169,6 +169,47 @@ class Compiler:
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
         return genn_cu
+    
+    def add_softmax_custom_updates(self, genn_model, genn_pop, 
+                                   input_var_name: str, output_var_name: str,
+                                   custom_update_name_suffix: str, 
+                                   custom_update_group_prefix: str = ""):
+        # Create custom update model to implement 
+        # first softmax pass and add to model
+        softmax_1 = CustomUpdateModel(
+            softmax_1_model, {}, {"MaxVal": 0.0},
+            {"Val": create_var_ref(genn_pop, input_var_name)})
+
+        genn_softmax_1 = self.add_custom_update(
+            genn_model, softmax_1, 
+            custom_update_group_prefix + "Softmax1",
+            "CUSoftmax1" + custom_update_name_suffix)
+
+        # Create custom update model to implement 
+        # second softmax pass and add to model
+        softmax_2 = CustomUpdateModel(
+            softmax_2_model, {}, {"SumExpVal": 0.0},
+            {"Val": create_var_ref(genn_pop, input_var_name),
+             "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
+
+        genn_softmax_2 = self.add_custom_update(
+            genn_model, softmax_2, 
+            custom_update_group_prefix + "Softmax2",
+            "CUSoftmax2" + custom_update_name_suffix)
+
+        # Create custom update model to implement 
+        # third softmax pass and add to model
+        softmax_3 = CustomUpdateModel(
+            softmax_3_model, {}, {},
+            {"Val": create_var_ref(genn_pop, input_var_name),
+             "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
+             "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
+             "SoftmaxVal": create_var_ref(genn_pop, output_var_name)})
+
+        self.add_custom_update(
+            genn_model, softmax_3, 
+            custom_update_group_prefix + "Softmax3", 
+            "CUSoftmax3" + custom_update_name_suffix)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, 
@@ -261,41 +302,12 @@ class Compiler:
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
 
-            # If neuron has softmax output
+            # If neuron has softmax output, add requisite custom updates
             if neuron.readout is not None and neuron.softmax:
-                # Create custom update model to implement 
-                # first softmax pass and add to model
-                softmax_1 = CustomUpdateModel(
-                    softmax_1_model, {}, {"MaxVal": 0.0},
-                    {"Val": create_var_ref(genn_pop, output_var[0])})
-
-                genn_softmax_1 = self.add_custom_update(
-                    genn_model, softmax_1, 
-                    "Softmax1", "CUSoftmax1" + pop.name)
-
-                # Create custom update model to implement 
-                # second softmax pass and add to model
-                softmax_2 = CustomUpdateModel(
-                    softmax_2_model, {}, {"SumExpVal": 0.0},
-                    {"Val": create_var_ref(genn_pop, output_var[0]),
-                     "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
-
-                genn_softmax_2 = self.add_custom_update(
-                    genn_model, softmax_2, 
-                    "Softmax2", "CUSoftmax2" + pop.name)
-
-                # Create custom update model to implement 
-                # third softmax pass and add to model
-                softmax_3 = CustomUpdateModel(
-                    softmax_3_model, {}, {},
-                    {"Val": create_var_ref(genn_pop, output_var[0]),
-                     "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
-                     "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
-                     "SoftmaxVal": create_var_ref(genn_pop, softmax_var_name)})
-
-                self.add_custom_update(
-                    genn_model, softmax_3, 
-                    "Softmax3", "CUSoftmax3" + pop.name)
+                self.add_softmax_custom_updates(genn_model, genn_pop, 
+                                                output_var[0], 
+                                                softmax_var_name,
+                                                pop.name)
 
         # Loop through connections
         connection_populations = {}
