@@ -28,6 +28,44 @@ from ml_genn.losses import default_losses
 
 logger = logging.getLogger(__name__)
 
+# EventProp uses a fixed size ring-buffer structure with a read pointer to
+# read data for the backward pass and a write pointer to write data from the
+# forward pass. These start positioned like this:
+# 
+# RingReadEndOffset   RingWriteStartOffset
+#        V                    V
+#        |--------------------|--------------------
+#        | Backward pass data | Forward pass data  
+#        |--------------------|--------------------
+#                            ^ ^
+#            <- RingReadOffset RingWriteOffset ->
+#
+# and move in opposite direction until the end of the example:
+#
+# RingReadEndOffset   RingWriteStartOffset
+#        V                    V
+#        |--------------------|--------------------
+#        | Backward pass data | Forward pass data |
+#        |--------------------|--------------------
+#        ^                                         ^
+# <- RingReadOffset                          RingWriteOffset ->
+#
+# 
+# Then, a reset custom update points the read offset  
+# to the end of the previous forward pass's data and provides a new 
+# space to write data from the next forward pass
+#
+#                     RingReadEndOffset    RingWriteStartOffset
+#                             V                    V
+#                             |--------------------|--------------------
+#                             | Backward pass data | Forward pass data |
+#                             |--------------------|--------------------
+#                                                 ^ ^
+#                                 <- RingReadOffset RingWriteOffset ->
+#
+# Because the buffer is circular and all incrementing and decrementing of 
+# read and write offsets check for wraparound, this can continue forever
+# **NOTE** due to the inprecision of ASCII diagramming there are out-by-one errors in the above
 
 class CompileState:
     def __init__(self, losses, readouts):
@@ -58,12 +96,12 @@ class CompileState:
             model.add_var_ref("RingWriteOffset", "int", 
                               create_var_ref(neuron_pops[pop],
                                              "RingWriteOffset"))
-            model.add_var_ref("RingForwardStartOffset", "int", 
+            model.add_var_ref("RingWriteStartOffset", "int", 
                               create_var_ref(neuron_pops[pop],
-                                             "RingForwardStartOffset"))
-            model.add_var_ref("RingBackwardEndOffset", "int", 
+                                             "RingWriteStartOffset"))
+            model.add_var_ref("RingReadEndOffset", "int", 
                               create_var_ref(neuron_pops[pop],
-                                             "RingBackwardEndOffset"))
+                                             "RingReadEndOffset"))
 
             # Add additional update code to update ring buffer offsets
             model.append_update_code(
@@ -72,8 +110,8 @@ class CompileState:
                 if ($(RingReadOffset) < 0) {{
                     $(RingReadOffset) = {compiler.max_spikes - 1};
                 }}
-                $(RingBackwardEndOffset) = $(RingForwardStartOffset);
-                $(RingForwardStartOffset) = $(RingReadOffset)
+                $(RingReadEndOffset) = $(RingWriteStartOffset);
+                $(RingWriteStartOffset) = $(RingReadOffset)
                 """)
             
             # Add custom update
@@ -137,7 +175,7 @@ neuron_backward_pass = Template(
 # Template used to generate reset code for neurons
 neuron_reset = Template(
     """
-    if($$(RingWriteOffset) != $$(RingBackwardEndOffset)) {
+    if($$(RingWriteOffset) != $$(RingReadEndOffset)) {
         // Write spike time and I-V to tape
         $$(RingSpikeTime)[ringOffset + $$(RingWriteOffset)] = $(t);
         $write
@@ -212,9 +250,9 @@ class EventPropCompiler(Compiler):
             
             # Add variables to hold offsets where this neuron
             # started writing to ring during the forward
-            # pass and where backward pass data ends
-            model_copy.add_var("RingForwardStartOffset", "int", 0)
-            model_copy.add_var("RingBackwardEndOffset", "int", 0)
+            # pass and where data to read during backward pass ends
+            model_copy.add_var("RingWriteStartOffset", "int", 0)
+            model_copy.add_var("RingReadEndOffset", "int", 0)
             
             # Add variable to hold backspike flag
             model_copy.add_var("BackSpike", "bool", False)
