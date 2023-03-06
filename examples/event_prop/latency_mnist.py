@@ -8,6 +8,7 @@ from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense,FixedProbability
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
@@ -16,7 +17,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 log_latency_encode_data)
 
 NUM_INPUT = 784
-NUM_HIDDEN = 100
+NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
 NUM_EPOCHS = 10
@@ -35,15 +36,15 @@ with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
                                   NUM_INPUT)
-    initial_hidden_weight = Normal(sd=1.0 / np.sqrt(NUM_INPUT))
+    initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
-    hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
-                                                    tau_refrac=5.0, 
+    hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
+                                                    tau_refrac=None, 
                                                     relative_reset=False,
                                                     integrate_during_refrac=False),
                    NUM_HIDDEN, Exponential(5.0))
-    output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
+    output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
                    LeakyIntegrate(tau_mem=20.0, softmax=False, readout="sum_var"),
                    NUM_OUTPUT, Exponential(5.0))
 
@@ -51,7 +52,7 @@ max_example_timesteps = int(np.ceil(calc_latest_spike_time(spikes)))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 optimiser="adam", batch_size=BATCH_SIZE,
+                                 optimiser=Adam(1e-2), batch_size=BATCH_SIZE,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 

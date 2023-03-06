@@ -362,13 +362,13 @@ class EventPropCompiler(Compiler):
         else:
             # Add variables to hold offsets for reading and writing ring variables
             model_copy.add_var("RingWriteOffset", "int", 0)
-            model_copy.add_var("RingReadOffset", "int", 0)
+            model_copy.add_var("RingReadOffset", "int", self.max_spikes - 1)
             
             # Add variables to hold offsets where this neuron
             # started writing to ring during the forward
             # pass and where data to read during backward pass ends
-            model_copy.add_var("RingWriteStartOffset", "int", 0)
-            model_copy.add_var("RingReadEndOffset", "int", 0)
+            model_copy.add_var("RingWriteStartOffset", "int", self.max_spikes - 1)
+            model_copy.add_var("RingReadEndOffset", "int", self.max_spikes - 1)
             
             # Add variable to hold backspike flag
             model_copy.add_var("BackSpike", "uint8_t", False)
