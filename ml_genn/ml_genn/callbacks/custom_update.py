@@ -1,4 +1,8 @@
+import logging
+
 from .callback import Callback
+
+logger = logging.getLogger(__name__)
 
 
 class CustomUpdate(Callback):
@@ -15,19 +19,27 @@ class CustomUpdate(Callback):
 
 class CustomUpdateOnBatchBegin(CustomUpdate):
     def on_batch_begin(self, batch):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at start of batch {batch}")
         self._custom_update()
 
 
 class CustomUpdateOnBatchEnd(CustomUpdate):
     def on_batch_end(self, batch, metrics):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at end of batch {batch}")
         self._custom_update()
 
 
 class CustomUpdateOnTimestepBegin(CustomUpdate):
-    def on_timestep_begin(self, batch):
+    def on_timestep_begin(self, timestep):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at start of timestep {timestep}")
         self._custom_update()
 
 
 class CustomUpdateOnTimestepEnd(CustomUpdate):
-    def on_timestep_end(self, batch):
+    def on_timestep_end(self, timestep):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at start of timestep {timestep}")
         self._custom_update()
