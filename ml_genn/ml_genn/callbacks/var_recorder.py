@@ -2,6 +2,7 @@ import numpy as np
 
 from itertools import chain
 
+from typing import Optional
 from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 from ..utils.network import PopulationType
@@ -11,15 +12,19 @@ from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
 
 class VarRecorder(Callback):
-    def __init__(self, pop: PopulationType, var: str, key=None,
+    def __init__(self, pop: PopulationType, var: Optional[str], key=None,
                  example_filter: ExampleFilterType = None,
-                 neuron_filter: NeuronFilterType = None):
+                 neuron_filter: NeuronFilterType = None,
+                 genn_var: Optional[str] = None):
         # Get underlying population
         # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
 
         # Get the name of the GeNN variable corresponding to var
-        self._var = get_genn_var_name(self._pop.neuron, var)
+        if var is not None:
+            self._var = get_genn_var_name(self._pop.neuron, var)
+        elif genn_var is not None:
+            self._var = genn_var
 
         # Stash key
         self.key = key
