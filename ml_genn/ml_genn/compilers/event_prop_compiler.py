@@ -171,8 +171,9 @@ class UpdateTrial(Callback):
 
 
 weight_update_model = {
+    "param_name_types": [("TauSyn", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
-                       ("DeltaG", "scalar")],
+                       ("Gradient", "scalar")],
 
     "sim_code": """
     $(addToInSyn, $(g));
@@ -181,7 +182,7 @@ weight_update_model = {
     $(BackSpike_pre)
     """,
     "event_code": """
-    $(DeltaG) += $(LambdaI_post);
+    $(Gradient) -= ($(LambdaI_post) * $(TauSyn));
     """}
 
 
@@ -478,9 +479,18 @@ class EventPropCompiler(Compiler):
             raise NotImplementedError("EventProp compiler only "
                                       "support heterogeneous delays")
         
+        # **NOTE** this is probably not necessary as 
+        # it's also checked in build_neuron_model
+        if isinstance(conn.synapse, Exponential):
+            tau_syn = conn.synapse.tau
+        else:
+            raise NotImplementedError("EventProp compiler only "
+                                      "supports Exponential synapses")
+                              
         # Create basic weight update model
         wum = WeightUpdateModel(model=deepcopy(weight_update_model),
-                                var_vals={"g": weight, "DeltaG": 0.0})
+                                param_vals={"TauSyn": tau_syn},
+                                var_vals={"g": weight, "Gradient": 0.0})
         
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
@@ -518,7 +528,7 @@ class EventPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
+                    create_wu_var_ref(genn_pop, "Gradient"), genn_model))
         
         # Add softmax custom updates for each population that requires them
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
@@ -562,7 +572,7 @@ class EventPropCompiler(Compiler):
                                         gradient_ref, genn_model):
         # If batch size is greater than 1
         if self.batch_size > 1:
-            # Create custom update model to reduce DeltaG into a variable 
+            # Create custom update model to reduce Gradient into a variable 
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
                 {"Gradient": gradient_ref})
