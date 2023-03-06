@@ -110,7 +110,7 @@ class CompileState:
     def add_batch_softmax_population(self, pop, input_var, output_var):
         self.batch_softmax_populations.append((pop, input_var, output_var))
     
-    def add_neuron_reset_vars(self, pop, reset_vars, reset_ring): 
+    def add_neuron_reset_vars(self, pop, reset_vars, reset_ring):
         self._neuron_reset_vars[pop] = (reset_vars, reset_ring)
 
     def create_reset_custom_updates(self, compiler, genn_model,
@@ -145,7 +145,7 @@ class CompileState:
                         $(RingReadOffset) = {compiler.max_spikes - 1};
                     }}
                     $(RingReadEndOffset) = $(RingWriteStartOffset);
-                    $(RingWriteStartOffset) = $(RingReadOffset)
+                    $(RingWriteStartOffset) = $(RingReadOffset);
                     """)
             
             # Add custom update
@@ -232,7 +232,7 @@ neuron_reset = Template(
         $$(RingWriteOffset)++;
         
         // Loop around if we've reached end of circular buffer
-        if ($$(RingWriteOffset) >= $max_spikes) {{
+        if ($$(RingWriteOffset) >= $max_spikes) {
             $$(RingWriteOffset) = 0;
         }
     }
@@ -323,14 +323,14 @@ class EventPropCompiler(Compiler):
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
                 compile_state.add_neuron_reset_vars(
-                    pop, model.reset_vars + pop.neuron.readout.reset_vars +
+                    pop, model.reset_vars +
                     [("LambdaV", "scalar", 0.0), ("LambdaI", "scalar", 0.0),
                      ("SumV", "scalar", 0.0)], False)
             
                 # Add code to start of sim code to run backwards pass 
                 model_copy.prepend_sim_code(
                     f"""
-                    const int backT = {self.example_timesteps * self.dt} - $$(t) - DT;
+                    const int backT = {self.example_timesteps * self.dt} - $(t) - DT;
                     
                     // Backward pass
                     // **NOTE** this is leaky integrator specific
@@ -371,7 +371,7 @@ class EventPropCompiler(Compiler):
             model_copy.add_var("RingReadEndOffset", "int", 0)
             
             # Add variable to hold backspike flag
-            model_copy.add_var("BackSpike", "bool", False)
+            model_copy.add_var("BackSpike", "uint8_t", False)
                 
             # Add EGP for spike time ring variables
             ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
