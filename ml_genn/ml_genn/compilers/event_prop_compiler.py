@@ -337,7 +337,7 @@ class EventPropCompiler(Compiler):
                     // **NOTE** loop condition depends on loss function
                     if ($(Trial) > 0) {{
                         // **YUCK** again this is copy-pasted from softmax loss
-                        const scalar g = ($(id) == $(YTrue)[$(batch)]) ? (1.0 - $(Softmax)) : $(Softmax);
+                        const scalar g = ($(id) == $(YTrue)[$(batch)]) ? (1.0 - $(Softmax)) : -$(Softmax);
                         $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
                     }}
                     
@@ -445,8 +445,8 @@ class EventPropCompiler(Compiler):
                             $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
                             $(LambdaV) *= $(Alpha);
                             """,
-                            transition="$(LambdaV) += ((1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * $(Vthresh) * $(LambdaV)) + $(RevISyn);"))
-                    
+                            transition="$(LambdaV) += (1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * ($(Vthresh) * $(LambdaV) + $(RevISyn));"))
+
                     # Prepend (as it accesses the pre-reset value of V) 
                     # code to reset t[ write spike time and I-V to ring buffer
                     model_copy.prepend_reset_code(
