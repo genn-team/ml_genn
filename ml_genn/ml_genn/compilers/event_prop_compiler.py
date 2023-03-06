@@ -162,15 +162,12 @@ class UpdateTrial(Callback):
         self._pop = get_underlying_pop(pop)
 
     def set_params(self, compiled_network, **kwargs):
-        self._compiled_network = compiled_network
+        self._genn_pop = compiled_network.neuron_populations[self._pop]
 
     def on_batch_begin(self, batch: int):
-        # Copy variable from device
-        pop = self._compiled_network.neuron_populations[self._pop]
-        
         # Set extra global parameter to batch ID
         # **TODO** this should be modifiable parameter in GeNN 5
-        pop.extra_global_params["Trial"].view[:] = batch
+        self._genn_pop.extra_global_params["Trial"].view[:] = batch
 
 
 weight_update_model = {
@@ -200,8 +197,8 @@ gradient_batch_reduce_model = {
 neuron_backward_pass = Template(
     """
     const int ringOffset = ($$(batch) * $$(num) * $max_spikes) + ($$(id) * $max_spikes);
-    const int backT = $example_time - $$(t) - DT;
-    
+    const scalar backT = $example_time - $$(t) - DT;
+
     // Backward pass
     $dynamics
     if ($$(BackSpike)) {
@@ -330,7 +327,7 @@ class EventPropCompiler(Compiler):
                 # Add code to start of sim code to run backwards pass 
                 model_copy.prepend_sim_code(
                     f"""
-                    const int backT = {self.example_timesteps * self.dt} - $(t) - DT;
+                    const float backT = {self.example_timesteps * self.dt} - $(t) - DT;
                     
                     // Backward pass
                     // **NOTE** this is leaky integrator specific
