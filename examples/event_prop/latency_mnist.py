@@ -39,7 +39,9 @@ with network:
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
     hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
-                                                    tau_refrac=5.0),
+                                                    tau_refrac=5.0, 
+                                                    relative_reset=False,
+                                                    integrate_during_refrac=False),
                    NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
                    LeakyIntegrate(tau_mem=20.0, softmax=False, readout="sum_var"),
