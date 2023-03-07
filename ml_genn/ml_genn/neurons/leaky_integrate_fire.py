@@ -4,8 +4,6 @@ from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
-from ..utils.value import is_value_initializer
-
 
 class LeakyIntegrateFire(Neuron):
     v_thresh = ValueDescriptor("Vthresh")
@@ -17,7 +15,7 @@ class LeakyIntegrateFire(Neuron):
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
                  tau_refrac: InitValue = None, relative_reset: bool = True,
-                 integrate_during_refrac: bool = True, 
+                 integrate_during_refrac: bool = True,
                  softmax: bool = False, readout=None):
         super(LeakyIntegrateFire, self).__init__(softmax, readout)
 

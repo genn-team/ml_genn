@@ -17,15 +17,15 @@ class Var(Readout):
 
         # Find output variable
         try:
-            output_var = (v for v in model.model["var_name_types"]
-                          if v[0] == self.output_var_name)
+            _ = (v for v in model.model["var_name_types"]
+                 if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to read")
 
         return model
 
-    def get_readout(self, genn_pop, batch_size:int, shape) -> np.ndarray:
+    def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull variable from genn
         genn_pop.pull_var_from_device(self.output_var_name)
 

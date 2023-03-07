@@ -1,7 +1,7 @@
 from ml_genn.utils.value import ValueDescriptor
 
-from pytest import approx
-from ml_genn.utils.value import get_values
+from pytest import approx, raises
+from ml_genn.utils.value import get_genn_var_name, get_values
 
 class Model:
     x = ValueDescriptor("X")
@@ -15,6 +15,14 @@ class Model:
 
 def test_invalid_values():
     pass
+
+def test_get_genn_name():
+    x = Model(1.0, 2.0, 3.0)
+    
+    assert get_genn_var_name(x, "x") == "X"
+
+    with raises(AttributeError):
+        get_genn_var_name(x, "n")
 
 def test_get_values():
     x = Model(1.0, 2.0, 3.0)

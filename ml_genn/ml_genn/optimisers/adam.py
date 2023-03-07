@@ -14,7 +14,7 @@ genn_model = {
     "extra_global_params": [("Alpha", "scalar"),
                             ("MomentScale1", "scalar"),
                             ("MomentScale2", "scalar")],
-    "var_refs": [("Gradient", "scalar", VarAccessMode_READ_ONLY), 
+    "var_refs": [("Gradient", "scalar", VarAccessMode_READ_ONLY),
                  ("Variable", "scalar")],
     "update_code":
         """
@@ -40,7 +40,7 @@ class Adam(Optimiser):
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
-    
+
     def set_step(self, genn_cu, step):
         assert step >= 0
         moment_scale_1 = 1.0 / (1.0 - (self.beta1 ** (step + 1)))
@@ -49,17 +49,17 @@ class Adam(Optimiser):
         genn_cu.extra_global_params["Alpha"].view[:] = self.alpha
         genn_cu.extra_global_params["MomentScale1"].view[:] = moment_scale_1
         genn_cu.extra_global_params["MomentScale2"].view[:] = moment_scale_2
-    
+
     def get_model(self, gradient_ref, var_ref, zero_gradient: bool):
-        model =  CustomUpdateModel(
+        model = CustomUpdateModel(
             deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,
              "Epsilon": self.epsilon},
             {"M": 0.0, "V": 0.0},
             {"Gradient": gradient_ref, "Variable": var_ref},
-            {"Alpha": self.alpha, "FirstMomentScale": 0.0, 
+            {"Alpha": self.alpha, "FirstMomentScale": 0.0,
              "SecondMomentScale": 0.0})
-         
+
         # If a optimiser than automatically zeros 
         # gradients should be provided
         if zero_gradient:

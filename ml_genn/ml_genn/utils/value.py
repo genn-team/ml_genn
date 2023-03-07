@@ -74,12 +74,24 @@ def is_value_initializer(value):
 
 
 # **THINK** should maybe a method in a base class for Neuron/Synapse etc
+def get_genn_var_name(inst, name):
+    # Get attribute from instance type
+    d = getattr(type(inst), name)
+
+    # If attribute is a value descriptor, return GeNN name
+    if isinstance(d, ValueDescriptor):
+        return d.genn_name
+    else:
+        raise RuntimeError(f"'{name}' is not a ValueDescriptor")
+
+
+# **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def get_values(inst, name_types, dt, vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
     # Build dictionary mapping GeNN names to var descriptors
-    descriptors = {d.genn_name: d  for n, d in descriptors
+    descriptors = {d.genn_name: d for n, d in descriptors
                    if (isinstance(d, ValueDescriptor)
                        and d.genn_name is not None)}
 
@@ -96,13 +108,13 @@ def set_values(inst, vals):
     descriptors = getmembers(type(inst), isdatadescriptor)
 
     # Build dictionary mapping GeNN names to var descriptors
-    descriptors = {d.genn_name: d  for n, d in descriptors
+    descriptors = {d.genn_name: d for n, d in descriptors
                    if (isinstance(d, ValueDescriptor)
                        and d.genn_name is not None)}
-    
+
     # Loop through values
     for n, v in vals.items():
-        # If there is a descriptor matching 
+        # If there is a descriptor matching
         # this name, use it to set variable
         if n in descriptors:
             descriptors[n].__set__(inst, v)
