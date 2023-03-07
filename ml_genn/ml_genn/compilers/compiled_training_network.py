@@ -84,8 +84,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
                 y = permute_dataset(y, indices)
 
             # Batch x and y
+            y_hack = {k: np.concatenate((np.zeros(batch_size, dtype=v.dtype), v[:-batch_size]))
+                      for k, v in y.items()}
             xy_batched = zip(batch_dataset(x, batch_size, x_size),
-                             batch_dataset(y, batch_size, y_size))
+                             batch_dataset(y_hack, batch_size, y_size))
 
             # Reset metrics at start of each epoch
             for m in metrics.values():
