@@ -25,6 +25,10 @@ class VarRecorder(Callback):
             self._var = get_genn_var_name(self._pop.neuron, var)
         elif genn_var is not None:
             self._var = genn_var
+        else:
+            raise RuntimeError("SpikeRecorder callback requires a "
+                               "variable to be specified, either "
+                               "via 'var' or 'genn_var' argument")
 
         # Stash key
         self.key = key
