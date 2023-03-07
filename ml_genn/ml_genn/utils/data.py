@@ -106,6 +106,31 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
     return preprocess_spikes(events["t"] * time_scale, spike_event_ids,
                              num_neurons)
 
+def linear_latency_encode_data(data: np.ndarray, max_time: float,
+                               min_time: float = 0.0,
+                               thresh: int = 1) -> List[PreprocessedSpikes]:
+    # **TODO** handle floating point data
+    # Loop through examples
+    time_range = max_time - min_time
+    spikes = []
+    for i in range(len(data)):
+        # Get boolean mask of spiking neurons
+        spike_vector = data[i] > thresh
+        
+        # Take cumulative sum to get end spikes
+        end_spikes = np.cumsum(spike_vector)
+        
+        # Extract values of spiking pixels
+        spike_pixels = data[i,spike_vector]
+        
+        # Calculate spike times
+        spike_times = (((255.0 - spike_pixels) / 255.0) * time_range) + min_time
+        
+        # Add to list
+        spikes.append(PreprocessedSpikes(end_spikes, spike_times))
+
+    return spikes
+         
 def log_latency_encode_data(data: np.ndarray, tau_eff: float,
                             thresh: float) -> List[PreprocessedSpikes]:
     # Loop through examples
