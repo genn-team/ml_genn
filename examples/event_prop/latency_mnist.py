@@ -14,21 +14,23 @@ from ml_genn.synapses import Exponential
 
 from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
-                                log_latency_encode_data)
+                                linear_latency_encode_data)
 
 NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
-NUM_EPOCHS = 1
+NUM_EPOCHS = 10
+EXAMPLE_TIME = 20.0
+DT = 1.0
 SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
 
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
-spikes = log_latency_encode_data(
+spikes = linear_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
-    20.0, 51)
+    EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork()
@@ -49,7 +51,7 @@ with network:
                    LeakyIntegrate(tau_mem=20.0, softmax=False, scale_i=True, readout="sum_var"),
                    NUM_OUTPUT, Exponential(5.0))
 
-max_example_timesteps = int(np.ceil(calc_latest_spike_time(spikes)))
+max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
@@ -73,9 +75,8 @@ if TRAIN:
                                  genn_var="SumV"),
                      VarRecorder(output, None, "out_softmax", visualise_examples,
                                  genn_var="Softmax")]
-        print(labels[0])
-        metrics, cb_data  = compiled_net.train({input: [spikes[0]] * 320},
-                                               {output: np.asarray([labels[0]] * 320)},
+        metrics, cb_data  = compiled_net.train({input: spikes},
+                                               {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
