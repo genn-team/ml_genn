@@ -302,6 +302,7 @@ class EventPropCompiler(Compiler):
                 model_copy.add_var("Softmax", "scalar", 0.0)
                 
                 # Add state variable to hold sum of V
+                # **NOTE** this comes from loss being sum
                 model_copy.add_var("SumV", "scalar", 0.0)
                 
                 # Add parameter with synaptic decay constant
