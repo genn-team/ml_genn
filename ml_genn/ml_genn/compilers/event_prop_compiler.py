@@ -213,7 +213,7 @@ neuron_backward_pass = Template(
         $$(BackSpike) = false;
     }
     // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if (fabs(backT - $$(RingSpikeTime)[ringOffset + $$(RingReadOffset)] - DT) < 1e-3*DT) {
+    if ($$(RingReadOffset) != $$(RingReadEndOffset) && fabs(backT - $$(RingSpikeTime)[ringOffset + $$(RingReadOffset)] - DT) < 1e-3*DT) {
         $$(BackSpike) = true;
     }
 
