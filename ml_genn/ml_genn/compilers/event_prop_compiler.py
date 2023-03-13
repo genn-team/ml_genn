@@ -287,7 +287,7 @@ class EventPropCompiler(Compiler):
             # **HACK** we don't want to call add_to_neuron on loss function as
             # it will add unwanted code to end of neuron but we do want this
             model_copy.add_egp("YTrue", "uint8_t*", 
-                              np.empty(self.batch_size))
+                               np.empty(self.batch_size, dtype=np.uint8))
             
             # If neuron model is a leaky integrator
             if isinstance(pop.neuron, LeakyIntegrate):
@@ -374,7 +374,8 @@ class EventPropCompiler(Compiler):
                 
             # Add EGP for spike time ring variables
             ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-            model_copy.add_egp("RingSpikeTime", "scalar*", np.empty(ring_size))
+            model_copy.add_egp("RingSpikeTime", "scalar*", 
+                               np.empty(ring_size, dtype=np.float32))
             
             # If neuron is an input
             if hasattr(pop.neuron, "set_input"):
@@ -423,7 +424,8 @@ class EventPropCompiler(Compiler):
                     model_copy.add_var("LambdaI", "scalar", 0.0)
                     
                     # Add EGP for IMinusV ring variables
-                    model_copy.add_egp("RingIMinusV", "scalar*", np.empty(ring_size))
+                    model_copy.add_egp("RingIMinusV", "scalar*", 
+                                       np.empty(ring_size, dtype=np.float32))
                     
                     # Add parameter for scaling factor
                     tau_mem = pop.neuron.tau_mem
