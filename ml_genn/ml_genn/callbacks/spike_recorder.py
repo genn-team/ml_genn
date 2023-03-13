@@ -19,15 +19,15 @@ class SpikeRecorder(Callback):
         # Stash key and whether we're recording spikes or spike-like events
         self.key = key
         self._record_spike_events = record_spike_events
-        
+
         # Create example filter
         self._example_filter = ExampleFilter(example_filter)
 
         # Create neuron filter mask
         self._neuron_mask = get_neuron_filter_mask(neuron_filter,
                                                    self._pop.shape)
-        
-        # Should this Populations/Layers SpikeRecorder be the one responsible for pulling spikes?
+
+        # Should this SpikeRecorder be the one responsible for pulling spikes?
         self._pull = False
 
         # List of spike times and IDs
