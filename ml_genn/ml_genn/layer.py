@@ -8,11 +8,14 @@ from .sequential_network import SequentialNetwork
 
 class InputLayer:
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
-                 record_spikes: bool = False, name: Optional[str] = None):
+                 record_spikes: bool = False,
+                 record_spike_events: bool = False,
+                 name: Optional[str] = None):
         # Create population and store weak reference in class
-        population = Population(neuron, shape=shape,
-                                record_spikes=record_spikes,
-                                name=name, add_to_model=False)
+        population = Population(
+            neuron, shape=shape, record_spikes=record_spikes,
+            record_spike_events=record_spike_events,
+            name=name, add_to_model=False)
         self.population = ref(population)
 
         SequentialNetwork._add_input_layer(self, population)
@@ -22,11 +25,14 @@ class Layer:
     def __init__(self, connectivity: ConnectivityInitializer,
                  neuron: NeuronInitializer, shape: Shape = None,
                  synapse: SynapseInitializer = "delta",
-                 record_spikes: bool = False, name: Optional[str] = None):
+                 record_spikes: bool = False,
+                 record_spike_events: bool = False,
+                 name: Optional[str] = None):
         # Create population and store weak reference in class
-        population = Population(neuron, shape=shape,
-                                record_spikes=record_spikes,
-                                name=name, add_to_model=False)
+        population = Population(
+            neuron, shape=shape, record_spikes=record_spikes,
+            record_spike_events=record_spike_events,
+            name=name, add_to_model=False)
         self.population = ref(population)
 
         # If there are any preceding layers, also create

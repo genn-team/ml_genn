@@ -11,21 +11,23 @@ from ..utils.network import get_underlying_pop
 class SpikeRecorder(Callback):
     def __init__(self, pop: PopulationType, key=None,
                  example_filter: ExampleFilterType = None,
-                 neuron_filter: NeuronFilterType = None):
+                 neuron_filter: NeuronFilterType = None,
+                 record_spike_events: bool = False):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
 
-        # Stash key
+        # Stash key and whether we're recording spikes or spike-like events
         self.key = key
-
+        self._record_spike_events = record_spike_events
+        
         # Create example filter
         self._example_filter = ExampleFilter(example_filter)
 
         # Create neuron filter mask
         self._neuron_mask = get_neuron_filter_mask(neuron_filter,
                                                    self._pop.shape)
-
-        # Should this SpikeRecorder be the one responsible for pulling spikes?
+        
+        # Should this Populations/Layers SpikeRecorder be the one responsible for pulling spikes?
         self._pull = False
 
         # List of spike times and IDs
@@ -45,9 +47,16 @@ class SpikeRecorder(Callback):
         # Check spike recording has been enabled on population
         # **YUCK** it's kinda annoying we have to do this
         genn_pop = self._compiled_network.neuron_populations[self._pop]
-        if not genn_pop.spike_recording_enabled:
-            raise RuntimeError("SpikeRecorder callback can only be used"
-                               "on Populations/Layers with record_spikes=True")
+        if self._record_spike_events:
+            if not genn_pop.spike_event_recording_enabled:
+                raise RuntimeError(
+                    "SpikeRecorder callback can only be used to record "
+                    "spike-like events from Populations/Layers with "
+                    "record_spike_events=True")
+        elif not genn_pop.spike_recording_enabled:
+            raise RuntimeError(
+                "SpikeRecorder callback can only be used to record "
+                "spikes from Populations/Layers with record_spikes=True")
 
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
@@ -78,7 +87,9 @@ class SpikeRecorder(Callback):
                 # **NOTE** the following is a version of the PyGeNN
                 # NeuronGroup._get_event_recording_data method,
                 # modified to support filtering
-                data = genn_pop._spike_recording_data
+                data = (genn_pop._spike_event_recording_data 
+                        if self._record_spike_events
+                        else genn_pop._spike_recording_data)
                 data = data.view(dtype=np.uint8)
 
                 # Reshape into a tensor with time, batches and recording bytes
