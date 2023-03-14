@@ -13,6 +13,7 @@ from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
 from ..callbacks import BatchProgressBar, Callback
+from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import LeakyIntegrate, LeakyIntegrateFire
 from ..optimisers import Optimiser
@@ -158,16 +159,24 @@ class CompileState:
 
 
 class UpdateTrial(Callback):
-    def __init__(self, pop: PopulationType):
-        self._pop = get_underlying_pop(pop)
-
-    def set_params(self, compiled_network, **kwargs):
-        self._genn_pop = compiled_network.neuron_populations[self._pop]
+    def __init__(self, genn_pop):
+        self.genn_pop = genn_pop
 
     def on_batch_begin(self, batch: int):
         # Set extra global parameter to batch ID
         # **TODO** this should be modifiable parameter in GeNN 5
-        self._genn_pop.extra_global_params["Trial"].view[:] = batch
+        self.genn_pop.extra_global_params["Trial"].view[:] = batch
+
+
+class ZeroInSyn(Callback):
+    def __init__(self, genn_syn_pop, example_timesteps: int):
+        self.genn_syn_pop = genn_syn_pop
+        self.example_timesteps = example_timesteps
+
+    def on_timestep_begin(self, timestep: int):
+        if timestep == (self.example_timesteps - 1):
+            self.genn_syn_pop.in_syn[:]= 0.0
+            self.genn_syn_pop.push_in_syn_to_device()
 
 
 weight_update_model = {
@@ -552,8 +561,13 @@ class EventPropCompiler(Compiler):
         
         # Add callbacks to set Trial extra global parameter on populations which require it
         for p in compile_state.update_trial_pops:
-            base_callbacks.append(UpdateTrial(p))
-        
+            base_callbacks.append(UpdateTrial(neuron_populations[p]))
+
+        # Add callbacks to zero insyn on all connections
+        # **NOTE** it would be great to be able to do this on device
+        for genn_syn_pop in connection_populations.values():
+            base_callbacks.append(ZeroInSyn(genn_syn_pop, self.example_timesteps))
+    
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
             base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax1"))
