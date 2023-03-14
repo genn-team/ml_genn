@@ -248,8 +248,9 @@ class Compiler:
                 pop.name, np.prod(pop.shape),
                 genn_neuron_model, param_vals, var_vals)
 
-            # Configure spike recording
+            # Configure spike and spike-like-event recording
             genn_pop.spike_recording_enabled = pop.record_spikes
+            genn_pop.spike_event_recording_enabled = pop.record_spike_events
 
             # Configure EGPs
             set_egp(egp_vals, genn_pop.extra_global_params)

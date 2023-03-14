@@ -41,13 +41,15 @@ class Population:
     _new_id = count()
     
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
-                 record_spikes: bool = False, name: Optional[str] = None,
-                 add_to_model: bool = True):
+                 record_spikes: bool = False, 
+                 record_spike_events: bool = False,
+                 name: Optional[str] = None, add_to_model: bool = True):
         self.neuron = neuron
         self.shape = _get_shape(shape)
         self._incoming_connections = []
         self._outgoing_connections = []
         self.record_spikes = record_spikes
+        self.record_spike_events = record_spike_events
 
         # Generate unique name if required
         self.name = (f"Pop{next(Population._new_id)}" if name is None
