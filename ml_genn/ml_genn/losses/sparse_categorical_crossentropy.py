@@ -3,18 +3,20 @@ import numpy as np
 from .loss import Loss
 from ..utils.model import NeuronModel
 
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_SHARED_NEURON
+
 
 class SparseCategoricalCrossentropy(Loss):
     def add_to_neuron(self, model: NeuronModel, shape, 
                       batch_size: int, example_timesteps: int):
-        # Add extra global parameter to store labels for each neuron
-        model.add_egp("YTrue", "uint8_t*", 
-                      np.empty(batch_size))
+        # Add variable, shared across neurons to hold true label for batch
+        model.add_var("YTrue", "uint8_t", 0, 
+                      VarAccess_READ_ONLY_SHARED_NEURON)
 
         # Add sim-code to convert label to one-hot
         model.append_sim_code(
             f"""
-            const scalar yTrue = ($(id) == $(YTrue)[$(batch)]) ? 1.0 : 0.0;
+            const scalar yTrue = ($(id) == $(YTrue)) ? 1.0 : 0.0;
             """)
 
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
@@ -27,7 +29,7 @@ class SparseCategoricalCrossentropy(Loss):
                                f"be < {batch_size}")
         
         # Copy flattened y_true into view
-        genn_pop.extra_global_params["YTrue"].view[:len(y_true)] = y_true
+        genn_pop.vars["YTrue"].view[:len(y_true),0] = y_true
         
         # Push YTrue to device
-        genn_pop.push_extra_global_param_to_device("YTrue")
+        genn_pop.push_var_to_device("YTrue")
