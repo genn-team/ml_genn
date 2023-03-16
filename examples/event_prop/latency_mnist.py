@@ -17,10 +17,10 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 linear_latency_encode_data)
 
 NUM_INPUT = 784
-NUM_HIDDEN = 350
+NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
-NUM_EPOCHS = 1
+NUM_EPOCHS = 10
 EXAMPLE_TIME = 20.0
 DT = 1.0
 SPARSITY = 1.0
@@ -37,7 +37,7 @@ network = SequentialNetwork()
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
-                                  NUM_INPUT, record_spikes=True, record_spike_events=True, name="input")
+                                  NUM_INPUT, name="input")
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
@@ -46,7 +46,7 @@ with network:
                                                     relative_reset=False,
                                                     integrate_during_refrac=False,
                                                     scale_i=True),
-                   NUM_HIDDEN, Exponential(5.0), record_spikes=True, record_spike_events=True, name="hidden")
+                   NUM_HIDDEN, Exponential(5.0), name="hidden")
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
                    LeakyIntegrate(tau_mem=20.0, softmax=False, scale_i=True, readout="sum_var"),
                    NUM_OUTPUT, Exponential(5.0), name="output")
@@ -63,6 +63,8 @@ if TRAIN:
         visualise_examples = [0, 32, 64, 96]
         # Evaluate model on numpy dataset
         start_time = perf_counter()
+        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
+        """
         callbacks = ["batch_progress_bar", Checkpoint(serialiser), 
                      SpikeRecorder(input, "in_spikes", visualise_examples),
                      SpikeRecorder(hidden, "hid_spikes", visualise_examples, record_spike_events=True),
@@ -77,12 +79,13 @@ if TRAIN:
                                  genn_var="SumV"),
                      VarRecorder(output, None, "out_softmax", visualise_examples,
                                  genn_var="Softmax")]
+        """
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
-        
+        """
         fig, axes = plt.subplots(9, len(visualise_examples), sharex="col", sharey="row")
         axes[0, 0].set_ylabel("Input spikes")
         axes[1, 0].set_ylabel("Input spike events")
@@ -110,7 +113,7 @@ if TRAIN:
 
             axes[8, j].set_xlabel("Time [ms]")
         plt.show()
-
+        """
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
@@ -129,6 +132,7 @@ else:
     network.load((NUM_EPOCHS - 1,), serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
+                                 reset_in_syn_between_batches=True,
                                  batch_size=BATCH_SIZE)
     compiled_net = compiler.compile(network)
 
