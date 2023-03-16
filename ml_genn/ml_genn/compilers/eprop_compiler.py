@@ -53,6 +53,7 @@ class CompileState:
     def add_neuron_readout_reset_vars(self, pop):
         reset_vars = pop.neuron.readout.reset_vars
         if len(reset_vars) > 0:
+            assert pop not in self._neuron_reset_vars
             self._neuron_reset_vars[pop] = reset_vars
 
     def create_reset_custom_updates(self, compiler, genn_model,
