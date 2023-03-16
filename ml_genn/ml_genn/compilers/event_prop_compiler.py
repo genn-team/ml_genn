@@ -278,7 +278,12 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError(
                     f"EventProp compiler doesn't "
                     f"support softmax neuron option")
-                
+            
+            # Add output logic to model and take copy of
+            # reset vars before we add further functionality
+            model_copy = pop.neuron.readout.add_readout_logic(model_copy)
+            model_reset_vars = model_copy.reset_vars
+
             # Add variable, shared across neurons to hold true label for batch
             # **HACK** we don't want to call add_to_neuron on loss function as
             # it will add unwanted code to end of neuron but we do want this
@@ -322,7 +327,7 @@ class EventPropCompiler(Compiler):
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
                 compile_state.add_neuron_reset_vars(
-                    pop, model.reset_vars +
+                    pop, model_reset_vars +
                     [("LambdaV", "scalar", 0.0), ("LambdaI", "scalar", 0.0),
                      ("SumV", "scalar", 0.0)], False)
             

@@ -257,6 +257,9 @@ class EPropCompiler(Compiler):
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
+            # Add output logic to model
+            model_copy = pop.neuron.readout.add_readout_logic(model_copy)
+
             # Add any output reset variables to compile state
             compile_state.add_neuron_readout_reset_vars(pop)
 

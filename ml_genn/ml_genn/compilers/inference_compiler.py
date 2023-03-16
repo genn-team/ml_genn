@@ -262,6 +262,11 @@ class InferenceCompiler(Compiler):
         return CompileState()
 
     def build_neuron_model(self, pop, model, compile_state):
+        # If population has a readout i.e. it's an output
+        # Add readout logic to model
+        if pop.neuron.readout is not None:
+            model = pop.neuron.readout.add_readout_logic(model)
+
         # Add any neuron reset variables to compile state
         compile_state.add_neuron_reset_vars(model, pop,
                                             self.reset_vars_between_batches)

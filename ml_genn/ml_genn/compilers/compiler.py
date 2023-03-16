@@ -298,9 +298,6 @@ class Compiler:
                     # Set softmax flag
                     softmax = True
 
-                # Add output logic to model
-                neuron_model = neuron.readout.add_readout_logic(neuron_model)
-
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(
                     pop, neuron_model,
