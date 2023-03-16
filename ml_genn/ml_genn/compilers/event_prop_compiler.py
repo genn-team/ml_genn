@@ -4,6 +4,7 @@ import numpy as np
 from string import Template
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
+                                        VarAccess_READ_ONLY_SHARED_NEURON,
                                         VarAccess_REDUCE_BATCH_SUM,
                                         VarAccess_REDUCE_NEURON_MAX,
                                         VarAccess_REDUCE_NEURON_SUM,
@@ -107,10 +108,7 @@ class CompileState:
         self.batch_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
-    
-    def add_batch_softmax_population(self, pop, input_var, output_var):
-        self.batch_softmax_populations.append((pop, input_var, output_var))
-    
+
     def add_neuron_reset_vars(self, pop, reset_vars, reset_ring):
         self._neuron_reset_vars[pop] = (reset_vars, reset_ring)
 
@@ -292,12 +290,16 @@ class EventPropCompiler(Compiler):
                     f"EventProp compiler doesn't "
                     f"support softmax neuron option")
                 
-            # Add extra global parameter to store labels for each neuron
+            # Add variable, shared across neurons to hold true label for batch
             # **HACK** we don't want to call add_to_neuron on loss function as
             # it will add unwanted code to end of neuron but we do want this
-            model_copy.add_egp("YTrue", "uint8_t*", 
-                               np.empty(self.batch_size, dtype=np.uint8))
+            model_copy.add_var("YTrue", "uint8_t", 0, 
+                               VarAccess_READ_ONLY_SHARED_NEURON)
             
+            # Add second variable to hold the true label for the backward pass
+            model_copy.add_var("YTrueBack", "uint8_t", 0, 
+                               VarAccess_READ_ONLY_SHARED_NEURON)
+
             # If neuron model is a leaky integrator
             if isinstance(pop.neuron, LeakyIntegrate):
                 # Get tau_syn from population's incoming connections
@@ -339,26 +341,39 @@ class EventPropCompiler(Compiler):
                 model_copy.prepend_sim_code(
                     f"""
                     const float backT = {self.example_timesteps * self.dt} - $(t) - DT;
-                    
+
                     // Backward pass
                     // **NOTE** this is leaky integrator specific
                     $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
                     $(LambdaV) *= $(Alpha);
-                    
+
                     // **NOTE** loop condition depends on loss function
                     if ($(Trial) > 0) {{
                         // **YUCK** again this is copy-pasted from softmax loss
-                        const scalar g = ($(id) == $(YTrue)[$(batch)]) ? (1.0 - $(Softmax)) : -$(Softmax);
+                        const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
                         $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
                     }}
                     
                     // Forward pass
-                    // **NOTE** this comes from loss being sum
-                    $(SumV) += ($(V) / {self.example_timesteps * self.dt}) * DT; // simple Euler
                     """)
                 
-                # Add population to list of those requiring a per-batch softmax
-                compile_state.add_batch_softmax_population(pop, "SumV", "Softmax")
+                # Add code to end of sim code to calculate SumV
+                # **NOTE** this comes from loss being sum
+                # **YUCK** this is already being calculated by readout - reuse
+                model_copy.append_sim_code(
+                    f"""
+                    $(SumV) += ($(V) / {self.example_timesteps});
+                    """)
+                
+                # Add population to lists of those requiring per-batch softmax
+                compile_state.batch_softmax_populations.append(
+                    (pop, "SumV", "Softmax"))
+                
+                # Add second reset to reset YTrueBack to YTrue
+                # **NOTE** seperate as these are SHARED_NEURON variables
+                compile_state.add_neuron_reset_vars(
+                    pop, [("YTrueBack", "uint8_t", "YTrue")], False)
+                     
             # Otherwise, neuron type is unsupported
             else:
                 raise NotImplementedError(

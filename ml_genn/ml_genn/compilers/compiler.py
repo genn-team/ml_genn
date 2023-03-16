@@ -80,14 +80,26 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
     # Loop through reset vars
     for name, type, value in reset_vars:
-        # Add variable reference using function to create variable reference
+        # Add variable reference
         model.add_var_ref(name, type, var_ref_creator(name))
 
-        # Add reset value parameter
-        model.add_param(name + "Reset", type, value)
+        # If variable should be reset to another variable
+        if isinstance(value, str):
+            # Add read-only variable reference to other variable
+            # **TODO** check value not an existing reset var
+            model.add_var_ref(value, type, var_ref_creator(value))
+            model.set_var_ref_access_mode(value, VarAccessMode_READ_ONLY)
+            
+            # Add code to set var
+            model.append_update_code(f"$({name}) = $({value});")
+        # Otherwise
+        else:
+            # Add reset value parameter
+            model.add_param(name + "Reset", type, value)
 
-        # Add code to set var
-        model.append_update_code(f"$({name}) = $({name}Reset);")
+            # Add code to set var
+            model.append_update_code(f"$({name}) = $({name}Reset);")
+
     return model
 
 class Compiler:
