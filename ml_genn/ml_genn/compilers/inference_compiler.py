@@ -1,6 +1,6 @@
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
-from .compiler import Compiler
+from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..metrics import Metric
@@ -247,6 +247,7 @@ class InferenceCompiler(Compiler):
                  prefer_in_memory_connect=True, 
                  reset_time_between_batches=True,
                  reset_vars_between_batches=True,
+                 reset_in_syn_between_batches=False,
                  **genn_kwargs):
         super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
                                                 kernel_profiling,
@@ -255,6 +256,7 @@ class InferenceCompiler(Compiler):
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
         self.reset_vars_between_batches = reset_vars_between_batches
+        self.reset_in_syn_between_batches = reset_in_syn_between_batches
 
     def pre_compile(self, network, **kwargs):
         return CompileState()
@@ -285,6 +287,14 @@ class InferenceCompiler(Compiler):
                                                   connection_populations)
         
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
+        
+        # Add callbacks to zero insyn on all connections
+        # **NOTE** it would be great to be able to do this on device
+        for genn_syn_pop in connection_populations.values():
+            base_callbacks.append(ZeroInSyn(genn_syn_pop,
+                                            self.evaluate_timesteps))
+    
+
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
                                         softmax, self.evaluate_timesteps,

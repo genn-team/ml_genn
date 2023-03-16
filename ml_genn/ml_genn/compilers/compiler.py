@@ -11,6 +11,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 from typing import Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
+from ..callbacks import Callback
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.value import InitValue
@@ -101,6 +102,18 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
             model.append_update_code(f"$({name}) = $({name}Reset);")
 
     return model
+
+
+class ZeroInSyn(Callback):
+    def __init__(self, genn_syn_pop, example_timesteps: int):
+        self.genn_syn_pop = genn_syn_pop
+        self.example_timesteps = example_timesteps
+
+    def on_timestep_begin(self, timestep: int):
+        if timestep == (self.example_timesteps - 1):
+            self.genn_syn_pop.in_syn[:]= 0.0
+            self.genn_syn_pop.push_in_syn_to_device()
+
 
 class Compiler:
     def __init__(self, dt: float = 1.0, batch_size: int = 1,

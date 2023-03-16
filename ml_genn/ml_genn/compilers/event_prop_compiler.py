@@ -10,10 +10,10 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_NEURON_SUM,
                                         VarAccessMode_READ_ONLY)
 
-from . import Compiler
+from .compiler import Compiler, ZeroInSyn
 from .compiled_training_network import CompiledTrainingNetwork
-from ..callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
-from ..callbacks import BatchProgressBar, Callback
+from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
+                         CustomUpdateOnBatchEnd)
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import LeakyIntegrate, LeakyIntegrateFire
@@ -102,7 +102,7 @@ class CompileState:
         self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
         self.weight_optimiser_connections = []
-        self._neuron_reset_vars = {}
+        self._neuron_reset_vars = []
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
         self.batch_softmax_populations = []
@@ -110,12 +110,12 @@ class CompileState:
         self.update_trial_pops = []
 
     def add_neuron_reset_vars(self, pop, reset_vars, reset_ring):
-        self._neuron_reset_vars[pop] = (reset_vars, reset_ring)
+        self._neuron_reset_vars.append((pop, reset_vars, reset_ring))
 
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops):
         # Loop through neuron variables to reset
-        for i, (pop, (reset_vars, reset_ring)) in enumerate(self._neuron_reset_vars.items()):
+        for i, (pop, reset_vars, reset_ring) in enumerate(self._neuron_reset_vars):
             # Create reset model
             model = create_reset_custom_update(
                 reset_vars,
@@ -164,17 +164,6 @@ class UpdateTrial(Callback):
         # Set extra global parameter to batch ID
         # **TODO** this should be modifiable parameter in GeNN 5
         self.genn_pop.extra_global_params["Trial"].view[:] = batch
-
-
-class ZeroInSyn(Callback):
-    def __init__(self, genn_syn_pop, example_timesteps: int):
-        self.genn_syn_pop = genn_syn_pop
-        self.example_timesteps = example_timesteps
-
-    def on_timestep_begin(self, timestep: int):
-        if timestep == (self.example_timesteps - 1):
-            self.genn_syn_pop.in_syn[:]= 0.0
-            self.genn_syn_pop.push_in_syn_to_device()
 
 
 weight_update_model = {
@@ -541,9 +530,6 @@ class EventPropCompiler(Compiler):
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations,
                                 compile_state, softmax):
-        # Fuse postsynaptic updates for efficiency
-        genn_model._model.set_fuse_postsynaptic_models(True)
-
         # Correctly target feedback
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"
