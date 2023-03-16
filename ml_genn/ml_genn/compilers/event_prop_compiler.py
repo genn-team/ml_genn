@@ -377,15 +377,18 @@ class EventPropCompiler(Compiler):
         # Otherwise, it's either an input or a hidden neuron
         # i.e. it requires a ring-buffer
         else:
-            # Add variables to hold offsets for reading and writing ring variables
+            # Add variables to hold offsets for 
+            # reading and writing ring variables
             model_copy.add_var("RingWriteOffset", "int", 0)
             model_copy.add_var("RingReadOffset", "int", self.max_spikes - 1)
-            
+
             # Add variables to hold offsets where this neuron
             # started writing to ring during the forward
             # pass and where data to read during backward pass ends
-            model_copy.add_var("RingWriteStartOffset", "int", self.max_spikes - 1)
-            model_copy.add_var("RingReadEndOffset", "int", self.max_spikes - 1)
+            model_copy.add_var("RingWriteStartOffset", "int",
+                               self.max_spikes - 1)
+            model_copy.add_var("RingReadEndOffset", "int", 
+                               self.max_spikes - 1)
             
             # Add variable to hold backspike flag
             model_copy.add_var("BackSpike", "uint8_t", False)
@@ -399,7 +402,8 @@ class EventPropCompiler(Compiler):
             if hasattr(pop.neuron, "set_input"):
                 # Add reset logic to reset any state 
                 # variables from the original model
-                compile_state.add_neuron_reset_vars(pop, model.reset_vars, True)
+                compile_state.add_neuron_reset_vars(pop, model.reset_vars,
+                                                    True)
 
                 # Add code to start of sim code to run 
                 # backwards pass and handle back spikes
@@ -424,18 +428,20 @@ class EventPropCompiler(Compiler):
                 if isinstance(pop.neuron, LeakyIntegrateFire):
                     # Check EventProp constraints
                     if pop.neuron.integrate_during_refrac:
-                        logger.warning("EventProp learning works best with LIF "
-                                       "neurons which do not continue to integrate "
-                                       "during their refractory period")
+                        logger.warning("EventProp learning works best with "
+                                       "LIF neurons which do not continue to "
+                                       "integrate in their refractory period")
                     if pop.neuron.relative_reset:
-                        logger.warning("EventProp learning works best with LIF "
-                                       "neurons with an absolute reset mechanism")
+                        logger.warning("EventProp learning works best "
+                                       "with LIF neurons with an "
+                                       "absolute reset mechanism")
         
                     # Get tau_syn from population's incoming connections
                     tau_syn = _get_tau_syn(pop)
                     
                     # Add parameter with synaptic decay constant
-                    model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn))
+                    model_copy.add_param("Beta", "scalar",
+                                         np.exp(-self.dt / tau_syn))
                     
                     # Add adjoint state variables
                     model_copy.add_var("LambdaV", "scalar", 0.0)
@@ -562,17 +568,21 @@ class EventPropCompiler(Compiler):
         base_callbacks = []
         if len(optimiser_custom_updates) > 0:
             if self.batch_size > 1:
-                base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
-            base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
+                base_callbacks.append(
+                    CustomUpdateOnBatchEnd("GradientBatchReduce"))
+            base_callbacks.append(
+                CustomUpdateOnBatchEnd("GradientLearn"))
         
-        # Add callbacks to set Trial extra global parameter on populations which require it
+        # Add callbacks to set Trial extra global parameter 
+        # on populations which require it
         for p in compile_state.update_trial_pops:
             base_callbacks.append(UpdateTrial(neuron_populations[p]))
 
         # Add callbacks to zero insyn on all connections
         # **NOTE** it would be great to be able to do this on device
         for genn_syn_pop in connection_populations.values():
-            base_callbacks.append(ZeroInSyn(genn_syn_pop, self.example_timesteps))
+            base_callbacks.append(
+                ZeroInSyn(genn_syn_pop, self.example_timesteps))
     
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
@@ -599,7 +609,7 @@ class EventPropCompiler(Compiler):
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
                 {"Gradient": gradient_ref})
-            
+
             # Add GeNN custom update to model
             genn_reduction = self.add_custom_update(
                 genn_model, reduction_optimiser_model, 
