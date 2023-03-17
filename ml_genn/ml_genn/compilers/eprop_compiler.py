@@ -279,7 +279,8 @@ class EPropCompiler(Compiler):
                     (pop, output_var[0], softmax_var_name))
 
             # Add output logic to model
-            model_copy = pop.neuron.readout.add_readout_logic(model_copy)
+            model_copy = pop.neuron.readout.add_readout_logic(
+                model_copy, example_timesteps=self.example_timesteps)
 
             # Add any output reset variables to compile state
             compile_state.add_neuron_readout_reset_vars(pop)

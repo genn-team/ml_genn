@@ -18,12 +18,12 @@ from ..metrics import default_metrics
 
 class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, softmax,
-                 evaluate_timesteps: int, base_callbacks: list,
+                 connection_populations, evaluate_timesteps: int, 
+                 base_callbacks: list,
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            softmax, evaluate_timesteps)
+            evaluate_timesteps)
         
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
@@ -265,7 +265,8 @@ class InferenceCompiler(Compiler):
         # If population has a readout i.e. it's an output
         # Add readout logic to model
         if pop.neuron.readout is not None:
-            model = pop.neuron.readout.add_readout_logic(model)
+            model = pop.neuron.readout.add_readout_logic(
+                model, example_timesteps=self.evaluate_timesteps)
 
         # Add any neuron reset variables to compile state
         compile_state.add_neuron_reset_vars(model, pop,
