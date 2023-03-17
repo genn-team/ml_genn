@@ -86,11 +86,14 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
         # If variable should be reset to another variable
         if isinstance(value, str):
-            # Add read-only variable reference to other variable
-            # **TODO** check value not an existing reset var
-            model.add_var_ref(value, type, var_ref_creator(value))
-            model.set_var_ref_access_mode(value, VarAccessMode_READ_ONLY)
-            
+            # If variable to reset to isn't already in list
+            # **TODO** give warning if it's not afterwards!
+            existing_reset_var = [v for v in reset_vars if v[0] == value]
+            if len(existing_reset_var) == 0:
+                # Add read-only variable reference to other variable
+                model.add_var_ref(value, type, var_ref_creator(value))
+                model.set_var_ref_access_mode(value, VarAccessMode_READ_ONLY)
+
             # Add code to set var
             model.append_update_code(f"$({name}) = $({value});")
         # Otherwise
