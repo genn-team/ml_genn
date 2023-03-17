@@ -48,7 +48,7 @@ with network:
                                                     scale_i=True),
                    NUM_HIDDEN, Exponential(5.0), name="hidden")
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="sum_var"),
+                   LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="avg_var"),
                    NUM_OUTPUT, Exponential(5.0), name="output")
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
