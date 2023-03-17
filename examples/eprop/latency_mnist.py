@@ -15,7 +15,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 log_latency_encode_data)
 
 NUM_INPUT = 784
-NUM_HIDDEN = 100
+NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 128
 NUM_EPOCHS = 10
@@ -43,7 +43,7 @@ with network:
                                                     integrate_during_refrac=True),
                    NUM_HIDDEN)
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))),
-                   LeakyIntegrate(tau_mem=20.0, softmax=True, readout="sum_var"),
+                   LeakyIntegrate(tau_mem=20.0, readout="sum_var"),
                    NUM_OUTPUT)
 
 max_example_timesteps = int(np.ceil(calc_latest_spike_time(spikes)))
