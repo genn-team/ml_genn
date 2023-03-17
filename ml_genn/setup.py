@@ -5,6 +5,6 @@ setup(name="ml_genn",
       packages=find_packages(),
 
       python_requires=">=3.7.0",
-      install_requires=["pygenn>=4.8.0",
+      install_requires=["pygenn>=4.8.1",
                         "enum-compat",
-                        "tqdm"])
+                        "tqdm", "deprecated"])
