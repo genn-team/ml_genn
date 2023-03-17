@@ -270,15 +270,7 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError(
                     f"EventProp compiler doesn't support "
                     f"{type(loss).__name__} loss")
-            
-            # Check built in softmax isn't enabled
-            # **HACK** REALLY softmax IS enabled but
-            # we don't want built in implementation
-            if pop.neuron.softmax:
-                raise NotImplementedError(
-                    f"EventProp compiler doesn't "
-                    f"support softmax neuron option")
-            
+
             # Add output logic to model and take copy of
             # reset vars before we add further functionality
             model_copy = pop.neuron.readout.add_readout_logic(model_copy)
