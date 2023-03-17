@@ -539,8 +539,7 @@ class EventPropCompiler(Compiler):
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations,
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         # Correctly target feedback
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"
@@ -595,7 +594,7 @@ class EventPropCompiler(Compiler):
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         return CompiledTrainingNetwork(
-            genn_model, neuron_populations, connection_populations, softmax,
+            genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
             base_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,

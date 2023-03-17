@@ -262,9 +262,7 @@ class FewSpikeCompiler(Compiler):
             conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, 
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
-                                       connection_populations, 
-                                       softmax, self.k,
+                                       connection_populations, self.k,
                                        compile_state.pop_pipeline_depth)

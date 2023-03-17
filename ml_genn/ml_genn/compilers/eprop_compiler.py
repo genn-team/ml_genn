@@ -7,8 +7,8 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd)
-from ..losses import Loss
+                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
 from ..optimisers import Optimiser
 from ..synapses import Delta
@@ -46,6 +46,7 @@ class CompileState:
         self.feedback_connections = []
         self.weight_optimiser_connections = []
         self.bias_optimiser_populations = []
+        self.softmax_populations = []
         self._neuron_reset_vars = {}
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
@@ -257,14 +258,31 @@ class EPropCompiler(Compiler):
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
+            # Get loss function associated with this output neuron
+            loss = compile_state.losses[pop]
+            
+            # If loss function is sparse categorical crossentropy
+            if isinstance(loss, SparseCategoricalCrossentropy):
+                # Get output variable from neuron model
+                output_var = model_copy.output_var
+
+                # Add softmax variable with same type as 
+                # output variable and initialise to zero
+                softmax_var_name = output_var[0] + "Softmax"
+                model_copy.add_var(softmax_var_name, output_var[1], 0)
+
+                # Finally, point output variable at new softmax'd output
+                model_copy.output_var_name = softmax_var_name
+                
+                # Add population to list of those needing softmax calculation
+                compile_state.softmax_populations.append(
+                    (pop, output_var[0], softmax_var_name))
+
             # Add output logic to model
             model_copy = pop.neuron.readout.add_readout_logic(model_copy)
 
             # Add any output reset variables to compile state
             compile_state.add_neuron_readout_reset_vars(pop)
-
-            # Get loss function associated with this output neuron
-            loss = compile_state.losses[pop]
 
             # Add state variable to hold error
             # **NOTE** all loss functions require this!
@@ -406,8 +424,7 @@ class EPropCompiler(Compiler):
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations,
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         # Fuse pre and postsynaptic updates for efficiency
         genn_model._model.set_fuse_postsynaptic_models(True)
         genn_model._model.set_fuse_pre_post_weight_update_models(True)
@@ -433,10 +450,17 @@ class EPropCompiler(Compiler):
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
                     create_var_ref(genn_pop, "DeltaBias"), genn_model))
         
+        # Loop through populations requiring softmax
+        # calculation and add requisite custom updates
+        for p, o, s in compile_state.softmax_populations:
+            genn_pop = neuron_populations[p]
+            self.add_softmax_custom_updates(genn_model, genn_pop, 
+                                            o, s, p.name)
+
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
-        
+
         # Build list of base callbacks
         base_callbacks = []
         if len(optimiser_custom_updates) > 0:
@@ -446,8 +470,14 @@ class EPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
+        # If softmax is required, add three stage reduction to callbacks
+        if len(compile_state.softmax_populations) > 0:
+            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
+            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
+            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
+
         return CompiledTrainingNetwork(
-            genn_model, neuron_populations, connection_populations, softmax,
+            genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
             base_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,

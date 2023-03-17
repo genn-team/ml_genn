@@ -237,10 +237,9 @@ class Compiler:
             "CUSoftmax3" + custom_update_name_suffix)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, 
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         return CompiledNetwork(genn_model, neuron_populations,
-                               connection_populations, softmax)
+                               connection_populations)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
         # If no name is specifie
@@ -272,7 +271,6 @@ class Compiler:
 
         # Loop through populations
         neuron_populations = {}
-        softmax = False
         for pop in network.populations:
             # Check population has shape
             if pop.shape is None:
@@ -282,21 +280,6 @@ class Compiler:
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
             neuron_model = neuron.get_model(pop, self.dt)
-            if neuron.readout is not None:
-                if neuron.softmax:
-                    # Get output variable from neuron model
-                    output_var = neuron_model.output_var
-
-                    # Add softmax variable with same type as 
-                    # output variable and initialise to zero
-                    softmax_var_name = output_var[0] + "Softmax"
-                    neuron_model.add_var(softmax_var_name, output_var[1], 0)
-
-                    # Finally, point output variable at new softmax'd output
-                    neuron_model.output_var_name = softmax_var_name
-                    
-                    # Set softmax flag
-                    softmax = True
 
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(
@@ -323,13 +306,6 @@ class Compiler:
 
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
-
-            # If neuron has softmax output, add requisite custom updates
-            if neuron.readout is not None and neuron.softmax:
-                self.add_softmax_custom_updates(genn_model, genn_pop, 
-                                                output_var[0], 
-                                                softmax_var_name,
-                                                pop.name)
 
         # Loop through connections
         connection_populations = {}
@@ -398,4 +374,4 @@ class Compiler:
 
         return self.create_compiled_network(genn_model, neuron_populations,
                                             connection_populations,
-                                            compile_state, softmax)
+                                            compile_state)

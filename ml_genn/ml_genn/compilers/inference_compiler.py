@@ -284,8 +284,7 @@ class InferenceCompiler(Compiler):
             conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations,
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
@@ -302,6 +301,6 @@ class InferenceCompiler(Compiler):
 
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
-                                        softmax, self.evaluate_timesteps,
+                                        self.evaluate_timesteps,
                                         base_callbacks,
                                         self.reset_time_between_batches)
