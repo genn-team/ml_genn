@@ -4,6 +4,7 @@ import numpy as np
 from string import Template
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
+                                        VarAccess_READ_ONLY_DUPLICATE,
                                         VarAccess_READ_ONLY_SHARED_NEURON,
                                         VarAccess_REDUCE_BATCH_SUM,
                                         VarAccess_REDUCE_NEURON_MAX,
@@ -18,6 +19,7 @@ from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import LeakyIntegrate, LeakyIntegrateFire
 from ..optimisers import Optimiser
+from ..readouts import AvgVar, MaxVar, SumVar
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -271,10 +273,10 @@ class EventPropCompiler(Compiler):
                     f"EventProp compiler doesn't support "
                     f"{type(loss).__name__} loss")
 
-            # Add output logic to model and take copy of
-            # reset vars before we add further functionality
-            model_copy = pop.neuron.readout.add_readout_logic(model_copy)
-            model_reset_vars = model_copy.reset_vars
+            # Add output logic to model
+            model_copy = pop.neuron.readout.add_readout_logic(
+                model_copy, max_time_required=True, 
+                example_timesteps=self.example_timesteps)
 
             # Add variable, shared across neurons to hold true label for batch
             # **HACK** we don't want to call add_to_neuron on loss function as
@@ -290,21 +292,14 @@ class EventPropCompiler(Compiler):
             if isinstance(pop.neuron, LeakyIntegrate):
                 # Get tau_syn from population's incoming connections
                 tau_syn = _get_tau_syn(pop)
-                
+
                 # Add adjoint state variables
                 model_copy.add_var("LambdaV", "scalar", 0.0)
                 model_copy.add_var("LambdaI", "scalar", 0.0)
-                
-                # Add state variable to hold softmax of output
-                model_copy.add_var("Softmax", "scalar", 0.0)
-                
-                # Add state variable to hold sum of V
-                # **NOTE** this comes from loss being sum
-                model_copy.add_var("SumV", "scalar", 0.0)
-                
+
                 # Add parameter with synaptic decay constant
                 model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn))
-                
+
                 # Add parameter for scaling factor
                 tau_mem = pop.neuron.tau_mem
                 model_copy.add_param("TauM", "scalar", tau_mem)
@@ -315,51 +310,80 @@ class EventPropCompiler(Compiler):
                 # population to list of those which require it updating
                 model_copy.add_egp("Trial", "unsigned int", 0)
                 compile_state.update_trial_pops.append(pop)
-                
-                # Add reset logic to reset adjoint state variables 
-                # as well as any state variables from the original model
-                compile_state.add_neuron_reset_vars(
-                    pop, model_reset_vars +
-                    [("LambdaV", "scalar", 0.0), ("LambdaI", "scalar", 0.0),
-                     ("SumV", "scalar", 0.0)], False)
-            
-                # Add code to start of sim code to run backwards pass 
+
+                # Add state variable to hold softmax of output
+                model_copy.add_var("Softmax", "scalar", 0.0,
+                                   VarAccess_READ_ONLY_DUPLICATE)
+
+                # If readout is AverageVar or SumVar
+                if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
+                    model_copy.prepend_sim_code(
+                        f"""
+                        // **NOTE** loop condition depends on loss function
+                        if ($(Trial) > 0) {{
+                            const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
+                            $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                        }}
+                        
+                        // Forward pass
+                        """)
+
+                    # Add custom updates to calculate softmax from VSum or VAvg
+                    var = ("VSum" if isinstance(pop.neuron.readout, SumVar)
+                           else "VAvg")
+                    compile_state.batch_softmax_populations.append(
+                        (pop, var, "Softmax"))
+
+                    # Add custom update to reset state
+                    compile_state.add_neuron_reset_vars(
+                        pop, model_copy.reset_vars, False)
+                # Otherwise, if readout is MaxVar
+                elif isinstance(pop.neuron.readout, MaxVar):
+                    # Add state variable to hold vmax from previous trial
+                    model_copy.add_var("VMaxTimeBack", "scalar", 0.0,
+                                       VarAccess_READ_ONLY_DUPLICATE)
+                                       
+                    model_copy.prepend_sim_code(
+                        f"""
+                        if ($(Trial) > 0 && fabs(backT - $(VMaxTimeBack)) < 1e-3*DT) {{
+                            const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
+                            $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})); // simple Euler
+                        }}
+                        
+                        // Forward pass
+                        """)
+
+                    # Add custom updates to calculate softmax from VMax
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "VMax", "Softmax"))
+                    
+                    # Add custom update to reset state
+                    # **NOTE** reset VMaxTimeBack first so VMaxTime isn't zeroed
+                    # **TODO** time type
+                    compile_state.add_neuron_reset_vars(
+                        pop, 
+                        [("VMaxTimeBack", "scalar", "VMaxTime")] + model_copy.reset_vars, 
+                        False)
+                # Otherwise, unsupported readout type
+                else:
+                    raise NotImplementedError(
+                        f"EventProp compiler doesn't support "
+                        f"{type(pop.neuron.readout).__name__} readouts")
+
+                # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
                     const float backT = {self.example_timesteps * self.dt} - $(t) - DT;
 
                     // Backward pass
-                    // **NOTE** this is leaky integrator specific
                     $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
                     $(LambdaV) *= $(Alpha);
+                    """)
 
-                    // **NOTE** loop condition depends on loss function
-                    if ($(Trial) > 0) {{
-                        // **YUCK** again this is copy-pasted from softmax loss
-                        const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                        $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
-                    }}
-                    
-                    // Forward pass
-                    """)
-                
-                # Add code to end of sim code to calculate SumV
-                # **NOTE** this comes from loss being sum
-                # **YUCK** this is already being calculated by readout - reuse
-                model_copy.append_sim_code(
-                    f"""
-                    $(SumV) += ($(V) / {self.example_timesteps});
-                    """)
-                
-                # Add population to lists of those requiring per-batch softmax
-                compile_state.batch_softmax_populations.append(
-                    (pop, "SumV", "Softmax"))
-                
-                # Add second reset to reset YTrueBack to YTrue
+                # Add second reset custom update to reset YTrueBack to YTrue
                 # **NOTE** seperate as these are SHARED_NEURON variables
                 compile_state.add_neuron_reset_vars(
                     pop, [("YTrueBack", "uint8_t", "YTrue")], False)
-                     
             # Otherwise, neuron type is unsupported
             else:
                 raise NotImplementedError(
