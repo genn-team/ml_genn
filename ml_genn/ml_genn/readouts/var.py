@@ -5,7 +5,7 @@ from ..utils.model import NeuronModel
 
 
 class Var(Readout):
-    def add_readout_logic(self, model: NeuronModel):
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "var_name_types" not in model.model:

@@ -7,7 +7,7 @@ from copy import deepcopy
 
 
 class SpikeCount(Readout):
-    def add_readout_logic(self, model: NeuronModel):
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
             raise RuntimeError("SpikeCount readout can only "
