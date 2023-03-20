@@ -240,9 +240,10 @@ neuron_reset = Template(
 
 class EventPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
-                 max_spikes: int = 500, dt: float = 1.0, batch_size: int = 1,
-                 rng_seed: int = 0, kernel_profiling: bool = False,
-                 **genn_kwargs):
+                 reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
+                 reg_nu_upper: float = 0.0, max_spikes: int = 500, 
+                 dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0, 
+                 kernel_profiling: bool = False, **genn_kwargs):
         super(EventPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                                 kernel_profiling,
                                                 prefer_in_memory_connect=True,
@@ -250,6 +251,9 @@ class EventPropCompiler(Compiler):
         self.example_timesteps = example_timesteps
         self.losses = losses
         self.max_spikes = max_spikes
+        self.reg_lambda_upper = reg_lambda_upper
+        self.reg_lambda_lower = reg_lambda_lower
+        self.reg_nu_upper = reg_nu_upper
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
@@ -472,13 +476,48 @@ class EventPropCompiler(Compiler):
                     model_copy.add_param("A", "scalar", 
                                          tau_mem / (tau_syn - tau_mem))
                     
+                    # On backward pass transition, update LambdaV
+                    transition_code = """
+                        $(LambdaV) += (1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * ($(Vthresh) * $(LambdaV) + $(RevISyn));
+                        """
+                    
+                    additional_reset_vars = [("LambdaV", "scalar", 0.0),
+                                             ("LambdaI", "scalar", 0.0)]
+                    
+                    # If regularisation is enabled
+                    # **THINK** is this LIF-specific?
+                    if self.regulariser_enabled:
+                        # Add state variables to hold spike count 
+                        # during forward and backward pass
+                        model_copy.add_var("SpikeCount", "int", 0)
+                        model_copy.add_var("SpikeCountBack", "int", 0,
+                                           VarAccess_READ_ONLY_DUPLICATE)
+                        
+                        # Add reset variables to copy SpikeCount
+                        # into SpikeCountBack and zero SpikeCount
+                        additional_reset_vars.extend(
+                            [("SpikeCountBack", "int", "SpikeCount"),
+                             ("SpikeCount", "int", 0)])
+                        
+                        # Add additional transition code to apply regularisation
+                        transition_code += """
+                        if ($(SpikeCountBack) > $(RegNuUpper)) {
+                            $(LambdaV) -= $(RegLambdaUpper) * ($(SpikeCountBack) - $(RegNuUpper)) / $(num_batch);
+                        }
+                        else {
+                            $(LambdaV) -= $(RegLambdaLower) * ($(SpikeCountBack) - $(RegNuUpper)) / $(num_batch);
+                        }
+                        """
+
+                        # Add code to update SpikeCount in forward reset code
+                        model_copy.append_reset_code("$(SpikeCount)++;")
+                    
                     # Add reset logic to reset adjoint state variables 
                     # as well as any state variables from the original model
                     compile_state.add_neuron_reset_vars(
-                        pop, model.reset_vars + [("LambdaV", "scalar", 0.0),
-                                                 ("LambdaI", "scalar", 0.0)],
+                        pop, model.reset_vars + additional_reset_vars,
                         True)
-                
+
                     # Add code to start of sim code to run backwards pass 
                     # and handle back spikes with correct LIF dynamics
                     model_copy.prepend_sim_code(
@@ -489,7 +528,7 @@ class EventPropCompiler(Compiler):
                             $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
                             $(LambdaV) *= $(Alpha);
                             """,
-                            transition="$(LambdaV) += (1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * ($(Vthresh) * $(LambdaV) + $(RevISyn));"))
+                            transition=transition_code))
 
                     # Prepend (as it accesses the pre-reset value of V) 
                     # code to reset t[ write spike time and I-V to ring buffer
@@ -615,6 +654,11 @@ class EventPropCompiler(Compiler):
             base_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, True)
+
+    @property
+    def regulariser_enabled(self):
+        return (self.reg_lambda_lower != 0.0 
+                or self.reg_lambda_upper != 0.0)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
