@@ -562,7 +562,15 @@ class EventPropCompiler(Compiler):
                         model_copy.add_var("SpikeCount", "int", 0)
                         model_copy.add_var("SpikeCountBack", "int", 0,
                                            VarAccess_READ_ONLY_DUPLICATE)
-                        
+
+                        # Add parameters for regulariser
+                        model_copy.add_param("RegNuUpper", "int",
+                                             self.reg_nu_upper)
+                        model_copy.add_param("RegLambdaUpper", "int",
+                                             self.reg_lambda_upper)
+                        model_copy.add_param("RegLambdaLower", "int",
+                                             self.reg_lambda_lower)
+
                         # Add reset variables to copy SpikeCount
                         # into SpikeCountBack and zero SpikeCount
                         additional_reset_vars.extend(
