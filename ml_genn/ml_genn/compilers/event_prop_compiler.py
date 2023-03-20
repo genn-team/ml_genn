@@ -351,7 +351,7 @@ class EventPropCompiler(Compiler):
                     model_copy.add_var("RingReadOffset", "int", 0)
                         
                     # Add EGP for softmax V ring variable
-                    ring_size = self.batch_size * np.prod(pop.shape) * self.example_timesteps
+                    ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
                     model_copy.add_egp("RingSoftmaxV", "scalar*", 
                                        np.empty(ring_size, dtype=np.float32))
                     
