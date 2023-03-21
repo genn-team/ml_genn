@@ -19,7 +19,7 @@ from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import LeakyIntegrate, LeakyIntegrateFire
 from ..optimisers import Optimiser
-from ..readouts import AvgVar, MaxVar, SumVar
+from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -319,7 +319,7 @@ class EventPropCompiler(Compiler):
                 model_copy.add_var("Softmax", "scalar", 0.0,
                                    VarAccess_READ_ONLY_DUPLICATE)
 
-                # If readout is AverageVar or SumVar
+                # If readout is AvgVar or SumVar
                 if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                     model_copy.prepend_sim_code(
                         f"""
@@ -336,6 +336,26 @@ class EventPropCompiler(Compiler):
                            else "VAvg")
                     compile_state.batch_softmax_populations.append(
                         (pop, var, "Softmax"))
+
+                    # Add custom update to reset state
+                    compile_state.add_neuron_reset_vars(
+                        pop, model_copy.reset_vars, False)
+                # Otherwise, if readout is AvgVarExpWeight
+                elif isinstance(pop.neuron.readout, AvgVarExpWeight):
+                    model_copy.prepend_sim_code(
+                        f"""
+                        const scalar localT = $(t) / {self.dt * self.example_timesteps};
+                        if ($(Trial) > 0) {{
+                            const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
+                            $(LambdaV) += ((g * exp(-(1.0 - localT))) / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                        }}
+                        
+                        // Forward pass
+                        """)
+
+                    # Add custom updates to calculate softmax from VAvg
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "VAvg", "Softmax"))
 
                     # Add custom update to reset state
                     compile_state.add_neuron_reset_vars(
@@ -496,9 +516,9 @@ class EventPropCompiler(Compiler):
                         model_copy.add_param("RegNuUpper", "int",
                                              self.reg_nu_upper)
                         model_copy.add_param("RegLambdaUpper", "int",
-                                             self.reg_lambda_upper)
+                                             self.reg_lambda_upper / self.batch_size)
                         model_copy.add_param("RegLambdaLower", "int",
-                                             self.reg_lambda_lower)
+                                             self.reg_lambda_lower / self.batch_size)
 
                         # Add reset variables to copy SpikeCount
                         # into SpikeCountBack and zero SpikeCount
@@ -509,10 +529,10 @@ class EventPropCompiler(Compiler):
                         # Add additional transition code to apply regularisation
                         transition_code += """
                         if ($(SpikeCountBack) > $(RegNuUpper)) {
-                            $(LambdaV) -= $(RegLambdaUpper) * ($(SpikeCountBack) - $(RegNuUpper)) / $(num_batch);
+                            $(LambdaV) -= $(RegLambdaUpper) * ($(SpikeCountBack) - $(RegNuUpper));
                         }
                         else {
-                            $(LambdaV) -= $(RegLambdaLower) * ($(SpikeCountBack) - $(RegNuUpper)) / $(num_batch);
+                            $(LambdaV) -= $(RegLambdaLower) * ($(SpikeCountBack) - $(RegNuUpper));
                         }
                         """
 

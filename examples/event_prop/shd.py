@@ -18,7 +18,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 NUM_HIDDEN = 256
-BATCH_SIZE = 256
+BATCH_SIZE = 32
 NUM_EPOCHS = 100
 EXAMPLE_TIME = 20.0
 DT = 1.0
@@ -60,11 +60,11 @@ with network:
                                            integrate_during_refrac=False,
                                            scale_i=True),
                         NUM_HIDDEN)
-    output = Population(LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="avg_var"),
+    output = Population(LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="avg_var_exp_weight"),
                         num_output)
 
     # Connections
-    Connection(input, hidden, Dense(Normal(mean=0.02, sd=0.01)),
+    Connection(input, hidden, Dense(Normal(mean=0.03, sd=0.01)),
                Exponential(5.0))
     Connection(hidden, hidden, Dense(Normal(mean=0.0, sd=0.02)),
                Exponential(5.0))
@@ -75,8 +75,9 @@ max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 per_timestep_loss=True, max_spikes=1500,
-                                 optimiser=Adam(5e-3), batch_size=BATCH_SIZE,
+                                 reg_lambda_upper=4e-09, reg_lambda_lower=4e-09, 
+                                 reg_nu_upper=14, max_spikes=1500, 
+                                 optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -100,9 +101,9 @@ if TRAIN:
             print(f"Gradient batch reduce time = {compiled_net.genn_model.get_custom_update_time('GradientBatchReduce')}")
             print(f"Gradient learn time = {compiled_net.genn_model.get_custom_update_time('GradientLearn')}")
             print(f"Reset time = {compiled_net.genn_model.get_custom_update_time('Reset')}")
-            print(f"Softmax1 time = {compiled_net.genn_model.get_custom_update_time('Softmax1')}")
-            print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('Softmax2')}")
-            print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('Softmax3')}")
+            print(f"Softmax1 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax1')}")
+            print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax2')}")
+            print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
 else:
     # Load network state from final checkpoint
     network.load((NUM_EPOCHS - 1,), serialiser)
