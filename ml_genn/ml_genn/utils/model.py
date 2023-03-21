@@ -191,12 +191,11 @@ class Model:
 
 class CustomUpdateModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, 
-                 var_refs={}, egp_vals={}, egp_refs={}):
+                 var_refs={}, egp_vals={}):
         super(CustomUpdateModel, self).__init__(model, param_vals,
                                                 var_vals, egp_vals)
 
         self.var_refs = var_refs
-        self.egp_refs = egp_refs
 
     def add_var_ref(self, name, type, value):
         self._add_to_list("var_refs", (name, type))
@@ -204,17 +203,12 @@ class CustomUpdateModel(Model):
     
     def set_var_ref_access_mode(self, name, access_mode):
         self._set_access_model("var_refs", name, access_mode)
-    
-    def add_egp_ref(self, name, type, value):
-        self._add_to_list("egp_refs", (name, type))
-        self.egp_refs[name] = value
 
     def append_update_code(self, code):
         self._append_code("update_code", code)
     
     def process(self):
-        return (super(CustomUpdateModel, self).process() 
-                + (self.var_refs,) + (self.egp_refs,))
+        return super(CustomUpdateModel, self).process() + (self.var_refs,)
 
 
 class NeuronModel(Model):

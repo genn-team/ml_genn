@@ -14,7 +14,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 from .compiler import Compiler, ZeroInSyn
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd)
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import LeakyIntegrate, LeakyIntegrateFire
@@ -27,14 +27,12 @@ from ..utils.model import CustomUpdateModel, WeightUpdateModel
 from ..utils.network import PopulationType
 
 from copy import deepcopy
-from pygenn.genn_model import (create_egp_ref, create_var_ref,
-                               create_wu_var_ref)
+from pygenn.genn_model import create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 from ..utils.value import is_value_constant
 
-from .compiler import softmax_1_model, softmax_2_model
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -110,26 +108,22 @@ class CompileState:
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
         self.batch_softmax_populations = []
-        self.timestep_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
 
-    def add_neuron_reset_vars(self, pop, reset_vars, 
-                              reset_event_ring, reset_v_ring):
-        self._neuron_reset_vars.append((pop, reset_vars, 
-                                        reset_event_ring, reset_v_ring))
+    def add_neuron_reset_vars(self, pop, reset_vars, reset_ring):
+        self._neuron_reset_vars.append((pop, reset_vars, reset_ring))
 
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops):
         # Loop through neuron variables to reset
-        for i, (pop, vars, r_ev, r_v) in enumerate(self._neuron_reset_vars):
+        for i, (pop, reset_vars, reset_ring) in enumerate(self._neuron_reset_vars):
             # Create reset model
             model = create_reset_custom_update(
-                vars,
+                reset_vars,
                 lambda name: create_var_ref(neuron_pops[pop], name))
-
-            # If we want to add code to reset event ring buffer
-            if r_ev:
+            
+            if reset_ring:
                 # Add references to ring buffer offsets
                 model.add_var_ref("RingReadOffset", "int",
                                   create_var_ref(neuron_pops[pop],
@@ -154,23 +148,6 @@ class CompileState:
                     $(RingReadEndOffset) = $(RingWriteStartOffset);
                     $(RingWriteStartOffset) = $(RingReadOffset);
                     """)
-            # Otherwise, if we want to add code to reset a voltage ring buffer
-            elif r_v:
-                # Add references to ring buffer offsets
-                model.add_var_ref("RingReadOffset", "int",
-                                  create_var_ref(neuron_pops[pop],
-                                                 "RingReadOffset"))
-                model.add_var_ref("RingWriteOffset", "int", 
-                                  create_var_ref(neuron_pops[pop],
-                                                 "RingWriteOffset"))
-                # Add additional update code to update ring buffer offsets
-                model.append_update_code(
-                    f"""
-                    $(RingReadOffset) = $(RingWriteOffset);
-                    if ($(RingWriteOffset) >= {2 * compiler.example_timesteps}) {{
-                        $(RingWriteOffset) = 0;
-                    }}
-                    """)
             
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
@@ -189,6 +166,7 @@ class UpdateTrial(Callback):
         # Set extra global parameter to batch ID
         # **TODO** this should be modifiable parameter in GeNN 5
         self.genn_pop.extra_global_params["Trial"].view[:] = batch
+
 
 weight_update_model = {
     "param_name_types": [("TauSyn", "scalar")],
@@ -263,21 +241,19 @@ neuron_reset = Template(
 class EventPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
-                 reg_nu_upper: float = 0.0, per_timestep_loss: bool = False,
-                 max_spikes: int = 500, dt: float = 1.0, batch_size: int = 1, 
-                 rng_seed: int = 0, kernel_profiling: bool = False, 
-                 **genn_kwargs):
+                 reg_nu_upper: float = 0.0, max_spikes: int = 500, 
+                 dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0, 
+                 kernel_profiling: bool = False, **genn_kwargs):
         super(EventPropCompiler, self).__init__(dt, batch_size, rng_seed,
                                                 kernel_profiling,
                                                 prefer_in_memory_connect=True,
                                                 **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses
+        self.max_spikes = max_spikes
         self.reg_lambda_upper = reg_lambda_upper
         self.reg_lambda_lower = reg_lambda_lower
         self.reg_nu_upper = reg_nu_upper
-        self.per_timestep_loss = per_timestep_loss
-        self.max_spikes = max_spikes
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
@@ -295,7 +271,6 @@ class EventPropCompiler(Compiler):
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             # Check loss function is compatible
-            # **TODO** categorical crossentropy i.e. one-hot encoded
             if not isinstance(compile_state.losses[pop], 
                               SparseCategoricalCrossentropy):
                 raise NotImplementedError(
@@ -340,109 +315,63 @@ class EventPropCompiler(Compiler):
                 model_copy.add_egp("Trial", "unsigned int", 0)
                 compile_state.update_trial_pops.append(pop)
 
-                # If we want to calculate per-timestep loss
-                if self.per_timestep_loss:
-                    # Get reset vars before we add ring-buffer variables
-                    reset_vars = model_copy.reset_vars
-                    
-                    # Add variables to hold offsets for 
-                    # reading and writing ring variables
-                    model_copy.add_var("RingWriteOffset", "int", 0)
-                    model_copy.add_var("RingReadOffset", "int", 0)
+                # Add state variable to hold softmax of output
+                model_copy.add_var("Softmax", "scalar", 0.0,
+                                   VarAccess_READ_ONLY_DUPLICATE)
+
+                # If readout is AverageVar or SumVar
+                if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
+                    model_copy.prepend_sim_code(
+                        f"""
+                        if ($(Trial) > 0) {{
+                            const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
+                            $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                        }}
                         
-                    # Add EGP for softmax V ring variable
-                    ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
-                    model_copy.add_egp("RingSoftmaxV", "scalar*", 
-                                       np.empty(ring_size, dtype=np.float32))
-                    
-                    # If readout is AverageVar or SumVar
-                    if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
-                        model_copy.prepend_sim_code(
-                            f"""
-                            const int ringOffset = ($(batch) * $(num) * {2 * self.example_timesteps}) + ($(id) * {2 * self.example_timesteps});
-                            if ($(Trial) > 0) {{
-                                $(RingReadOffset)--;
-                                const scalar softmax = $(RingSoftmaxV)[ringOffset + $(RingReadOffset)];
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - softmax) : -softmax;
-                                $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
-                            }}
-                            
-                            // Forward pass
-                            """)
+                        // Forward pass
+                        """)
 
-                        # Add custom updates to calculate 
-                        # softmax from V and write directly to buffer
-                        compile_state.timestep_softmax_populations.append(
-                            (pop, "V"))
+                    # Add custom updates to calculate softmax from VSum or VAvg
+                    var = ("VSum" if isinstance(pop.neuron.readout, SumVar)
+                           else "VAvg")
+                    compile_state.batch_softmax_populations.append(
+                        (pop, var, "Softmax"))
 
-                        # Add custom update to reset state
-                        compile_state.add_neuron_reset_vars(
-                            pop, reset_vars, False, True)
-                    # Otherwise, unsupported readout type
-                    else:
-                        raise NotImplementedError(
-                            f"EventProp compiler doesn't support "
-                            f"{type(pop.neuron.readout).__name__} readouts")
-                # Otherwise, we want to calculate loss over each trial
-                else:
-                    # Add state variable to hold softmax of output
-                    model_copy.add_var("Softmax", "scalar", 0.0,
+                    # Add custom update to reset state
+                    compile_state.add_neuron_reset_vars(
+                        pop, model_copy.reset_vars, False)
+                # Otherwise, if readout is MaxVar
+                elif isinstance(pop.neuron.readout, MaxVar):
+                    # Add state variable to hold vmax from previous trial
+                    model_copy.add_var("VMaxTimeBack", "scalar", 0.0,
                                        VarAccess_READ_ONLY_DUPLICATE)
-
-                    # If readout is AverageVar or SumVar
-                    if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
-                        model_copy.prepend_sim_code(
-                            f"""
-                            if ($(Trial) > 0) {{
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
-                            }}
-                            
-                            // Forward pass
-                            """)
-
-                        # Add custom updates to calculate 
-                        # softmax from VSum or VAvg
-                        var = ("VSum" if isinstance(pop.neuron.readout, SumVar)
-                               else "VAvg")
-                        compile_state.batch_softmax_populations.append(
-                            (pop, var, "Softmax"))
-
-                        # Add custom update to reset state
-                        compile_state.add_neuron_reset_vars(
-                            pop, model_copy.reset_vars, False, False)
-                    # Otherwise, if readout is MaxVar
-                    elif isinstance(pop.neuron.readout, MaxVar):
-                        # Add state variable to hold vmax from previous trial
-                        model_copy.add_var("VMaxTimeBack", "scalar", 0.0,
-                                           VarAccess_READ_ONLY_DUPLICATE)
-                                           
-                        model_copy.prepend_sim_code(
-                            f"""
-                            if ($(Trial) > 0 && fabs(backT - $(VMaxTimeBack)) < 1e-3*DT) {{
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})); // simple Euler
-                            }}
-                            
-                            // Forward pass
-                            """)
-
-                        # Add custom updates to calculate softmax from VMax
-                        compile_state.batch_softmax_populations.append(
-                            (pop, "VMax", "Softmax"))
+                                       
+                    model_copy.prepend_sim_code(
+                        f"""
+                        if ($(Trial) > 0 && fabs(backT - $(VMaxTimeBack)) < 1e-3*DT) {{
+                            const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
+                            $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})); // simple Euler
+                        }}
                         
-                        # Add custom update to reset state
-                        # **NOTE** reset VMaxTimeBack first so VMaxTime isn't zeroed
-                        # **TODO** time type
-                        compile_state.add_neuron_reset_vars(
-                            pop, 
-                            [("VMaxTimeBack", "scalar", "VMaxTime")] + model_copy.reset_vars, 
-                            False, False)
-                    # Otherwise, unsupported readout type
-                    else:
-                        raise NotImplementedError(
-                            f"EventProp compiler doesn't support "
-                            f"{type(pop.neuron.readout).__name__} readouts")
+                        // Forward pass
+                        """)
+
+                    # Add custom updates to calculate softmax from VMax
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "VMax", "Softmax"))
+                    
+                    # Add custom update to reset state
+                    # **NOTE** reset VMaxTimeBack first so VMaxTime isn't zeroed
+                    # **TODO** time type
+                    compile_state.add_neuron_reset_vars(
+                        pop, 
+                        [("VMaxTimeBack", "scalar", "VMaxTime")] + model_copy.reset_vars, 
+                        False)
+                # Otherwise, unsupported readout type
+                else:
+                    raise NotImplementedError(
+                        f"EventProp compiler doesn't support "
+                        f"{type(pop.neuron.readout).__name__} readouts")
 
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
@@ -457,7 +386,7 @@ class EventPropCompiler(Compiler):
                 # Add second reset custom update to reset YTrueBack to YTrue
                 # **NOTE** seperate as these are SHARED_NEURON variables
                 compile_state.add_neuron_reset_vars(
-                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+                    pop, [("YTrueBack", "uint8_t", "YTrue")], False)
             # Otherwise, neuron type is unsupported
             else:
                 raise NotImplementedError(
@@ -493,7 +422,7 @@ class EventPropCompiler(Compiler):
                 # Add reset logic to reset any state 
                 # variables from the original model
                 compile_state.add_neuron_reset_vars(pop, model.reset_vars,
-                                                    True, False)
+                                                    True)
 
                 # Add code to start of sim code to run 
                 # backwards pass and handle back spikes
@@ -594,7 +523,7 @@ class EventPropCompiler(Compiler):
                     # as well as any state variables from the original model
                     compile_state.add_neuron_reset_vars(
                         pop, model.reset_vars + additional_reset_vars,
-                        True, False)
+                        True)
 
                     # Add code to start of sim code to run backwards pass 
                     # and handle back spikes with correct LIF dynamics
@@ -686,18 +615,11 @@ class EventPropCompiler(Compiler):
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "Gradient"), genn_model))
         
-        # Add per-batch softmax custom updates for each population that requires them
+        # Add softmax custom updates for each population that requires them
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
             genn_pop = neuron_populations[p]
             self.add_softmax_custom_updates(genn_model, genn_pop,
-                                            i, o, "Batch")
-
-        # Add per-timestep softmax custom updates for each population that requires them
-        for i, (p, i) in enumerate(compile_state.timestep_softmax_populations):
-            # Create custom update model to implement 
-            # first softmax pass and add to model
-            genn_pop = neuron_populations[p]
-            self._add_softmax_buffer_custom_updates(genn_model, genn_pop, i)
+                                            i, o, p.name, "Batch")
 
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
@@ -729,12 +651,6 @@ class EventPropCompiler(Compiler):
             base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax2"))
             base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax3"))
 
-        # If softmax calculation is required at end of timestep, add callbacks
-        if len(compile_state.timestep_softmax_populations) > 0:
-            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
-            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
-            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
-
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
             base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
@@ -750,59 +666,7 @@ class EventPropCompiler(Compiler):
     def regulariser_enabled(self):
         return (self.reg_lambda_lower != 0.0 
                 or self.reg_lambda_upper != 0.0)
-    
-    def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
-                                           input_var_name: str):
-        # Create custom update model to implement 
-        # first softmax pass and add to model
-        softmax_1 = CustomUpdateModel(
-            softmax_1_model, {}, {"MaxVal": 0.0},
-            {"Val": create_var_ref(genn_pop, input_var_name)})
 
-        genn_softmax_1 = self.add_custom_update(
-            genn_model, softmax_1, 
-            "Softmax1",
-            "CUSoftmax1" + genn_pop.name)
-
-        # Create custom update model to implement 
-        # second softmax pass and add to model
-        softmax_2 = CustomUpdateModel(
-            softmax_2_model, {}, {"SumExpVal": 0.0},
-            {"Val": create_var_ref(genn_pop, input_var_name),
-             "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
-
-        genn_softmax_2 = self.add_custom_update(
-            genn_model, softmax_2, 
-            "Softmax2",
-            "CUSoftmax2" + genn_pop.name)
-
-        # Create custom update model to implement 
-        # third softmax pass and add to model
-        softmax_3 = CustomUpdateModel(
-            {
-                "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
-                             ("MaxVal", "scalar", VarAccessMode_READ_ONLY),
-                             ("SumExpVal", "scalar", VarAccessMode_READ_ONLY),
-                             ("RingWriteOffset", "int")],
-                "extra_global_param_refs": [("RingSoftmaxV", "scalar*")],
-                "update_code": f"""
-                const int ringOffset = ($(batch) * $(num) * {2 * self.example_timesteps}) + ($(id) * {2 * self.example_timesteps});
-                $(RingSoftmaxV)[ringOffset + $(RingWriteOffset)]= exp($(Val) - $(MaxVal)) / $(SumExpVal);
-                $(RingWriteOffset)++;
-                """}, 
-            {}, {},
-            {"Val": create_var_ref(genn_pop, input_var_name),
-             "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
-             "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
-             "RingWriteOffset": create_var_ref(genn_pop, "RingWriteOffset")},
-            {},
-            {"RingSoftmaxV": create_egp_ref(genn_pop, "RingSoftmaxV")})
-
-        self.add_custom_update(
-            genn_model, softmax_3, 
-            "Softmax3", 
-            "CUSoftmax3" + genn_pop.name)
-            
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1

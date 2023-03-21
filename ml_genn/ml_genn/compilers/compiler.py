@@ -183,8 +183,7 @@ class Compiler:
                           group: str, name: str):
         # Process model
         (cu_model, cu_param_vals, cu_var_vals,
-         cu_egp_vals, cu_var_egp_vals, 
-         cu_var_refs, cu_egp_refs) = model.process()
+         cu_egp_vals, cu_var_egp_vals, cu_var_refs) = model.process()
 
         # Create custom update model
         genn_cum = create_custom_custom_update_class("CustomUpdate",
@@ -193,8 +192,7 @@ class Compiler:
         # Add custom update
         genn_cu = genn_model.add_custom_update(name, group,
                                                genn_cum, cu_param_vals, 
-                                               cu_var_vals, cu_var_refs,
-                                               cu_egp_refs)
+                                               cu_var_vals, cu_var_refs)
 
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
@@ -202,6 +200,7 @@ class Compiler:
     
     def add_softmax_custom_updates(self, genn_model, genn_pop, 
                                    input_var_name: str, output_var_name: str,
+                                   custom_update_name_suffix: str, 
                                    custom_update_group_prefix: str = ""):
         # Create custom update model to implement 
         # first softmax pass and add to model
@@ -212,7 +211,7 @@ class Compiler:
         genn_softmax_1 = self.add_custom_update(
             genn_model, softmax_1, 
             custom_update_group_prefix + "Softmax1",
-            "CUSoftmax1" + genn_pop.name)
+            "CUSoftmax1" + custom_update_name_suffix)
 
         # Create custom update model to implement 
         # second softmax pass and add to model
@@ -224,7 +223,7 @@ class Compiler:
         genn_softmax_2 = self.add_custom_update(
             genn_model, softmax_2, 
             custom_update_group_prefix + "Softmax2",
-            "CUSoftmax2" + genn_pop.name)
+            "CUSoftmax2" + custom_update_name_suffix)
 
         # Create custom update model to implement 
         # third softmax pass and add to model
@@ -238,7 +237,7 @@ class Compiler:
         self.add_custom_update(
             genn_model, softmax_3, 
             custom_update_group_prefix + "Softmax3", 
-            "CUSoftmax3" + genn_pop.name)
+            "CUSoftmax3" + custom_update_name_suffix)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
