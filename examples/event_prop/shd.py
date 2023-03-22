@@ -19,7 +19,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
 
 NUM_HIDDEN = 256
 BATCH_SIZE = 32
-NUM_EPOCHS = 100
+NUM_EPOCHS = 300
 EXAMPLE_TIME = 20.0
 DT = 1.0
 SPARSITY = 1.0

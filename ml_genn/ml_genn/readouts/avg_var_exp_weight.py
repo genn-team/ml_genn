@@ -34,8 +34,9 @@ class AvgVarExpWeight(Readout):
 
         # Add code to update average variable
         scale = 1.0 / kwargs["example_timesteps"]
+        local_t_scale = 1.0 / (kwargs["dt"] * kwargs["example_timesteps"])
         model_copy.append_sim_code(
-            f"$({avg_var_name}) += exp(-localT) * {scale} * $({self.output_var_name});")
+            f"$({avg_var_name}) += exp(-($(t) * {local_t_scale})) * {scale} * $({self.output_var_name});")
 
         # Add average variable with same type as output
         # variable and initialise to zero

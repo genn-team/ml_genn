@@ -279,7 +279,7 @@ class EventPropCompiler(Compiler):
 
             # Add output logic to model
             model_copy = pop.neuron.readout.add_readout_logic(
-                model_copy, max_time_required=True, 
+                model_copy, max_time_required=True, dt=self.dt,
                 example_timesteps=self.example_timesteps)
 
             # Add variable, shared across neurons to hold true label for batch
@@ -342,12 +342,12 @@ class EventPropCompiler(Compiler):
                         pop, model_copy.reset_vars, False)
                 # Otherwise, if readout is AvgVarExpWeight
                 elif isinstance(pop.neuron.readout, AvgVarExpWeight):
+                    local_t_scale = 1.0 / (self.dt * self.example_timesteps)
                     model_copy.prepend_sim_code(
                         f"""
-                        const scalar localT = $(t) / {self.dt * self.example_timesteps};
                         if ($(Trial) > 0) {{
                             const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                            $(LambdaV) += ((g * exp(-(1.0 - localT))) / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                            $(LambdaV) += ((g * exp(-(1.0 - ($(t) * {local_t_scale})))) / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
                         }}
                         
                         // Forward pass
