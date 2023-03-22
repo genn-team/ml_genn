@@ -7,6 +7,7 @@ from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
+from ..readouts import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 
@@ -20,11 +21,10 @@ from ..metrics import default_metrics
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, softmax,
-                 k: int, pop_pipeline_depth: dict):
+                 connection_populations, k: int,
+                 pop_pipeline_depth: dict):
         super(CompiledFewSpikeNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations,
-            softmax, k)
+              genn_model, neuron_populations, connection_populations, k)
 
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
@@ -244,7 +244,11 @@ class FewSpikeCompiler(Compiler):
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
-            # **TODO** check readout is Var
+            # Check readout is supported
+            if not isinstance(pop.neuron.readout, Var):
+                raise NotImplementedError(
+                    "FewSpike models only support output "
+                    "neurons with Var readout")
             
             # Add readout logic to model
             model = pop.neuron.readout.add_readout_logic(model)
