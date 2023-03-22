@@ -10,6 +10,9 @@ from pygenn.genn_model import create_custom_init_var_snippet_class
 from ..utils.connectivity import get_param_2d
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_DENSE_PROCEDURALG)
+
 genn_snippet = create_custom_init_var_snippet_class(
     "avepool2d_dense",
 
@@ -106,8 +109,8 @@ class AvgPoolDense2D(Connectivity):
         pool_ih, pool_iw, pool_ic = connection.source().shape
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
-        conn = ("DENSE_INDIVIDUALG" if prefer_in_memory
-                else "DENSE_PROCEDURALG")
+        conn = (SynapseMatrixType_DENSE_INDIVIDUALG if prefer_in_memory
+                else SynapseMatrixType_DENSE_PROCEDURALG)
 
         wu_var_val = Wrapper(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,

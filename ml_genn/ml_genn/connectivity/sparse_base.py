@@ -4,6 +4,8 @@ from ..utils.value import InitValue, ValueDescriptor
 
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG)
 
 class SparseBase(Connectivity):
     pre_ind = ValueDescriptor("pre_ind")
@@ -28,22 +30,24 @@ class SparseBase(Connectivity):
                                        "sparse connectivity must be "
                                        "provided as arrays")
             # Use sparse connectivity
-            return ConnectivitySnippet(snippet=None,
-                                       matrix_type="SPARSE_INDIVIDUALG",
-                                       weight=self.weight, delay=self.delay,
-                                       pre_ind=self.pre_ind,
-                                       post_ind=self.post_ind)
+            return ConnectivitySnippet(
+                snippet=None,
+                matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                weight=self.weight, delay=self.delay,
+                pre_ind=self.pre_ind, post_ind=self.post_ind)
                 
         # Otherwise, if either weight or delay is an array or we prefer in-memory
         # connectivity, only option is to use SPARSE_INDIVIDUALG
         elif (is_value_array(self.weight) or is_value_array(self.delay)
                 or prefer_in_memory):
-            return ConnectivitySnippet(snippet=snippet,
-                                       matrix_type="SPARSE_INDIVIDUALG",
-                                       weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(
+                snippet=snippet,
+                matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                weight=self.weight, delay=self.delay)
         # Otherwise, we can use PROCEDURAL_PROCEDURALG
         # **NOTE** same as PROCEDURAL_GLOBALG for constant weights/delays
         else:
-            return ConnectivitySnippet(snippet=snippet,
-                                       matrix_type="PROCEDURAL_PROCEDURALG",
-                                       weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(
+                snippet=snippet,
+                matrix_type=SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                weight=self.weight, delay=self.delay)

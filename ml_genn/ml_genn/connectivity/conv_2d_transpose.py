@@ -11,6 +11,9 @@ from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG)
+
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "conv_2d_transpose",
 
@@ -121,11 +124,13 @@ class Conv2DTranspose(Connectivity):
             delay = (KernelInit(self.delay)
                      if is_value_array(self.delay)
                      else self.delay)
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="SPARSE_INDIVIDUALG",
-                                       weight=weight, delay=delay)
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                weight=weight, delay=delay)
         else:
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="PROCEDURAL_KERNELG",
-                                       weight=self.weight,
-                                       delay=self.delay)
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                weight=self.weight,
+                delay=self.delay)

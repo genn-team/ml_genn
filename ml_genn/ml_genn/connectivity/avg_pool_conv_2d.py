@@ -13,6 +13,10 @@ from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
+
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_conv_2d",
 
@@ -172,9 +176,10 @@ class AvgPoolConv2D(Connectivity):
                 "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="TOEPLITZ_KERNELG",
-                                       weight=scaled_weight, delay=self.delay)
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType_TOEPLITZ_KERNELG,
+                weight=scaled_weight, delay=self.delay)
         else:
             conn_init = init_connectivity(genn_snippet, {
                 "pool_kh": pool_kh, "pool_kw": pool_kw,
@@ -187,9 +192,10 @@ class AvgPoolConv2D(Connectivity):
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
             if prefer_in_memory:
-                return ConnectivitySnippet(snippet=conn_init,
-                                           matrix_type="PROCEDURAL_KERNELG",
-                                           weight=scaled_weight,
+                return ConnectivitySnippet(
+                    snippet=conn_init,
+                    matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                    weight=scaled_weight,
                                            delay=self.delay)
             else:
                 # If weights/delays are arrays, use kernel initializer
@@ -200,6 +206,7 @@ class AvgPoolConv2D(Connectivity):
                 delay = (KernelInit(self.delay)
                          if is_value_array(self.delay)
                          else self.delay)
-                return ConnectivitySnippet(snippet=conn_init,
-                                           matrix_type="SPARSE_INDIVIDUALG",
-                                           weight=weight, delay=delay)
+                return ConnectivitySnippet(
+                    snippet=conn_init,
+                    matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                    weight=weight, delay=delay)
