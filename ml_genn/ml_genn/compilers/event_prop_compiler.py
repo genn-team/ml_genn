@@ -499,10 +499,12 @@ class EventPropCompiler(Compiler):
                     transition_code = """
                         $(LambdaV) += (1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * ($(Vthresh) * $(LambdaV) + $(RevISyn));
                         """
-                    
+
+                    # List of variables aside from those in base 
+                    # model we want to reset every batch
                     additional_reset_vars = [("LambdaV", "scalar", 0.0),
                                              ("LambdaI", "scalar", 0.0)]
-                    
+
                     # If regularisation is enabled
                     # **THINK** is this LIF-specific?
                     if self.regulariser_enabled:
@@ -538,7 +540,7 @@ class EventPropCompiler(Compiler):
 
                         # Add code to update SpikeCount in forward reset code
                         model_copy.append_reset_code("$(SpikeCount)++;")
-                    
+
                     # Add reset logic to reset adjoint state variables 
                     # as well as any state variables from the original model
                     compile_state.add_neuron_reset_vars(
@@ -558,7 +560,7 @@ class EventPropCompiler(Compiler):
                             transition=transition_code))
 
                     # Prepend (as it accesses the pre-reset value of V) 
-                    # code to reset t[ write spike time and I-V to ring buffer
+                    # code to reset to write spike time and I-V to ring buffer
                     model_copy.prepend_reset_code(
                         neuron_reset.substitute(
                             max_spikes=self.max_spikes,
