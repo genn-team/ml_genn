@@ -585,8 +585,8 @@ class EventPropCompiler(Compiler):
         # **THINK** IS scaling different?
         return model
     
-    def build_weight_update_model(self, conn, weight, delay, compile_state):
-        if not is_value_constant(delay):
+    def build_weight_update_model(self, conn, connect_snippet, compile_state):
+        if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("EventProp compiler only "
                                       "support heterogeneous delays")
         
@@ -601,7 +601,8 @@ class EventPropCompiler(Compiler):
         # Create basic weight update model
         wum = WeightUpdateModel(model=deepcopy(weight_update_model),
                                 param_vals={"TauSyn": tau_syn},
-                                var_vals={"g": weight, "Gradient": 0.0})
+                                var_vals={"g": connect_snippet.weight,
+                                          "Gradient": 0.0})
         
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron

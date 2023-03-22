@@ -14,6 +14,7 @@ from .. import Connection, Population, Network
 from ..callbacks import Callback
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
+from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import deepcopy
@@ -152,13 +153,13 @@ class Compiler:
         return model
 
     def build_weight_update_model(self, connection: Connection,
-                                  weight: InitValue, delay: InitValue,
+                                  connect_snippet: ConnectivitySnippet,
                                   compile_state):
         # Build parameter values
-        param_vals = {"g": weight}
-        het_delay = not is_value_constant(delay)
+        param_vals = {"g": connect_snippet.weight}
+        het_delay = not is_value_constant(connect_snippet.delay)
         if het_delay:
-            param_vals["d"] = delay
+            param_vals["d"] = connect_snippet.delay
 
         # If source neuron model defines a negative threshold condition
         src_pop = connection.source()
@@ -336,8 +337,8 @@ class Compiler:
             (wum, wum_param_vals, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals) =\
-                self.build_weight_update_model(conn, connect_snippet.weight,
-                                               delay, compile_state).process()
+                self.build_weight_update_model(conn, connect_snippet,
+                                               compile_state).process()
 
             # Create custom weight update model
             genn_wum = create_custom_weight_update_class("WeightUpdateModel",

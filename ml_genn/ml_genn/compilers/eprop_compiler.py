@@ -371,8 +371,8 @@ class EPropCompiler(Compiler):
         # Return model
         return model
     
-    def build_weight_update_model(self, conn, weight, delay, compile_state):
-        if not is_value_constant(delay):
+    def build_weight_update_model(self, conn, connect_snippet, compile_state):
+        if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
         
@@ -387,7 +387,8 @@ class EPropCompiler(Compiler):
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
-                var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
+                var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
+                          "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
@@ -400,7 +401,7 @@ class EPropCompiler(Compiler):
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
-                var_vals={"g": weight, "eFiltered": 0.0,
+                var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
@@ -410,7 +411,7 @@ class EPropCompiler(Compiler):
             wum = WeightUpdateModel(
                 model=output_learning_model,
                 param_vals={"Alpha": alpha},
-                var_vals={"g": weight, "DeltaG": 0.0},
+                var_vals={"g": connect_snippet.weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0})
 
             # Add connection to list of feedback connections
