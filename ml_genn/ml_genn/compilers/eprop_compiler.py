@@ -22,6 +22,8 @@ from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.value import is_value_constant
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG)
 from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
 
@@ -231,9 +233,11 @@ class EPropCompiler(Compiler):
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True, **genn_kwargs):
-        super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
+        supported_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                  SynapseMatrixType_DENSE_INDIVIDUALG]
+        super(EPropCompiler, self).__init__(supported_matrix_types, dt,
+                                            batch_size, rng_seed,
                                             kernel_profiling,
-                                            prefer_in_memory_connect=True,
                                             **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses

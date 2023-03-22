@@ -148,7 +148,7 @@ class AvgPoolConv2D(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of AvgPoolConv2D kernel")
 
-    def get_snippet(self, connection, prefer_in_memory):
+    def get_snippet(self, connection, supported_matrix_type):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape
@@ -165,10 +165,23 @@ class AvgPoolConv2D(Connectivity):
 
         scaled_weight = self.weight.flatten() / (pool_kh * pool_kw)
 
-        if (not prefer_in_memory and conv_sh == 1 and conv_sw == 1
+        # Build list of available matrix types, 
+        # adding Toeplitz of constraints are met
+        available_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                  SynapseMatrixType_PROCEDURAL_KERNELG]
+        if (conv_sh == 1 and conv_sw == 1
             and (self.conv_padding is not PadMode.SAME
                  or ((self.conv_size[0] % 2) != 0
                      and (self.conv_size[1] % 2) != 0))):
+            available_matrix_types.append(SynapseMatrixType_TOEPLITZ_KERNELG)
+
+        # Get best supported connectivity choice
+        best_matrix_type = supported_matrix_type.get_best(
+            available_matrix_types)
+        if best_matrix_type is None:
+            raise NotImplementedError("Compiler does not support "
+                                      "AvgPoolConv2D connectivity")
+        elif best_matrix_type == SynapseMatrixType_TOEPLITZ_KERNELG:
             conn_init = init_toeplitz_connectivity("AvgPoolConv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
                 "pool_kh": pool_kh, "pool_kw": pool_kw,
@@ -191,7 +204,7 @@ class AvgPoolConv2D(Connectivity):
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-            if prefer_in_memory:
+            if best_matrix_type == SynapseMatrixType_PROCEDURAL_KERNELG:
                 return ConnectivitySnippet(
                     snippet=conn_init,
                     matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,

@@ -16,6 +16,11 @@ from ..utils.module import get_object_mapping
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..metrics import default_metrics
 
 
@@ -187,9 +192,22 @@ class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  prefer_in_memory_connect: bool = True, **genn_kwargs):
-        super(FewSpikeCompiler, self).__init__(dt, batch_size, rng_seed,
+        # Determine matrix type order of preference based on flag
+        if prefer_in_memory_connect:
+            supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG,
+                                     SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG]
+        else:
+            supported_matrix_type = [SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                     SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG]
+        super(FewSpikeCompiler, self).__init__(supported_matrix_type, dt,
+                                               batch_size, rng_seed,
                                                kernel_profiling,
-                                               prefer_in_memory_connect,
                                                **genn_kwargs)
         self.k = k
 

@@ -8,7 +8,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_NEURON_MAX,
                                         VarAccess_REDUCE_NEURON_SUM,
                                         VarAccessMode_READ_ONLY)
-from typing import Optional
+from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
@@ -107,7 +107,23 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
     return model
 
-
+class SupportedMatrixType:
+    def __init__(self, supported: List[int]):
+        # Build dictionary of supported connectivity types and order
+        self._supported = {v: i for i, v in enumerate(supported)}
+    
+    def get_best(self, available: List[int]) -> Optional[int]:
+        # Intersect supported connectivity types with those that are available
+        possible = self._supported.keys() & available
+        
+        # If there are no possible options
+        if len(possible) == 0:
+            return None
+        # Otherwise, return the connectivity with 
+        # the highest priority from possible
+        else:
+            return min(possible, key=lambda p: self._supported[p])
+        
 class ZeroInSyn(Callback):
     def __init__(self, genn_syn_pop, example_timesteps: int):
         self.genn_syn_pop = genn_syn_pop
@@ -120,14 +136,14 @@ class ZeroInSyn(Callback):
 
 
 class Compiler:
-    def __init__(self, dt: float = 1.0, batch_size: int = 1,
-                 rng_seed: int = 0, kernel_profiling: bool = False,
-                 prefer_in_memory_connect : bool = True, **genn_kwargs):
+    def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
+                 batch_size: int = 1, rng_seed: int = 0, 
+                 kernel_profiling: bool = False, **genn_kwargs):
         self.dt = dt
         self.batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
-        self.prefer_in_memory_connect = prefer_in_memory_connect
+        self.supported_matrix_type = SupportedMatrixType(supported_matrix_type)
         self.genn_kwargs = genn_kwargs
 
     def pre_compile(self, network: Network, **kwargs):
@@ -327,7 +343,7 @@ class Compiler:
             # Get connectivity init snippet
             connect_snippet =\
                 conn.connectivity.get_snippet(conn,
-                                              self.prefer_in_memory_connect)
+                                              self.supported_matrix_type)
 
             # Calculate delay
             delay = self.calculate_delay(conn, connect_snippet.delay,

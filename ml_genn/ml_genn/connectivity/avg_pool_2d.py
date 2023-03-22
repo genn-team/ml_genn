@@ -10,6 +10,9 @@ from pygenn.genn_model import (create_cmlf_class,
 from ..utils.connectivity import get_param_2d, update_target_shape
 from ..utils.value import is_value_constant
 
+from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG)
+                                 
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_2d",
 
@@ -89,7 +92,7 @@ class AvgPool2D(Connectivity):
         # Update target shape
         update_target_shape(target, self.output_shape, self.flatten)
 
-    def get_snippet(self, connection, prefer_in_memory):
+    def get_snippet(self, connection, supported_matrix_type):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape
@@ -100,12 +103,18 @@ class AvgPool2D(Connectivity):
             "pool_sh": pool_sh, "pool_sw": pool_sw,
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "pool_oh": pool_oh, "pool_ow": pool_ow, "pool_oc": pool_oc})
+        
+        # Get best supported matrix type
+        # **NOTE** no need to use globalg as constant weights 
+        # will be turned into parameters which is equivalent
+        best_matrix_type = supported_matrix_type.get_best(
+            [SynapseMatrixType_SPARSE_INDIVIDUALG, 
+             SynapseMatrixType_PROCEDURAL_PROCEDURALG])
 
-        if prefer_in_memory:
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="SPARSE_GLOBALG",
-                                       weight=self.weight, delay=self.delay)
+        if best_matrix_type is None:
+            raise NotImplementedError("Compiler does not support "
+                                      "AvgPool2D connectivity")
         else:
             return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="PROCEDURAL_GLOBALG",
+                                       matrix_type=best_conn,
                                        weight=self.weight, delay=self.delay)

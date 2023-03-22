@@ -33,6 +33,10 @@ from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 from ..utils.value import is_value_constant
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -244,9 +248,13 @@ class EventPropCompiler(Compiler):
                  reg_nu_upper: float = 0.0, max_spikes: int = 500, 
                  dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0, 
                  kernel_profiling: bool = False, **genn_kwargs):
-        super(EventPropCompiler, self).__init__(dt, batch_size, rng_seed,
+        supported_matrix_types = [SynapseMatrixType_TOEPLITZ_KERNELG,
+                                  SynapseMatrixType_PROCEDURAL_KERNELG,
+                                  SynapseMatrixType_DENSE_INDIVIDUALG,
+                                  SynapseMatrixType_SPARSE_INDIVIDUALG]
+        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
+                                                batch_size, rng_seed,
                                                 kernel_profiling,
-                                                prefer_in_memory_connect=True,
                                                 **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses

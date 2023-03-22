@@ -13,6 +13,11 @@ from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..metrics import default_metrics
 
 
@@ -249,9 +254,22 @@ class InferenceCompiler(Compiler):
                  reset_vars_between_batches=True,
                  reset_in_syn_between_batches=False,
                  **genn_kwargs):
-        super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
-                                                kernel_profiling,
-                                                prefer_in_memory_connect,
+        # Determine matrix type order of preference based on flag
+        if prefer_in_memory_connect:
+            supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG,
+                                     SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG]
+        else:
+            supported_matrix_type = [SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                     SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG]
+        super(InferenceCompiler, self).__init__(supported_matrix_type, dt,
+                                                batch_size, rng_seed,
+                                                kernel_profiling, 
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
