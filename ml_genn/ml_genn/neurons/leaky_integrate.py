@@ -1,5 +1,6 @@
 import numpy as np
 
+from typing import Optional
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
@@ -11,7 +12,7 @@ class LeakyIntegrate(Neuron):
 
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, scale_i : bool = False,
-                 softmax: bool = False, readout=None):
+                 softmax: Optional[bool] = None, readout=None):
         super(LeakyIntegrate, self).__init__(softmax, readout)
 
         self.v = v

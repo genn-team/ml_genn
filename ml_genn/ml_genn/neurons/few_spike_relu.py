@@ -1,3 +1,4 @@
+from typing import Optional
 from .few_spike_relu_input import FewSpikeReluInput
 from .neuron import Neuron
 from ..utils.model import NeuronModel
@@ -99,7 +100,7 @@ class FewSpikeRelu(Neuron):
     alpha = ConstantValueDescriptor()
 
     def __init__(self, k: int = 10, alpha: float = 25,
-                 softmax: bool = False, readout=None):
+                 softmax: Optional[bool] = None, readout=None):
         super(FewSpikeRelu, self).__init__(softmax, readout)
         self.k = k
         self.alpha = alpha
