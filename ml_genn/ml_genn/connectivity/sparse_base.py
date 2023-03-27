@@ -57,8 +57,8 @@ class SparseBase(Connectivity):
                     weight=self.weight, delay=self.delay,
                     pre_ind=self.pre_ind, post_ind=self.post_ind)
                     
-            # Otherwise, if either weight or delay is an array
-            elif array_weight_delay:
+            # Otherwise, use snippet to initialize sparse matrix
+            else:
                 return ConnectivitySnippet(
                     snippet=snippet,
                     matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
