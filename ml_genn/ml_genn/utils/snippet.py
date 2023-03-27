@@ -2,10 +2,9 @@ from collections import namedtuple
 from numbers import Number
 
 ConnectivitySnippet = namedtuple("ConnectivitySnippet",
-                                 ["snippet", "matrix_type",
-                                  "weight", "delay", 
-                                  "pre_ind", "post_ind"],
-                                 defaults=[None, None])
+                                 ["snippet", "matrix_type", "weight", "delay",
+                                  "pre_ind", "post_ind", "trainable"],
+                                 defaults=[None, None, True])
 
 InitializerSnippet = namedtuple("InitializerSnippet",
                                 ["snippet", "param_vals", "egp_vals"],

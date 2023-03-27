@@ -13,6 +13,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 
 from .compiler import Compiler, ZeroInSyn
 from .compiled_training_network import CompiledTrainingNetwork
+from .weight_update_models import static_pulse_model
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd)
 from ..connection import Connection
@@ -597,21 +598,32 @@ class EventPropCompiler(Compiler):
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("EventProp compiler only "
                                       "support heterogeneous delays")
-        
-        # **NOTE** this is probably not necessary as 
-        # it's also checked in build_neuron_model
-        if isinstance(conn.synapse, Exponential):
-            tau_syn = conn.synapse.tau
+
+        # If this is some form of trainable connectivity
+        if connect_snippet.trainable:
+            # **NOTE** this is probably not necessary as 
+            # it's also checked in build_neuron_model
+            if isinstance(conn.synapse, Exponential):
+                tau_syn = conn.synapse.tau
+            else:
+                raise NotImplementedError("EventProp compiler only "
+                                          "supports Exponential synapses")
+
+            # Create basic weight update model
+            wum = WeightUpdateModel(model=deepcopy(weight_update_model),
+                                    param_vals={"TauSyn": tau_syn},
+                                    var_vals={"g": connect_snippet.weight,
+                                              "Gradient": 0.0})
+            # Add weights to list of checkpoint vars
+            compile_state.checkpoint_connection_vars.append((conn, "g"))
+
+            # Add connection to list of connections to optimise
+            compile_state.weight_optimiser_connections.append(conn)
+        # Otherwise, e.g. it's a pooling layer
         else:
-            raise NotImplementedError("EventProp compiler only "
-                                      "supports Exponential synapses")
-                              
-        # Create basic weight update model
-        wum = WeightUpdateModel(model=deepcopy(weight_update_model),
-                                param_vals={"TauSyn": tau_syn},
-                                var_vals={"g": connect_snippet.weight,
-                                          "Gradient": 0.0})
-        
+            wum = WeightUpdateModel(model=deepcopy(static_pulse_model),
+                                    param_vals={"g": connect_snippet.weight})
+            
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
         if not hasattr(source_neuron, "set_input"):
@@ -621,12 +633,6 @@ class EventPropCompiler(Compiler):
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
                 wum.append_event_code("$(addToPre, $(g) * ($(LambdaV_post) - $(LambdaI_post)));")
-
-        # Add weights to list of checkpoint vars
-        compile_state.checkpoint_connection_vars.append((conn, "g"))
-
-        # Add connection to list of connections to optimise
-        compile_state.weight_optimiser_connections.append(conn)
 
         # Return weight update model
         return wum

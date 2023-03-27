@@ -117,4 +117,5 @@ class AvgPool2D(Connectivity):
         else:
             return ConnectivitySnippet(snippet=conn_init,
                                        matrix_type=best_conn,
-                                       weight=self.weight, delay=self.delay)
+                                       weight=self.weight, delay=self.delay,
+                                       trainable=False)
