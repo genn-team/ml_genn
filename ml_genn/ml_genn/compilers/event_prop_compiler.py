@@ -13,7 +13,6 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 
 from .compiler import Compiler, ZeroInSyn
 from .compiled_training_network import CompiledTrainingNetwork
-from .weight_update_models import static_pulse_model
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd)
 from ..connection import Connection
@@ -37,7 +36,8 @@ from ..utils.value import is_value_constant
 from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
                                  SynapseMatrixType_SPARSE_INDIVIDUALG,
                                  SynapseMatrixType_PROCEDURAL_KERNELG,
-                                 SynapseMatrixType_TOEPLITZ_KERNELG)
+                                 SynapseMatrixType_TOEPLITZ_KERNELG,
+                                 SynapseMatrixWeight_KERNEL)
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -173,7 +173,8 @@ class UpdateTrial(Callback):
         # **TODO** this should be modifiable parameter in GeNN 5
         self.genn_pop.extra_global_params["Trial"].view[:] = batch
 
-
+# Standard EventProp weight update model
+# **NOTE** feedback is added if required
 weight_update_model = {
     "param_name_types": [("TauSyn", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
@@ -189,6 +190,35 @@ weight_update_model = {
     $(Gradient) -= ($(LambdaI_post) * $(TauSyn));
     """}
 
+# EventProp weight update model used on KERNEL weights when atomics required
+# **NOTE** feedback is added if required
+# **YUCK** you should NEVER have to use backend-specific code in models
+weight_update_model_atomic_cuda = {
+    "param_name_types": [("TauSyn", "scalar")],
+    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
+                       ("Gradient", "scalar")],
+
+    "sim_code": """
+    $(addToInSyn, $(g));
+    """,
+    "event_threshold_condition_code": """
+    $(BackSpike_pre)
+    """,
+    "event_code": """
+    atomicAdd(&$(Gradient), -($(LambdaI_post) * $(TauSyn)));
+    """}
+
+# Weight update model used on non-trainable connections
+# **NOTE** feedback is added if required
+static_weight_update_model = {
+    "param_name_types": [("g", "scalar")],
+    "sim_code":
+        """
+        $(addToInSyn, $(g));
+        """,
+    "event_threshold_condition_code": """
+    $(BackSpike_pre)
+    """,}
 
 gradient_batch_reduce_model = {
     "var_name_types": [("ReducedGradient", "scalar", VarAccess_REDUCE_BATCH_SUM)],
@@ -611,11 +641,19 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError("EventProp compiler only "
                                           "supports Exponential synapses")
 
+            # Determine whether atomic weight updates are required
+            # **YUCK** backend-specific code shouldn't be required in models
+            # **TODO** something when OpenCL
+            use_atomic = (
+                (connect_snippet.matrix_type & SynapseMatrixWeight_KERNEL)
+                and compile_state.backend_name == "CUDA")
+
             # Create basic weight update model
-            wum = WeightUpdateModel(model=deepcopy(weight_update_model),
-                                    param_vals={"TauSyn": tau_syn},
-                                    var_vals={"g": connect_snippet.weight,
-                                              "Gradient": 0.0})
+            wum = WeightUpdateModel(
+                model=deepcopy(weight_update_model_atomic_cuda if use_atomic
+                               else weight_update_model),
+                param_vals={"TauSyn": tau_syn},
+                var_vals={"g": connect_snippet.weight, "Gradient": 0.0})
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "g"))
 
@@ -623,7 +661,7 @@ class EventPropCompiler(Compiler):
             compile_state.weight_optimiser_connections.append(conn)
         # Otherwise, e.g. it's a pooling layer
         else:
-            wum = WeightUpdateModel(model=deepcopy(static_pulse_model),
+            wum = WeightUpdateModel(model=deepcopy(static_weight_update_model),
                                     param_vals={"g": connect_snippet.weight})
             
         # If source neuron isn't an input neuron
