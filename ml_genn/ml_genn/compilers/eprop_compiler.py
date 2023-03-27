@@ -249,7 +249,7 @@ class EPropCompiler(Compiler):
         self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
 
-    def pre_compile(self, network, **kwargs):
+    def pre_compile(self, network, genn_model, **kwargs):
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]

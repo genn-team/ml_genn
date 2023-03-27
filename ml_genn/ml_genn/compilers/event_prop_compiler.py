@@ -105,9 +105,10 @@ def _get_tau_syn(pop):
     return tau_syn
                 
 class CompileState:
-    def __init__(self, losses, readouts):
+    def __init__(self, losses, readouts, backend_name):
         self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
+        self.backend_name = backend_name
         self.weight_optimiser_connections = []
         self._neuron_reset_vars = []
         self.checkpoint_connection_vars = []
@@ -266,12 +267,13 @@ class EventPropCompiler(Compiler):
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
-    def pre_compile(self, network, **kwargs):
+    def pre_compile(self, network, genn_model, **kwargs):
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
 
-        return CompileState(self.losses, readouts)
+        return CompileState(self.losses, readouts,
+                            genn_model.use_backend)
 
     def build_neuron_model(self, pop, model, compile_state):
         # Make copy of model

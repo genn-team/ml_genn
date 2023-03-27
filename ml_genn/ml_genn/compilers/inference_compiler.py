@@ -276,7 +276,7 @@ class InferenceCompiler(Compiler):
         self.reset_vars_between_batches = reset_vars_between_batches
         self.reset_in_syn_between_batches = reset_in_syn_between_batches
 
-    def pre_compile(self, network, **kwargs):
+    def pre_compile(self, network, genn_model, **kwargs):
         return CompileState()
 
     def build_neuron_model(self, pop, model, compile_state):

@@ -146,7 +146,7 @@ class Compiler:
         self.supported_matrix_type = SupportedMatrixType(supported_matrix_type)
         self.genn_kwargs = genn_kwargs
 
-    def pre_compile(self, network: Network, **kwargs):
+    def pre_compile(self, network: Network, genn_model, **kwargs):
         return None
 
     def calculate_delay(self, conn: Connection, delay, compile_state):
@@ -287,7 +287,8 @@ class Compiler:
         genn_model.timing_enabled = self.kernel_profiling
 
         # Run any pre-compilation logic
-        compile_state = self.pre_compile(network, **kwargs)
+        compile_state = self.pre_compile(network, genn_model,
+                                         **kwargs)
 
         # Loop through populations
         neuron_populations = {}
