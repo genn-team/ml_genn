@@ -703,39 +703,44 @@ class EventPropCompiler(Compiler):
                                                   neuron_populations)
         
         # Build list of base callbacks
-        base_callbacks = []
+        base_train_callbacks = []
+        base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
             if self.batch_size > 1:
-                base_callbacks.append(
+                base_train_callbacks.append(
                     CustomUpdateOnBatchEnd("GradientBatchReduce"))
-            base_callbacks.append(
+            base_train_callbacks.append(
                 CustomUpdateOnBatchEnd("GradientLearn"))
         
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
         for p in compile_state.update_trial_pops:
-            base_callbacks.append(UpdateTrial(neuron_populations[p]))
+            base_train_callbacks.append(UpdateTrial(neuron_populations[p]))
 
         # Add callbacks to zero insyn on all connections
         # **NOTE** it would be great to be able to do this on device
         for genn_syn_pop in connection_populations.values():
-            base_callbacks.append(
+            base_train_callbacks.append(
+                ZeroInSyn(genn_syn_pop, self.example_timesteps))
+            base_validate_callbacks.append(
                 ZeroInSyn(genn_syn_pop, self.example_timesteps))
     
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
-            base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax1"))
-            base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax2"))
-            base_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax3"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax1"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax2"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchSoftmax3"))
 
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
-            base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+            base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+            base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
-            base_callbacks, optimiser_custom_updates,
+            base_train_callbacks, base_validate_callbacks, 
+            optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, True)
 

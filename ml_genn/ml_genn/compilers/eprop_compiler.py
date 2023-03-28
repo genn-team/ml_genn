@@ -469,24 +469,27 @@ class EPropCompiler(Compiler):
                                                   neuron_populations)
 
         # Build list of base callbacks
-        base_callbacks = []
+        base_train_callbacks = []
+        base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
             if self.batch_size > 1:
-                base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
-            base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
+                base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
         if compile_state.is_reset_custom_update_required:
-            base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+            base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+            base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         # If softmax is required, add three stage reduction to callbacks
         if len(compile_state.softmax_populations) > 0:
-            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
-            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
-            base_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
+            base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
+            base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
+            base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
-            base_callbacks, optimiser_custom_updates,
+            base_train_callbacks, base_validate_callbacks, 
+            optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
