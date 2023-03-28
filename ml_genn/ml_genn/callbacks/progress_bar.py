@@ -33,7 +33,7 @@ class BatchProgressBar(Callback):
     def _init_prog_bar(self):
         # If there's no existing progress bar,
         if self._progress_bar is None:
-            from tqdm import tqdm
+            from tqdm.auto import tqdm
             self._progress_bar = tqdm(total=self._num_batches)
 
         # Reset progress bar
