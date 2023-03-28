@@ -15,11 +15,25 @@ DataDictType = Mapping[Any, Union[Sequence, np.ndarray]]
 
 PreprocessedSpikes = namedtuple("PreprocessedSpikes", ["end_spikes", "spike_times"])
 
+def split_dataset(data: DataDictType, split: float) -> Tuple[DataDictType,
+                                                             DataDictType]:
+    # Check that split is valid
+    if split < 0.0 or split > 1.0:
+        raise RuntimeError(f"Invalid split of {split}")
+
+    # Get size of dataset
+    dataset_size = get_dataset_size(data)
+
+    # Get point where dataset is split
+    split_point = int(round((1.0 - split) * dataset_size))
+
+    # Return two dictionaries with values from before and after split point
+    return ({k: v[:split_point] for k, v in data.items()},
+            {k: v[split_point:] for k, v in data.items()})
 
 def get_dataset_size(data: DataDictType) -> Optional[int]:
     sizes = [len(d) for d in data.values()]
     return sizes[0] if len(set(sizes)) <= 1 else None
-
 
 def batch_dataset(data: DataDictType, batch_size: int, size: int):
     # Perform split, resulting in {key: split data} dictionary
@@ -66,7 +80,6 @@ def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
     # Return end spike indices and spike times
     return PreprocessedSpikes(end_spikes, times)
 
- 
 # **TODO** maybe this could be a static from_tonic method 
 def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                             shape: Tuple,
@@ -130,7 +143,7 @@ def linear_latency_encode_data(data: np.ndarray, max_time: float,
         spikes.append(PreprocessedSpikes(end_spikes, spike_times))
 
     return spikes
-         
+
 def log_latency_encode_data(data: np.ndarray, tau_eff: float,
                             thresh: float) -> List[PreprocessedSpikes]:
     # Loop through examples
