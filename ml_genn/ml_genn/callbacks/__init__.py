@@ -10,3 +10,9 @@ from .var_recorder import VarRecorder
 from ..utils.module import get_module_classes
 
 default_callbacks = get_module_classes(globals(), Callback)
+
+__all__ = ["Callback", "Checkpoint", "CustomUpdateOnBatchBegin",
+           "CustomUpdateOnBatchEnd", "CustomUpdateOnTimestepBegin",
+           "CustomUpdateOnTimestepEnd", "OptimiserParamSchedule",
+           "BatchProgressBar", "SpikeRecorder", "VarRecorder",
+           "default_callbacks"]

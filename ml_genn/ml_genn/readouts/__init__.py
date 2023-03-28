@@ -9,3 +9,6 @@ from .var import Var
 from ..utils.module import get_module_classes
 
 default_readouts = get_module_classes(globals(), Readout)
+
+__all__ = ["AvgVar", "AvgVarExpWeight", "MaxVar", "Readout", "SpikeCount",
+           "SumVar", "Var", "default_readouts"]
