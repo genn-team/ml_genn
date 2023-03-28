@@ -109,8 +109,8 @@ for (b = 0; b < builderNodes.size(); b++) {
                     // Build dynamic LibGeNN
                     echo "Building LibGeNN";
                     def messagesLibGeNN = "libgenn_${NODE_NAME}.txt";
-                    sh "rm -f ${messagesLibGeNN}";
                     def commandsLibGeNN = """
+                    rm -f ${messagesLibGeNN}
                     make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messagesLibGeNN}\" 2>&1
                     """;
                     def statusLibGeNN = sh script:commandsLibGeNN, returnStatus:true;
@@ -122,9 +122,9 @@ for (b = 0; b < builderNodes.size(); b++) {
                     // Build PyGeNN module
                     echo "Building and installing PyGeNN";
                     def messagesPyGeNN = "pygenn_${NODE_NAME}.txt";
-                    sh "rm -f ${messagesPyGeNN}";
                     def commandsPyGeNN = """
                     . ${WORKSPACE}/venv/bin/activate
+                    rm -f ${messagesPyGeNN}
                     python setup.py install  1>>\"${messagesPyGeNN}\" 2>&1
                     python setup.py install  1>>\"${messagesPyGeNN}\" 2>&1
                     """;
@@ -162,9 +162,9 @@ for (b = 0; b < builderNodes.size(); b++) {
                 dir("tests") {
                     // Run ML GeNN test suite
                     def messagesTests = "tests_${NODE_NAME}.txt";
-                    sh "rm -f ${messagesTests}";
                     def commandsTest = """
                     . ${WORKSPACE}/venv/bin/activate
+                    rm -f ${messagesTests}
                     pytest -v --cov ../ml_genn --cov ../ml_genn_tf --cov-report=xml:${coverageMLGeNN} --junitxml ml_genn_${NODE_NAME}.xml 1>>\"${messagesTests}\" 2>&1
                     """;
                     def statusTests = sh script:commandsTest, returnStatus:true;
@@ -181,7 +181,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     junit "ml_genn_${NODE_NAME}.xml";
                 }
             }
-            
+
             buildStage("Uploading coverage (${NODE_NAME})") {
                 withCredentials([string(credentialsId: "codecov_token_ml_genn", variable: "CODECOV_TOKEN")]) {
 
@@ -190,19 +190,20 @@ for (b = 0; b < builderNodes.size(); b++) {
                     sh 'curl -s https://codecov.io/bash | bash -s - -n ' + env.NODE_NAME + ' -f ' + coverageMLGeNN + ' -t $CODECOV_TOKEN';
                 }
             }
-            
+
             buildStage("Running Flake8 (${NODE_NAME})") {
                 // Run flake8
                 def logFlake8MLGeNN = "flake8_${NODE_NAME}.log";
                 def commandsFlake8MLGeNN = """
                 . ${WORKSPACE}/venv/bin/activate
+                rm -f ${logFlake8MLGeNN}
                 flake8 --format pylint --output-file ${logFlake8MLGeNN} ml_genn/ml_genn ml_genn_tf/ml_genn_tf
                 """
                 def statusFlake8MLGeNN = sh script:commandsFlake8MLGeNN, returnStatus:true;
-                
+
                 // Record any issues
                 recordIssues enabledForFailure: true, tool: flake8(pattern: logFlake8MLGeNN);
-                
+
                 if (statusFlake8MLGeNN != 0) {
                     setBuildStatus("Running Flake8 (${NODE_NAME})", "FAILURE");
                 }
