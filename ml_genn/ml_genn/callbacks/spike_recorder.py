@@ -27,7 +27,7 @@ class SpikeRecorder(Callback):
         self._neuron_mask = get_neuron_filter_mask(neuron_filter,
                                                    self._pop.shape)
 
-        # Should this SpikeRecorder be the one responsible for pulling spikes?
+        # Is this SpikeRecorder the one responsible for pulling spikes?
         self._pull = False
 
         # List of spike times and IDs
@@ -87,7 +87,7 @@ class SpikeRecorder(Callback):
                 # **NOTE** the following is a version of the PyGeNN
                 # NeuronGroup._get_event_recording_data method,
                 # modified to support filtering
-                data = (genn_pop._spike_event_recording_data 
+                data = (genn_pop._spike_event_recording_data
                         if self._record_spike_events
                         else genn_pop._spike_recording_data)
                 data = data.view(dtype=np.uint8)

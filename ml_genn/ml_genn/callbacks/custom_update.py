@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class CustomUpdate(Callback):
     def __init__(self, name):
         self.name = name
-    
+
     def set_params(self, compiled_network, **kwargs):
         # Extract compiled network
         self._compiled_network = compiled_network

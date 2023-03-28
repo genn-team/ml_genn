@@ -15,4 +15,3 @@ class OptimiserParamSchedule(Callback):
         # Set parameter to return value of function
         setattr(self._optimiser, self.param_name,
                 self.func(epoch, getattr(self._optimiser, self.param_name)))
-
