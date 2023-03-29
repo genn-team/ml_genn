@@ -41,13 +41,13 @@ def get_object(obj, base_class: Type[T], description: str,
                dictionary: Mapping[str, T]) -> Optional[T]:
     if obj is None:
         return obj
-    elif isinstance(obj, base_class):
-        return copy(obj)
     elif isinstance(obj, str):
         if obj in dictionary:
             return dictionary[obj]()
         else:
             raise RuntimeError(f"{description} object '{obj}' unknown")
+    elif isinstance(obj, base_class):
+        return copy(obj)
     else:
         raise RuntimeError(f"{description} objects should be specified "
                            f"either as a string or a {description} object")
