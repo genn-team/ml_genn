@@ -24,7 +24,8 @@ class Network:
     """
     _context = None
 
-    def __init__(self):
+    def __init__(self, default_params: dict = {}):
+        self.default_params = default_params
         self.populations = []
         self.connections = []
 
@@ -66,6 +67,12 @@ class Network:
                                "inside a ``with network:`` block")
         Network._context.connections.append(conn)
 
+    @staticmethod
+    def get_default_params(type):
+        if Network._context is None:
+            return {}
+        else:
+            return Network._context.default_params.get(type, {})
 
     def __enter__(self):
         if Network._context is not None:
