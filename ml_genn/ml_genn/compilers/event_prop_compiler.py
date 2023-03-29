@@ -82,6 +82,12 @@ logger = logging.getLogger(__name__)
 # read and write offsets check for wraparound, this can continue forever
 # **NOTE** due to the inprecision of ASCII diagramming there are out-by-one errors in the above
 
+default_params = {
+    LeakyIntegrate: {"scale_i": True}, 
+    LeakyIntegrateFire: {"relative_reset": False, 
+                         "integrate_during_refrac": False,
+                         "scale_i": True}}
+
 def _get_tau_syn(pop):
     # Loop through incoming connections
     tau_syn = None
