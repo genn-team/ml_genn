@@ -32,7 +32,7 @@ def get_module_classes(globals: Mapping[str, Any],
             # to snake_cast and add to dictionary
             if default_constructable:
                 snake_name = camel_to_snake_pattern.sub("_", name).lower()
-                target_dict[snake_name] = obj()
+                target_dict[snake_name] = obj
     return target_dict
 
 T = TypeVar("T")
@@ -45,7 +45,7 @@ def get_object(obj, base_class: Type[T], description: str,
         return copy(obj)
     elif isinstance(obj, str):
         if obj in dictionary:
-            return copy(dictionary[obj])
+            return dictionary[obj]()
         else:
             raise RuntimeError(f"{description} object '{obj}' unknown")
     else:
