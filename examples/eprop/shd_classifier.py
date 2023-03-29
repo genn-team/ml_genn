@@ -14,6 +14,8 @@ from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
+from ml_genn.compilers.eprop_compiler import default_params
+
 NUM_HIDDEN = 256
 BATCH_SIZE = 512
 NUM_EPOCHS = 50
@@ -43,15 +45,13 @@ num_input = int(np.prod(dataset.sensor_size))
 num_output = len(dataset.classes)
 
 serialiser = Numpy("shd_checkpoints")
-network = Network()
+network = Network(default_params)
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=BATCH_SIZE * max_spikes),
                        num_input)
     hidden = Population(AdaptiveLeakyIntegrateFire(v_thresh=0.6,
-                                                   tau_refrac=5.0,
-                                                   relative_reset=True,
-                                                   integrate_during_refrac=True),
+                                                   tau_refrac=5.0),
                         NUM_HIDDEN)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", num_output)
 

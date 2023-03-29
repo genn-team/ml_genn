@@ -16,6 +16,8 @@ from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 linear_latency_encode_data)
 
+from ml_genn.compilers.event_prop_compiler import default_params
+
 NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
@@ -33,7 +35,7 @@ spikes = linear_latency_encode_data(
     EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
-network = SequentialNetwork()
+network = SequentialNetwork(default_params)
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
@@ -41,22 +43,16 @@ with network:
     initial_hidden1_weight = Normal(mean=0.078, sd=0.045)
     hidden1 = Layer(Conv2D(initial_hidden1_weight, 16, 3, True),
                     LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                       tau_refrac=None, 
-                                       relative_reset=False,
-                                       integrate_during_refrac=False,
-                                       scale_i=True),
+                                       tau_refrac=Nonee),
                   synapse=Exponential(5.0), name="hidden1")
     initial_hidden2_weight = Normal(mean=0.078, sd=0.045)
     connectivity2 = (Dense(initial_hidden2_weight) if SPARSITY == 1.0 
                      else FixedProbability(SPARSITY, initial_hidden2_weight))
     hidden2 = Layer(connectivity2, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                                      tau_refrac=None, 
-                                                      relative_reset=False,
-                                                      integrate_during_refrac=False,
-                                                      scale_i=True),
+                                                      tau_refrac=None),
                     NUM_HIDDEN, Exponential(5.0), name="hidden2")
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="avg_var"),
+                   LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
                    NUM_OUTPUT, Exponential(5.0), name="output")
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
