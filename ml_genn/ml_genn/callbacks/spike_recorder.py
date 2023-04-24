@@ -30,10 +30,7 @@ class SpikeRecorder(Callback):
         # Is this SpikeRecorder the one responsible for pulling spikes?
         self._pull = False
 
-        # List of spike times and IDs
-        self._spikes = ([], [])
-
-    def set_params(self, compiled_network, **kwargs):
+    def set_params(self, data, compiled_network, **kwargs):
         # Extract compiled network
         self._batch_size = compiled_network.genn_model.batch_size
         self._compiled_network = compiled_network
@@ -60,6 +57,10 @@ class SpikeRecorder(Callback):
 
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
+
+        # Create tuple of lists to hold recorded spike times and IDs
+        data[self.key] =  ([], [])
+        self._spikes = data[self.key]
 
     def set_first(self):
         self._pull = True
