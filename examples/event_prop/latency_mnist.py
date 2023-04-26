@@ -1,11 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import mnist
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
-from ml_genn.callbacks import Checkpoint, SpikeRecorder, VarRecorder
+from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
-from ml_genn.connectivity import Dense,FixedProbability
+from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
@@ -13,8 +12,7 @@ from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
 from time import perf_counter
-from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
-                                linear_latency_encode_data)
+from ml_genn.utils.data import linear_latency_encode_data
 
 NUM_INPUT = 784
 NUM_HIDDEN = 128
@@ -36,8 +34,8 @@ serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
-    input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
-                                  NUM_INPUT, name="input")
+    input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
+                                  NUM_INPUT)
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
@@ -46,10 +44,10 @@ with network:
                                                     relative_reset=False,
                                                     integrate_during_refrac=False,
                                                     scale_i=True),
-                   NUM_HIDDEN, Exponential(5.0), name="hidden")
+                   NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
                    LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="avg_var"),
-                   NUM_OUTPUT, Exponential(5.0), name="output")
+                   NUM_OUTPUT, Exponential(5.0))
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
@@ -64,56 +62,11 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-        """
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser), 
-                     SpikeRecorder(input, "in_spikes", visualise_examples),
-                     SpikeRecorder(hidden, "hid_spikes", visualise_examples, record_spike_events=True),
-                     SpikeRecorder(input, "in_spike_events", visualise_examples, record_spike_events=True),
-                     SpikeRecorder(hidden, "hid_spike_events", visualise_examples),
-                     VarRecorder(hidden, None, "hid_lambda_v", visualise_examples,
-                                 genn_var="LambdaV"),
-                     VarRecorder(output, None, "out_lambda_v", visualise_examples,
-                                 genn_var="LambdaV"),
-                     VarRecorder(output, "v", "out_v", visualise_examples),
-                     VarRecorder(output, None, "out_sum_v", visualise_examples,
-                                 genn_var="SumV"),
-                     VarRecorder(output, None, "out_softmax", visualise_examples,
-                                 genn_var="Softmax")]
-        """
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
-        """
-        fig, axes = plt.subplots(9, len(visualise_examples), sharex="col", sharey="row")
-        axes[0, 0].set_ylabel("Input spikes")
-        axes[1, 0].set_ylabel("Input spike events")
-        axes[2, 0].set_ylabel("Hidden spikes")
-        axes[3, 0].set_ylabel("Hidden spike events")
-        
-        axes[4, 0].set_ylabel("Hidden lambda V")
-        axes[5, 0].set_ylabel("Output lambda V")
-        axes[6, 0].set_ylabel("Output V")
-        axes[7, 0].set_ylabel("Output sum V")
-        axes[8, 0].set_ylabel("Output softmax")
-        
-        for j, e in enumerate(visualise_examples):
-            axes[0, j].set_title(f"Example {e}")
-            axes[0, j].scatter(cb_data["in_spikes"][0][j], cb_data["in_spikes"][1][j], s=2)
-            axes[1, j].scatter(cb_data["in_spike_events"][0][j], cb_data["in_spike_events"][1][j], s=2)
-            axes[2, j].scatter(cb_data["hid_spike_events"][0][j], cb_data["hid_spike_events"][1][j], s=2)
-            axes[3, j].scatter(cb_data["hid_spikes"][0][j], cb_data["hid_spikes"][1][j], s=2)
-
-            axes[4, j].plot(cb_data["hid_lambda_v"][j])
-            axes[5, j].plot(cb_data["out_lambda_v"][j])
-            axes[6, j].plot(cb_data["out_v"][j])
-            axes[7, j].plot(cb_data["out_sum_v"][j])
-            axes[8, j].plot(cb_data["out_softmax"][j])
-
-            axes[8, j].set_xlabel("Time [ms]")
-        plt.show()
-        """
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
