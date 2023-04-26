@@ -268,17 +268,23 @@ neuron_reset = Template(
             $$(RingWriteOffset) = 0;
         }
     }
-    else {
-        //printf("%f: hidden: ImV buffer violation in neuron %d, fwd_start: %d, new_fwd_start: %d, rp_ImV: %d, wp_ImV: %d\\n", $$(t), $$(id), $$(RingReadEndOffset), $$(RingWriteStartOffset), $$(RingReadOffset), $$(RingWriteOffset));
-        // assert(0);
-    }
+    $strict_check
     """)
+
+# Code used to add optional strict checking after neuron reset
+neuron_reset_strict_check = """
+    else {
+        printf("%f: hidden: ring buffer violation in neuron %d, read end offset: %d, write start offset: %d, read offset: %d, write offset: %d\\n", $(t), $(id), $(RingReadEndOffset), $(RingWriteStartOffset), $(RingReadOffset), $(RingWriteOffset));
+        assert(false);
+    }
+    """
 
 class EventPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
                  reg_nu_upper: float = 0.0, max_spikes: int = 500, 
-                 dt: float = 1.0, batch_size: int = 1, rng_seed: int = 0, 
+                 strict_buffer_checking: bool = False, dt: float = 1.0,
+                 batch_size: int = 1, rng_seed: int = 0, 
                  kernel_profiling: bool = False, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType_TOEPLITZ_KERNELG,
                                   SynapseMatrixType_PROCEDURAL_KERNELG,
@@ -291,6 +297,7 @@ class EventPropCompiler(Compiler):
         self.example_timesteps = example_timesteps
         self.losses = losses
         self.max_spikes = max_spikes
+        self.strict_buffer_checking = strict_buffer_checking
         self.reg_lambda_upper = reg_lambda_upper
         self.reg_lambda_lower = reg_lambda_lower
         self.reg_nu_upper = reg_nu_upper
@@ -498,7 +505,10 @@ class EventPropCompiler(Compiler):
                 model_copy.prepend_reset_code(
                     neuron_reset.substitute(
                         max_spikes=self.max_spikes,
-                        write=""))
+                        write="",
+                        strict_check=(neuron_reset_strict_check
+                                      if self.strict_buffer_checking
+                                      else "")))
             # Otherwise i.e. it's hidden
             else:
                 # Add additional input variable to receive feedback
@@ -605,7 +615,10 @@ class EventPropCompiler(Compiler):
                     model_copy.prepend_reset_code(
                         neuron_reset.substitute(
                             max_spikes=self.max_spikes,
-                            write="$(RingIMinusV)[ringOffset + $(RingWriteOffset)] = $(Isyn) - $(V);"))
+                            write="$(RingIMinusV)[ringOffset + $(RingWriteOffset)] = $(Isyn) - $(V);",
+                            strict_check=(neuron_reset_strict_check 
+                                          if self.strict_buffer_checking
+                                          else "")))
                 # Otherwise, neuron type is unsupported
                 else:
                     raise NotImplementedError(
