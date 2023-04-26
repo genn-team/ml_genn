@@ -17,8 +17,8 @@ class Var(Readout):
 
         # Find output variable
         try:
-            _ = (v for v in model.model["var_name_types"]
-                 if v[0] == self.output_var_name)
+            _ = next(v for v in model.model["var_name_types"]
+                     if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to read")

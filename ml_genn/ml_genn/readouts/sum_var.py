@@ -19,10 +19,10 @@ class SumVar(Readout):
 
         # Find output variable
         try:
-            output_var = [v for v in model.model["var_name_types"]
-                          if v[0] == self.output_var_name]
+            output_var = next(v for v in model.model["var_name_types"]
+                              if v[0] == self.output_var_name)
         except StopIteration:
-            raise RuntimeError(f"Model does not variable "
+            raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to sum")
 
         # Make copy of model
@@ -30,7 +30,7 @@ class SumVar(Readout):
 
         # Determine name and type of sum variable
         sum_var_name = self.output_var_name + "Sum"
-        self.output_var_type = output_var[0][1]
+        self.output_var_type = output_var[1]
 
         # Add code to update sum variable
         model_copy.append_sim_code(
