@@ -11,7 +11,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_NEURON_SUM,
                                         VarAccessMode_READ_ONLY)
 
-from .compiler import Compiler, ZeroInSyn
+from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd)
@@ -173,6 +173,18 @@ class UpdateTrial(Callback):
         # **TODO** this should be modifiable parameter in GeNN 5
         self.genn_pop.extra_global_params["Trial"].view[:] = batch
 
+# Callback which clamps in_syn to 0 one timestep before  
+# trial end to avoid bleeding spikes into the next trial
+class ZeroInSynLastTimestep(Callback):
+    def __init__(self, genn_syn_pop, example_timesteps: int):
+        self.genn_syn_pop = genn_syn_pop
+        self.example_timesteps = example_timesteps
+
+    def on_timestep_begin(self, timestep: int):
+        if timestep == (self.example_timesteps - 1):
+            self.genn_syn_pop.in_syn[:]= 0.0
+            self.genn_syn_pop.push_in_syn_to_device()
+        
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
 weight_update_model = {
@@ -733,9 +745,9 @@ class EventPropCompiler(Compiler):
         # **NOTE** it would be great to be able to do this on device
         for genn_syn_pop in connection_populations.values():
             base_train_callbacks.append(
-                ZeroInSyn(genn_syn_pop, self.example_timesteps))
+                ZeroInSynLastTimestep(genn_syn_pop, self.example_timesteps))
             base_validate_callbacks.append(
-                ZeroInSyn(genn_syn_pop, self.example_timesteps))
+                ZeroInSynLastTimestep(genn_syn_pop, self.example_timesteps))
 
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:

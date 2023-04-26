@@ -4,6 +4,7 @@ from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..metrics import Metric
+from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
@@ -203,6 +204,7 @@ class CompileState:
     def __init__(self):
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
+        self.in_syn_zero_conns = []
     
     def add_neuron_reset_vars(self, model, pop, reset_model_vars):
         if reset_model_vars:
@@ -300,6 +302,11 @@ class InferenceCompiler(Compiler):
         if self.reset_vars_between_batches:
             compile_state.add_psm_reset_vars(model, conn)
 
+        # If connection has any synapse model other than delta,
+        # add it to the list of connections to zero insyn
+        if not isinstance(conn.synapse, Delta):
+            compile_state.in_syn_zero_conns.append(conn)
+
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, compile_state)
 
@@ -312,12 +319,12 @@ class InferenceCompiler(Compiler):
         
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
         
-        # Add callbacks to zero insyn on all connections
-        # **NOTE** it would be great to be able to do this on device
-        for genn_syn_pop in connection_populations.values():
-            base_callbacks.append(ZeroInSyn(genn_syn_pop,
-                                            self.evaluate_timesteps))
-    
+        # If insyn should be reset between batches
+        if self.reset_in_syn_between_batches:
+            # Add callbacks to zero insyn on all connections requiring them
+            # **NOTE** it would be great to be able to do this on device
+            for c in compile_state.in_syn_zero_conns:
+                base_callbacks.append(ZeroInSyn(connection_populations[c]))
 
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,

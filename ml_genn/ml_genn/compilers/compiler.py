@@ -125,14 +125,12 @@ class SupportedMatrixType:
             return min(possible, key=lambda p: self._supported[p])
         
 class ZeroInSyn(Callback):
-    def __init__(self, genn_syn_pop, example_timesteps: int):
+    def __init__(self, genn_syn_pop):
         self.genn_syn_pop = genn_syn_pop
-        self.example_timesteps = example_timesteps
 
-    def on_timestep_begin(self, timestep: int):
-        if timestep == (self.example_timesteps - 1):
-            self.genn_syn_pop.in_syn[:]= 0.0
-            self.genn_syn_pop.push_in_syn_to_device()
+    def on_batch_begin(self, batch):
+        self.genn_syn_pop.in_syn[:]= 0.0
+        self.genn_syn_pop.push_in_syn_to_device()
 
 
 class Compiler:
