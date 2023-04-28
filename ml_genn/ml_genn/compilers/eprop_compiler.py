@@ -4,24 +4,26 @@ import numpy as np
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_BATCH_SUM)
-from ml_genn.callbacks import CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd
-from ml_genn.compilers import Compiler
-from ml_genn.compilers.compiled_training_network import CompiledTrainingNetwork
-from ml_genn.callbacks import BatchProgressBar
-from ml_genn.losses import Loss
-from ml_genn.neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
-from ml_genn.optimisers import Optimiser
-from ml_genn.synapses import Delta
-from ml_genn.utils.callback_list import CallbackList
-from ml_genn.utils.data import MetricsType
-from ml_genn.utils.model import CustomUpdateModel, WeightUpdateModel
+from . import Compiler
+from .compiled_training_network import CompiledTrainingNetwork
+from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
+                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+from ..losses import Loss, SparseCategoricalCrossentropy
+from ..neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
+from ..optimisers import Optimiser
+from ..synapses import Delta
+from ..utils.callback_list import CallbackList
+from ..utils.data import MetricsType
+from ..utils.model import CustomUpdateModel, WeightUpdateModel
 
 from copy import deepcopy
 from pygenn.genn_model import create_var_ref, create_wu_var_ref
-from ml_genn.compilers.compiler import create_reset_custom_update
-from ml_genn.utils.module import get_object, get_object_mapping
-from ml_genn.utils.value import is_value_constant
+from .compiler import create_reset_custom_update
+from ..utils.module import get_object, get_object_mapping
+from ..utils.value import is_value_constant
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG)
 from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
 
@@ -46,6 +48,7 @@ class CompileState:
         self.feedback_connections = []
         self.weight_optimiser_connections = []
         self.bias_optimiser_populations = []
+        self.softmax_populations = []
         self._neuron_reset_vars = {}
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
@@ -53,6 +56,7 @@ class CompileState:
     def add_neuron_readout_reset_vars(self, pop):
         reset_vars = pop.neuron.readout.reset_vars
         if len(reset_vars) > 0:
+            assert pop not in self._neuron_reset_vars
             self._neuron_reset_vars[pop] = reset_vars
 
     def create_reset_custom_updates(self, compiler, genn_model,
@@ -229,9 +233,11 @@ class EPropCompiler(Compiler):
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True, **genn_kwargs):
-        super(EPropCompiler, self).__init__(dt, batch_size, rng_seed,
+        supported_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                  SynapseMatrixType_DENSE_INDIVIDUALG]
+        super(EPropCompiler, self).__init__(supported_matrix_types, dt,
+                                            batch_size, rng_seed,
                                             kernel_profiling,
-                                            prefer_in_memory_connect=True,
                                             **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -243,7 +249,7 @@ class EPropCompiler(Compiler):
         self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
 
-    def pre_compile(self, network, **kwargs):
+    def pre_compile(self, network, genn_model, **kwargs):
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
@@ -256,11 +262,33 @@ class EPropCompiler(Compiler):
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
-            # Add any output reset variables to compile state
-            compile_state.add_neuron_readout_reset_vars(pop)
-
             # Get loss function associated with this output neuron
             loss = compile_state.losses[pop]
+            
+            # If loss function is sparse categorical crossentropy
+            if isinstance(loss, SparseCategoricalCrossentropy):
+                # Get output variable from neuron model
+                output_var = model_copy.output_var
+
+                # Add softmax variable with same type as 
+                # output variable and initialise to zero
+                softmax_var_name = output_var[0] + "Softmax"
+                model_copy.add_var(softmax_var_name, output_var[1], 0)
+
+                # Finally, point output variable at new softmax'd output
+                model_copy.output_var_name = softmax_var_name
+                
+                # Add population to list of those needing softmax calculation
+                compile_state.softmax_populations.append(
+                    (pop, output_var[0], softmax_var_name))
+
+            # Add output logic to model
+            model_copy = pop.neuron.readout.add_readout_logic(
+                model_copy, example_timesteps=self.example_timesteps,
+                dt=self.dt)
+
+            # Add any output reset variables to compile state
+            compile_state.add_neuron_readout_reset_vars(pop)
 
             # Add state variable to hold error
             # **NOTE** all loss functions require this!
@@ -347,8 +375,8 @@ class EPropCompiler(Compiler):
         # Return model
         return model
     
-    def build_weight_update_model(self, conn, weight, delay, compile_state):
-        if not is_value_constant(delay):
+    def build_weight_update_model(self, conn, connect_snippet, compile_state):
+        if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
         
@@ -363,7 +391,8 @@ class EPropCompiler(Compiler):
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
-                var_vals={"g": weight, "eFiltered": 0.0, "DeltaG": 0.0},
+                var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
+                          "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
@@ -376,7 +405,7 @@ class EPropCompiler(Compiler):
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
-                var_vals={"g": weight, "eFiltered": 0.0,
+                var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0})
@@ -386,7 +415,7 @@ class EPropCompiler(Compiler):
             wum = WeightUpdateModel(
                 model=output_learning_model,
                 param_vals={"Alpha": alpha},
-                var_vals={"g": weight, "DeltaG": 0.0},
+                var_vals={"g": connect_snippet.weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0})
 
             # Add connection to list of feedback connections
@@ -402,8 +431,7 @@ class EPropCompiler(Compiler):
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations,
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         # Fuse pre and postsynaptic updates for efficiency
         genn_model._model.set_fuse_postsynaptic_models(True)
         genn_model._model.set_fuse_pre_post_weight_update_models(True)
@@ -429,23 +457,39 @@ class EPropCompiler(Compiler):
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
                     create_var_ref(genn_pop, "DeltaBias"), genn_model))
         
+        # Loop through populations requiring softmax
+        # calculation and add requisite custom updates
+        for p, o, s in compile_state.softmax_populations:
+            genn_pop = neuron_populations[p]
+            self.add_softmax_custom_updates(genn_model, genn_pop, 
+                                            o, s, p.name)
+
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
-        
+
         # Build list of base callbacks
-        base_callbacks = []
+        base_train_callbacks = []
+        base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
             if self.batch_size > 1:
-                base_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
-            base_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
+                base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
         if compile_state.is_reset_custom_update_required:
-            base_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+            base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+            base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+
+        # If softmax is required, add three stage reduction to callbacks
+        if len(compile_state.softmax_populations) > 0:
+            base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
+            base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
+            base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
 
         return CompiledTrainingNetwork(
-            genn_model, neuron_populations, connection_populations, softmax,
+            genn_model, neuron_populations, connection_populations,
             compile_state.losses, self._optimiser, self.example_timesteps,
-            base_callbacks, optimiser_custom_updates,
+            base_train_callbacks, base_validate_callbacks, 
+            optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 

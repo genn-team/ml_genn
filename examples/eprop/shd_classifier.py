@@ -22,7 +22,7 @@ TRAIN = True
 KERNEL_PROFILING = False
 
 # Get SHD dataset
-dataset = SHD(save_to='./data', train=TRAIN)
+dataset = SHD(save_to='../data', train=TRAIN)
 
 # Preprocess
 spikes = []
@@ -53,8 +53,7 @@ with network:
                                                    relative_reset=True,
                                                    integrate_during_refrac=True),
                         NUM_HIDDEN)
-    output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", softmax=TRAIN),
-                        num_output)
+    output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", num_output)
 
     # Connections
     Connection(input, hidden, Dense(Normal(sd=1.0 / np.sqrt(num_input))))

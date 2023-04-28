@@ -8,11 +8,13 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
                                         VarAccess_REDUCE_NEURON_MAX,
                                         VarAccess_REDUCE_NEURON_SUM,
                                         VarAccessMode_READ_ONLY)
-from typing import Optional
+from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
+from ..callbacks import Callback
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
+from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import deepcopy
@@ -80,28 +82,69 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
     # Loop through reset vars
     for name, type, value in reset_vars:
-        # Add variable reference using function to create variable reference
+        # Add variable reference
         model.add_var_ref(name, type, var_ref_creator(name))
 
-        # Add reset value parameter
-        model.add_param(name + "Reset", type, value)
+        # If variable should be reset to another variable
+        if isinstance(value, str):
+            # If variable to reset to isn't already in list
+            # **TODO** give warning if it's not afterwards!
+            existing_reset_var = [v for v in reset_vars if v[0] == value]
+            if len(existing_reset_var) == 0:
+                # Add read-only variable reference to other variable
+                model.add_var_ref(value, type, var_ref_creator(value))
+                model.set_var_ref_access_mode(value, VarAccessMode_READ_ONLY)
 
-        # Add code to set var
-        model.append_update_code(f"$({name}) = $({name}Reset);")
+            # Add code to set var
+            model.append_update_code(f"$({name}) = $({value});")
+        # Otherwise
+        else:
+            # Add reset value parameter
+            model.add_param(name + "Reset", type, value)
+
+            # Add code to set var
+            model.append_update_code(f"$({name}) = $({name}Reset);")
+
     return model
 
+class SupportedMatrixType:
+    def __init__(self, supported: List[int]):
+        # Build dictionary of supported connectivity types and order
+        self._supported = {v: i for i, v in enumerate(supported)}
+    
+    def get_best(self, available: List[int]) -> Optional[int]:
+        # Intersect supported connectivity types with those that are available
+        possible = self._supported.keys() & available
+        
+        # If there are no possible options
+        if len(possible) == 0:
+            return None
+        # Otherwise, return the connectivity with 
+        # the highest priority from possible
+        else:
+            return min(possible, key=lambda p: self._supported[p])
+        
+class ZeroInSyn(Callback):
+    def __init__(self, genn_syn_pop):
+        self.genn_syn_pop = genn_syn_pop
+
+    def on_batch_begin(self, batch):
+        self.genn_syn_pop.in_syn[:]= 0.0
+        self.genn_syn_pop.push_in_syn_to_device()
+
+
 class Compiler:
-    def __init__(self, dt: float = 1.0, batch_size: int = 1,
-                 rng_seed: int = 0, kernel_profiling: bool = False,
-                 prefer_in_memory_connect : bool = True, **genn_kwargs):
+    def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
+                 batch_size: int = 1, rng_seed: int = 0, 
+                 kernel_profiling: bool = False, **genn_kwargs):
         self.dt = dt
         self.batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
-        self.prefer_in_memory_connect = prefer_in_memory_connect
+        self.supported_matrix_type = SupportedMatrixType(supported_matrix_type)
         self.genn_kwargs = genn_kwargs
 
-    def pre_compile(self, network: Network, **kwargs):
+    def pre_compile(self, network: Network, genn_model, **kwargs):
         return None
 
     def calculate_delay(self, conn: Connection, delay, compile_state):
@@ -124,13 +167,13 @@ class Compiler:
         return model
 
     def build_weight_update_model(self, connection: Connection,
-                                  weight: InitValue, delay: InitValue,
+                                  connect_snippet: ConnectivitySnippet,
                                   compile_state):
         # Build parameter values
-        param_vals = {"g": weight}
-        het_delay = not is_value_constant(delay)
+        param_vals = {"g": connect_snippet.weight}
+        het_delay = not is_value_constant(connect_snippet.delay)
         if het_delay:
-            param_vals["d"] = delay
+            param_vals["d"] = connect_snippet.delay
 
         # If source neuron model defines a negative threshold condition
         src_pop = connection.source()
@@ -169,12 +212,52 @@ class Compiler:
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
         return genn_cu
+    
+    def add_softmax_custom_updates(self, genn_model, genn_pop, 
+                                   input_var_name: str, output_var_name: str,
+                                   custom_update_name_suffix: str, 
+                                   custom_update_group_prefix: str = ""):
+        # Create custom update model to implement 
+        # first softmax pass and add to model
+        softmax_1 = CustomUpdateModel(
+            softmax_1_model, {}, {"MaxVal": 0.0},
+            {"Val": create_var_ref(genn_pop, input_var_name)})
+
+        genn_softmax_1 = self.add_custom_update(
+            genn_model, softmax_1, 
+            custom_update_group_prefix + "Softmax1",
+            "CUSoftmax1" + custom_update_name_suffix)
+
+        # Create custom update model to implement 
+        # second softmax pass and add to model
+        softmax_2 = CustomUpdateModel(
+            softmax_2_model, {}, {"SumExpVal": 0.0},
+            {"Val": create_var_ref(genn_pop, input_var_name),
+             "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
+
+        genn_softmax_2 = self.add_custom_update(
+            genn_model, softmax_2, 
+            custom_update_group_prefix + "Softmax2",
+            "CUSoftmax2" + custom_update_name_suffix)
+
+        # Create custom update model to implement 
+        # third softmax pass and add to model
+        softmax_3 = CustomUpdateModel(
+            softmax_3_model, {}, {},
+            {"Val": create_var_ref(genn_pop, input_var_name),
+             "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
+             "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
+             "SoftmaxVal": create_var_ref(genn_pop, output_var_name)})
+
+        self.add_custom_update(
+            genn_model, softmax_3, 
+            custom_update_group_prefix + "Softmax3", 
+            "CUSoftmax3" + custom_update_name_suffix)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, 
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         return CompiledNetwork(genn_model, neuron_populations,
-                               connection_populations, softmax)
+                               connection_populations)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
         # If no name is specifie
@@ -202,11 +285,11 @@ class Compiler:
         genn_model.timing_enabled = self.kernel_profiling
 
         # Run any pre-compilation logic
-        compile_state = self.pre_compile(network, **kwargs)
+        compile_state = self.pre_compile(network, genn_model,
+                                         **kwargs)
 
         # Loop through populations
         neuron_populations = {}
-        softmax = False
         for pop in network.populations:
             # Check population has shape
             if pop.shape is None:
@@ -216,24 +299,6 @@ class Compiler:
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
             neuron_model = neuron.get_model(pop, self.dt)
-            if neuron.readout is not None:
-                if neuron.softmax:
-                    # Get output variable from neuron model
-                    output_var = neuron_model.output_var
-
-                    # Add softmax variable with same type as 
-                    # output variable and initialise to zero
-                    softmax_var_name = output_var[0] + "Softmax"
-                    neuron_model.add_var(softmax_var_name, output_var[1], 0)
-
-                    # Finally, point output variable at new softmax'd output
-                    neuron_model.output_var_name = softmax_var_name
-                    
-                    # Set softmax flag
-                    softmax = True
-
-                # Add output logic to model
-                neuron_model = neuron.readout.add_readout_logic(neuron_model)
 
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(
@@ -261,42 +326,6 @@ class Compiler:
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
 
-            # If neuron has softmax output
-            if neuron.readout is not None and neuron.softmax:
-                # Create custom update model to implement 
-                # first softmax pass and add to model
-                softmax_1 = CustomUpdateModel(
-                    softmax_1_model, {}, {"MaxVal": 0.0},
-                    {"Val": create_var_ref(genn_pop, output_var[0])})
-
-                genn_softmax_1 = self.add_custom_update(
-                    genn_model, softmax_1, 
-                    "Softmax1", "CUSoftmax1" + pop.name)
-
-                # Create custom update model to implement 
-                # second softmax pass and add to model
-                softmax_2 = CustomUpdateModel(
-                    softmax_2_model, {}, {"SumExpVal": 0.0},
-                    {"Val": create_var_ref(genn_pop, output_var[0]),
-                     "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
-
-                genn_softmax_2 = self.add_custom_update(
-                    genn_model, softmax_2, 
-                    "Softmax2", "CUSoftmax2" + pop.name)
-
-                # Create custom update model to implement 
-                # third softmax pass and add to model
-                softmax_3 = CustomUpdateModel(
-                    softmax_3_model, {}, {},
-                    {"Val": create_var_ref(genn_pop, output_var[0]),
-                     "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
-                     "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
-                     "SoftmaxVal": create_var_ref(genn_pop, softmax_var_name)})
-
-                self.add_custom_update(
-                    genn_model, softmax_3, 
-                    "Softmax3", "CUSoftmax3" + pop.name)
-
         # Loop through connections
         connection_populations = {}
         for conn in network.connections:
@@ -313,7 +342,7 @@ class Compiler:
             # Get connectivity init snippet
             connect_snippet =\
                 conn.connectivity.get_snippet(conn,
-                                              self.prefer_in_memory_connect)
+                                              self.supported_matrix_type)
 
             # Calculate delay
             delay = self.calculate_delay(conn, connect_snippet.delay,
@@ -323,8 +352,8 @@ class Compiler:
             (wum, wum_param_vals, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals) =\
-                self.build_weight_update_model(conn, connect_snippet.weight,
-                                               delay, compile_state).process()
+                self.build_weight_update_model(conn, connect_snippet,
+                                               compile_state).process()
 
             # Create custom weight update model
             genn_wum = create_custom_weight_update_class("WeightUpdateModel",
@@ -364,4 +393,4 @@ class Compiler:
 
         return self.create_compiled_network(genn_model, neuron_populations,
                                             connection_populations,
-                                            compile_state, softmax)
+                                            compile_state)

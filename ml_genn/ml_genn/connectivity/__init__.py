@@ -11,3 +11,7 @@ from .one_to_one import OneToOne
 from ..utils.module import get_module_classes
 
 default_connectivity = get_module_classes(globals(), Connectivity)
+
+__all__ = ["AvgPool2D", "AvgPoolConv2D", "AvgPoolDense2D", "Connectivity",
+           "Conv2D", "Conv2DTranspose", "Dense", "FixedProbability",
+           "OneToOne", "default_connectivity"]

@@ -1,3 +1,4 @@
+from typing import Optional
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
@@ -27,7 +28,8 @@ class IntegrateFire(Neuron):
     v = ValueDescriptor("V")
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
-                 v: InitValue = 0.0, softmax: bool = False, readout=None):
+                 v: InitValue = 0.0, softmax: Optional[bool] = None,
+                 readout=None):
         super(IntegrateFire, self).__init__(softmax, readout)
 
         self.v_thresh = v_thresh

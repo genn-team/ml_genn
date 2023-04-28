@@ -11,6 +11,9 @@ from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG)
+
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "conv_2d_transpose",
 
@@ -93,7 +96,7 @@ class Conv2DTranspose(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should match shape of Conv2DTranspose kernel")
 
-    def get_snippet(self, connection, prefer_in_memory):
+    def get_snippet(self, connection, supported_matrix_type):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = connection.source().shape
@@ -112,7 +115,14 @@ class Conv2DTranspose(Connectivity):
             "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
             "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-        if prefer_in_memory:
+        # Get best supported connectivity choice
+        best_matrix_type = supported_matrix_type.get_best(
+            [SynapseMatrixType_SPARSE_INDIVIDUALG,
+             SynapseMatrixType_PROCEDURAL_KERNELG])
+        if best_matrix_type is None:
+            raise NotImplementedError("Compiler does not support "
+                                      "Conv2DTranspose connectivity")
+        elif best_matrix_type == SynapseMatrixType_SPARSE_INDIVIDUALG:
             # If weights/delays are arrays, use kernel initializer
             # to initialize, otherwise use as is
             weight = (KernelInit(self.weight)
@@ -121,11 +131,13 @@ class Conv2DTranspose(Connectivity):
             delay = (KernelInit(self.delay)
                      if is_value_array(self.delay)
                      else self.delay)
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="SPARSE_INDIVIDUALG",
-                                       weight=weight, delay=delay)
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                weight=weight, delay=delay)
         else:
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="PROCEDURAL_KERNELG",
-                                       weight=self.weight,
-                                       delay=self.delay)
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                weight=self.weight,
+                delay=self.delay)

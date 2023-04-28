@@ -11,6 +11,7 @@ from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
 
+
 class VarRecorder(Callback):
     def __init__(self, pop: PopulationType, var: Optional[str], key=None,
                  example_filter: ExampleFilterType = None,

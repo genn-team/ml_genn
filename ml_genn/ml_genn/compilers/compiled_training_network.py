@@ -1,5 +1,6 @@
 import numpy as np
 
+from typing import Optional
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..connectivity.sparse_base import SparseBase
@@ -8,7 +9,8 @@ from ..serialisers import Serialiser
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 
-from ..utils.data import batch_dataset, get_dataset_size, permute_dataset
+from ..utils.data import (batch_dataset, get_dataset_size,
+                          permute_dataset, split_dataset)
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 
@@ -17,20 +19,22 @@ from ..serialisers import default_serialisers
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, softmax, losses,
-                 optimiser, example_timesteps: int, base_callbacks: list,
+                 connection_populations, losses,
+                 optimiser, example_timesteps: int, 
+                 base_train_callbacks: list, base_validate_callbacks: list,
                  optimiser_custom_updates: list,
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            softmax, example_timesteps)
+            example_timesteps)
 
         self.losses = losses
         self.optimiser = optimiser
         self.example_timesteps = example_timesteps
-        self.base_callbacks = base_callbacks
+        self.base_train_callbacks = base_train_callbacks
+        self.base_validate_callbacks = base_validate_callbacks
         self.optimiser_custom_updates = optimiser_custom_updates
         self.checkpoint_connection_vars = checkpoint_connection_vars
         self.checkpoint_population_vars = checkpoint_population_vars
@@ -44,32 +48,92 @@ class CompiledTrainingNetwork(CompiledNetwork):
     def train(self, x: dict, y: dict, num_epochs: int, 
               start_epoch: int = 0, shuffle: bool = True,
               metrics: MetricsType = "sparse_categorical_accuracy",
-              callbacks=[BatchProgressBar()]):
-        # Determine the number of elements in x and y
-        x_size = get_dataset_size(x)
-        y_size = get_dataset_size(y)
+              callbacks=[BatchProgressBar()], validation_split: float = 0.0,
+              validation_x: Optional[dict] = None, 
+              validation_y: Optional[dict] = None):
 
-        # Build metrics
-        metrics = get_object_mapping(metrics, y.keys(), Metric, 
-                                     "Metric", default_metrics)
+        # If validation split is specified
+        if validation_split != 0.0:
+            # Check validation data isn't also provided
+            if validation_x is not None or validation_y is not None:
+                raise RuntimeError("validation data and validation split "
+                                   "cannot both be provided")
 
-        if x_size is None:
+            # Split dataset into training and validation
+            x, validation_x = split_dataset(x, validation_split)
+            y, validation_y = split_dataset(y, validation_split)
+
+        # Get the size of x and y
+        x_train_size = get_dataset_size(x)
+        y_train_size = get_dataset_size(y)
+
+        # Check training sizes match
+        if x_train_size is None:
             raise RuntimeError("Each input population must be "
-                               " provided with same number of inputs")
-        if y_size is None:
+                               "provided with same number of training inputs")
+        if y_train_size is None:
             raise RuntimeError("Each output population must be "
-                               " provided with same number of labels")
-        if x_size != y_size:
-            raise RuntimeError("Number of inputs and labels must match")
+                               "provided with same number of training labels")
+        if x_train_size != y_train_size:
+            raise RuntimeError("Number of training inputs "
+                               "and labels must match")
 
-        # Create callback list and begin testing
+        # If seperate validation data is provided
+        if validation_x is not None and validation_y is not None:
+            # Get the size of validation_x and validation_y
+            x_validate_size = get_dataset_size(validation_x)
+            y_validate_size = get_dataset_size(validation_y)
+
+            # Check validation sizes match
+            if x_validate_size is None:
+                raise RuntimeError("Each input population must be provided "
+                                   "with same number of validation inputs")
+            if y_validate_size is None:
+                raise RuntimeError("Each output population must be provided "
+                                   "with same number of validation labels")
+            if x_validate_size != y_validate_size:
+                raise RuntimeError("Number of validation inputs "
+                                   "and labels must match")
+        # Otherwise, no validation is required
+        else:
+            x_validate_size = 0
+            y_validate_size = 0
+
+        # Build metrics for training
+        train_metrics = get_object_mapping(metrics, y.keys(), Metric, 
+                                           "Metric", default_metrics)
+
+        # Create callback list
         batch_size = self.genn_model.batch_size
-        num_batches = (x_size + batch_size - 1) // batch_size;
-        callback_list = CallbackList(self.base_callbacks + callbacks,
-                                     compiled_network=self,
-                                     num_batches=num_batches, 
-                                     num_epochs=num_epochs)
-        callback_list.on_train_begin()
+        num_train_batches = (x_train_size + batch_size - 1) // batch_size
+        train_callback_list = CallbackList(
+            self.base_train_callbacks + callbacks,
+            compiled_network=self,
+            num_batches=num_train_batches, 
+            num_epochs=num_epochs)
+        train_callback_list.on_train_begin()
+        
+        # If there's any validation data
+        if x_validate_size > 0:
+            # Build metrics for validation
+            validate_metrics = get_object_mapping(metrics, y.keys(), Metric, 
+                                                  "Metric", default_metrics)
+
+            # Create seperate callback list and begin testing
+            num_validate_batches = (x_validate_size + batch_size - 1) // batch_size
+            validate_callback_list = CallbackList(
+                self.base_validate_callbacks + callbacks,
+                compiled_network=self,
+                num_batches=num_validate_batches, 
+                num_epochs=num_epochs)
+            validate_callback_list.on_test_begin()
+            
+            # Batch validation data
+            # **NOTE** need to turn zip into list 
+            # as, otherwise, it can only be iterated once
+            xy_validate_batched = list(zip(
+                batch_dataset(validation_x, batch_size, x_validate_size),
+                batch_dataset(validation_y, batch_size, y_validate_size)))
 
         # Loop through epochs
         step_i = 0
@@ -77,35 +141,60 @@ class CompiledTrainingNetwork(CompiledNetwork):
             # If we should shuffle
             if shuffle:
                 # Generate random permutation
-                indices = np.random.permutation(x_size)
+                indices = np.random.permutation(x_train_size)
 
                 # Permute x and y
                 x = permute_dataset(x, indices)
                 y = permute_dataset(y, indices)
 
             # Batch x and y
-            xy_batched = zip(batch_dataset(x, batch_size, x_size),
-                             batch_dataset(y, batch_size, y_size))
+            # **NOTE** can use zip directly as 
+            # it only needs to be iterated once
+            xy_train_batched = zip(batch_dataset(x, batch_size, x_train_size),
+                                   batch_dataset(y, batch_size, y_train_size))
 
-            # Reset metrics at start of each epoch
-            for m in metrics.values():
+            # Reset training metrics at start of each epoch
+            for m in train_metrics.values():
                 m.reset()
 
-            callback_list.on_epoch_begin(e)
+            train_callback_list.on_epoch_begin(e)
 
             # Loop through batches and train
-            for batch_i, (x_batch, y_batch) in enumerate(xy_batched):
+            for batch_i, (x_batch, y_batch) in enumerate(xy_train_batched):
                 self._train_batch(batch_i, step_i, x_batch, y_batch,
-                                  metrics, callback_list)
+                                  train_metrics, train_callback_list)
                 step_i += 1
 
-            callback_list.on_epoch_end(e, metrics)
+            train_callback_list.on_epoch_end(e, train_metrics)
+            
+            # If there's any validation data
+            if x_validate_size > 0:
+                # Reset validation metrics at start of each epoch
+                for m in validate_metrics.values():
+                    m.reset()
 
-        # End testing
-        callback_list.on_train_end(metrics)
+                validate_callback_list.on_epoch_begin(e)
 
-        # Return metrics
-        return metrics, callback_list.get_data()
+                # Loop through batches and validate
+                for batch_i, (x_batch, y_batch) in enumerate(xy_validate_batched):
+                    self._validate_batch(batch_i, x_batch, y_batch,
+                                         validate_metrics, validate_callback_list)
+
+                validate_callback_list.on_epoch_end(e, validate_metrics)
+
+        # End training
+        train_callback_list.on_train_end(train_metrics)
+
+        # If there's any validation data
+        if x_validate_size > 0:
+            validate_callback_list.on_test_end(validate_metrics)
+            
+            return (train_metrics, validate_metrics,
+                    train_callback_list.get_data(),
+                    validate_callback_list.get_data())
+        # Otherwise, just return training metrics and callback data
+        else:
+            return train_metrics, train_callback_list.get_data()
 
     def save_connectivity(self, keys=(), serialiser="numpy"):
         # Create serialiser
@@ -146,10 +235,36 @@ class CompiledTrainingNetwork(CompiledNetwork):
             genn_pop = self.neuron_populations[p]
             genn_pop.pull_var_from_device(v)
             serialiser.serialise(keys + (p, v), genn_pop.vars[v].view)
+    
+    def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
+                        callback_list: CallbackList):
+        # Start batch
+        callback_list.on_batch_begin(batch)
 
-    def _train_batch(self, batch: int, step: int,
-                     x: dict, y: dict, metrics,
-                     callback_list: CallbackList):
+        # Reset time to 0 if desired
+        if self.reset_time_between_batches:
+            self.genn_model.timestep = 0
+            self.genn_model.t = 0.0
+
+        # Apply inputs to model
+        self.set_input(x)
+
+        # Simulate timesteps
+        for t in range(self.example_timesteps):
+            self.step_time(callback_list)
+
+        # Get predictions from model
+        y_pred = self.get_readout(list(y.keys()))
+
+        # Update metrics
+        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
+            metrics[o].update(y_true, out_y_pred[:len(y_true)])
+        
+        # End batch
+        callback_list.on_batch_end(batch, metrics)
+
+    def _train_batch(self, batch: int, step: int, x: dict, y: dict,
+                     metrics, callback_list: CallbackList):
         # Start batch
         callback_list.on_batch_begin(batch)
 

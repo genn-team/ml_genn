@@ -14,4 +14,3 @@ class Checkpoint(Callback):
         # If we should checkpoint this epoch
         if (epoch % self.epoch_interval) == 0:
             self._compiled_network.save((epoch,), self.serialiser)
-

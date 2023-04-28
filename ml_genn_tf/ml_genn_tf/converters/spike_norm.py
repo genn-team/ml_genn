@@ -56,8 +56,7 @@ class NormCompiler(InferenceCompiler):
             pop, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations,
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         # Loop through model populations
         pop_threshold_custom_updates = {}
         for pop, genn_pop in neuron_populations.items():
@@ -86,7 +85,7 @@ class NormCompiler(InferenceCompiler):
         # Superclass
         compiled_net = super(NormCompiler, self).create_compiled_network(
             genn_model, neuron_populations, connection_populations, 
-            compile_state, softmax)
+            compile_state)
         
         # **YUCK** monkey patch compiled network with dictionary of custom 
         # updates responsible for calculating each population's thresholds

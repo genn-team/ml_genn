@@ -1,5 +1,6 @@
 import numpy as np
 
+from typing import Optional
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
@@ -19,8 +20,8 @@ class AdaptiveLeakyIntegrateFire(Neuron):
                  v: InitValue = 0.0, a: InitValue = 0.0, beta: InitValue = 0.0174,
                  tau_mem: InitValue = 20.0, tau_refrac: InitValue = None,
                  tau_adapt: InitValue = 2000.0, relative_reset: bool = True,
-                 integrate_during_refrac: bool = True, softmax: bool = False,
-                 readout=None):
+                 integrate_during_refrac: bool = True,
+                 softmax: Optional[bool] = None, readout=None):
         super(AdaptiveLeakyIntegrateFire, self).__init__(softmax, readout)
 
         self.v_thresh = v_thresh

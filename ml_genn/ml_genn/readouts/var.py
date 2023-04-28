@@ -5,7 +5,7 @@ from ..utils.model import NeuronModel
 
 
 class Var(Readout):
-    def add_readout_logic(self, model: NeuronModel):
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "var_name_types" not in model.model:
@@ -17,8 +17,8 @@ class Var(Readout):
 
         # Find output variable
         try:
-            _ = (v for v in model.model["var_name_types"]
-                 if v[0] == self.output_var_name)
+            _ = next(v for v in model.model["var_name_types"]
+                     if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to read")

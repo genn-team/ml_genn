@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .. import Connection, Population
+    from ..compilers.compiler import SupportedMatrixType
 
 
 class Connectivity(ABC):
@@ -33,5 +34,6 @@ class Connectivity(ABC):
         pass
 
     @abstractmethod
-    def get_snippet(self, connection: "Connection", prefer_in_memory: bool):
+    def get_snippet(self, connection: "Connection",
+                    supported_matrix_type: "SupportedMatrixType"):
         pass

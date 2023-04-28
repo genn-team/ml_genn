@@ -7,6 +7,7 @@ from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
+from ..readouts import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 
@@ -15,16 +16,20 @@ from ..utils.module import get_object_mapping
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..metrics import default_metrics
 
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, softmax,
-                 k: int, pop_pipeline_depth: dict):
+                 connection_populations, k: int,
+                 pop_pipeline_depth: dict):
         super(CompiledFewSpikeNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations,
-            softmax, k)
+              genn_model, neuron_populations, connection_populations, k)
 
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
@@ -187,13 +192,26 @@ class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  prefer_in_memory_connect: bool = True, **genn_kwargs):
-        super(FewSpikeCompiler, self).__init__(dt, batch_size, rng_seed,
+        # Determine matrix type order of preference based on flag
+        if prefer_in_memory_connect:
+            supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG,
+                                     SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG]
+        else:
+            supported_matrix_type = [SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                     SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG]
+        super(FewSpikeCompiler, self).__init__(supported_matrix_type, dt,
+                                               batch_size, rng_seed,
                                                kernel_profiling,
-                                               prefer_in_memory_connect,
                                                **genn_kwargs)
         self.k = k
 
-    def pre_compile(self, network, inputs, outputs, **kwargs):
+    def pre_compile(self, network, genn_model, inputs, outputs, **kwargs):
         dag = get_network_dag(inputs, outputs)
 
         # Loop through populations
@@ -242,6 +260,17 @@ class FewSpikeCompiler(Compiler):
                 "FewSpike models only support FewSpikeRelu "
                 "and FewSpikeReluInput neurons")
 
+        # If population has a readout i.e. it's an output
+        if pop.neuron.readout is not None:
+            # Check readout is supported
+            if not isinstance(pop.neuron.readout, Var):
+                raise NotImplementedError(
+                    "FewSpike models only support output "
+                    "neurons with Var readout")
+            
+            # Add readout logic to model
+            model = pop.neuron.readout.add_readout_logic(model)
+
         # Build neuron model
         return super(FewSpikeCompiler, self).build_neuron_model(
             pop, model, compile_state)
@@ -255,9 +284,7 @@ class FewSpikeCompiler(Compiler):
             conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, 
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
-                                       connection_populations, 
-                                       softmax, self.k,
+                                       connection_populations, self.k,
                                        compile_state.pop_pipeline_depth)

@@ -4,6 +4,7 @@ from ..utils.value import InitValue
 
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import SynapseMatrixType_DENSE_INDIVIDUALG
 
 class Dense(Connectivity):
     def __init__(self, weight: InitValue, delay: InitValue = 0):
@@ -32,7 +33,15 @@ class Dense(Connectivity):
                 raise RuntimeError("source population shape "
                                    "doesn't match weights")
 
-    def get_snippet(self, connection, prefer_in_memory):
-        return ConnectivitySnippet(snippet=None,
-                                   matrix_type="DENSE_INDIVIDUALG",
-                                   weight=self.weight, delay=self.delay)
+    def get_snippet(self, connection, supported_matrix_type):
+        # Get best supported connectivity choice
+        best_matrix_type = supported_matrix_type.get_best(
+            [SynapseMatrixType_DENSE_INDIVIDUALG])
+        if best_matrix_type is None:
+            raise NotImplementedError("Compiler does not support "
+                                      "Dense connectivity")
+        else:
+            return ConnectivitySnippet(
+                snippet=None,
+                matrix_type=SynapseMatrixType_DENSE_INDIVIDUALG,
+                weight=self.weight, delay=self.delay)

@@ -1,5 +1,6 @@
 import numpy as np
 
+from typing import Optional
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
@@ -15,8 +16,8 @@ class LeakyIntegrateFire(Neuron):
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
                  tau_refrac: InitValue = None, relative_reset: bool = True,
-                 integrate_during_refrac: bool = True,
-                 softmax: bool = False, readout=None):
+                 integrate_during_refrac: bool = True, scale_i: bool = False,
+                 softmax: Optional[bool] = None, readout=None):
         super(LeakyIntegrateFire, self).__init__(softmax, readout)
 
         self.v_thresh = v_thresh
@@ -26,6 +27,7 @@ class LeakyIntegrateFire(Neuron):
         self.tau_refrac = tau_refrac
         self.relative_reset = relative_reset
         self.integrate_during_refrac = integrate_during_refrac
+        self.scale_i = scale_i
 
     def get_model(self, population, dt):
         # Build basic model
@@ -48,6 +50,11 @@ class LeakyIntegrateFire(Neuron):
                 """
                 $(V) = $(Vreset);
                 """
+        # Define integration code based on whether I should be scaled
+        if self.scale_i:
+            v_update = "$(V) = ($(Alpha) * $(V)) + ((1.0 - $(Alpha)) * $(Isyn));"
+        else:
+            v_update = "$(V) = ($(Alpha) * $(V)) + $(Isyn);"
 
         # If neuron has refractory period
         if self.tau_refrac is not None:
@@ -55,25 +62,26 @@ class LeakyIntegrateFire(Neuron):
             genn_model["var_name_types"].append(("RefracTime", "scalar"))
             genn_model["param_name_types"].append(("TauRefrac", "scalar"))
 
+            
             # Build correct sim code depending on whether
             # we should integrate during refractory period
             if self.integrate_during_refrac:
                 genn_model["sim_code"] =\
-                    """
-                    $(V) = ($(Alpha) * $(V)) + $(Isyn);
-                    if ($(RefracTime) > 0.0) {
+                    f"""
+                    {v_update}
+                    if ($(RefracTime) > 0.0) {{
                         $(RefracTime) -= DT;
-                    }
+                    }}
                     """
             else:
                 genn_model["sim_code"] =\
-                    """
-                    if ($(RefracTime) > 0.0) {
+                    f"""
+                    if ($(RefracTime) > 0.0) {{
                         $(RefracTime) -= DT;
-                    }
-                    else {
-                        $(V) = ($(Alpha) * $(V)) + $(Isyn);
-                    }
+                    }}
+                    else {{
+                        {v_update}
+                    }}
                     """
 
             # Add refractory period initialisation to reset code
@@ -87,10 +95,7 @@ class LeakyIntegrateFire(Neuron):
                 " && $(RefracTime) <= 0.0"
         # Otherwise, build non-refractory sim-code
         else:
-            genn_model["sim_code"] =\
-                """
-                $(V) = ($(Alpha) * $(V)) + $(Isyn);
-                """
+            genn_model["sim_code"] = v_update
 
         # Return model
         var_vals = {} if self.tau_refrac is None else {"RefracTime": 0.0}

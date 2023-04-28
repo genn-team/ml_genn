@@ -1,9 +1,10 @@
 from typing import Iterator, Sequence
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
-from .compiler import Compiler
+from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..metrics import Metric
+from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
@@ -13,17 +14,22 @@ from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 
+from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
+                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..metrics import default_metrics
 
 
 class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, softmax,
-                 evaluate_timesteps: int, base_callbacks: list,
+                 connection_populations, evaluate_timesteps: int, 
+                 base_callbacks: list,
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            softmax, evaluate_timesteps)
+            evaluate_timesteps)
         
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
@@ -198,6 +204,7 @@ class CompileState:
     def __init__(self):
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
+        self.in_syn_zero_conns = []
     
     def add_neuron_reset_vars(self, model, pop, reset_model_vars):
         if reset_model_vars:
@@ -247,19 +254,41 @@ class InferenceCompiler(Compiler):
                  prefer_in_memory_connect=True, 
                  reset_time_between_batches=True,
                  reset_vars_between_batches=True,
+                 reset_in_syn_between_batches=False,
                  **genn_kwargs):
-        super(InferenceCompiler, self).__init__(dt, batch_size, rng_seed,
-                                                kernel_profiling,
-                                                prefer_in_memory_connect,
+        # Determine matrix type order of preference based on flag
+        if prefer_in_memory_connect:
+            supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG,
+                                     SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG]
+        else:
+            supported_matrix_type = [SynapseMatrixType_TOEPLITZ_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_KERNELG,
+                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                                     SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                     SynapseMatrixType_DENSE_INDIVIDUALG]
+        super(InferenceCompiler, self).__init__(supported_matrix_type, dt,
+                                                batch_size, rng_seed,
+                                                kernel_profiling, 
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
         self.reset_vars_between_batches = reset_vars_between_batches
+        self.reset_in_syn_between_batches = reset_in_syn_between_batches
 
-    def pre_compile(self, network, **kwargs):
+    def pre_compile(self, network, genn_model, **kwargs):
         return CompileState()
 
     def build_neuron_model(self, pop, model, compile_state):
+        # If population has a readout i.e. it's an output
+        # Add readout logic to model
+        if pop.neuron.readout is not None:
+            model = pop.neuron.readout.add_readout_logic(
+                model, example_timesteps=self.evaluate_timesteps,
+                dt=self.dt)
+
         # Add any neuron reset variables to compile state
         compile_state.add_neuron_reset_vars(model, pop,
                                             self.reset_vars_between_batches)
@@ -273,20 +302,32 @@ class InferenceCompiler(Compiler):
         if self.reset_vars_between_batches:
             compile_state.add_psm_reset_vars(model, conn)
 
+        # If connection has any synapse model other than delta,
+        # add it to the list of connections to zero insyn
+        if not isinstance(conn.synapse, Delta):
+            compile_state.in_syn_zero_conns.append(conn)
+
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations,
-                                compile_state, softmax):
+                                connection_populations, compile_state):
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
                                                   connection_populations)
         
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
+        
+        # If insyn should be reset between batches
+        if self.reset_in_syn_between_batches:
+            # Add callbacks to zero insyn on all connections requiring them
+            # **NOTE** it would be great to be able to do this on device
+            for c in compile_state.in_syn_zero_conns:
+                base_callbacks.append(ZeroInSyn(connection_populations[c]))
+
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
-                                        softmax, self.evaluate_timesteps,
+                                        self.evaluate_timesteps,
                                         base_callbacks,
                                         self.reset_time_between_batches)

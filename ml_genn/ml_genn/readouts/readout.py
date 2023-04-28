@@ -8,7 +8,7 @@ from abc import abstractmethod
 
 class Readout(ABC):
     @abstractmethod
-    def add_readout_logic(self, model: NeuronModel) -> NeuronModel:
+    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
         pass
 
     @abstractmethod

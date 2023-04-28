@@ -18,7 +18,7 @@ class FixedProbability(SparseBase):
     def connect(self, source, target):
         pass
 
-    def get_snippet(self, connection, prefer_in_memory):
+    def get_snippet(self, connection, supported_matrix_type):
         # No autapse model should be used if self-connections are disallowed
         # and we're connecting the same population to itself
         no_autapse = (not self.allow_self_connections
@@ -26,4 +26,5 @@ class FixedProbability(SparseBase):
         snippet = ("FixedProbabilityNoAutapse" if no_autapse
                    else "FixedProbability")
         return super(FixedProbability, self)._get_snippet(
-            prefer_in_memory, init_connectivity(snippet, {"prob": self.p}))
+            supported_matrix_type, 
+            init_connectivity(snippet, {"prob": self.p}))

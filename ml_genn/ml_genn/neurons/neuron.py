@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 from typing import Optional
+from warnings import warn
 from ..readouts import Readout
 from ..utils.model import NeuronModel
 
@@ -18,13 +19,17 @@ class Neuron(ABC):
     """Base class for all neuron models
     
     Attributes:
-        softmax: Should softmax of output should be computed
+        readout: Type of readout to attach to this neuron's output variable
     """
-    def __init__(self, softmax: bool = False, 
+    def __init__(self, softmax: Optional[bool] = None,
                  readout: Optional[Readout] = None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
-        self.softmax = softmax
         self.readout = readout
+        
+        # Give warning if softmax argument is used
+        if softmax is not None:
+            warn("The softmax argument is no longer "
+                 "required and will be removed", DeprecationWarning)
 
     @abstractmethod
     def get_model(self, population: Population, dt: float) -> NeuronModel:

@@ -60,7 +60,7 @@ class Adam(Optimiser):
             {"Alpha": self.alpha, "FirstMomentScale": 0.0,
              "SecondMomentScale": 0.0})
 
-        # If a optimiser than automatically zeros 
+        # If a optimiser than automatically zeros
         # gradients should be provided
         if zero_gradient:
             # Change variable access model of gradient to read-write

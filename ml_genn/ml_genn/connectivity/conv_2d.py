@@ -10,6 +10,10 @@ from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
+from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                 SynapseMatrixType_PROCEDURAL_KERNELG,
+                                 SynapseMatrixType_TOEPLITZ_KERNELG)
+
 
 class Conv2D(Connectivity):
     def __init__(self, weight: InitValue, filters, conv_size,
@@ -47,7 +51,7 @@ class Conv2D(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of Conv2D kernel")
 
-    def get_snippet(self, connection, prefer_in_memory):
+    def get_snippet(self, connection, supported_matrix_type):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = connection.source().shape
@@ -58,16 +62,31 @@ class Conv2D(Connectivity):
         elif self.conv_padding == PadMode.SAME:
             conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
-
-        if not prefer_in_memory and conv_sh == 1 and conv_sw == 1:
+        
+        # Build list of available matrix types, 
+        # adding Toeplitz of constraints are met
+        available_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
+                                  SynapseMatrixType_PROCEDURAL_KERNELG]
+        if conv_sh == 1 and conv_sw == 1:
+            available_matrix_types.append(SynapseMatrixType_TOEPLITZ_KERNELG)
+        
+        # Get best supported matrix type
+        best_matrix_type = supported_matrix_type.get_best(
+            available_matrix_types)
+        
+        if best_matrix_type is None:
+            raise NotImplementedError("Compiler does not support "
+                                      "Conv2D connectivity")
+        elif best_matrix_type == SynapseMatrixType_TOEPLITZ_KERNELG:
             conn_init = init_toeplitz_connectivity("Conv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-            return ConnectivitySnippet(snippet=conn_init,
-                                       matrix_type="TOEPLITZ_KERNELG",
-                                       weight=self.weight, delay=self.delay)
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType_TOEPLITZ_KERNELG,
+                weight=self.weight, delay=self.delay)
         else:
             conn_init = init_connectivity("Conv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
@@ -76,7 +95,7 @@ class Conv2D(Connectivity):
                 "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
                 "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
-            if prefer_in_memory:
+            if best_matrix_type == SynapseMatrixType_SPARSE_INDIVIDUALG:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
                 weight = (KernelInit(self.weight)
@@ -85,11 +104,13 @@ class Conv2D(Connectivity):
                 delay = (KernelInit(self.delay)
                          if is_value_array(self.delay)
                          else self.delay)
-                return ConnectivitySnippet(snippet=conn_init,
-                                           matrix_type="SPARSE_INDIVIDUALG",
-                                           weight=weight, delay=delay)
+                return ConnectivitySnippet(
+                    snippet=conn_init,
+                    matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                    weight=weight, delay=delay)
             else:
-                return ConnectivitySnippet(snippet=conn_init,
-                                           matrix_type="PROCEDURAL_KERNELG",
-                                           weight=self.weight,
-                                           delay=self.delay)
+                return ConnectivitySnippet(
+                    snippet=conn_init,
+                    matrix_type=SynapseMatrixType_PROCEDURAL_KERNELG,
+                    weight=self.weight,
+                    delay=self.delay)
