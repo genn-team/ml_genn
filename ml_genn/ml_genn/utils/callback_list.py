@@ -17,18 +17,23 @@ class CallbackList:
     """Class used internally to efficiently handle lists of callback objects
     """
     def __init__(self, callbacks: Sequence[Callback], **params):
+        # Build list of callback objects
         self._callbacks = [get_object(c, Callback, "Callback",
                                       default_callbacks)
                            for c in callbacks]
 
+        # Because callback objects themselves should not be stateful,
+        # create dictionary to hold any data callbacks produce
+        self._data = {}
+
         # Loop through callbacks, build dictionary of all callbacks
-        # of each type and call set_params methods if presetn
+        # of each type and call set_params methods if present
         callback_types = defaultdict(list)
         for c in self._callbacks:
             callback_types[type(c)].append(c)
 
             if hasattr(c, "set_params"):
-                c.set_params(**params)
+                c.set_params(data=self._data, **params)
 
         # Loop through all callback types and
         # inform the first callback of each type

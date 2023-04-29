@@ -41,15 +41,16 @@ class VarRecorder(Callback):
         self._neuron_mask = get_neuron_filter_mask(neuron_filter,
                                                    self._pop.shape)
 
-        # Create empty list to hold recorded data
-        self._data = []
-
-    def set_params(self, compiled_network, **kwargs):
+    def set_params(self, data, compiled_network, **kwargs):
         self._batch_size = compiled_network.genn_model.batch_size
         self._compiled_network = compiled_network
 
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
+
+        # Create empty list to hold recorded data
+        data[self.key] = []
+        self._data = data[self.key]
 
     def on_timestep_end(self, timestep: int):
         # If anything should be recorded this batch
