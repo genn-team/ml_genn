@@ -13,6 +13,8 @@ from ml_genn.optimisers import Adam
 from time import perf_counter
 from ml_genn.utils.data import preprocess_spikes
 
+from ml_genn.compilers.eprop_compiler import default_params
+
 NUM_INPUT = 20
 NUM_HIDDEN = 256
 NUM_OUTPUT = 3
@@ -62,15 +64,13 @@ in_spike_ids = np.repeat(np.arange(NUM_INPUT), num_spikes_per_neuron)
 # Pre-process spikes
 in_spikes = preprocess_spikes(in_spike_times.flatten(), in_spike_ids, NUM_INPUT)
 
-network = Network()
+network = Network(default_params)
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=len(in_spike_ids)),
                                   NUM_INPUT, record_spikes=True)
     hidden = Population(LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0,
-                                           tau_refrac=5.0, 
-                                           relative_reset=True,
-                                           integrate_during_refrac=True),
+                                           tau_refrac=5.0),
                         NUM_HIDDEN, record_spikes=True)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="var"),
                         NUM_OUTPUT)

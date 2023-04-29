@@ -9,7 +9,8 @@ from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..losses import Loss, SparseCategoricalCrossentropy
-from ..neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire
+from ..neurons import (AdaptiveLeakyIntegrateFire, LeakyIntegrate,
+                       LeakyIntegrateFire)
 from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
@@ -28,6 +29,15 @@ from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
 
 logger = logging.getLogger(__name__)
+
+default_params = {
+    AdaptiveLeakyIntegrateFire: {"relative_reset": True,
+                                 "integrate_during_refrac": True,
+                                 "scale_i": False},
+    LeakyIntegrate: {"scale_i": False}, 
+    LeakyIntegrateFire: {"relative_reset": True, 
+                         "integrate_during_refrac": True,
+                         "scale_i": False}}
 
 def _has_connection_to_output(pop):
     # Loop through population's outgoing connections

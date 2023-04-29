@@ -2,47 +2,45 @@ from .network import Network
 
 
 class SequentialNetwork(Network):
-    _context = None
-
-    def __init__(self):
-        super(SequentialNetwork, self).__init__()
+    def __init__(self, default_params: dict = {}):
+        super(SequentialNetwork, self).__init__(default_params)
 
         self.layers = []
 
     @staticmethod
     def _add_input_layer(layer, population):
-        if SequentialNetwork._context is None:
+        if Network._context is None:
             raise RuntimeError("InputLayer must be created "
                                "inside a ``with sequential_network:`` block")
-        SequentialNetwork._context.layers.append(layer)
-        SequentialNetwork._context.populations.append(population)
+        Network._context.layers.append(layer)
+        Network._context.populations.append(population)
 
     @staticmethod
     def _add_layer(layer, population, connection):
-        if SequentialNetwork._context is None:
+        if Network._context is None:
             raise RuntimeError("Layer must be created "
                                "inside a ``with sequential_network:`` block")
-        SequentialNetwork._context.layers.append(layer)
-        SequentialNetwork._context.populations.append(population)
-        SequentialNetwork._context.connections.append(connection)
+        Network._context.layers.append(layer)
+        Network._context.populations.append(population)
+        Network._context.connections.append(connection)
 
     @staticmethod
     def get_prev_layer():
-        if SequentialNetwork._context is None:
+        if Network._context is None:
             raise RuntimeError("Cannot get previous layer outside of a "
                                "``with sequential_network:`` block")
-        if len(SequentialNetwork._context.layers) > 0:
-            return SequentialNetwork._context.layers[-1]
+        if len(Network._context.layers) > 0:
+            return Network._context.layers[-1]
         else:
             return None
 
     def __enter__(self):
-        if SequentialNetwork._context is not None:
-            raise RuntimeError("Nested sequential networks are "
+        if Network._context is not None:
+            raise RuntimeError("Nested networks are "
                                "not currently supported")
 
-        SequentialNetwork._context = self
+        Network._context = self
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
-        assert SequentialNetwork._context is not None
-        SequentialNetwork._context = None
+        assert Network._context is not None
+        Network._context = None

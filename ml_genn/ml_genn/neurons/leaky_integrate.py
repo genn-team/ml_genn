@@ -5,11 +5,14 @@ from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
+from ..utils.decorators import network_default_params
+
 class LeakyIntegrate(Neuron):
     v = ValueDescriptor("V")
     bias = ValueDescriptor("Bias")
     tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
 
+    @network_default_params
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, scale_i : bool = False,
                  softmax: Optional[bool] = None, readout=None):

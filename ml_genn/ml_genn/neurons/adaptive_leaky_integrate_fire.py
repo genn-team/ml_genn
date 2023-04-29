@@ -5,6 +5,7 @@ from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
+from ..utils.decorators import network_default_params
 
 class AdaptiveLeakyIntegrateFire(Neuron):
     v_thresh = ValueDescriptor("Vthresh")
@@ -16,6 +17,7 @@ class AdaptiveLeakyIntegrateFire(Neuron):
     tau_refrac = ValueDescriptor("TauRefrac")
     tau_adapt = ValueDescriptor("Rho", lambda val, dt: np.exp(-dt / val))
 
+    @network_default_params
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, a: InitValue = 0.0, beta: InitValue = 0.0174,
                  tau_mem: InitValue = 20.0, tau_refrac: InitValue = None,

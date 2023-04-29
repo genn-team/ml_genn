@@ -14,6 +14,8 @@ from ml_genn.synapses import Exponential
 from time import perf_counter
 from ml_genn.utils.data import linear_latency_encode_data
 
+from ml_genn.compilers.event_prop_compiler import default_params
+
 NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
@@ -31,7 +33,7 @@ spikes = linear_latency_encode_data(
     EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
-network = SequentialNetwork()
+network = SequentialNetwork(default_params)
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
@@ -40,13 +42,10 @@ with network:
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
     hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                                    tau_refrac=None, 
-                                                    relative_reset=False,
-                                                    integrate_during_refrac=False,
-                                                    scale_i=True),
+                                                    tau_refrac=None),
                    NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   LeakyIntegrate(tau_mem=20.0, scale_i=True, readout="avg_var"),
+                   LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
                    NUM_OUTPUT, Exponential(5.0))
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
