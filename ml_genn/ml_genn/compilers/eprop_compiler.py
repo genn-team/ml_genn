@@ -490,10 +490,14 @@ class EPropCompiler(Compiler):
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
         # If softmax is required, add three stage reduction to callbacks
+        # **NOTE** this is also required for validation because readout is configured this way
         if len(compile_state.softmax_populations) > 0:
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
+            base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
+            base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
+            base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
