@@ -31,7 +31,7 @@ genn_model = {
     "is_auto_refractory_required": False}
 
 
-class SpikeInput(Neuron):
+class SpikeInput(Neuron, InputBase):
     def __init__(self, max_spikes=1000000):
         super(SpikeInput, self).__init__()
 
