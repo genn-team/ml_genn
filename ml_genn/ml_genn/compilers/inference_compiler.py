@@ -200,6 +200,57 @@ class CompiledInferenceNetwork(CompiledNetwork):
         callback_list.on_batch_end(batch, metrics)
 
 
+
+class CompiledLiveInferenceNetwork(CompiledNetwork):
+    def __init__(self, genn_model, neuron_populations,
+                 connection_populations, evaluate_timesteps: int, 
+                 base_callbacks: list,
+                 reset_time_between_batches: bool = True):
+        super(CompiledLiveInferenceNetwork, self).__init__(
+            genn_model, neuron_populations, connection_populations,
+            evaluate_timesteps)
+        
+        self.evaluate_timesteps = evaluate_timesteps
+        self.base_callbacks = base_callbacks
+        self.reset_time_between_batches = reset_time_between_batches
+
+    def evaluate(self, x: dict, y: list,
+                 callbacks=[]):
+        """ Evaluate model on live data
+        """
+        # Create callback list and begin testing
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
+                                     live_outputs=y)
+        callback_list.on_test_begin()
+
+        # Loop
+        try:
+            while True:
+                # Start batch
+                callback_list.on_batch_begin(batch)
+
+                # Reset time to 0 if desired
+                if self.reset_time_between_batches:
+                    self.genn_model.timestep = 0
+                    self.genn_model.t = 0.0
+
+                # Apply inputs to model
+                self.set_input(x)
+
+                # Simulate timesteps
+                for t in range(self.evaluate_timesteps):
+                    self.step_time(callback_list)
+
+                # End batch
+                callback_list.on_batch_end(batch, metrics)
+        except KeyboardInterrupt:
+            pass
+
+        # End testing
+        callback_list.on_test_end(metrics)
+
+
 class CompileState:
     def __init__(self):
         self._neuron_reset_vars = {}
@@ -250,11 +301,11 @@ class CompileState:
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
-                 kernel_profiling: bool = False,
-                 prefer_in_memory_connect=True, 
-                 reset_time_between_batches=True,
-                 reset_vars_between_batches=True,
-                 reset_in_syn_between_batches=False,
+                 kernel_profiling: bool = False, live: bool = False,
+                 prefer_in_memory_connect: bool = True, 
+                 reset_time_between_batches: bool = True,
+                 reset_vars_between_batches: bool = True,
+                 reset_in_syn_between_batches: bool = False,
                  **genn_kwargs):
         # Determine matrix type order of preference based on flag
         if prefer_in_memory_connect:
@@ -274,9 +325,15 @@ class InferenceCompiler(Compiler):
                                                 kernel_profiling, 
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
+        self.live = live
         self.reset_time_between_batches = reset_time_between_batches
         self.reset_vars_between_batches = reset_vars_between_batches
         self.reset_in_syn_between_batches = reset_in_syn_between_batches
+        
+        # Check batch size
+        if self.live and genn_model.batch_size != 1:
+            raise RuntimeError("Networks for live inference "
+                               "must be compiled with batch size 1")
 
     def pre_compile(self, network, genn_model, **kwargs):
         return CompileState()
@@ -316,9 +373,9 @@ class InferenceCompiler(Compiler):
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
                                                   connection_populations)
-        
+
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
-        
+
         # If insyn should be reset between batches
         if self.reset_in_syn_between_batches:
             # Add callbacks to zero insyn on all connections requiring them
@@ -326,8 +383,16 @@ class InferenceCompiler(Compiler):
             for c in compile_state.in_syn_zero_conns:
                 base_callbacks.append(ZeroInSyn(connection_populations[c]))
 
-        return CompiledInferenceNetwork(genn_model, neuron_populations,
-                                        connection_populations,
-                                        self.evaluate_timesteps,
-                                        base_callbacks,
-                                        self.reset_time_between_batches)
+        # Return either live or standard compiled inference network
+        if self.live:
+            return CompiledLiveInferenceNetwork(genn_model, neuron_populations,
+                                                connection_populations,
+                                                self.evaluate_timesteps,
+                                                base_callbacks,
+                                                self.reset_time_between_batches)
+        else:
+            return CompiledInferenceNetwork(genn_model, neuron_populations,
+                                            connection_populations,
+                                            self.evaluate_timesteps,
+                                            base_callbacks,
+                                            self.reset_time_between_batches)
