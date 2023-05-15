@@ -59,13 +59,16 @@ class CompiledNetwork:
                                "not currently supported")
 
         CompiledNetwork._context = self
-        self.genn_model.build()
+        if not self.genn_model._built:
+            self.genn_model.build()
         self.genn_model.load(
             num_recording_timesteps=self.num_recording_timesteps)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
         assert CompiledNetwork._context is not None
         CompiledNetwork._context = None
+
+        self.genn_model.unload()
 
     def _get_readout(self, pop: PopulationType) -> np.ndarray:
         pop = get_underlying_pop(pop)
