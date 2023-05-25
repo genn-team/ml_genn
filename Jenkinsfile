@@ -125,8 +125,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     def commandsPyGeNN = """
                     . ${WORKSPACE}/venv/bin/activate
                     rm -f ${messagesPyGeNN}
-                    python setup.py install  1>>\"${messagesPyGeNN}\" 2>&1
-                    python setup.py install  1>>\"${messagesPyGeNN}\" 2>&1
+                    pip install . 1>>\"${messagesPyGeNN}\" 2>&1
                     """;
                     def statusPyGeNN = sh script:commandsPyGeNN, returnStatus:true;
                     archive messagesPyGeNN;
