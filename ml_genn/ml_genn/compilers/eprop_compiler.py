@@ -472,7 +472,7 @@ class EPropCompiler(Compiler):
         for p, o, s in compile_state.softmax_populations:
             genn_pop = neuron_populations[p]
             self.add_softmax_custom_updates(genn_model, genn_pop, 
-                                            o, s, p.name)
+                                            o, s)
 
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
