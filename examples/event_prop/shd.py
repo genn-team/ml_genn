@@ -117,7 +117,6 @@ if TRAIN:
                                  losses="sparse_categorical_crossentropy",
                                  reg_lambda_upper=4e-09, reg_lambda_lower=4e-09, 
                                  reg_nu_upper=14, max_spikes=1500, 
-                                 per_timestep_loss=True,
                                  optimiser=Adam(0.001), dt=DT, batch_size=BATCH_SIZE,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
