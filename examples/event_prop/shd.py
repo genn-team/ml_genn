@@ -12,23 +12,65 @@ from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 from tonic.datasets import SHD
+from tonic.transforms import Compose, CropTime
+from typing import Tuple
 
+from dataclasses import dataclass
 from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 from ml_genn.compilers.event_prop_compiler import default_params
 
+
+@dataclass
+class EventsToGrid:
+    sensor_size: Tuple[int, int, int]
+    dt: float
+
+    def __call__(self, events):
+        # Tuple of possible axis names
+        axes = ("x", "y", "p")
+
+        # Build bin and sample data structures for histogramdd
+        bins = []
+        sample = []
+        for s, a in zip(self.sensor_size, axes):
+            if a in events.dtype.names:
+                bins.append(np.linspace(0, s, s + 1))
+                sample.append(events[a])
+
+        # Add time bins
+        bins.append(np.arange(0.0, np.amax(events["t"]) + self.dt, self.dt))
+        sample.append(events["t"])
+
+        # Build histogram
+        event_hist,_ = np.histogramdd(tuple(sample), tuple(bins))
+        new_events = np.where(event_hist > 0)
+
+        # Copy x, y, p data into new structured array
+        grid_events = np.empty(len(new_events[0]), dtype=events.dtype)
+        for i, a in enumerate(axes):
+            if a in grid_events.dtype.names:
+                grid_events[a] = new_events[i]
+
+        # Add t, scaling by dt
+        grid_events["t"] = new_events[-1] * self.dt
+        return grid_events
+
+
 NUM_HIDDEN = 256
 BATCH_SIZE = 32
 NUM_EPOCHS = 300
 EXAMPLE_TIME = 20.0
-DT = 1.0
+DT = 8.0
 TRAIN = True
 KERNEL_PROFILING = True
 
-# Get SHD dataset
-dataset = SHD(save_to='../data', train=TRAIN)
+# Get SHD dataset, crop each example to 1000ms and ensure grids are aligned to timestep grid
+dataset = SHD(save_to="../data", train=TRAIN,
+              transform=Compose([CropTime(max=1000.0 * 1000.0), EventsToGrid(SHD.sensor_size, DT * 1000.0)]))
+
 
 # Preprocess
 spikes = []
@@ -58,7 +100,7 @@ with network:
     hidden = Population(LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
                                            tau_refrac=None),
                         NUM_HIDDEN)
-    output = Population(LeakyIntegrate(tau_mem=20.0, readout="avg_var_exp_weight"),
+    output = Population(LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
                         num_output)
 
     # Connections
@@ -75,7 +117,8 @@ if TRAIN:
                                  losses="sparse_categorical_crossentropy",
                                  reg_lambda_upper=4e-09, reg_lambda_lower=4e-09, 
                                  reg_nu_upper=14, max_spikes=1500, 
-                                 optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
+                                 per_timestep_loss=True,
+                                 optimiser=Adam(0.001), dt=DT, batch_size=BATCH_SIZE,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -108,7 +151,7 @@ else:
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,
-                                 batch_size=BATCH_SIZE)
+                                 dt=DT, batch_size=BATCH_SIZE)
     compiled_net = compiler.compile(network)
 
     with compiled_net:

@@ -412,17 +412,17 @@ class EventPropCompiler(Compiler):
                 if self.per_timestep_loss:
                     # Get reset vars before we add ring-buffer variables
                     reset_vars = model_copy.reset_vars
-                    
+
                     # Add variables to hold offsets for 
                     # reading and writing ring variables
                     model_copy.add_var("RingWriteOffset", "int", 0)
                     model_copy.add_var("RingReadOffset", "int", 0)
-                        
+
                     # Add EGP for softmax V ring variable
                     ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
                     model_copy.add_egp("RingSoftmaxV", "scalar*", 
                                        np.empty(ring_size, dtype=np.float32))
-                    
+
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         model_copy.prepend_sim_code(
@@ -434,7 +434,7 @@ class EventPropCompiler(Compiler):
                                 const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - softmax) : -softmax;
                                 $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
                             }}
-                            
+
                             // Forward pass
                             """)
 
@@ -498,7 +498,8 @@ class EventPropCompiler(Compiler):
 
                         # Add custom update to reset state
                         compile_state.add_neuron_reset_vars(
-                            pop, model_copy.reset_vars, False)
+                            pop, model_copy.reset_vars,
+                            False, False)
                     # Otherwise, if readout is MaxVar
                     elif isinstance(pop.neuron.readout, MaxVar):
                         # Add state variable to hold vmax from previous trial
