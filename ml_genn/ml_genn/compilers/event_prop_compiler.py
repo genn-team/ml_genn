@@ -781,7 +781,8 @@ class EventPropCompiler(Compiler):
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations,
+                                current_source_populations, compile_state):
         # Correctly target feedback
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"
@@ -854,7 +855,8 @@ class EventPropCompiler(Compiler):
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            compile_state.losses, self._optimiser, self.example_timesteps,
+            current_source_populations, compile_state.losses,
+            self._optimiser, self.example_timesteps,
             base_train_callbacks, base_validate_callbacks, 
             optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
@@ -864,7 +866,7 @@ class EventPropCompiler(Compiler):
     def regulariser_enabled(self):
         return (self.reg_lambda_lower != 0.0 
                 or self.reg_lambda_upper != 0.0)
-    
+
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
         # Create custom update model to implement 
@@ -916,7 +918,7 @@ class EventPropCompiler(Compiler):
             genn_model, softmax_3, 
             "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
-            
+
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1

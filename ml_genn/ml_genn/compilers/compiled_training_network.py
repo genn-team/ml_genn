@@ -19,8 +19,8 @@ from ..serialisers import default_serialisers
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, losses,
-                 optimiser, example_timesteps: int, 
+                 connection_populations, current_source_populations,
+                 losses, optimiser, example_timesteps: int,
                  base_train_callbacks: list, base_validate_callbacks: list,
                  optimiser_custom_updates: list,
                  checkpoint_connection_vars: list,
@@ -28,7 +28,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            example_timesteps)
+            current_source_populations, example_timesteps)
 
         self.losses = losses
         self.optimiser = optimiser

@@ -389,7 +389,7 @@ class EPropCompiler(Compiler):
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
-        
+
         # Calculate membrane persistence
         alpha = np.exp(-self.dt / compile_state.tau_mem)
 
@@ -409,7 +409,7 @@ class EPropCompiler(Compiler):
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
             rho = np.exp(-self.dt / compile_state.tau_adapt)
-            
+
             wum = WeightUpdateModel(
                 model=eprop_alif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
@@ -441,7 +441,8 @@ class EPropCompiler(Compiler):
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations,
+                                current_source_populations, compile_state):
         # Fuse pre and postsynaptic updates for efficiency
         genn_model._model.set_fuse_postsynaptic_models(True)
         genn_model._model.set_fuse_pre_post_weight_update_models(True)
@@ -449,7 +450,7 @@ class EPropCompiler(Compiler):
         # Correctly target feedback
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "ISynFeedback"
-        
+
         # Add optimisers to connection weights that require them
         optimiser_custom_updates = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
@@ -458,7 +459,7 @@ class EPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
-        
+
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
             genn_pop = neuron_populations[p]
@@ -466,7 +467,7 @@ class EPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
                     create_var_ref(genn_pop, "DeltaBias"), genn_model))
-        
+
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
         for p, o, s in compile_state.softmax_populations:
@@ -501,8 +502,8 @@ class EPropCompiler(Compiler):
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            compile_state.losses, self._optimiser, self.example_timesteps,
-            base_train_callbacks, base_validate_callbacks, 
+            current_source_populations, compile_state.losses, self._optimiser,
+            self.example_timesteps, base_train_callbacks, base_validate_callbacks,
             optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)

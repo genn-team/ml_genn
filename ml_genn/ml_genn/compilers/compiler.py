@@ -256,9 +256,12 @@ class Compiler:
             "CUSoftmax3" + genn_pop.name)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations,
+                                current_source_populations,
+                                compile_state):
         return CompiledNetwork(genn_model, neuron_populations,
-                               connection_populations)
+                               connection_populations,
+                               current_source_populations)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
         # If no name is specifie
@@ -291,6 +294,7 @@ class Compiler:
 
         # Loop through populations
         neuron_populations = {}
+        current_source_populations = {}
         for pop in network.populations:
             # Check population has shape
             if pop.shape is None:
@@ -394,4 +398,5 @@ class Compiler:
 
         return self.create_compiled_network(genn_model, neuron_populations,
                                             connection_populations,
+                                            current_source_populations,
                                             compile_state)

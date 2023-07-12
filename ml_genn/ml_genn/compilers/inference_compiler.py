@@ -24,13 +24,13 @@ from ..metrics import default_metrics
 
 class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, evaluate_timesteps: int, 
-                 base_callbacks: list,
+                 connection_populations, current_source_populations,
+                 evaluate_timesteps: int, base_callbacks: list,
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations,
-            evaluate_timesteps)
-        
+            genn_model, neuron_populations, current_source_populations,
+            connection_populations, evaluate_timesteps)
+
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
         self.reset_time_between_batches = reset_time_between_batches
@@ -311,7 +311,9 @@ class InferenceCompiler(Compiler):
             conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+                                connection_populations,
+                                current_source_populations,
+                                compile_state):
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
@@ -328,6 +330,7 @@ class InferenceCompiler(Compiler):
 
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
+                                        current_source_populations,
                                         self.evaluate_timesteps,
                                         base_callbacks,
                                         self.reset_time_between_batches)
