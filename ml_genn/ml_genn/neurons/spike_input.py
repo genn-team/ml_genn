@@ -36,17 +36,17 @@ class SpikeInput(Neuron, Input):
         super(SpikeInput, self).__init__()
 
         self.max_spikes = max_spikes
-    
+
     def set_input(self, genn_pop, batch_size: int, shape,
                   input: Union[PreprocessedSpikes, Sequence[PreprocessedSpikes]]):
         # Batch spikes
         batched_spikes = batch_spikes(input, batch_size)
-        
+
         # Get view
         start_spikes_view = genn_pop.vars["StartSpike"].view
         end_spikes_view = genn_pop.vars["EndSpike"].view
         spike_times_view = genn_pop.extra_global_params["SpikeTimes"].view
-        
+
         # Check that spike times will fit in view, copy them and push them
         num_spikes = len(batched_spikes.spike_times) 
         assert num_spikes <= len(spike_times_view)
@@ -58,7 +58,7 @@ class SpikeInput(Neuron, Input):
         start_spikes_view[:] = calc_start_spikes(batched_spikes.end_spikes)
         genn_pop.push_var_to_device("StartSpike")
         genn_pop.push_var_to_device("EndSpike")
-    
+
     def get_model(self, population: "Population", dt: float):
         return NeuronModel(genn_model, None, {}, 
                            {"StartSpike": 0, "EndSpike": 0},

@@ -274,7 +274,7 @@ class EPropCompiler(Compiler):
         if pop.neuron.readout is not None:
             # Get loss function associated with this output neuron
             loss = compile_state.losses[pop]
-            
+
             # If loss function is sparse categorical crossentropy
             if isinstance(loss, SparseCategoricalCrossentropy):
                 # Get output variable from neuron model
@@ -287,7 +287,7 @@ class EPropCompiler(Compiler):
 
                 # Finally, point output variable at new softmax'd output
                 model_copy.output_var_name = softmax_var_name
-                
+
                 # Add population to list of those needing softmax calculation
                 compile_state.softmax_populations.append(
                     (pop, output_var[0], softmax_var_name))
@@ -384,7 +384,7 @@ class EPropCompiler(Compiler):
 
         # Return model
         return model
-    
+
     def build_weight_update_model(self, conn, connect_snippet, compile_state):
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
@@ -515,7 +515,7 @@ class EPropCompiler(Compiler):
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
                 {"Gradient": gradient_ref})
-            
+
             # Add GeNN custom update to model
             genn_reduction = self.add_custom_update(
                 genn_model, reduction_optimiser_model, 

@@ -267,7 +267,7 @@ class FewSpikeCompiler(Compiler):
                 raise NotImplementedError(
                     "FewSpike models only support output "
                     "neurons with Var readout")
-            
+
             # Add readout logic to model
             model = pop.neuron.readout.add_readout_logic(model)
 
