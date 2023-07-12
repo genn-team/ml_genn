@@ -12,13 +12,14 @@ from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
-from ..utils.model import (CustomUpdateModel, NeuronModel,
-                           SynapseModel, WeightUpdateModel)
+from ..utils.model import (CurrentSourceModel, CustomUpdateModel,
+                           NeuronModel, SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import deepcopy
-from pygenn.genn_model import (create_custom_custom_update_class,
+from pygenn.genn_model import (create_custom_current_source_class,
+                               create_custom_custom_update_class,
                                create_custom_neuron_class,
                                create_custom_postsynaptic_class,
                                create_custom_weight_update_class,
@@ -161,9 +162,13 @@ class Compiler:
 
         return model_copy
 
+    def build_current_source_model(self, pop: Population,
+                                   model: CurrentSourceModel,
+                                   compile_state):
+        return model
+
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
                             compile_state):
-        # Build model customised for parameters and values
         return model
 
     def build_weight_update_model(self, connection: Connection,
@@ -304,15 +309,14 @@ class Compiler:
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
             neuron_model = neuron.get_model(pop, self.dt)
-
-            neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
-                self.build_neuron_model(
-                    pop, neuron_model,
-                    compile_state).process()
+            genn_neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
+                self.build_neuron_model(pop, neuron_model,
+                                        compile_state).process()
 
             # Create custom neuron model
-            genn_neuron_model = create_custom_neuron_class("NeuronModel",
-                                                           **neuron_model)
+            genn_neuron_model = create_custom_neuron_class(
+                "NeuronModel", **genn_neuron_model)
+
             # Add neuron population
             genn_pop = genn_model.add_neuron_population(
                 pop.name, np.prod(pop.shape),
@@ -330,6 +334,37 @@ class Compiler:
 
             # Add to neuron populations dictionary
             neuron_populations[pop] = genn_pop
+
+            # Loop through any current sources associated with neuron model
+            # **TODO** combine with current sources added to population
+            for csm in neuron_model.current_sources:
+                # Build GeNN current source model, parameters and values
+                genn_cs_model, param_vals, var_vals, egp_vals, var_egp_vals =\
+                    self.build_current_source_model(pop, csm,
+                                                    compile_state).process()
+
+                # Create custom current source model
+                genn_cs_model = create_custom_current_source_class(
+                    "CurrentSourceModel", **genn_cs_model)
+
+                # Add current source
+                genn_cs_pop = genn_model.add_current_source(
+                    f"{pop.name}_CS", genn_cs_model, genn_pop,
+                    param_vals, var_vals)
+
+                # Configure EGPs
+                set_egp(egp_vals, genn_cs_pop.extra_global_params)
+
+                # Configure var init EGPs
+                set_var_egps(var_egp_vals, genn_cs_pop.vars)
+
+                # Add to current source populations dictionary
+                # **NOTE** for now we only support a single current
+                # source per population - could be relaxed although
+                # not quite clear how inputs would identify correct one
+                assert pop not in current_source_populations
+                current_source_populations[pop] = genn_cs_pop
+
 
         # Loop through connections
         connection_populations = {}
