@@ -1,4 +1,4 @@
-from .input_base import InputBase
+from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor

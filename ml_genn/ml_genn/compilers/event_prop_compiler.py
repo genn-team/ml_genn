@@ -17,7 +17,7 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
-from ..neurons import LeakyIntegrate, LeakyIntegrateFire
+from ..neurons import Input, LeakyIntegrate, LeakyIntegrateFire
 from ..optimisers import Optimiser
 from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar
 from ..synapses import Exponential
@@ -577,7 +577,7 @@ class EventPropCompiler(Compiler):
                                np.empty(ring_size, dtype=np.float32))
 
             # If neuron is an input
-            if hasattr(pop.neuron, "set_input"):
+            if isinstance(pop.neuron, Input):
                 # Add reset logic to reset any state 
                 # variables from the original model
                 compile_state.add_neuron_reset_vars(pop, model.reset_vars,
@@ -769,7 +769,7 @@ class EventPropCompiler(Compiler):
 
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
-        if not hasattr(source_neuron, "set_input"):
+        if not isinstance(source_neuron, Input):
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
 

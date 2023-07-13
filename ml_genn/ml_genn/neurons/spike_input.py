@@ -3,7 +3,7 @@ import numpy as np
 from collections import namedtuple
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from typing import Sequence, Union
-from .input_base import InputBase
+from .input import Input
 from .neuron import Neuron
 from ..utils.data import PreprocessedSpikes 
 from ..utils.model import NeuronModel
@@ -31,7 +31,7 @@ genn_model = {
     "is_auto_refractory_required": False}
 
 
-class SpikeInput(Neuron):
+class SpikeInput(Neuron, Input):
     def __init__(self, max_spikes=1000000):
         super(SpikeInput, self).__init__()
 

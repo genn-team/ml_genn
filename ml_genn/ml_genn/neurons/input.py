@@ -1,7 +1,17 @@
 import numpy as np
 
+from abc import ABC
 
-class InputBase:
+from abc import abstractmethod
+
+
+class Input:
+    @abstractmethod
+    def set_input(self, compiled_net, pop, input):
+        pass
+
+
+class InputBase(Input):
     def __init__(self, var_name="Input", **kwargs):
         super(InputBase, self).__init__(**kwargs)
 

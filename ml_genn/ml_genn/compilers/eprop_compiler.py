@@ -9,8 +9,8 @@ from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..losses import Loss, SparseCategoricalCrossentropy
-from ..neurons import (AdaptiveLeakyIntegrateFire, LeakyIntegrate,
-                       LeakyIntegrateFire)
+from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
+                       LeakyIntegrate, LeakyIntegrateFire)
 from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
@@ -336,7 +336,7 @@ class EPropCompiler(Compiler):
                 compile_state.checkpoint_population_vars.append((pop, "Bias"))
 
         # Otherwise, if neuron isn't an input i.e. it's hidden
-        elif not hasattr(pop.neuron, "set_input"):
+        elif not isinstance(pop.neuron, Input):
             # Check hidden population is connected directly to output
             if not _has_connection_to_output(pop):
                 raise RuntimeError("In models trained with e-prop, all "
