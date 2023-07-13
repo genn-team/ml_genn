@@ -4,6 +4,7 @@ from abc import ABC
 
 from abc import abstractmethod
 
+from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 
 class Input:
     @abstractmethod
@@ -12,10 +13,64 @@ class Input:
 
 
 class InputBase(Input):
-    def __init__(self, var_name="Input", **kwargs):
+    def __init__(self, var_name="Input", egp_name=None,
+                 input_timesteps=1, input_dt=1,
+                 **kwargs):
         super(InputBase, self).__init__(**kwargs)
 
+        # If no EGP name is given, give error if no
+        if input_timesteps > 1 and egp_name is None:
+            raise RuntimeError("Neuron model does not "
+                               "support time-varying input")
+
         self.var_name = var_name
+        self.egp_name = egp_name
+        self.input_timesteps = input_timesteps
+        self.input_dt = input_dt
+
+    def add_input_logic(self, neuron_model, batch_size: int, shape):
+        # Replace input references in sim code with local variable reference
+        neuron_model.replace_input("input")
+
+        # If input isn't time-varying
+        if self.input_timesteps == 1:
+            # Add read-only input variable
+            neuron_model.add_var(self.var_name, "scalar", 0.0,
+                                 VarAccess_READ_ONLY_DUPLICATE)
+
+            # Prepend sim code with code to initialize
+            # local variable to input + synaptic input
+            neuron_model.prepend_sim_code(
+                f"const scalar input = $({self.var_name}) + $(Isyn);")
+        else:
+            # If batch size is 1
+            flat_shape = np.prod(shape)
+            if batch_size == 1:
+                # Add EGP
+                neuron_model.add_egp(self.egp_name, "scalar*",
+                                     np.empty(self.input_timesteps,) + shape)
+
+                # Prepend sim code with code to initialize
+                # local variable to correct EGP entry + synaptic input
+                neuron_model.prepend_sim_code(
+                    f"""
+                    const int timestep = (int)($(t) / DT);
+                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);")
+                    """)
+            else:
+                # Add EGP
+                neuron_model.add_egp(
+                    self.egp_name, "scalar*",
+                    np.empty(self.input_timesteps, batch_size) + shape)
+
+                # Prepend sim code with code to initialize
+                # local variable to correct EGP entry + synaptic input
+                neuron_model.prepend_sim_code(
+                    f"""
+                    const int timestep = (int)($(t) / DT);
+                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);")
+                    """)
+
 
     def set_input(self, genn_pop, batch_size: int, shape, input):
         # Ensure input is something convertable to a numpy array

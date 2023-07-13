@@ -22,11 +22,11 @@ class Model:
                  var_vals: MutableMapping[str, Value] = {},
                  egp_vals: MutableMapping[str, EGPValue] = {}):
         self.model = model
-    
+
         self.param_vals = param_vals
         self.var_vals = var_vals
         self.egp_vals = egp_vals
-    
+
     def add_param(self, name: str, type: str, value: Value):
         self._add_to_list("param_name_types", (name, type))
         self.param_vals[name] = value
@@ -57,7 +57,7 @@ class Model:
 
         # Add EGP to replace it
         self.add_egp(param_name, param[1], param_val)
-        
+
     def set_var_access_mode(self, name: str, access_mode: int):
         self._set_access_model("var_name_types", name, access_mode)
 
@@ -146,18 +146,22 @@ class Model:
             self.model[name] = f"{code}\n"
         else:
             self.model[name] += f"\n{code}\n"
-    
+
     def _prepend_code(self, name: str, code: str):
         code = dedent(code)
         if name not in self.model:
             self.model[name] = f"{code}\n"
         else:
             self.model[name] = f"{code}\n" + self.model[name]
-    
+
+    def _replace_code(self, name: str, source: str, target: str):
+        if name in self.model:
+            self.model[name].replace(source, target)
+
     def _set_access_model(self, name: str, var: str, access_mode):
         # Find var
         var_index, _ = self._search_list(name, var)
-        
+
         # Take first two elements of existing var and add access mode
         var_array = self.model[name]
         var_array[var_index] = var_array[var_index][:2] + (access_mode,)
@@ -169,10 +173,10 @@ class Model:
 
         # Remove parameter
         self.model["param_name_types"].pop(param_index)
-        
+
         # Add variable to replace it
         self._add_to_list(var_name, param[:2] + (access_mode,))
-        
+
         # Remove parameter value and add into var vals
         var_vals[param_name] = param_vals.pop(param_name)
 
@@ -222,7 +226,7 @@ class NeuronModel(Model):
                  param_vals={}, var_vals={}, egp_vals={}):
         super(NeuronModel, self).__init__(model, param_vals, 
                                           var_vals, egp_vals)
-        
+
         self.output_var_name = output_var_name
 
     def add_additional_input_var(self, name, type, init_val):
@@ -236,10 +240,22 @@ class NeuronModel(Model):
 
     def append_reset_code(self, code):
         self._append_code("reset_code", code)
-    
+
     def prepend_reset_code(self, code):
         self._prepend_code("reset_code", code)
-    
+
+    def replace_input(self, replacement, source="Isyn"):
+        # Replace $(source) in all neuron code strings
+        source_neuron = f"$({source})"
+        self._replace_code("sim_code", source_neuron, replacement)
+        self._replace_code("threshold_condition_code", source_neuron,
+                           replacement)
+        self._replace_code("reset_code", source_neuron, replacement)
+
+        # Replace $(source_pre) in negative event threshold code
+        self._replace_code("negative_threshold_condition_code",
+                           f"$({source}_pre)", replacement)
+
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst, dt,
                              param_vals={}, var_vals={}, egp_vals={}):
