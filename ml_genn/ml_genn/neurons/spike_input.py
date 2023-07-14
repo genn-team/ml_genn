@@ -59,7 +59,7 @@ class SpikeInput(Neuron, Input):
         genn_pop.push_var_to_device("StartSpike")
         genn_pop.push_var_to_device("EndSpike")
 
-    def get_model(self, population: "Population", dt: float):
+    def get_model(self, population: "Population", dt: float, batch_size: int):
         return NeuronModel(genn_model, None, {}, 
                            {"StartSpike": 0, "EndSpike": 0},
                            {"SpikeTimes": np.empty(self.max_spikes)})

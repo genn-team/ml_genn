@@ -37,7 +37,7 @@ class AdaptiveLeakyIntegrateFire(Neuron):
         self.relative_reset = relative_reset
         self.integrate_during_refrac = integrate_during_refrac
 
-    def get_model(self, population, dt):
+    def get_model(self, population, dt, batch_size):
         # Build basic model
         genn_model = {
             "var_name_types": [("V", "scalar"), ("A", "scalar")],

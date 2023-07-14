@@ -177,7 +177,8 @@ class Compiler:
 
         # If source neuron model defines a negative threshold condition
         src_pop = connection.source()
-        src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt)
+        src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt,
+                                                    self.batch_size)
         if "negative_threshold_condition_code" in src_neuron_model.model:
             wum = WeightUpdateModel(
                 (deepcopy(signed_static_pulse_delay_model) if het_delay
@@ -299,7 +300,7 @@ class Compiler:
 
             # Build GeNN neuron model, parameters and values
             neuron = pop.neuron
-            neuron_model = neuron.get_model(pop, self.dt)
+            neuron_model = neuron.get_model(pop, self.dt, self.batch_size)
 
             neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
                 self.build_neuron_model(
@@ -334,7 +335,9 @@ class Compiler:
             syn = conn.synapse
             (psm, psm_param_vals, psm_var_vals, 
              psm_egp_vals, psm_var_egp_vals) =\
-                self.build_synapse_model(conn, syn.get_model(conn, self.dt),
+                self.build_synapse_model(conn,
+                                         syn.get_model(conn, self.dt,
+                                                       self.batch_size),
                                          compile_state).process()
 
             # Create custom postsynaptic model

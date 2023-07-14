@@ -30,5 +30,5 @@ class Exponential(Synapse):
                                       "currently support tau values specified"
                                       " using Initialiser objects")
 
-    def get_model(self, connection, dt):
+    def get_model(self, connection, dt, batch_size):
         return SynapseModel.from_val_descriptors(genn_model, self, dt)

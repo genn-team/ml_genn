@@ -36,5 +36,5 @@ class IntegrateFire(Neuron):
         self.v_reset = v_reset
         self.v = v
 
-    def get_model(self, population, dt):
+    def get_model(self, population, dt, batch_size):
         return NeuronModel.from_val_descriptors(genn_model, "V", self, dt)

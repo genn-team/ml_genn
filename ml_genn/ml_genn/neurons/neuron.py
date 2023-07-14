@@ -32,7 +32,8 @@ class Neuron(ABC):
                  "required and will be removed", DeprecationWarning)
 
     @abstractmethod
-    def get_model(self, population: Population, dt: float) -> NeuronModel:
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         """Gets model implementing this neuron
 
         Args:

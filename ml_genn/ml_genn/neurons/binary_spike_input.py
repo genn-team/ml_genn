@@ -10,17 +10,15 @@ class BinarySpikeInput(Neuron, InputBase):
 
         self.signed_spikes = signed_spikes
 
-    def get_model(self, population, dt):
+    def get_model(self, population, batch_size):
         genn_model = {
-            "var_name_types": [("Input", "scalar",
-                                VarAccess_READ_ONLY_DUPLICATE)],
             "sim_code":
                 """
                 const bool spike = $(Input) != 0.0;
                 """,
             "threshold_condition_code":
                 """
-                $(Input) > 0.0 && spike
+                $(Isyn) > 0.0 && spike
                 """,
             "is_auto_refractory_required": False}
 
@@ -28,7 +26,9 @@ class BinarySpikeInput(Neuron, InputBase):
         if self.signed_spikes:
             genn_model["negative_threshold_condition_code"] =\
                 """
-                $(Input_pre) < 0.0 && spike
+                $(Input) < 0.0 && spike
                 """
 
-        return NeuronModel(genn_model, None, {}, {"Input": 0.0})
+        neuron_model = NeuronModel(genn_model, None, {}, {})
+        self.add_input_logic(neuron_model, batch_size, population.shape)
+        return neuron_model

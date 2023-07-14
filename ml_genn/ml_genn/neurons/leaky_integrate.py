@@ -23,7 +23,7 @@ class LeakyIntegrate(Neuron):
         self.tau_mem = tau_mem
         self.scale_i = scale_i
 
-    def get_model(self, population, dt):
+    def get_model(self, population, dt, batch_size):
         genn_model = {
             "var_name_types": [("V", "scalar")],
             "param_name_types": [("Alpha", "scalar"), ("Bias", "scalar")],

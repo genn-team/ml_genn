@@ -105,7 +105,7 @@ class FewSpikeRelu(Neuron):
         self.k = k
         self.alpha = alpha
 
-    def get_model(self, population, dt):
+    def get_model(self, population, dt, batch_size):
         # Loop through incoming connections
         source_alpha = None
         source_signed = None

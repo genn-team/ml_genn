@@ -31,7 +31,7 @@ class LeakyIntegrateFire(Neuron):
         self.integrate_during_refrac = integrate_during_refrac
         self.scale_i = scale_i
 
-    def get_model(self, population, dt):
+    def get_model(self, population, dt, batch_size):
         # Build basic model
         genn_model = {
             "var_name_types": [("V", "scalar")],
