@@ -27,16 +27,28 @@ class Model:
         self.var_vals = var_vals
         self.egp_vals = egp_vals
 
+    def has_param(self, name):
+        return self._is_in_list("param_name_types", name)
+
+    def has_var(self, name):
+        return self._is_in_list("var_name_types", name)
+
+    def has_egp(self, name):
+        return self._is_in_list("extra_global_params", name)
+
     def add_param(self, name: str, type: str, value: Value):
+        assert not self.has_param(name)
         self._add_to_list("param_name_types", (name, type))
         self.param_vals[name] = value
 
     def add_var(self, name: str, type: str, value: Value,
                 access_mode: int = VarAccess_READ_WRITE):
+        assert not self.has_var(name)
         self._add_to_list("var_name_types", (name, type, access_mode))
         self.var_vals[name] = value
 
     def add_egp(self, name: str, type: str, value: EGPValue):
+        assert not self.has_egp(name)
         self._add_to_list("extra_global_params", (name, type))
         self.egp_vals[name] = value
     
@@ -140,6 +152,16 @@ class Model:
             self.model[name] = []
         self.model[name].append(value)
 
+    def _is_in_list(self, name: str, value):
+        if name in self.model:
+            try:
+                next(p for p in self.model[name] if p[0] == value)
+                return True
+            except StopIteration:
+                pass
+
+        return False
+
     def _append_code(self, name: str, code: str):
         code = dedent(code)
         if name not in self.model:
@@ -202,14 +224,22 @@ class CustomUpdateModel(Model):
         self.var_refs = var_refs
         self.egp_refs = egp_refs
 
+    def has_var_ref(self, name):
+        return self._is_in_list("var_refs", name)
+
+    def has_egp_ref(self, name):
+        return self._is_in_list("egp_refs", name)
+
     def add_var_ref(self, name, type, value):
+        assert not self.has_var_ref(name)
         self._add_to_list("var_refs", (name, type))
         self.var_refs[name] = value
-    
+
     def set_var_ref_access_mode(self, name, access_mode):
         self._set_access_model("var_refs", name, access_mode)
-    
+
     def add_egp_ref(self, name, type, value):
+        assert not self.has_egp_ref(name)
         self._add_to_list("egp_refs", (name, type))
         self.egp_refs[name] = value
 
