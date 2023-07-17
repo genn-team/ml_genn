@@ -38,7 +38,6 @@ class PoissonInput(Neuron, InputBase):
                 """
                 $(Input_pre) < 0.0 && spike
                 """
-
-        neuron_model = NeuronModel(genn_model, None, {}, {"Input": 0.0})
-        self.add_input_logic(neuron_model, batch_size, population.shape)
-        return neuron_model
+        return self.create_input_model(
+            NeuronModel(genn_model, None, {}, {}),
+            batch_size, population.shape)

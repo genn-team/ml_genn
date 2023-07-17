@@ -3,6 +3,10 @@ from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .. import Population
 
 class BinarySpikeInput(Neuron, InputBase):
     def __init__(self, signed_spikes=False, input_frames=1,
@@ -16,7 +20,7 @@ class BinarySpikeInput(Neuron, InputBase):
             raise NotImplementedError("Signed spike input cannot currently "
                                       "be used with time-varying inputs ")
 
-    def get_model(self, population, batch_size):
+    def get_model(self, population: "Population", dt: float, batch_size: int):
         genn_model = {
             "sim_code":
                 """
@@ -35,6 +39,6 @@ class BinarySpikeInput(Neuron, InputBase):
                 $(Input) < 0.0 && spike
                 """
 
-        neuron_model = NeuronModel(genn_model, None, {}, {})
-        self.add_input_logic(neuron_model, batch_size, population.shape)
-        return neuron_model
+        # Add standard input logic to model and return
+        return self.create_input_model(NeuronModel(genn_model, None, {}, {}),
+                                       batch_size, population.shape)
