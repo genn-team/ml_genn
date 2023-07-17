@@ -401,12 +401,19 @@ class EventPropCompiler(Compiler):
                 tau_mem = pop.neuron.tau_mem
                 model_copy.add_param("TauM", "scalar", tau_mem)
                 model_copy.add_param("A", "scalar", 
-                                     tau_mem / (tau_syn - tau_mem))
+                                     tau_mem / (tau_mem - tau_syn))
 
                 # Add extra global parameter to contain trial index and add 
                 # population to list of those which require it updating
                 model_copy.add_egp("Trial", "unsigned int", 0)
                 compile_state.update_trial_pops.append(pop)
+
+                # Prepend standard code to update LambdaV and LambdaI
+                model_copy.prepend_sim_code(
+                    f"""
+                    $(LambdaI) = drive + (($(LambdaI) - drive) * $(Beta)) + ($(A) * ($(LambdaV) - drive) * ($(Alpha) - $(Beta)));
+                    $(LambdaV) = drive + (($(LambdaV) - drive) * $(Alpha));
+                    """)
 
                 # If we want to calculate per-timestep loss
                 if self.per_timestep_loss:
@@ -432,14 +439,14 @@ class EventPropCompiler(Compiler):
                                 $(RingReadOffset)--;
                                 const scalar softmax = $(RingSoftmaxV)[ringOffset + $(RingReadOffset)];
                                 const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - softmax) : -softmax;
-                                $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                                drive = g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
                             }}
                             
                             // Forward pass
                             """)
 
                         # Add custom updates to calculate 
-                        # softmax from V and write directly to buffer
+                        # softmax from V and write directly to buffermodel_copy
                         compile_state.timestep_softmax_populations.append(
                             (pop, "V"))
 
@@ -463,7 +470,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             if ($(Trial) > 0) {{
                                 const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                                drive = g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -486,7 +493,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             if ($(Trial) > 0) {{
                                 const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                $(LambdaV) += ((g * exp(-(1.0 - ($(t) * {local_t_scale})))) / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})) * DT; // simple Euler
+                                drive = (g * exp(-(1.0 - ($(t) * {local_t_scale})))) / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -509,7 +516,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             if ($(Trial) > 0 && fabs(backT - $(VMaxTimeBack)) < 1e-3*DT) {{
                                 const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                $(LambdaV) += (g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps})); // simple Euler
+                                drive = g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -538,8 +545,7 @@ class EventPropCompiler(Compiler):
                     const float backT = {self.example_timesteps * self.dt} - $(t) - DT;
 
                     // Backward pass
-                    $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
-                    $(LambdaV) *= $(Alpha);
+                    scalar drive = 0.0;
                     """)
 
                 # Add second reset custom update to reset YTrueBack to YTrue
