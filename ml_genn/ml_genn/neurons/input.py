@@ -3,6 +3,7 @@ import numpy as np
 from abc import ABC
 
 from abc import abstractmethod
+from copy import deepcopy
 
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 
@@ -27,46 +28,57 @@ class InputBase(Input):
         self.input_frames = input_frames
         self.input_frame_time = input_frame_time
 
-    def add_input_logic(self, neuron_model, batch_size: int, shape):
+    def create_input_model(self, base_model, batch_size: int, shape,
+                           replace_isyn=False):
+        # Make copy of model
+        nm_copy = deepcopy(base_model)
+
+        # If flag is set, replace Isyn with
+        # **NOTE** do this first so it doesn't modify the new code we add!
+        if replace_isyn:
+            nm_copy.replace_sim_code("$(Isyn)", "input")
+            nm_copy.replace_threshold_condition_code("$(Isyn)", "input")
+            nm_copy.replace_reset_code("$(Isyn)", "input")
+
         # If input isn't time-varying
         if self.input_frames == 1:
             # Add read-only input variable
-            neuron_model.add_var(self.var_name, "scalar", 0.0,
-                                 VarAccess_READ_ONLY_DUPLICATE)
+            nm_copy.add_var(self.var_name, "scalar", 0.0,
+                            VarAccess_READ_ONLY_DUPLICATE)
 
             # Prepend sim code with code to initialize
             # local variable to input + synaptic input
-            neuron_model.prepend_sim_code(
+            nm_copy.prepend_sim_code(
                 f"const scalar input = $({self.var_name}) + $(Isyn);")
         else:
             # If batch size is 1
             flat_shape = np.prod(shape)
             if batch_size == 1:
                 # Add EGP
-                neuron_model.add_egp(self.egp_name, "scalar*",
-                                     np.empty(self.input_frames,) + shape)
+                nm_copy.add_egp(self.egp_name, "scalar*",
+                                np.empty(self.input_frames,) + shape)
 
                 # Prepend sim code with code to initialize
                 # local variable tosigned_spikes correct EGP entry + synaptic input
-                neuron_model.prepend_sim_code(
+                nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)round($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
                     const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);")
                     """)
             else:
                 # Add EGP
-                neuron_model.add_egp(
+                nm_copy.add_egp(
                     self.egp_name, "scalar*",
                     np.empty(self.input_frames, batch_size) + shape)
 
                 # Prepend sim code with code to initialize
                 # local variable to correct EGP entry + synaptic input
-                neuron_model.prepend_sim_code(
+                nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)round($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
                     const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)] + $(Isyn);")
                     """)
-
+        return nm_copy
 
     def set_input(self, genn_pop, batch_size: int, shape, input):
         # Ensure input is something convertable to a numpy array
