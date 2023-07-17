@@ -13,7 +13,7 @@ class BinarySpikeInput(Neuron, InputBase):
 
         self.signed_spikes = signed_spikes
         if self.signed_spikes and input_frames > 1:
-            throw NotImplementedError("Signed spike input cannot currently "
+            raise NotImplementedError("Signed spike input cannot currently "
                                       "be used with time-varying inputs ")
 
     def get_model(self, population, batch_size):
