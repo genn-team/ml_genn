@@ -18,5 +18,5 @@ class IntegrateFireInput(IntegrateFire, InputBase):
         # Replace standard Isyn input with reference
         # to local variable, add input logic and return
         nm.replace_input("input")
-        self.add_input_logic(nm, batch_size: population.shape)
+        self.add_input_logic(nm, batch_size, population.shape)
         return nm

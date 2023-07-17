@@ -7,6 +7,7 @@ from .integrate_fire import IntegrateFire
 from .integrate_fire_input import IntegrateFireInput
 from .leaky_integrate import LeakyIntegrate
 from .leaky_integrate_fire import LeakyIntegrateFire
+from .leaky_integrate_fire_input import LeakyIntegrateFireInput
 from .neuron import Neuron
 from .poisson_input import PoissonInput
 from .spike_input import SpikeInput
@@ -17,5 +18,5 @@ default_neurons = get_module_classes(globals(), Neuron)
 
 __all = ["AdaptiveLeakyIntegrateFire", "BinarySpikeInput", "FewSpikeRelu",
          "FewSpikeReluInput", "Input", "IntegrateFire", "IntegrateFireInput",
-         "LeakyIntegrate", "LeakyIntegrateFire", "Neuron",
-         "PoissonInput", "SpikeInput", "default_neurons"]
+         "LeakyIntegrate", "LeakyIntegrateFire", "LeakyIntegrateFireInput", 
+         "Neuron", "PoissonInput", "SpikeInput", "default_neurons"]
