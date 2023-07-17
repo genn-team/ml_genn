@@ -5,10 +5,16 @@ from ..utils.model import NeuronModel
 
 
 class BinarySpikeInput(Neuron, InputBase):
-    def __init__(self, signed_spikes=False):
-        super(BinarySpikeInput, self).__init__()
+    def __init__(self, signed_spikes=False, input_frames=1,
+                 input_frame_time=1):
+        super(BinarySpikeInput, self).__init__(
+            egp_name="Input", input_frames=input_frames,
+            input_frame_time=input_frame_time)
 
         self.signed_spikes = signed_spikes
+        if self.signed_spikes and input_frames > 1:
+            throw NotImplementedError("Signed spike input cannot currently "
+                                      "be used with time-varying inputs ")
 
     def get_model(self, population, batch_size):
         genn_model = {
@@ -18,7 +24,7 @@ class BinarySpikeInput(Neuron, InputBase):
                 """,
             "threshold_condition_code":
                 """
-                $(Isyn) > 0.0 && spike
+                $(Input) > 0.0 && spike
                 """,
             "is_auto_refractory_required": False}
 

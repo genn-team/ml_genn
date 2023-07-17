@@ -13,23 +13,23 @@ class Input:
 
 class InputBase(Input):
     def __init__(self, var_name="Input", egp_name=None,
-                 input_timesteps=1, input_step=1,
+                 input_frames=1, input_frame_time=1,
                  **kwargs):
         super(InputBase, self).__init__(**kwargs)
 
-        # If no EGP name is given, give error if no
-        if input_timesteps > 1 and egp_name is None:
+        # If input has multiple frames but no EGP name is given, give error
+        if input_frames > 1 and egp_name is None:
             raise RuntimeError("Neuron model does not "
                                "support time-varying input")
 
         self.var_name = var_name
         self.egp_name = egp_name
-        self.input_timesteps = input_timesteps
-        self.input_step = input_step
+        self.input_frames = input_frames
+        self.input_frame_time = input_frame_time
 
     def add_input_logic(self, neuron_model, batch_size: int, shape):
         # If input isn't time-varying
-        if self.input_timesteps == 1:
+        if self.input_frames == 1:
             # Add read-only input variable
             neuron_model.add_var(self.var_name, "scalar", 0.0,
                                  VarAccess_READ_ONLY_DUPLICATE)
@@ -44,27 +44,27 @@ class InputBase(Input):
             if batch_size == 1:
                 # Add EGP
                 neuron_model.add_egp(self.egp_name, "scalar*",
-                                     np.empty(self.input_timesteps,) + shape)
+                                     np.empty(self.input_frames,) + shape)
 
                 # Prepend sim code with code to initialize
                 # local variable tosigned_spikes correct EGP entry + synaptic input
                 neuron_model.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)round($(t) / ({self.input_step} * DT)), {self.input_timesteps - 1});
+                    const int timestep = min((int)round($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
                     const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);")
                     """)
             else:
                 # Add EGP
                 neuron_model.add_egp(
                     self.egp_name, "scalar*",
-                    np.empty(self.input_timesteps, batch_size) + shape)
+                    np.empty(self.input_frames, batch_size) + shape)
 
                 # Prepend sim code with code to initialize
                 # local variable to correct EGP entry + synaptic input
                 neuron_model.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)round($(t) / ({self.input_step} * DT)), {self.input_timesteps - 1});
-                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_timesteps}) + (timestep * {flat_shape}) + $(id)] + $(Isyn);")
+                    const int timestep = min((int)round($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
+                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)] + $(Isyn);")
                     """)
 
 
@@ -82,8 +82,8 @@ class InputBase(Input):
             raise RuntimeError(f"Input shape {input.shape} does not match "
                                f"population shape {shape}")
 
-        # If input ivar_namesn't time-varying
-        if self.input_timesteps == 1:
+        # If input isn't time-varying
+        if self.input_frames == 1:
             # If batch size is 1
             if batch_size == 1:
                 # Check input shape either has no batch
@@ -125,9 +125,9 @@ class InputBase(Input):
         else:
             # Check time dimension matches
             if (len(input_batch_time_dims) == 0
-                or input_batch_time_dims[-1] != self.input_timesteps):
+                or input_batch_time_dims[-1] != self.input_frames):
                 raise RuntimeError(f"Input shape {input.shape} does not "
-                                   f"match timesteps {self.input_timesteps}")
+                                   f"match timesteps {self.input_frames}")
 
             # If batch size is 1
             egp_view = genn_pop.extra_global_params[self.egp_name].view
@@ -152,7 +152,7 @@ class InputBase(Input):
                                        f"not match batch size {batch_size}")
 
                 # Reshape input into batches of flattened data
-                input_size = self.input_timesteps * np.prod(shape)
+                input_size = self.input_frames * np.prod(shape)
                 batched_input = np.reshape(input, (-1, input_size))
 
                 # If we have a full batch

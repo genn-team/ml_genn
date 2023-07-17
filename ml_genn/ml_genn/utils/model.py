@@ -244,17 +244,12 @@ class NeuronModel(Model):
     def prepend_reset_code(self, code):
         self._prepend_code("reset_code", code)
 
-    def replace_input(self, replacement, source="Isyn"):
-        # Replace $(source) in all neuron code strings
-        source_neuron = f"$({source})"
-        self._replace_code("sim_code", source_neuron, replacement)
-        self._replace_code("threshold_condition_code", source_neuron,
+    def replace_input(self, replacement):
+        # Replace $(Isyn) in all neuron code strings
+        self._replace_code("sim_code", "$(Isyn)", replacement)
+        self._replace_code("threshold_condition_code", "$(Isyn)",
                            replacement)
-        self._replace_code("reset_code", source_neuron, replacement)
-
-        # Replace $(source_pre) in negative event threshold code
-        self._replace_code("negative_threshold_condition_code",
-                           f"$({source}_pre)", replacement)
+        self._replace_code("reset_code", "$(Isyn)", replacement)
 
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst, dt,
