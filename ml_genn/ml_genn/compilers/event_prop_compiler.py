@@ -502,7 +502,7 @@ class EventPropCompiler(Compiler):
 
                         # Add custom update to reset state
                         compile_state.add_neuron_reset_vars(
-                            pop, model_copy.reset_vars, False)
+                            pop, model_copy.reset_vars, False, False)
                     # Otherwise, if readout is MaxVar
                     elif isinstance(pop.neuron.readout, MaxVar):
                         # Add state variable to hold vmax from previous trial
