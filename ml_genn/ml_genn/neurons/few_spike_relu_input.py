@@ -76,8 +76,9 @@ class FewSpikeReluInput(Neuron, InputBase):
         else:
             scale = self.alpha * 2**(-self.k)
 
+        # Return appropriate neuron model
+        # **NOTE** because this model doesn't support time-varying input
+        # and input is read into an existing state variable, no need to use create_input_model
         model = genn_model_signed if self.signed_input else genn_model
-        return self.create_input_model(
-            NeuronModel(model, None, {"K": self.k, "Scale": scale}, {"V": 0.0}),
-            batch_size, population.shape)
+        return NeuronModel(model, None, {"K": self.k, "Scale": scale}, {"V": 0.0})
 

@@ -7,10 +7,18 @@ from copy import deepcopy
 
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 
+
+def _replace_neuron_code(nm, source, target):
+    nm.replace_sim_code(source, target)
+    nm.replace_threshold_condition_code(source, target)
+    nm.replace_reset_code(source, target)
+
+
 class Input:
     @abstractmethod
     def set_input(self, compiled_net, pop, input):
         pass
+
 
 class InputBase(Input):
     def __init__(self, var_name="Input", egp_name=None,
@@ -29,31 +37,29 @@ class InputBase(Input):
         self.input_frame_time = input_frame_time
 
     def create_input_model(self, base_model, batch_size: int, shape,
-                           replace_isyn=False):
+                           replace_input: str = None):
         # Make copy of model
         nm_copy = deepcopy(base_model)
-
-        # If flag is set, replace Isyn with
-        # **NOTE** do this first so it doesn't modify the new code we add!
-        if replace_isyn:
-            nm_copy.replace_sim_code("$(Isyn)", "input")
-            nm_copy.replace_threshold_condition_code("$(Isyn)", "input")
-            nm_copy.replace_reset_code("$(Isyn)", "input")
 
         # If input isn't time-varying
         if self.input_frames == 1:
             # Add read-only input variable
-            if not nm_copy.has_var(self.var_name):
-                nm_copy.add_var(self.var_name, "scalar", 0.0,
-                                VarAccess_READ_ONLY_DUPLICATE)
+            nm_copy.add_var(self.var_name, "scalar", 0.0,
+                            VarAccess_READ_ONLY_DUPLICATE)
 
-            # Prepend sim code with code to initialize
-            # local variable to input + synaptic input
-            nm_copy.prepend_sim_code(
-                f"const scalar input = $({self.var_name}) + $(Isyn);")
+            # Replace input with reference to new variable
+            nm_copy.replace_sim_code(replace_input, f"$({self.var_name})")
+            nm_copy.replace_threshold_condition_code(replace_input, f"$({self.var_name})")
+            nm_copy.replace_reset_code(replace_input, f"$({self.var_name})")
         else:
-            # If batch size is 1
+            # Check there isn't a variable which conflicts with EGP
             assert not nm_copy.has_var(self.egp_name)
+
+            # Replace input with references to local variable
+            # **NOTE** do this first so it doesn't modify the new code we add!
+            _replace_neuron_code(nm_copy, replace_input, "input")
+
+            # If batch size is 1
             flat_shape = np.prod(shape)
             if batch_size == 1:
                 # Add EGP
@@ -65,7 +71,7 @@ class InputBase(Input):
                 nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);
+                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)];
                     """)
             else:
                 # Add EGP
@@ -78,7 +84,7 @@ class InputBase(Input):
                 nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)] + $(Isyn);
+                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)];
                     """)
         return nm_copy
 
@@ -182,3 +188,4 @@ class InputBase(Input):
 
             # Push variable to device
             genn_pop.push_extra_global_param_to_device(self.egp_name)
+

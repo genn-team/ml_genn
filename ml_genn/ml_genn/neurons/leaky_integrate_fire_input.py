@@ -24,4 +24,4 @@ class LeakyIntegrateFireInput(LeakyIntegrateFire, InputBase):
 
         # Add input logic and replace isyn with input
         return self.create_input_model(nm, batch_size, population.shape,
-                                       replace_isyn=True)
+                                       replace_input="$(Isyn)")
