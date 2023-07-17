@@ -1,5 +1,6 @@
 from .input import InputBase
 from .leaky_integrate_fire import LeakyIntegrateFire
+from ..utils.value import InitValue
 
 
 class LeakyIntegrateFireInput(LeakyIntegrateFire, InputBase):
@@ -7,12 +8,12 @@ class LeakyIntegrateFireInput(LeakyIntegrateFire, InputBase):
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
                  tau_refrac: InitValue = None, relative_reset: bool = True,
                  integrate_during_refrac: bool = True, scale_i: bool = False,
-                 softmax: Optional[bool] = None, input_frames=1, input_frame_time=1):
+                 input_frames=1, input_frame_time=1):
         super(LeakyIntegrateFireInput, self).__init__(
             v_thresh=v_thresh, v_reset=v_reset, v=v, tau_mem=tau_mem, 
             tau_refrac=tau_refrac, relative_reset=relative_reset, 
             integrate_during_refrac=integrate_during_refrac, scale_i=scale_i,
-            softmax=softmax, egp_name="Input", input_frames=input_frames, 
+            egp_name="Input", input_frames=input_frames,
             input_frame_time=input_frame_time)
 
 

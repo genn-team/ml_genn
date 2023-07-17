@@ -1,5 +1,6 @@
 from .input import InputBase
 from .integrate_fire import IntegrateFire
+from ..utils.value import InitValue
 
 
 class IntegrateFireInput(IntegrateFire, InputBase):
