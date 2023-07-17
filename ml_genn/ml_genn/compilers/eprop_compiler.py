@@ -10,7 +10,8 @@ from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
-                       LeakyIntegrate, LeakyIntegrateFire)
+                       LeakyIntegrate, LeakyIntegrateFire, 
+                       LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
@@ -37,7 +38,10 @@ default_params = {
     LeakyIntegrate: {"scale_i": False}, 
     LeakyIntegrateFire: {"relative_reset": True, 
                          "integrate_during_refrac": True,
-                         "scale_i": False}}
+                         "scale_i": False},
+    LeakyIntegrateFireInput: {"relative_reset": True, 
+                              "integrate_during_refrac": True,
+                              "scale_i": False}}
 
 def _has_connection_to_output(pop):
     # Loop through population's outgoing connections
