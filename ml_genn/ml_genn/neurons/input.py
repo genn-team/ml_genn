@@ -58,27 +58,27 @@ class InputBase(Input):
             if batch_size == 1:
                 # Add EGP
                 nm_copy.add_egp(self.egp_name, "scalar*",
-                                np.empty(self.input_frames,) + shape)
+                                np.empty((self.input_frames,) + shape))
 
                 # Prepend sim code with code to initialize
                 # local variable tosigned_spikes correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)round($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);")
+                    const int timestep = min((int)($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
+                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)] + $(Isyn);
                     """)
             else:
                 # Add EGP
                 nm_copy.add_egp(
                     self.egp_name, "scalar*",
-                    np.empty(self.input_frames, batch_size) + shape)
+                    np.empty((self.input_frames, batch_size) + shape))
 
                 # Prepend sim code with code to initialize
                 # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)round($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)] + $(Isyn);")
+                    const int timestep = min((int)($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
+                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)] + $(Isyn);
                     """)
         return nm_copy
 
@@ -172,13 +172,13 @@ class InputBase(Input):
                 # If we have a full batch
                 input_batch_size = batched_input.shape[0]
                 if input_batch_size == batch_size:
-                    egp_view[:] = batched_input
+                    egp_view[:] = batched_input.flatten()
 
                 # Otherwise, pad up to full batch
                 else:
                     egp_view[:] = np.pad(batched_input,
                                          ((0, batch_size - input_batch_size),
-                                          (0, 0)))
+                                          (0, 0))).flatten()
 
             # Push variable to device
             genn_pop.push_extra_global_param_to_device(self.egp_name)
