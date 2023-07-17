@@ -88,9 +88,9 @@ class InputBase(Input):
             if batch_size == 1:
                 # Check input shape either has no batch
                 # dimension or it has a length of 1
-                if (len(input_time_batch_dims) != 0
-                    and (len(input_time_batch_dims) != 1
-                         or input_time_batch_dims[0] != 1):
+                if (len(input_batch_time_dims) != 0
+                    and (len(input_batch_time_dims) != 1
+                         or input_batch_time_dims[0] != 1)):
                     raise RuntimeError(f"Input shape {input.shape} does "
                                        f"not match batch size {batch_size}")
 
@@ -100,8 +100,8 @@ class InputBase(Input):
             else:
                 # Check input shape has batch dimension
                 # and this is less than or equal to batch size
-                if (len(input_time_batch_dims) != 1
-                    or input_time_batch_dims[0] > batch_size):
+                if (len(input_batch_time_dims) != 1
+                    or input_batch_time_dims[0] > batch_size):
                     raise RuntimeError(f"Input shape {input.shape} does "
                                        f"not match batch size {batch_size}")
 
@@ -134,9 +134,9 @@ class InputBase(Input):
             if batch_size == 1:
                 # Check input shape either has no batch
                 # dimension or it has a length of 1
-                if (len(input_time_batch_dims) != 1
-                    and (len(input_time_batch_dims) != 2
-                         or input_time_batch_dims[0] != 1):
+                if (len(input_batch_time_dims) != 1
+                    and (len(input_batch_time_dims) != 2
+                         or input_batch_time_dims[0] != 1)):
                     raise RuntimeError(f"Input shape {input.shape} does "
                                        f"not match batch size {batch_size}")
 
@@ -146,8 +146,8 @@ class InputBase(Input):
             else:
                 # Check input shape has batch dimension
                 # and this is less than or equal to batch size
-                if (len(input_time_batch_dims) != 2
-                    or input_time_batch_dims[0] > batch_size):
+                if (len(input_batch_time_dims) != 2
+                    or input_batch_time_dims[0] > batch_size):
                     raise RuntimeError(f"Input shape {input.shape} does "
                                        f"not match batch size {batch_size}")
 
