@@ -10,10 +10,10 @@ if TYPE_CHECKING:
 
 class PoissonInput(Neuron, InputBase):
     def __init__(self, signed_spikes=False, input_frames=1, 
-                 input_frame_time=1):
-        super(PoissonInput, self).__init__(egp_name="Input", 
-                                           input_frames=input_frames,
-                                           input_frame_time=input_frame_time)
+                 input_frame_timesteps=1):
+        super(PoissonInput, self).__init__(
+            egp_name="Input", input_frames=input_frames,
+            input_frame_timesteps=input_frame_timesteps)
 
         self.signed_spikes = signed_spikes
         if self.signed_spikes and input_frames > 1:

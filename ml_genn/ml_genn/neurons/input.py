@@ -22,7 +22,7 @@ class Input:
 
 class InputBase(Input):
     def __init__(self, var_name="Input", egp_name=None,
-                 input_frames=1, input_frame_time=1,
+                 input_frames=1, input_frame_timesteps=1,
                  **kwargs):
         super(InputBase, self).__init__(**kwargs)
 
@@ -34,7 +34,7 @@ class InputBase(Input):
         self.var_name = var_name
         self.egp_name = egp_name
         self.input_frames = input_frames
-        self.input_frame_time = input_frame_time
+        self.input_frame_timesteps = input_frame_timesteps
 
     def create_input_model(self, base_model, batch_size: int, shape,
                            replace_input: str = None):
@@ -70,7 +70,7 @@ class InputBase(Input):
                 # local variable tosigned_spikes correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
+                    const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * DT)), {self.input_frames - 1});
                     const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)];
                     """)
             else:
@@ -83,7 +83,7 @@ class InputBase(Input):
                 # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)($(t) / ({self.input_frame_time} * DT)), {self.input_frames - 1});
+                    const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * DT)), {self.input_frames - 1});
                     const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)];
                     """)
         return nm_copy
