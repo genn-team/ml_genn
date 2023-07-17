@@ -156,7 +156,7 @@ class Model:
 
     def _replace_code(self, name: str, source: str, target: str):
         if name in self.model:
-            self.model[name].replace(source, target)
+            self.model[name] = self.model[name].replace(source, target)
 
     def _set_access_model(self, name: str, var: str, access_mode):
         # Find var
@@ -244,12 +244,14 @@ class NeuronModel(Model):
     def prepend_reset_code(self, code):
         self._prepend_code("reset_code", code)
 
-    def replace_input(self, replacement):
-        # Replace $(Isyn) in all neuron code strings
-        self._replace_code("sim_code", "$(Isyn)", replacement)
-        self._replace_code("threshold_condition_code", "$(Isyn)",
-                           replacement)
-        self._replace_code("reset_code", "$(Isyn)", replacement)
+    def replace_sim_code(self, source: str, target: str):
+        self._replace_code("sim_code", source, target)
+
+    def replace_threshold_condition_code(self, source: str, target: str):
+        self._replace_code("threshold_condition_code", source, target)
+
+    def replace_reset_code(self, source: str, target: str):
+        self._replace_code("reset_code", source, target)
 
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst, dt,
