@@ -43,8 +43,9 @@ class InputBase(Input):
         # If input isn't time-varying
         if self.input_frames == 1:
             # Add read-only input variable
-            nm_copy.add_var(self.var_name, "scalar", 0.0,
-                            VarAccess_READ_ONLY_DUPLICATE)
+            if not nm_copy.has_var(self.var_name):
+                nm_copy.add_var(self.var_name, "scalar", 0.0,
+                                VarAccess_READ_ONLY_DUPLICATE)
 
             # Prepend sim code with code to initialize
             # local variable to input + synaptic input
@@ -52,6 +53,7 @@ class InputBase(Input):
                 f"const scalar input = $({self.var_name}) + $(Isyn);")
         else:
             # If batch size is 1
+            assert not nm_copy.has_var(self.egp_name)
             flat_shape = np.prod(shape)
             if batch_size == 1:
                 # Add EGP
