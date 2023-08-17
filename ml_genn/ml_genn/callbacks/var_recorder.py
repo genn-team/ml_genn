@@ -13,7 +13,7 @@ from ..utils.value import get_genn_var_name
 
 
 class VarRecorder(Callback):
-    def __init__(self, pop: PopulationType, var: Optional[str], key=None,
+    def __init__(self, pop: PopulationType, var: Optional[str] = None, key = None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,
                  genn_var: Optional[str] = None):
