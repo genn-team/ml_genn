@@ -1,19 +1,27 @@
 from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
-from .input_base import InputBase
+from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .. import Population
 
 class PoissonInput(Neuron, InputBase):
-    def __init__(self, signed_spikes=False):
-        super(PoissonInput, self).__init__()
+    def __init__(self, signed_spikes=False, input_frames=1, 
+                 input_frame_timesteps=1):
+        super(PoissonInput, self).__init__(
+            egp_name="Input", input_frames=input_frames,
+            input_frame_timesteps=input_frame_timesteps)
 
         self.signed_spikes = signed_spikes
+        if self.signed_spikes and input_frames > 1:
+            raise NotImplementedError("Signed spike input cannot currently "
+                                      "be used with time-varying inputs ")
 
-    def get_model(self, population, dt):
+    def get_model(self, population: "Population", dt: float, batch_size: int):
         genn_model = {
-            "var_name_types": [("Input", "scalar",
-                                VarAccess_READ_ONLY_DUPLICATE)],
             "sim_code":
                 """
                 const bool spike = $(gennrand_uniform) >= exp(-fabs($(Input)) * DT);
@@ -30,5 +38,6 @@ class PoissonInput(Neuron, InputBase):
                 """
                 $(Input_pre) < 0.0 && spike
                 """
-
-        return NeuronModel(genn_model, None, {}, {"Input": 0.0})
+        return self.create_input_model(
+            NeuronModel(genn_model, None, {}, {}),
+            batch_size, population.shape, replace_input="$(Input)")

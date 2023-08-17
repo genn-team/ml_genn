@@ -9,8 +9,9 @@ from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..losses import Loss, SparseCategoricalCrossentropy
-from ..neurons import (AdaptiveLeakyIntegrateFire, LeakyIntegrate,
-                       LeakyIntegrateFire)
+from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
+                       LeakyIntegrate, LeakyIntegrateFire, 
+                       LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
@@ -37,7 +38,10 @@ default_params = {
     LeakyIntegrate: {"scale_i": False}, 
     LeakyIntegrateFire: {"relative_reset": True, 
                          "integrate_during_refrac": True,
-                         "scale_i": False}}
+                         "scale_i": False},
+    LeakyIntegrateFireInput: {"relative_reset": True, 
+                              "integrate_during_refrac": True,
+                              "scale_i": False}}
 
 def _has_connection_to_output(pop):
     # Loop through population's outgoing connections
@@ -274,7 +278,7 @@ class EPropCompiler(Compiler):
         if pop.neuron.readout is not None:
             # Get loss function associated with this output neuron
             loss = compile_state.losses[pop]
-            
+
             # If loss function is sparse categorical crossentropy
             if isinstance(loss, SparseCategoricalCrossentropy):
                 # Get output variable from neuron model
@@ -287,7 +291,7 @@ class EPropCompiler(Compiler):
 
                 # Finally, point output variable at new softmax'd output
                 model_copy.output_var_name = softmax_var_name
-                
+
                 # Add population to list of those needing softmax calculation
                 compile_state.softmax_populations.append(
                     (pop, output_var[0], softmax_var_name))
@@ -336,7 +340,7 @@ class EPropCompiler(Compiler):
                 compile_state.checkpoint_population_vars.append((pop, "Bias"))
 
         # Otherwise, if neuron isn't an input i.e. it's hidden
-        elif not hasattr(pop.neuron, "set_input"):
+        elif not isinstance(pop.neuron, Input):
             # Check hidden population is connected directly to output
             if not _has_connection_to_output(pop):
                 raise RuntimeError("In models trained with e-prop, all "
@@ -384,7 +388,7 @@ class EPropCompiler(Compiler):
 
         # Return model
         return model
-    
+
     def build_weight_update_model(self, conn, connect_snippet, compile_state):
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
@@ -515,7 +519,7 @@ class EPropCompiler(Compiler):
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
                 {"Gradient": gradient_ref})
-            
+
             # Add GeNN custom update to model
             genn_reduction = self.add_custom_update(
                 genn_model, reduction_optimiser_model, 

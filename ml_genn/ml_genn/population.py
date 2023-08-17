@@ -29,7 +29,7 @@ NeuronInitializer = Union[Neuron, str]
 
 class Population:
     """A population of neurons
-    
+
     Attributes:
         shape:          Shape of population
         name:           Name of connection (only really used 
@@ -39,7 +39,7 @@ class Population:
                         callbacks to this population
     """
     _new_id = count()
-    
+
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
                  record_spikes: bool = False, 
                  record_spike_events: bool = False,
@@ -80,7 +80,7 @@ class Population:
         require no arguments, a string e.g. "leaky_integrate_fire"
         """
         return self._neuron
-    
+
     @neuron.setter
     def neuron(self, n: NeuronInitializer):
         self._neuron = get_object(n, Neuron, "Neuron", default_neurons)

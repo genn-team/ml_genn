@@ -15,5 +15,5 @@ class Delta(Synapse):
     def __init__(self):
         super(Delta, self).__init__()
 
-    def get_model(self, connection, dt):
+    def get_model(self, connection, dt, batch_size):
         return SynapseModel(genn_model, {}, {})

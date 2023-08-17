@@ -1,4 +1,4 @@
-from .input_base import InputBase
+from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
@@ -69,13 +69,16 @@ class FewSpikeReluInput(Neuron, InputBase):
         self.alpha = alpha
         self.signed_input = signed_input
 
-    def get_model(self, population, dt):
+    def get_model(self, population, dt, batch_size):
         # Calculate scale
         if self.signed_input:
             scale = self.alpha * 2**(-self.k // 2)
         else:
             scale = self.alpha * 2**(-self.k)
 
+        # Return appropriate neuron model
+        # **NOTE** because this model doesn't support time-varying input
+        # and input is read into an existing state variable, no need to use create_input_model
         model = genn_model_signed if self.signed_input else genn_model
-        return NeuronModel(model, None, {"K": self.k, "Scale": scale},
-                           {"V": 0.0})
+        return NeuronModel(model, None, {"K": self.k, "Scale": scale}, {"V": 0.0})
+

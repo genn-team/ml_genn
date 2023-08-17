@@ -1,41 +1,22 @@
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
-from .input_base import InputBase
-from .neuron import Neuron
-from ..utils.model import NeuronModel
-from ..utils.value import InitValue, ValueDescriptor
-
-genn_model = {
-    "var_name_types": [("Input", "scalar", VarAccess_READ_ONLY_DUPLICATE),
-                       ("V", "scalar")],
-    "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar")],
-    "sim_code":
-        """
-        $(V) += $(Input);
-        """,
-    "threshold_condition_code":
-        """
-        $(V) >= $(Vthresh)
-        """,
-    "reset_code":
-        """
-        $(V) = $(Vreset);
-        """,
-    "is_auto_refractory_required": False}
+from .input import InputBase
+from .integrate_fire import IntegrateFire
+from ..utils.value import InitValue
 
 
-class IntegrateFireInput(Neuron, InputBase):
-    v_thresh = ValueDescriptor("Vthresh")
-    v_reset = ValueDescriptor("Vreset")
-    v = ValueDescriptor("V")
-
+class IntegrateFireInput(IntegrateFire, InputBase):
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
-                 v: InitValue = 0.0):
-        super(IntegrateFireInput, self).__init__()
+                 v: InitValue = 0.0, input_frames=1, input_frame_timesteps=1):
+        super(IntegrateFireInput, self).__init__(
+            v_thresh=v_thresh, v_reset=v_reset, v=v,
+            egp_name="Input", input_frames=input_frames,
+            input_frame_timesteps=input_frame_timesteps)
 
-        self.v_thresh = v_thresh
-        self.v_reset = v_reset
-        self.v = v
 
-    def get_model(self, population, dt):
-        return NeuronModel.from_val_descriptors(genn_model, None, self, dt,
-                                                var_vals={"Input": 0.0})
+    def get_model(self, population, dt, batch_size):
+        # Get standard integrate-and-fire model
+        nm = super(IntegrateFireInput, self).get_model(population, dt,
+                                                       batch_size)
+
+        # Add input logic and replace isyn with input
+        return self.create_input_model(nm, batch_size, population.shape,
+                                       replace_input="$(Isyn)")
