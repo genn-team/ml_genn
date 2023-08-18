@@ -1,7 +1,7 @@
 import numpy as np
 
 from ml_genn import Connection, Population, Network
-from ml_genn.callbacks import Checkpoint
+from ml_genn.callbacks import Checkpoint, VarRecorder
 from ml_genn.compilers import EPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
@@ -29,7 +29,8 @@ dataset = SHD(save_to='../data', train=TRAIN)
 # Preprocess
 spikes = []
 labels = []
-for events, label in dataset:
+for i in range(len(dataset)):
+    events, label = dataset[i]
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
                                           dataset.sensor_size))
     labels.append(label)
@@ -53,7 +54,7 @@ with network:
     hidden = Population(AdaptiveLeakyIntegrateFire(v_thresh=0.6,
                                                    tau_refrac=5.0),
                         NUM_HIDDEN)
-    output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var", num_output)
+    output = Population(LeakyIntegrate(tau_mem=20.0, readout="sum_var"), num_output)
 
     # Connections
     Connection(input, hidden, Dense(Normal(sd=1.0 / np.sqrt(num_input))))
