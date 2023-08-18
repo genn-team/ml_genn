@@ -33,8 +33,7 @@ logger = logging.getLogger(__name__)
 
 default_params = {
     AdaptiveLeakyIntegrateFire: {"relative_reset": True,
-                                 "integrate_during_refrac": True,
-                                 "scale_i": False},
+                                 "integrate_during_refrac": True},
     LeakyIntegrate: {"scale_i": False}, 
     LeakyIntegrateFire: {"relative_reset": True, 
                          "integrate_during_refrac": True,
