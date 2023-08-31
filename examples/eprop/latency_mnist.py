@@ -22,9 +22,10 @@ NUM_OUTPUT = 10
 BATCH_SIZE = 128
 NUM_EPOCHS = 10
 SPARSITY = 1.0
-TRAIN = True
+TRAIN = False
 KERNEL_PROFILING = False
 
+np.seterr(all='raise')
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 spikes = log_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),

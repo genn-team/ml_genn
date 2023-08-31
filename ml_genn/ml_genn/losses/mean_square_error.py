@@ -10,7 +10,8 @@ class MeanSquareError(Loss):
         # Add extra global parameter to store Y* throughout example
         flat_shape = np.prod(shape)
         egp_size = (example_timesteps * batch_size * flat_shape)
-        model.add_egp("YTrue", "scalar*", np.empty(egp_size))
+        model.add_egp("YTrue", "scalar*",
+                      np.empty(egp_size, dtype=np.float32))
     
         # Add sim-code to read out correct yTrue value 
         model.append_sim_code(

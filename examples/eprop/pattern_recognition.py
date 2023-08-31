@@ -52,7 +52,7 @@ in_group = np.arange(NUM_INPUT, dtype=int) // IN_GROUP_SIZE
 
 # Fill matrix rows with base spike times
 num_spikes_per_neuron = IN_ACTIVE_INTERVAL // IN_ACTIVE_ISI
-in_spike_times = np.empty((NUM_INPUT, num_spikes_per_neuron))
+in_spike_times = np.empty((NUM_INPUT, num_spikes_per_neuron), dtype=np.float32)
 in_spike_times[:] = np.arange(0, IN_ACTIVE_INTERVAL, IN_ACTIVE_ISI)
 
 # Shift each spike time by group start
