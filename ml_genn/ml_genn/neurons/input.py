@@ -68,7 +68,7 @@ class InputBase(Input):
                                          dtype=np.float32))
 
                 # Prepend sim code with code to initialize
-                # local variable tosigned_spikes correct EGP entry + synaptic input
+                # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * DT)), {self.input_frames - 1});

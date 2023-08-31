@@ -53,7 +53,8 @@ def get_object(obj, base_class: Type[T], description: str,
                            f"either as a string or a {description} object")
 
 
-def get_object_mapping(obj, keys, base_class: Type, description:str, dictionary) -> dict:
+def get_object_mapping(obj, keys, base_class: Type,
+                       description: str, dictionary) -> dict:
     # If metrics are already in dictionary form
     if isinstance(obj, dict):
         # If keys match, process each metric and create new dictionary
