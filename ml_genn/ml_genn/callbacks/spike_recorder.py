@@ -114,16 +114,16 @@ class SpikeRecorder(Callback):
 
                 # Slice out batches we want
                 data_unpack = data_unpack[:, self._batch_mask, :]
-                
+
                 if self._record_counts:
                     # Loop through these batches
                     for b in range(data_unpack.shape[1]):
-                        # Calculate sum of 
+                        # Calculate number of spikes along time axis
                         # **TODO** there is a numpy PR that exposes popcount 
                         # allowing this to be done more efficiently
                         counts = np.sum(data_unpack[:, b, self._neuron_mask],
-                                        axis=2)
-                                        
+                                        axis=0)
+
                         # Add to list
                         self._spikes.append(counts)
                 else:
