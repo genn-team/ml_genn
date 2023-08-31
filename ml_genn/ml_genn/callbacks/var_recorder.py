@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 
 from itertools import chain
@@ -11,6 +12,9 @@ from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
 
+from pygenn.genn_wrapper.Models import VarAccessDuplication_SHARED_NEURON
+
+logger = logging.getLogger(__name__)
 
 class VarRecorder(Callback):
     def __init__(self, pop: PopulationType, var: Optional[str] = None,
@@ -48,6 +52,27 @@ class VarRecorder(Callback):
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
 
+        try:
+            # Get GeNN population from compiled model
+            pop = compiled_network.neuron_populations[self._pop]
+
+            # Get neuronmodel variables
+            pop_vars = pop.neuron.get_vars()
+
+            # Find variable
+            var = next(v for v in pop_vars if v.name == self._var)
+        except StopIteration:
+            raise RuntimeError(f"Model does not have variable "
+                               f"{self._var} to record")
+
+        # Determine if var is shared
+        self.shared = (var.access & VarAccessDuplication_SHARED_NEURON) != 0
+
+        # If variable is shared and neuron mask was set, give warning
+        if self.shared and not np.all(self._neuron_mask):
+            logger.warn(f"VarRecorder ignoring neuron mask applied "
+                        f"to SHARED_NEURON variable f{self._var}")
+
         # Create empty list to hold recorded data
         data[self.key] = []
         self._data = data[self.key]
@@ -62,9 +87,15 @@ class VarRecorder(Callback):
             # Get view, sliced by batch mask if simulation is batched
             var_view = pop.vars[self._var].view
             if self._batch_size > 1:
-                data_view = var_view[self._batch_mask][:, self._neuron_mask]
+                if self.shared:
+                    data_view = var_view[self._batch_mask][:,:]
+                else:
+                    data_view = var_view[self._batch_mask][:, self._neuron_mask]
             else:
-                data_view = var_view[self._neuron_mask]
+                if self.shared:
+                    data_view = var_view[:]
+                else:
+                    data_view = var_view[self._neuron_mask]
 
             # If there isn't already list to hold data, add one
             if len(self._data) == 0:
