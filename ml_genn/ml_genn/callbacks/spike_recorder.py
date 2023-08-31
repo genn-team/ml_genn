@@ -12,13 +12,15 @@ class SpikeRecorder(Callback):
     def __init__(self, pop: PopulationType, key=None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,
-                 record_spike_events: bool = False):
+                 record_spike_events: bool = False,
+                 record_counts: bool = False):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
 
         # Stash key and whether we're recording spikes or spike-like events
         self.key = key
         self._record_spike_events = record_spike_events
+        self._record_counts = record_counts
 
         # Create example filter
         self._example_filter = ExampleFilter(example_filter)
@@ -58,8 +60,14 @@ class SpikeRecorder(Callback):
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
 
-        # Create tuple of lists to hold recorded spike times and IDs
-        data[self.key] =  ([], [])
+        # If we only want to record spike counts, create list to hold counts
+        if self._record_counts:
+            data[self.key] =  []
+        # Otherwise, create tuple of lists to hold spike times and IDs
+        else:
+            data[self.key] =  ([], [])
+
+        # Stash local reference to data
         self._spikes = data[self.key]
 
     def set_first(self):
@@ -98,13 +106,6 @@ class SpikeRecorder(Callback):
                 data = np.reshape(data, (-1, self._batch_size,
                                          event_recording_bytes))
 
-                # Calculate start time of recording
-                dt = cn.genn_model.dT
-                start_time_ms = (timestep - data.shape[0]) * dt
-                if start_time_ms < 0.0:
-                    raise Exception("spike_recording_data can only be "
-                                    "accessed once buffer is full.")
-
                 # Unpack data (results in one byte per bit)
                 # **THINK** is there a way to avoid this step?
                 data_unpack = np.unpackbits(data, axis=2,
@@ -113,19 +114,38 @@ class SpikeRecorder(Callback):
 
                 # Slice out batches we want
                 data_unpack = data_unpack[:, self._batch_mask, :]
+                
+                if self._record_counts:
+                    # Loop through these batches
+                    for b in range(data_unpack.shape[1]):
+                        # Calculate sum of 
+                        # **TODO** there is a numpy PR that exposes popcount 
+                        # allowing this to be done more efficiently
+                        counts = np.sum(data_unpack[:, b, self._neuron_mask],
+                                        axis=2)
+                                        
+                        # Add to list
+                        self._spikes.append(counts)
+                else:
+                     # Calculate start time of recording
+                    dt = cn.genn_model.dT
+                    start_time_ms = (timestep - data.shape[0]) * dt
+                    if start_time_ms < 0.0:
+                        raise Exception("spike_recording_data can only be "
+                                        "accessed once buffer is full.")
 
-                # Loop through these batches
-                for b in range(data_unpack.shape[1]):
-                    # Calculate indices where there are events
-                    events = np.where(
-                        data_unpack[:, b, self._neuron_mask] == 1)
+                    # Loop through these batches
+                    for b in range(data_unpack.shape[1]):
+                        # Calculate indices where there are events
+                        events = np.where(
+                            data_unpack[:, b, self._neuron_mask] == 1)
 
-                    # Convert event times to ms
-                    event_times = start_time_ms + (events[0] * dt)
+                        # Convert event times to ms
+                        event_times = start_time_ms + (events[0] * dt)
 
-                    # Add to lists
-                    self._spikes[0].append(event_times)
-                    self._spikes[1].append(events[1])
+                        # Add to lists
+                        self._spikes[0].append(event_times)
+                        self._spikes[1].append(events[1])
 
     def get_data(self):
         return self.key, self._spikes
