@@ -20,18 +20,6 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
 
 from ml_genn.compilers.event_prop_compiler import default_params
 
-def preprocess_dataset(dataset, ordering, sensor_size):
-    # Preprocess
-    spikes = []
-    labels = []
-    for i in range(len(dataset)):
-        events, label = dataset[i]
-        spikes.append(preprocess_tonic_spikes(events, ordering,
-                                              sensor_size))
-        labels.append(label)
-        
-    return spikes, labels
-
 NUM_HIDDEN = 256
 BATCH_SIZE = 32
 NUM_EPOCHS = 300
