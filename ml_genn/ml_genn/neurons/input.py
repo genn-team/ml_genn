@@ -64,10 +64,11 @@ class InputBase(Input):
             if batch_size == 1:
                 # Add EGP
                 nm_copy.add_egp(self.egp_name, "scalar*",
-                                np.empty((self.input_frames,) + shape))
+                                np.empty((self.input_frames,) + shape,
+                                         dtype=np.float32))
 
                 # Prepend sim code with code to initialize
-                # local variable tosigned_spikes correct EGP entry + synaptic input
+                # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * DT)), {self.input_frames - 1});
@@ -77,7 +78,8 @@ class InputBase(Input):
                 # Add EGP
                 nm_copy.add_egp(
                     self.egp_name, "scalar*",
-                    np.empty((self.input_frames, batch_size) + shape))
+                    np.empty((self.input_frames, batch_size) + shape,
+                             dtype=np.float32))
 
                 # Prepend sim code with code to initialize
                 # local variable to correct EGP entry + synaptic input

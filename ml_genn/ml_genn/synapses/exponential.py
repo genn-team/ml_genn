@@ -16,15 +16,15 @@ genn_model = {
         """
         $(inSyn) *= $(ExpDecay);
         """}
-        
+
 class Exponential(Synapse):
     tau = ValueDescriptor("ExpDecay", lambda val, dt: np.exp(-dt / val))
-    
-    def __init__(self, tau:InitValue=5.0):
+
+    def __init__(self, tau: InitValue = 5.0):
         super(Exponential, self).__init__()
-        
+
         self.tau = tau
-        
+
         if is_value_initializer(self.tau):
             raise NotImplementedError("Exponential synapse model does not "
                                       "currently support tau values specified"

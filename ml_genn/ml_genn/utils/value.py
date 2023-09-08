@@ -13,10 +13,10 @@ Value = Union[Number, Sequence[Number], np.ndarray, Initializer]
 InitValue = Union[Value, str]
 
 class ValueDescriptor:
-    def __init__(self, genn_name: str, value_transform = None):
+    def __init__(self, genn_name: str, value_transform=None):
         self.genn_name = genn_name
         self.value_transform = value_transform
-    
+
     def get_transformed(self, instance, dt):
         # Get value
         val = self.__get__(instance, None)
@@ -35,7 +35,7 @@ class ValueDescriptor:
         # Otherwise, return attribute value
         else:
             return getattr(instance, f"_{self.name}")
-    
+
     def __set__(self, instance, value):
         # **NOTE** strings are checked first as strings ARE sequences
         name_internal = f"_{self.name}"

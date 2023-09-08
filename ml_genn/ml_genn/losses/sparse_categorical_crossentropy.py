@@ -27,9 +27,9 @@ class SparseCategoricalCrossentropy(Loss):
             raise RuntimeError(f"Length of target data for "
                                f"SparseCategoricalCrossentropy loss should "
                                f"be < {batch_size}")
-        
+
         # Copy flattened y_true into view
-        genn_pop.vars["YTrue"].view[:len(y_true),0] = y_true
-        
+        genn_pop.vars["YTrue"].view[:len(y_true), 0] = y_true
+
         # Push YTrue to device
         genn_pop.push_var_to_device("YTrue")

@@ -88,7 +88,7 @@ class VarRecorder(Callback):
             var_view = pop.vars[self._var].view
             if self._batch_size > 1:
                 if self.shared:
-                    data_view = var_view[self._batch_mask][:,:]
+                    data_view = var_view[self._batch_mask][:, :]
                 else:
                     data_view = var_view[self._batch_mask][:, self._neuron_mask]
             else:

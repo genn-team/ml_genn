@@ -62,4 +62,5 @@ class SpikeInput(Neuron, Input):
     def get_model(self, population: "Population", dt: float, batch_size: int):
         return NeuronModel(genn_model, None, {}, 
                            {"StartSpike": 0, "EndSpike": 0},
-                           {"SpikeTimes": np.empty(self.max_spikes)})
+                           {"SpikeTimes": np.empty(self.max_spikes,
+                                                   dtype=np.float32)})

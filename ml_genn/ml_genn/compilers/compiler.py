@@ -387,7 +387,7 @@ class Compiler:
             # Configure EGPs
             set_egp(wum_egp_vals, genn_pop.extra_global_params)
             set_egp(psm_egp_vals, genn_pop.psm_extra_global_params)
-            
+
             # Configure var init EGPs
             set_var_egps(wum_var_egp_vals, genn_pop.vars)
             set_var_egps(psm_var_egp_vals, genn_pop.psm_vars)

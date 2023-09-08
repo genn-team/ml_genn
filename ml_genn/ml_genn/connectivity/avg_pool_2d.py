@@ -12,7 +12,7 @@ from ..utils.value import is_value_constant
 
 from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
                                  SynapseMatrixType_PROCEDURAL_PROCEDURALG)
-                                 
+
 genn_snippet = create_custom_sparse_connect_init_snippet_class(
     "avg_pool_2d",
 
@@ -34,12 +34,12 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
         const int pool_iw = $(pool_iw), pool_ic = $(pool_ic);
         const int pool_oh = $(pool_oh), pool_ow = $(pool_ow), pool_oc = $(pool_oc);
-        
+
         // Convert presynaptic neuron ID to row, column and channel in pool input
         const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
         const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
         const int poolInChan = $(id_pre) % pool_ic;
-        
+
         // Calculate corresponding pool output
         const int poolOutRow = poolInRow / pool_sh;
         const int poolStrideRow = poolOutRow * pool_sh;
@@ -103,7 +103,7 @@ class AvgPool2D(Connectivity):
             "pool_sh": pool_sh, "pool_sw": pool_sw,
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "pool_oh": pool_oh, "pool_ow": pool_ow, "pool_oc": pool_oc})
-        
+
         # Get best supported matrix type
         # **NOTE** no need to use globalg as constant weights 
         # will be turned into parameters which is equivalent

@@ -65,7 +65,7 @@ def permute_dataset(data: DataDictType,
             shuffled_data[k] = v[indices]
         else:
             shuffled_data[k] = [v[i] for i in indices]
-    
+
     return shuffled_data
 
 def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
@@ -114,7 +114,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
             spike_event_ids = events["p"] + (events["x"] * shape[2])
         else:
             raise RuntimeError("Only 1D and 2D sensors supported")
-    
+
     # Preprocess scaled times and flattened IDs
     return preprocess_spikes(events["t"] * time_scale, spike_event_ids,
                              num_neurons)
@@ -129,16 +129,16 @@ def linear_latency_encode_data(data: np.ndarray, max_time: float,
     for i in range(len(data)):
         # Get boolean mask of spiking neurons
         spike_vector = data[i] > thresh
-        
+
         # Take cumulative sum to get end spikes
         end_spikes = np.cumsum(spike_vector)
-        
+
         # Extract values of spiking pixels
-        spike_pixels = data[i,spike_vector]
-        
+        spike_pixels = data[i, spike_vector]
+
         # Calculate spike times
         spike_times = (((255.0 - spike_pixels) / 255.0) * time_range) + min_time
-        
+
         # Add to list
         spikes.append(PreprocessedSpikes(end_spikes, spike_times))
 
@@ -151,16 +151,16 @@ def log_latency_encode_data(data: np.ndarray, tau_eff: float,
     for i in range(len(data)):
         # Get boolean mask of spiking neurons
         spike_vector = data[i] > thresh
-        
+
         # Take cumulative sum to get end spikes
         end_spikes = np.cumsum(spike_vector)
-            
+
         # Extract values of spiking pixels
-        spike_pixels = data[i,spike_vector]
-        
+        spike_pixels = data[i, spike_vector]
+
         # Calculate spike times
         spike_times = tau_eff * np.log(spike_pixels / (spike_pixels - thresh))
-        
+
         # Add to list
         spikes.append(PreprocessedSpikes(end_spikes, spike_times))
 
@@ -177,7 +177,7 @@ def batch_spikes(spikes: Sequence[PreprocessedSpikes],
     if any(len(s.end_spikes) != num_neurons for s in spikes):
         raise RuntimeError("Cannot batch PreprocessedSpikes "
                            "with different numbers of neurons")
-        
+
     assert all(len(s.end_spikes) == num_neurons for s in spikes)
 
     # Extract seperate lists of each example's

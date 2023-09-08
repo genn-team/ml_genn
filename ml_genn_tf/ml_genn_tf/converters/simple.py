@@ -7,8 +7,8 @@ from .converter import Converter
 from .enum import InputType
 
 class Simple(Converter):
-    def __init__(self, evaluate_timesteps, signed_input:bool=False,
-                 input_type:InputType=InputType.POISSON):
+    def __init__(self, evaluate_timesteps, signed_input: bool = False,
+                 input_type: InputType = InputType.POISSON):
         self.evaluate_timesteps = evaluate_timesteps
         self.signed_input = signed_input
         self.input_type = InputType(input_type)
@@ -27,10 +27,10 @@ class Simple(Converter):
 
     def pre_convert(self, tf_model):
         pass
-    
+
     def pre_compile(self, mlg_network):
         pass
-    
+
     def create_compiler(self, **kwargs):
         return InferenceCompiler(evaluate_timesteps=self.evaluate_timesteps,
                                  **kwargs)

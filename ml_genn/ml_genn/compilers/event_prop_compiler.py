@@ -264,7 +264,7 @@ static_weight_update_model = {
         """,
     "event_threshold_condition_code": """
     $(BackSpike_pre)
-    """,}
+    """}
 
 gradient_batch_reduce_model = {
     "var_name_types": [("ReducedGradient", "scalar", VarAccess_REDUCE_BATCH_SUM)],
