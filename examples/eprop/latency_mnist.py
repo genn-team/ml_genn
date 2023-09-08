@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import mnist
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
-from ml_genn.callbacks import Checkpoint, SpikeRecorder
+from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense,FixedProbability
 from ml_genn.initializers import Normal
@@ -19,13 +19,12 @@ from ml_genn.compilers.eprop_compiler import default_params
 NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
-BATCH_SIZE = 1
+BATCH_SIZE = 128
 NUM_EPOCHS = 10
 SPARSITY = 1.0
-TRAIN = False
+TRAIN = True
 KERNEL_PROFILING = False
 
-np.seterr(all='raise')
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 spikes = log_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
@@ -36,7 +35,7 @@ network = SequentialNetwork(default_params)
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
-                                  NUM_INPUT, record_spikes=True)
+                                  NUM_INPUT)
     initial_hidden_weight = Normal(sd=1.0 / np.sqrt(NUM_INPUT))
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
@@ -59,10 +58,10 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-        metrics, cb_data  = compiled_net.train({input: spikes},
-                                               {output: labels},
-                                               num_epochs=NUM_EPOCHS, shuffle=True,
-                                               callbacks=callbacks)
+        metrics, _  = compiled_net.train({input: spikes},
+                                         {output: labels},
+                                         num_epochs=NUM_EPOCHS, shuffle=True,
+                                         callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
         
         end_time = perf_counter()
@@ -90,18 +89,8 @@ else:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        callbacks = ["batch_progress_bar", SpikeRecorder(input, key="input_spikes"),
-                     SpikeRecorder(input, key="input_spike_counts", record_counts=True)]
-        metrics, cb_data  = compiled_net.evaluate({input: spikes},
-                                                  {output: labels},
-                                                  callbacks=callbacks)
+        metrics, _  = compiled_net.evaluate({input: spikes},
+                                            {output: labels})
         end_time = perf_counter()
-
-        input_spikes = cb_data["input_spikes"]
-        input_spike_counts = cb_data["input_spike_counts"]
-
-        assert np.array_equal(np.bincount(input_spikes[1][100], minlength=NUM_INPUT),
-                              input_spike_counts[100])
-
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
