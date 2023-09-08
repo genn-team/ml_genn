@@ -136,7 +136,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                 batch_dataset(validation_y, batch_size, y_validate_size)))
 
         # Loop through epochs
-        step_i = 0
+        step_i = num_train_batches * start_epoch
         for e in range(start_epoch, start_epoch + num_epochs):
             # If we should shuffle
             if shuffle:

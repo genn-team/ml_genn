@@ -56,7 +56,6 @@ if TRAIN:
     compiled_net = compiler.compile(network)
 
     with compiled_net:
-        visualise_examples = [0, 32, 64, 96]
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
