@@ -137,7 +137,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Loop through epochs
         step_i = 0
-        for e in range(start_epoch, num_epochs):
+        for e in range(start_epoch, start_epoch + num_epochs):
             # If we should shuffle
             if shuffle:
                 # Generate random permutation
