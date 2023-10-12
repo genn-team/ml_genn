@@ -28,7 +28,7 @@ class LeakyIntegrate(Neuron):
             "var_name_types": [("V", "scalar")],
             "param_name_types": [("Alpha", "scalar"), ("Bias", "scalar")],
             "is_auto_refractory_required": False}
-        
+
         # Define integration code based on whether I should be scaled
         if self.scale_i:
             genn_model["sim_code"] = "$(V) = ($(Alpha) * $(V)) + ((1.0 - $(Alpha)) * $(Isyn));"
