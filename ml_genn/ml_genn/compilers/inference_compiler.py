@@ -32,7 +32,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            evaluate_timesteps)
+            None, evaluate_timesteps)
         
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
