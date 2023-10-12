@@ -1,23 +1,32 @@
 import numpy as np
 
 from .metric import Metric
-
+from ..communicators import Communicator
 
 class MeanSquareError(Metric):
     def __init__(self):
         self.reset()
 
-    def update(self, y_true, y_pred):
+    def update(self, y_true, y_pred, communicator: Communicator):
         y_true = np.asarray(y_true)
         if y_true.shape != y_pred.shape:
             raise RuntimeError(f"Prediction shape:{y_pred.shape} does "
                                f"not match label shape:{y_true.shape}")
 
         # Add mean square error between truth and prediction
-        self.sum_mse += np.mean(np.square(y_true - y_pred))
+        batch_sum_mse = np.mean(np.square(y_true - y_pred))
 
         # Add shape of true
-        self.total += y_true.shape[0]
+        batch_total = y_true.shape[0]
+
+        # If a communicator is provided, sum number correct and total across batch
+        if communicator is not None:
+            batch_sum_mse = communicator.reduce_sum(batch_correct)
+            batch_total = communicator.reduce_sum(batch_sum_mse)
+
+        # Add total size and MSE sum across batch to totals
+        self.sum_mse += batch_sum_mse
+        self.total += batch_total
 
     def reset(self):
         self.sum_mse = 0.0
