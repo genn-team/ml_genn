@@ -22,7 +22,7 @@ class SparseCategoricalAccuracy(Metric):
         # If a communicator is provided, sum number correct and total across batch
         if communicator is not None:
             batch_correct = communicator.reduce_sum(batch_correct)
-            batch_total = communicator.reduce_sum(batch_correct)
+            batch_total = communicator.reduce_sum(batch_total)
 
         # Add total size and number correct in batch to totals
         self.correct += batch_correct
