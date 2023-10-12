@@ -60,13 +60,13 @@ class CompiledNetwork:
             raise RuntimeError("Nested compiled networks are "
                                "not currently supported")
         CompiledNetwork._context = self
-        
+
         # Build model (only on first rank if there is a communicator)
         first_rank = (self.communicator is None 
                       or self.communicator.rank == 0)
         if first_rank and not self.genn_model._built:
             self.genn_model.build()
-        
+
         # If there is a communicator, wait for all ranks to reach this point
         if self.communicator is not None:
             self.communicator.barrier()
