@@ -672,10 +672,12 @@ class EventPropCompiler(Compiler):
                         # Add parameters for regulariser
                         model_copy.add_param("RegNuUpper", "int",
                                              self.reg_nu_upper)
-                        model_copy.add_param("RegLambdaUpper", "int",
-                                             self.reg_lambda_upper / self.batch_size)
-                        model_copy.add_param("RegLambdaLower", "int",
-                                             self.reg_lambda_lower / self.batch_size)
+                        model_copy.add_param(
+                            "RegLambdaUpper", "int",
+                            self.reg_lambda_upper / self.full_batch_size)
+                        model_copy.add_param(
+                            "RegLambdaLower", "int",
+                            self.reg_lambda_lower / self.full_batch_size)
 
                         # Add reset variables to copy SpikeCount
                         # into SpikeCountBack and zero SpikeCount
@@ -829,7 +831,7 @@ class EventPropCompiler(Compiler):
         base_train_callbacks = []
         base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
-            if self.batch_size > 1:
+            if self.full_batch_size > 1:
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(
@@ -933,7 +935,7 @@ class EventPropCompiler(Compiler):
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1
-        if self.batch_size > 1:
+        if self.full_batch_size > 1:
             # Create custom update model to reduce Gradient into a variable 
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},

@@ -488,7 +488,7 @@ class EPropCompiler(Compiler):
         base_train_callbacks = []
         base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
-            if self.batch_size > 1:
+            if self.full_batch_size > 1:
                 base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
         if compile_state.is_reset_custom_update_required:
@@ -516,7 +516,7 @@ class EPropCompiler(Compiler):
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1
-        if self.batch_size > 1:
+        if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},
