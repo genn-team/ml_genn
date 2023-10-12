@@ -39,7 +39,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.checkpoint_connection_vars = checkpoint_connection_vars
         self.checkpoint_population_vars = checkpoint_population_vars
         self.reset_time_between_batches = reset_time_between_batches
-        
+
         # Build set of synapse groups with checkpoint variables
         self.checkpoint_synapse_groups = set(
             connection_populations[c] 
@@ -166,7 +166,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                 step_i += 1
 
             train_callback_list.on_epoch_end(e, train_metrics)
-            
+
             # If there's any validation data
             if x_validate_size > 0:
                 # Reset validation metrics at start of each epoch
@@ -223,7 +223,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             # connectivity so variables can be accessed correctly
             if genn_pop.is_ragged:
                 genn_pop.pull_connectivity_from_device()
-                
+
         # Loop through connection variables to checkpoint
         for c, v in self.checkpoint_connection_vars:
             genn_pop = self.connection_populations[c]
@@ -258,8 +258,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)])
-        
+            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+                              self.communicator)
+
         # End batch
         callback_list.on_batch_end(batch, metrics)
 
@@ -294,7 +295,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)])
+            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+                              self.communicator)
 
         # Loop through optimiser custom updates and set step
         for c in self.optimiser_custom_updates:

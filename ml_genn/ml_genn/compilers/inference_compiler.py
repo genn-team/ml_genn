@@ -195,7 +195,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)])
+            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+                              self.communicator)
 
         # End batch
         callback_list.on_batch_end(batch, metrics)

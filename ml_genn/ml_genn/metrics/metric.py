@@ -1,11 +1,12 @@
 from abc import ABC
+from ..communicators import Communicator
 
 from abc import abstractmethod, abstractproperty
 
 
 class Metric(ABC):
     @abstractmethod
-    def update(self, y_true, y_pred):
+    def update(self, y_true, y_pred, communicator: Communicator):
         pass
 
     @abstractmethod
