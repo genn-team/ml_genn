@@ -5,6 +5,7 @@ from .population import Population
 from .sequential_network import SequentialNetwork
 
 from . import callbacks
+from . import communicators
 from . import compilers
 from . import connectivity
 from . import initializers
@@ -17,9 +18,7 @@ from . import serialisers
 from . import synapses
 from . import utils
 
-__all__ = ["Connection", "InputLayer", "Layer",
-           "Network", "Population", "SequentialNetwork",
-           "callbacks", "compilers", "connectivity",
-           "initializers", "losses", "metrics",
-           "neurons", "optimisers", "readouts",
-           "serialisers", "synapses", "utils"]
+__all__ = ["Connection", "InputLayer", "Layer", "Network", "Population",
+           "SequentialNetwork", "callbacks", "communicators", "compilers",
+           "connectivity", "initializers", "losses", "metrics", "neurons",
+           "optimisers", "readouts", "serialisers", "synapses", "utils"]
