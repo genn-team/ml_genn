@@ -34,13 +34,13 @@ class FewSpike(Converter):
         if len(pre_conv_alpha) > 0 and tf_layer not in pre_conv_alpha:
             logger.warning(f"FewSpike pre_convert has not provided "
                            f"an alpha value for '{tf_layer.name}'")
-            
+
         # Lookup optimised alpha value for neuron
         alpha = (pre_conv_alpha[tf_layer] if tf_layer in pre_conv_alpha
                  else self.alpha)
         return FewSpikeRelu(self.k, alpha, 
                             readout="var" if is_output else None)
-    
+
     def pre_convert(self, tf_model):
         # If any normalisation data was provided
         if self.norm_data is not None:
@@ -71,7 +71,7 @@ class FewSpike(Converter):
         # Otherwise, return empty normalisation output tuple
         else:
             return PreConvertOutput(layer_alpha={}, input_alpha=None)
-    
+
     def post_convert(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
         # Loop through populations
         for p in mlg_network.populations:
@@ -80,11 +80,11 @@ class FewSpike(Converter):
                 # Determine the maximum alpha value of presynaptic populations
                 max_presyn_alpha = max(c().source().neuron.alpha 
                                        for c in p.incoming_connections)
-                
+
                 # Loop through incoming connections
                 for c in p.incoming_connections:
                     # Set presyn alpha to maximum alpha of all presyn layers
                     c().source().neuron.alpha = max_presyn_alpha
-    
+
     def create_compiler(self, **kwargs):
         return FewSpikeCompiler(k=self.k, **kwargs)
