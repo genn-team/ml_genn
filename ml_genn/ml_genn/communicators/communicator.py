@@ -1,14 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC
-from ..compilers.compiled_network import CompiledNetwork
 
 from abc import abstractmethod, abstractproperty
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .. import Population
 
 class Communicator(ABC):
     """Base class for all communicators - objects for abstracting away details of parallel communications between ranks

@@ -12,12 +12,13 @@ from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
+from ..communicators import Communicator
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from pygenn.genn_model import (create_custom_custom_update_class,
                                create_custom_neuron_class,
                                create_custom_postsynaptic_class,
@@ -111,11 +112,11 @@ class SupportedMatrixType:
     def __init__(self, supported: List[int]):
         # Build dictionary of supported connectivity types and order
         self._supported = {v: i for i, v in enumerate(supported)}
-    
+
     def get_best(self, available: List[int]) -> Optional[int]:
         # Intersect supported connectivity types with those that are available
         possible = self._supported.keys() & available
-        
+
         # If there are no possible options
         if len(possible) == 0:
             return None
@@ -123,7 +124,7 @@ class SupportedMatrixType:
         # the highest priority from possible
         else:
             return min(possible, key=lambda p: self._supported[p])
-        
+
 class ZeroInSyn(Callback):
     def __init__(self, genn_syn_pop):
         self.genn_syn_pop = genn_syn_pop
@@ -135,13 +136,15 @@ class ZeroInSyn(Callback):
 
 class Compiler:
     def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
-                 batch_size: int = 1, rng_seed: int = 0, 
-                 kernel_profiling: bool = False, **genn_kwargs):
+                 batch_size: int = 1, rng_seed: int = 0,
+                 kernel_profiling: bool = False,
+                 communicator: Communicator = None, **genn_kwargs):
         self.dt = dt
         self.batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
         self.supported_matrix_type = SupportedMatrixType(supported_matrix_type)
+        self.communicator = communicator
         self.genn_kwargs = genn_kwargs
 
     def pre_compile(self, network: Network, genn_model, **kwargs):
@@ -259,7 +262,7 @@ class Compiler:
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
         return CompiledNetwork(genn_model, neuron_populations,
-                               connection_populations)
+                               connection_populations, self.communicator)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
         # If no name is specifie
@@ -279,8 +282,14 @@ class Compiler:
         # **THINK** should this include compiler parameters?
         clean_name += type(self).__name__
 
+        # If we are using a communicator, generate NCCL reductions
+        # **NOTE** this only works with CUDA backend
+        kwargs = copy(self.genn_kwargs)
+        if self.communicator is not None:
+            kwargs["enableNCCLReductions"] = True
+
         # Create GeNN model and set basic properties
-        genn_model = GeNNModel("float", clean_name, **self.genn_kwargs)
+        genn_model = GeNNModel("float", clean_name, **kwargs)
         genn_model.dT = self.dt
         genn_model.batch_size = self.batch_size
         genn_model._model.set_seed(self.rng_seed)
