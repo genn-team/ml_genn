@@ -61,11 +61,17 @@ class CompiledNetwork:
                                "not currently supported")
         CompiledNetwork._context = self
 
-        # Build model (only on first rank if there is a communicator)
+        # If model, isn't already built
         first_rank = (self.communicator is None 
                       or self.communicator.rank == 0)
-        if first_rank and not self.genn_model._built:
-            self.genn_model.build()
+        if not self.genn_model._built:
+            # If this is the first rank, build model
+            if first_rank:
+                self.genn_model.build()
+            # Otherwise, at least ensure it is finalised
+            # **HACK** GeNN should handle this
+            else:
+                self.genn_model._model.finalize()
 
         # If there is a communicator, wait for all ranks to reach this point
         if self.communicator is not None:
