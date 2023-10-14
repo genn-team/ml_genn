@@ -7,7 +7,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
@@ -240,6 +240,12 @@ gradient_batch_reduce_model = {
     $(Gradient) = 0;
     """}
 
+gradient_zero_model = {
+    "var_refs": [("Gradient", "scalar")],
+    "update_code": """
+    $(Gradient) = 0;
+    """}
+    
 class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
@@ -464,6 +470,8 @@ class EPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
+            self._create_gradient_zero_custom_update(
+                f"Weight{i}", create_wu_var_ref(genn_pop, "DeltaG"), genn_model)
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -472,6 +480,8 @@ class EPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
                     create_var_ref(genn_pop, "DeltaBias"), genn_model))
+            self._create_gradient_zero_custom_update(
+                f"Bias{i}", create_var_ref(genn_pop, "DeltaBias"), genn_model)
 
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
@@ -491,6 +501,8 @@ class EPropCompiler(Compiler):
             if self.full_batch_size > 1:
                 base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
+            base_validate_callbacks.append(
+                CustomUpdateOnEpochEnd("GradientZero"))
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
@@ -512,7 +524,15 @@ class EPropCompiler(Compiler):
             base_validate_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
-
+    
+    def _create_gradient_zero_custom_update(self, name_suffix, 
+                                            gradient_ref, genn_model):
+        # Add custom update to zero gradients
+        self.add_custom_update(
+            genn_model, CustomUpdateModel(gradient_zero_model, {}, {},
+                                          {"Gradient": gradient_ref}),
+            "GradientZero", "CUGradientZero" + name_suffix)
+    
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1
