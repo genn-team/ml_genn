@@ -39,7 +39,7 @@ class CustomUpdateOnEpochBegin(CustomUpdate):
 
 
 class CustomUpdateOnEpochEnd(CustomUpdate):
-    def on_poch_end(self, epoch, metrics):
+    def on_epoch_end(self, epoch, metrics):
         logger.debug(f"Running custom update {self.name} "
                      f"at end of epoch {epoch}")
         self._custom_update()
