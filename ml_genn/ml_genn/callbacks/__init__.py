@@ -1,7 +1,9 @@
 from .callback import Callback
 from .checkpoint import Checkpoint
 from .custom_update import (CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd,
-                            CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd)
+                            CustomUpdateOnEpochBegin, CustomUpdateOnEpochEnd,
+                            CustomUpdateOnTimestepBegin,
+                            CustomUpdateOnTimestepEnd)
 from .optimiser_param_schedule import OptimiserParamSchedule
 from .progress_bar import BatchProgressBar
 from .spike_recorder import SpikeRecorder

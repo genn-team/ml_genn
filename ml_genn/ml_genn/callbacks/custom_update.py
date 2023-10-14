@@ -31,6 +31,20 @@ class CustomUpdateOnBatchEnd(CustomUpdate):
         self._custom_update()
 
 
+class CustomUpdateOnEpochBegin(CustomUpdate):
+    def on_epoch_begin(self, epoch):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at start of epoch {epoch}")
+        self._custom_update()
+
+
+class CustomUpdateOnEpochEnd(CustomUpdate):
+    def on_poch_end(self, epoch, metrics):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at end of epoch {epoch}")
+        self._custom_update()
+
+
 class CustomUpdateOnTimestepBegin(CustomUpdate):
     def on_timestep_begin(self, timestep):
         logger.debug(f"Running custom update {self.name} "
