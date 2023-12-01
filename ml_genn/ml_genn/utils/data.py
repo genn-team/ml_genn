@@ -96,7 +96,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
     if shape[2] == 1:
         # If sensor is 2D, flatten x and y into event IDs
         if ("x" in ordering) and ("y" in ordering):
-            spike_event_ids = events["x"] + (events["y"] * shape[1])
+            spike_event_ids = events["x"] + (events["y"] * shape[0])
         # Otherwise, if it's 1D, simply use X
         elif "x" in ordering:
             spike_event_ids = events["x"]
@@ -108,7 +108,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
         if ("x" in ordering) and ("y" in ordering):
             spike_event_ids = (events["p"] +
                                (events["x"] * shape[2]) + 
-                               (events["y"] * shape[1] * shape[2]))
+                               (events["y"] * shape[0] * shape[2]))
         # Otherwise, if it's 1D, flatten x and p into event IDs
         elif "x" in ordering:
             spike_event_ids = events["p"] + (events["x"] * shape[2])
