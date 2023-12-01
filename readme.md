@@ -6,8 +6,8 @@ A library for deep learning with Spiking Neural Networks (SNN)powered by [GeNN](
 ## Installation
  1. Follow the instructions in https://github.com/genn-team/genn/blob/master/pygenn/README.md to install PyGeNN.
  2. Clone this project
- 3. Install mlGeNN with setuptools using ``python ml_genn/setup.py develop`` command
- 3. To use mlGeNN to convert ANNs trained with Keras to SNNs, install mlGeNN TF with setuptools using ``python ml_genn_tf/setup.py develop`` command
+ 3. Install mlGeNN with setuptools using ``python setup.py develop`` command in the ``ml_genn`` directory
+ 3. To use mlGeNN to convert ANNs trained with Keras to SNNs, install mlGeNN TF with setuptools using ``python setup.py develop`` command in the ``ml_genn_tf`` directory
 
 ## Usage
 ### Convert ANN to SNN
