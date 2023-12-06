@@ -1,4 +1,6 @@
-from typing import Iterator, Sequence
+import numpy as np
+
+from typing import Iterator, Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
@@ -8,6 +10,7 @@ from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
+from ..utils.network import PopulationType
 
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import create_reset_custom_update
@@ -38,9 +41,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
     def evaluate(self, x: dict, y: dict,
                  metrics: MetricsType = "sparse_categorical_accuracy",
                  callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in numpy format against labels
-        accuracy --  dictionary containing accuracy of predictions
-                     made by each output Population or Layer
+        """ Evaluate metrics on a numpy dataset
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
@@ -81,13 +82,52 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
+    def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
+                callbacks=[BatchProgressBar()]):
+        """ Generate predictions from a numpy dataset
+        """
+        # Determine the number of elements in x
+        x_size = get_dataset_size(x)
+
+        if x_size is None:
+            raise RuntimeError("Each input population must be "
+                               " provided with same number of inputs")
+        # Batch x
+        x = batch_dataset(x, self.genn_model.batch_size, x_size)
+        
+        # Create callback list and begin testing
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
+                                     num_batches=len(x))
+        callback_list.on_test_begin()
+
+        # Loop through batches and evaluate
+        y_pred = []
+        for batch, x_batch in enumerate(x):
+            # Start batch
+            callback_list.on_batch_begin(batch)
+
+            # Get predictions from model
+            y_pred.append(np.copy(self._predict_batch(batch, x_batch, outputs,
+                                                      callback_list)))
+
+            # End batch
+            callback_list.on_batch_end(batch, {})
+
+        # End testing
+        callback_list.on_test_end({})
+        
+        # Concatenate predictions into single numpy array
+        y_pred = np.concatenate(y_pred)
+        
+        # Trim padding from predictions and return
+        return y_pred[:x_size,:], callback_list.get_data()
+
     def evaluate_batch_iter(
             self, inputs, outputs, data: Iterator, num_batches: int = None,
             metrics: MetricsType = "sparse_categorical_accuracy",
             callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in iterator format against labels
-        accuracy --  dictionary containing accuracy of predictions
-                     made by each output Population or Layer
+        """ Evaluate metrics on an iterator that provides batches of a dataset
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
@@ -160,23 +200,18 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         return metrics, callback_list.get_data()
 
-    def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
-                        callback_list: CallbackList):
-        """ Evaluate a single batch of inputs against labels
+    def _predict_batch(self, batch: int, x: dict,
+                       outputs: Union[Sequence, PopulationType],
+                       callback_list: CallbackList):
+        """ Generate predictions from a single batch of inputs
         Args:
         batch --    index of current batch
         x --        dict mapping input Population or InputLayer to
                     array containing one batch of inputs
-        y --        dict mapping output Population or Layer to
+        outputs --  population or sequence of populations
+                    to read predictions from
                     array containing one batch of labels
-
-        Returns:
-        correct --  dictionary containing number of correct predictions
-                    made by each output Population or Layer
         """
-        # Start batch
-        callback_list.on_batch_begin(batch)
-
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
@@ -189,8 +224,25 @@ class CompiledInferenceNetwork(CompiledNetwork):
         for t in range(self.evaluate_timesteps):
             self.step_time(callback_list)
 
+        # Return predictions from model
+        return self.get_readout(outputs)
+
+
+    def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
+                        callback_list: CallbackList):
+        """ Evaluate a single batch of inputs against labels
+        Args:
+        batch --    index of current batch
+        x --        dict mapping input Population or InputLayer to
+                    array containing one batch of inputs
+        y --        dict mapping output Population or Layer to
+                    array containing one batch of labels
+        """
+        # Start batch
+        callback_list.on_batch_begin(batch)
+
         # Get predictions from model
-        y_pred = self.get_readout(list(y.keys()))
+        y_pred = self._predict_batch(batch, x, list(y.keys()), callback_list)
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
