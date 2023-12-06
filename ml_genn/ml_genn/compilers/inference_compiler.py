@@ -235,7 +235,6 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Return predictions from model
         return self.get_readout(outputs)
 
-
     def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
                         callback_list: CallbackList):
         """ Evaluate a single batch of inputs against labels
