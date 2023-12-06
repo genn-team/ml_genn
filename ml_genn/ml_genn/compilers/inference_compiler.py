@@ -94,34 +94,45 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                " provided with same number of inputs")
         # Batch x
         x = batch_dataset(x, self.genn_model.batch_size, x_size)
-        
+
+        # Convert outputs to sequence
+        outputs = outputs if isinstance(outputs, Sequence) else [outputs]
+
         # Create callback list and begin testing
         callback_list = CallbackList(self.base_callbacks + callbacks,
                                      compiled_network=self,
                                      num_batches=len(x))
         callback_list.on_test_begin()
 
+        # Build dictionary mapping from output to
+        # (initially empty) lists to hold predictions
+        y_pred = {o: [] for o in outputs}
+
         # Loop through batches and evaluate
-        y_pred = []
         for batch, x_batch in enumerate(x):
             # Start batch
             callback_list.on_batch_begin(batch)
 
-            # Get predictions from model
-            y_pred.append(np.copy(self._predict_batch(batch, x_batch, outputs,
-                                                      callback_list)))
+            # Get predictions from each output on this batch
+            y_pred_batch = self._predict_batch(batch, x_batch, outputs,
+                                               callback_list)
+
+            # Insert copies into dictionary
+            for o, y in  zip(outputs, y_pred_batch):
+                y_pred[o].append(np.copy(y))
 
             # End batch
             callback_list.on_batch_end(batch, {})
 
         # End testing
         callback_list.on_test_end({})
-        
-        # Concatenate predictions into single numpy array
-        y_pred = np.concatenate(y_pred)
-        
-        # Trim padding from predictions and return
-        return y_pred[:x_size,:], callback_list.get_data()
+
+        # Concatenate predictions into single numpy array and trim padding
+        for o in outputs:
+            y_pred[o] = np.concatenate(y_pred[o])[:x_size,:]
+
+        # Return predictions and metrics
+        return y_pred, callback_list.get_data()
 
     def evaluate_batch_iter(
             self, inputs, outputs, data: Iterator, num_batches: int = None,
@@ -200,17 +211,14 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         return metrics, callback_list.get_data()
 
-    def _predict_batch(self, batch: int, x: dict,
-                       outputs: Union[Sequence, PopulationType],
+    def _predict_batch(self, batch: int, x: dict, outputs: Sequence,
                        callback_list: CallbackList):
         """ Generate predictions from a single batch of inputs
         Args:
         batch --    index of current batch
         x --        dict mapping input Population or InputLayer to
                     array containing one batch of inputs
-        outputs --  population or sequence of populations
-                    to read predictions from
-                    array containing one batch of labels
+        outputs --  sequence of populations to read predictions from
         """
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
