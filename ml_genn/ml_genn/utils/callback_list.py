@@ -1,5 +1,6 @@
 from collections import defaultdict
 from typing import List, Sequence
+from warnings import warn
 
 from ..callbacks import Callback
 
@@ -118,7 +119,9 @@ class CallbackList:
 
                 # Add data to dictionary, using index of
                 # callback as key if key is not provided
-                key = i if key is None else key
+                if key is None:
+                    warn(f"No key provided - a default numerical key {i} will be used")
+                    key = i
                 if key in cb_data:
                     raise KeyError(f"Callback data key {key} is not unique")
                 cb_data[key] = data
