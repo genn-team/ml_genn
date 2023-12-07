@@ -5,6 +5,7 @@ from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
+from ..communicators import Communicator
 from ..metrics import Metric
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
@@ -27,13 +28,13 @@ from ..metrics import default_metrics
 
 class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, evaluate_timesteps: int, 
-                 base_callbacks: list,
+                 connection_populations, communicator,
+                 evaluate_timesteps: int, base_callbacks: list,
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            evaluate_timesteps)
-        
+            communicator, evaluate_timesteps)
+
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
         self.reset_time_between_batches = reset_time_between_batches
@@ -253,7 +254,8 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)])
+            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+                              self.communicator)
 
         # End batch
         callback_list.on_batch_end(batch, metrics)
@@ -264,7 +266,7 @@ class CompileState:
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
         self.in_syn_zero_conns = []
-    
+
     def add_neuron_reset_vars(self, model, pop, reset_model_vars):
         if reset_model_vars:
             reset_vars = model.reset_vars
@@ -280,7 +282,7 @@ class CompileState:
         reset_vars = model.reset_vars
         if len(reset_vars) > 0:
             self._psm_reset_vars[conn] = reset_vars
-    
+
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops, conn_pops):
         # Loop through neuron variables to reset
@@ -314,6 +316,7 @@ class InferenceCompiler(Compiler):
                  reset_time_between_batches=True,
                  reset_vars_between_batches=True,
                  reset_in_syn_between_batches=False,
+                 communicator: Communicator = None,
                  **genn_kwargs):
         # Determine matrix type order of preference based on flag
         if prefer_in_memory_connect:
@@ -330,7 +333,8 @@ class InferenceCompiler(Compiler):
                                      SynapseMatrixType_DENSE_INDIVIDUALG]
         super(InferenceCompiler, self).__init__(supported_matrix_type, dt,
                                                 batch_size, rng_seed,
-                                                kernel_profiling, 
+                                                kernel_profiling,
+                                                communicator,
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
@@ -387,6 +391,7 @@ class InferenceCompiler(Compiler):
 
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
+                                        self.communicator,
                                         self.evaluate_timesteps,
                                         base_callbacks,
                                         self.reset_time_between_batches)

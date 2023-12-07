@@ -5,6 +5,7 @@ from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from ..communicators import Communicator
 from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..readouts import Var
@@ -26,10 +27,11 @@ from ..metrics import default_metrics
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, k: int,
-                 pop_pipeline_depth: dict):
+                 connection_populations, communicator,
+                 k: int, pop_pipeline_depth: dict):
         super(CompiledFewSpikeNetwork, self).__init__(
-              genn_model, neuron_populations, connection_populations, k)
+              genn_model, neuron_populations, connection_populations,
+              communicator, k)
 
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
@@ -167,7 +169,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
                     # Update metrics
                     metrics[o].update(batch_y_true,
-                                      batch_y_pred[:len(batch_y_true)])
+                                      batch_y_pred[:len(batch_y_true)],
+                                      self.communicator)
 
             # End batch
             callback_list.on_batch_end(batch_i, metrics)
@@ -191,7 +194,8 @@ CompileState = namedtuple("CompileState",
 class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
-                 prefer_in_memory_connect: bool = True, **genn_kwargs):
+                 prefer_in_memory_connect: bool = True,
+                 communicator: Communicator = None, **genn_kwargs):
         # Determine matrix type order of preference based on flag
         if prefer_in_memory_connect:
             supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
@@ -207,7 +211,7 @@ class FewSpikeCompiler(Compiler):
                                      SynapseMatrixType_DENSE_INDIVIDUALG]
         super(FewSpikeCompiler, self).__init__(supported_matrix_type, dt,
                                                batch_size, rng_seed,
-                                               kernel_profiling,
+                                               kernel_profiling, communicator,
                                                **genn_kwargs)
         self.k = k
 
@@ -286,5 +290,6 @@ class FewSpikeCompiler(Compiler):
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
-                                       connection_populations, self.k,
+                                       connection_populations,
+                                       self.communicator, self.k,
                                        compile_state.pop_pipeline_depth)

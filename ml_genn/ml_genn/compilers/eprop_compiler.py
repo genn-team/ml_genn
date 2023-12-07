@@ -8,6 +8,7 @@ from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+from ..communicators import Communicator
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
                        LeakyIntegrate, LeakyIntegrateFire, 
@@ -245,12 +246,14 @@ class EPropCompiler(Compiler):
                  f_target: float = 10.0, train_output_bias: bool = True,
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
-                 reset_time_between_batches: bool = True, **genn_kwargs):
+                 reset_time_between_batches: bool = True,
+                 communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
                                   SynapseMatrixType_DENSE_INDIVIDUALG]
         super(EPropCompiler, self).__init__(supported_matrix_types, dt,
                                             batch_size, rng_seed,
                                             kernel_profiling,
+                                            communicator,
                                             **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -392,7 +395,7 @@ class EPropCompiler(Compiler):
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
-        
+
         # Calculate membrane persistence
         alpha = np.exp(-self.dt / compile_state.tau_mem)
 
@@ -412,7 +415,7 @@ class EPropCompiler(Compiler):
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
             rho = np.exp(-self.dt / compile_state.tau_adapt)
-            
+
             wum = WeightUpdateModel(
                 model=eprop_alif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
@@ -452,7 +455,7 @@ class EPropCompiler(Compiler):
         # Correctly target feedback
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "ISynFeedback"
-        
+
         # Add optimisers to connection weights that require them
         optimiser_custom_updates = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
@@ -461,7 +464,7 @@ class EPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
-        
+
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
             genn_pop = neuron_populations[p]
@@ -469,7 +472,7 @@ class EPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
                     create_var_ref(genn_pop, "DeltaBias"), genn_model))
-        
+
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
         for p, o, s in compile_state.softmax_populations:
@@ -485,7 +488,7 @@ class EPropCompiler(Compiler):
         base_train_callbacks = []
         base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
-            if self.batch_size > 1:
+            if self.full_batch_size > 1:
                 base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
         if compile_state.is_reset_custom_update_required:
@@ -504,16 +507,16 @@ class EPropCompiler(Compiler):
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            compile_state.losses, self._optimiser, self.example_timesteps,
-            base_train_callbacks, base_validate_callbacks, 
-            optimiser_custom_updates,
+            self.communicator, compile_state.losses, self._optimiser,
+            self.example_timesteps, base_train_callbacks,
+            base_validate_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1
-        if self.batch_size > 1:
+        if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},

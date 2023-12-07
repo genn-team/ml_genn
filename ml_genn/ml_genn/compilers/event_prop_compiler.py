@@ -15,6 +15,7 @@ from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
@@ -328,11 +329,12 @@ neuron_reset_strict_check = """
 class EventPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
-                 reg_nu_upper: float = 0.0, max_spikes: int = 500, 
+                 reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
-                 batch_size: int = 1, rng_seed: int = 0, 
-                 kernel_profiling: bool = False, **genn_kwargs):
+                 batch_size: int = 1, rng_seed: int = 0,
+                 kernel_profiling: bool = False,
+                 communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType_TOEPLITZ_KERNELG,
                                   SynapseMatrixType_PROCEDURAL_KERNELG,
                                   SynapseMatrixType_DENSE_INDIVIDUALG,
@@ -340,6 +342,7 @@ class EventPropCompiler(Compiler):
         super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
                                                 batch_size, rng_seed,
                                                 kernel_profiling,
+                                                communicator,
                                                 **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -669,10 +672,12 @@ class EventPropCompiler(Compiler):
                         # Add parameters for regulariser
                         model_copy.add_param("RegNuUpper", "int",
                                              self.reg_nu_upper)
-                        model_copy.add_param("RegLambdaUpper", "int",
-                                             self.reg_lambda_upper / self.batch_size)
-                        model_copy.add_param("RegLambdaLower", "int",
-                                             self.reg_lambda_lower / self.batch_size)
+                        model_copy.add_param(
+                            "RegLambdaUpper", "int",
+                            self.reg_lambda_upper / self.full_batch_size)
+                        model_copy.add_param(
+                            "RegLambdaLower", "int",
+                            self.reg_lambda_lower / self.full_batch_size)
 
                         # Add reset variables to copy SpikeCount
                         # into SpikeCountBack and zero SpikeCount
@@ -738,7 +743,7 @@ class EventPropCompiler(Compiler):
 
         # Return model
         return model
-    
+
     def build_weight_update_model(self, conn, connect_snippet, compile_state):
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("EventProp compiler only "
@@ -826,7 +831,7 @@ class EventPropCompiler(Compiler):
         base_train_callbacks = []
         base_validate_callbacks = []
         if len(optimiser_custom_updates) > 0:
-            if self.batch_size > 1:
+            if self.full_batch_size > 1:
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(
@@ -864,9 +869,9 @@ class EventPropCompiler(Compiler):
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            compile_state.losses, self._optimiser, self.example_timesteps,
-            base_train_callbacks, base_validate_callbacks, 
-            optimiser_custom_updates,
+            self.communicator, compile_state.losses, self._optimiser,
+            self.example_timesteps, base_train_callbacks,
+            base_validate_callbacks, optimiser_custom_updates,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, True)
 
@@ -874,7 +879,7 @@ class EventPropCompiler(Compiler):
     def regulariser_enabled(self):
         return (self.reg_lambda_lower != 0.0 
                 or self.reg_lambda_upper != 0.0)
-    
+
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
         # Create custom update model to implement 
@@ -926,11 +931,11 @@ class EventPropCompiler(Compiler):
             genn_model, softmax_3, 
             "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
-            
+
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
                                         gradient_ref, genn_model):
         # If batch size is greater than 1
-        if self.batch_size > 1:
+        if self.full_batch_size > 1:
             # Create custom update model to reduce Gradient into a variable 
             reduction_optimiser_model = CustomUpdateModel(
                 gradient_batch_reduce_model, {}, {"ReducedGradient": 0.0},

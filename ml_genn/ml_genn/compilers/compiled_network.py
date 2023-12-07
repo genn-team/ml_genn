@@ -13,10 +13,12 @@ class CompiledNetwork:
     _context = None
 
     def __init__(self, genn_model, neuron_populations,
-                 connection_populations, num_recording_timesteps=None):
+                 connection_populations, communicator,
+                 num_recording_timesteps=None):
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
         self.connection_populations = connection_populations
+        self.communicator = communicator
         self.num_recording_timesteps = num_recording_timesteps
 
     def set_input(self, inputs: dict):
@@ -57,12 +59,41 @@ class CompiledNetwork:
         if CompiledNetwork._context is not None:
             raise RuntimeError("Nested compiled networks are "
                                "not currently supported")
-
         CompiledNetwork._context = self
+
+        # If model, isn't already built
+        first_rank = (self.communicator is None 
+                      or self.communicator.rank == 0)
         if not self.genn_model._built:
-            self.genn_model.build()
+            # If this is the first rank, build model
+            if first_rank:
+                self.genn_model.build()
+            # Otherwise, at least ensure it is finalised
+            # **HACK** GeNN should handle this
+            else:
+                self.genn_model._model.finalize()
+
+        # If there is a communicator, wait for all ranks to reach this point
+        if self.communicator is not None:
+            self.communicator.barrier()
+
         self.genn_model.load(
             num_recording_timesteps=self.num_recording_timesteps)
+
+        # If there is a communicator
+        if self.communicator is not None:
+            # Generate unique ID for our NCCL 'clique' on first rank
+            if first_rank:
+                self.genn_model._slm.nccl_generate_unique_id()
+
+            # Broadcast our  NCCL clique ID across all ranks
+            nccl_unique_id_view =\
+                self.genn_model._slm.nccl_assign_external_unique_id()
+            self.communicator.broadcast(nccl_unique_id_view, 0)
+
+            # Initialise NCCL communicator
+            self.genn_model._slm.nccl_init_communicator(
+                self.communicator.rank, self.communicator.num_ranks)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
         assert CompiledNetwork._context is not None
