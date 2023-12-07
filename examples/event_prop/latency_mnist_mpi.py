@@ -37,7 +37,7 @@ spikes = linear_latency_encode_data(
     EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 
-serialiser = Numpy("latency_mnist_checkpoints")
+serialiser = Numpy("latency_mnist_mpi_checkpoints")
 network = SequentialNetwork(default_params)
 with network:
     # Populations
