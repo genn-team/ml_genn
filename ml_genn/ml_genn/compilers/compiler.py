@@ -296,12 +296,12 @@ class Compiler:
 
         # If we are using a communicator, generate NCCL reductions
         # **NOTE** this only works with CUDA backend
-        kwargs = copy(self.genn_kwargs)
+        genn_kwargs = copy(self.genn_kwargs)
         if self.communicator is not None:
-            kwargs["enableNCCLReductions"] = True
+            genn_kwargs["enableNCCLReductions"] = True
 
         # Create GeNN model and set basic properties
-        genn_model = GeNNModel("float", clean_name, **kwargs)
+        genn_model = GeNNModel("float", clean_name, **genn_kwargs)
         genn_model.dT = self.dt
         genn_model.batch_size = self.batch_size
         genn_model._model.set_seed(self.rng_seed)

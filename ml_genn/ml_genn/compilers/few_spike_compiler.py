@@ -169,7 +169,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
                     # Update metrics
                     metrics[o].update(batch_y_true,
-                                      batch_y_pred[:len(batch_y_true)])
+                                      batch_y_pred[:len(batch_y_true)],
+                                      self.communicator)
 
             # End batch
             callback_list.on_batch_end(batch_i, metrics)
