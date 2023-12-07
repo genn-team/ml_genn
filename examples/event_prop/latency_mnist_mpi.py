@@ -29,13 +29,17 @@ SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
 
-communicator = MPI()
-train_dataset_slice = slice(communicator.rank, -1, communicator.num_ranks)
-labels = mnist.train_labels()[train_dataset_slice] if TRAIN else mnist.test_labels()
-spikes = linear_latency_encode_data(
-    mnist.train_images()[train_dataset_slice] if TRAIN else mnist.test_images(),
-    EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
+if TRAIN:
+    communicator = MPI()
+    print(f"Training on rank {communicator.rank} / {communicator.num_ranks}")
+    train_dataset_slice = slice(communicator.rank, -1, communicator.num_ranks)
+    labels = mnist.train_labels()[train_dataset_slice]
+    images = mnist.train_images()[train_dataset_slice]
+else:
+    labels = mnist.test_labels()
+    images = mnist.test_images()
 
+spikes = linear_latency_encode_data(images, EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_mpi_checkpoints")
 network = SequentialNetwork(default_params)

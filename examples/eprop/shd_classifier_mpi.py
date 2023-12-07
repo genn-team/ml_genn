@@ -22,18 +22,24 @@ NUM_HIDDEN = 256
 BATCH_SIZE = 512
 NUM_EPOCHS = 50
 
+TRAIN = True
 KERNEL_PROFILING = False
 
 # Get SHD dataset
 dataset = SHD(save_to='../data', train=True)
 
-# Create MPI communicator
-communicator = MPI()
+if TRAIN:
+    communicator = MPI()
+    print(f"Training on rank {communicator.rank} / {communicator.num_ranks}")
+
+    data_range = range(communicator.rank, len(dataset), communicator.num_ranks)
+else:
+    data_range = range(len(dataset))
 
 # Preprocess
 spikes = []
 labels = []
-for i in range(communicator.rank, len(dataset), communicator.num_ranks):
+for i in data_range:
     events, label = dataset[i]
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
                                           dataset.sensor_size))
@@ -65,27 +71,45 @@ with network:
     Connection(hidden, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
     Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))))
 
-compiler = EPropCompiler(example_timesteps=int(np.ceil(latest_spike_time)),
-                         losses="sparse_categorical_crossentropy",
-                         optimiser="adam", batch_size=BATCH_SIZE,
-                         communicator=communicator,
-                         selectGPUByDeviceID=True,
-                         deviceSelectMethod=DeviceSelect_MANUAL)
-compiled_net = compiler.compile(network)
+if TRAIN:
+    compiler = EPropCompiler(example_timesteps=int(np.ceil(latest_spike_time)),
+                            losses="sparse_categorical_crossentropy",
+                            optimiser="adam", batch_size=BATCH_SIZE,
+                            communicator=communicator,
+                            selectGPUByDeviceID=True,
+                            deviceSelectMethod=DeviceSelect_MANUAL)
+    compiled_net = compiler.compile(network)
 
-with compiled_net:
-    # Evaluate model on SHD
-    start_time = perf_counter()
-    if communicator.rank == 0:
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-    else:
-        callbacks = []
-    metrics, _  = compiled_net.train({input: spikes},
-                                        {output: labels},
-                                        num_epochs=50,
-                                        callbacks=callbacks,
-                                        shuffle=True)
-    end_time = perf_counter()
-    print(f"Accuracy = {100 * metrics[output].result}%")
-    print(f"Time = {end_time - start_time}s")
+    with compiled_net:
+        # Evaluate model on SHD
+        start_time = perf_counter()
+        if communicator.rank == 0:
+            callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
+        else:
+            callbacks = []
+        metrics, _  = compiled_net.train({input: spikes},
+                                            {output: labels},
+                                            num_epochs=50,
+                                            callbacks=callbacks,
+                                            shuffle=True)
+        end_time = perf_counter()
+        print(f"Accuracy = {100 * metrics[output].result}%")
+        print(f"Time = {end_time - start_time}s")
+else:
+    # Load network state from final checkpoint
+    network.load((NUM_EPOCHS - 1,), serialiser)
 
+    compiler = InferenceCompiler(evaluate_timesteps=int(np.ceil(latest_spike_time)),
+                                 reset_vars_between_batches=False, batch_size=BATCH_SIZE)
+    compiled_net = compiler.compile(network)
+
+    with compiled_net:
+        compiled_net.evaluate({input: spikes}, {output: labels})
+
+        # Evaluate model on numpy dataset
+        start_time = perf_counter()
+        metrics, _  = compiled_net.evaluate({input: spikes},
+                                            {output: labels})
+        end_time = perf_counter()
+        print(f"Accuracy = {100 * metrics[output].result}%")
+        print(f"Time = {end_time - start_time}s")
