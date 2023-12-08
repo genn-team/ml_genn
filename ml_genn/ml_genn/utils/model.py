@@ -2,7 +2,7 @@ import numpy as np
 
 from numbers import Number
 from typing import Any, MutableMapping, Sequence, Union
-from pygenn import VarAccess
+from pygenn import VarAccess, VarAccessModeAttribute
 from .value import Value
 
 from copy import deepcopy
@@ -72,7 +72,7 @@ class Model:
         self._set_access_model("var_name_types", name, access_mode)
 
     def make_param_var(self, param_name: str, 
-                       access_mode: int = VarAccess_READ_ONLY):
+                       access_mode: int = VarAccess.READ_ONLY):
         self._make_param_var("var_name_types", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
@@ -120,7 +120,7 @@ class Model:
             # Otherwise, turn it into a (read-only) variable
             else:
                 model_copy["var_name_types"].append((name, ptype,
-                                                     VarAccess_READ_ONLY))
+                                                     VarAccess.READ_ONLY))
                 if is_value_initializer(val):
                     snippet = val.get_snippet()
                     var_vals_copy[name] = init_var(snippet.snippet,
@@ -208,7 +208,7 @@ class Model:
                 # If variable either has default (read-write)
                 # access or this is explicitly set
                 # **TODO** mechanism to exclude variables from reset
-                if len(v) < 3 or (v[2] & VarAccessMode_READ_WRITE) != 0:
+                if len(v) < 3 or (v[2] & VarAccessModeAttribute.READ_WRITE) != 0:
                     reset_vars.append((v[0], v[1], var_vals[v[0]]))
         return reset_vars
 

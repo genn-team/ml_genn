@@ -7,19 +7,19 @@ from ..initializers import Wrapper
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from pygenn import create_init_var_snippet
+from pygenn import create_var_init_snippet
 from ..utils.connectivity import get_param_2d
 from ..utils.value import is_value_array
 
 
-genn_snippet = create_init_var_snippet(
+genn_snippet = create_var_init_snippet(
     "avepool2d_dense",
 
     params=[
         ("pool_kh", "int"), ("pool_kw", "int"),
         ("pool_sh", "int"), ("pool_sw", "int"),
         ("pool_ih", "int"), ("pool_iw", "int"), ("pool_ic", "int"),
-        ("dense_ih", "int"), "dense_iw", "int"), ("dense_ic", "int"),
+        ("dense_ih", "int"), ("dense_iw", "int"), ("dense_ic", "int"),
         ("dense_units", "int")],
 
     extra_global_params=[("weights", "scalar*")],
@@ -74,8 +74,8 @@ class AvgPoolDense2D(Connectivity):
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
         self.pool_output_shape = (
-            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+            ceil((pool_ih - pool_kh + 1) / pool_sh),
+            ceil((pool_iw - pool_kw + 1) / pool_sw),
             pool_ic)
 
         # If weights are specified as 2D array

@@ -7,13 +7,13 @@ from ..utils.connectivity import PadMode, KernelInit
 from ..utils.value import InitValue
 
 from pygenn import (create_sparse_connect_init_snippet,
-                    init_connectivity, init_toeplitz_connectivity)
+                    init_sparse_connectivity, init_toeplitz_connectivity)
 from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
 
 
-genn_snippet = create_custom_sparse_connect_init_snippet_class(
+genn_snippet = create_sparse_connect_init_snippet(
     "avg_pool_conv_2d",
 
     params=[
@@ -26,7 +26,7 @@ genn_snippet = create_custom_sparse_connect_init_snippet_class(
         ("conv_ih", "int"), ("conv_iw", "int"), ("conv_ic", "int"),
         ("conv_oh", "int"), ("conv_ow", "int"), ("conv_oc", "int")],
 
-    calc_max_row_len_func=lambda num_pre, num_post, pars: int(ceil(pars["conv_kh"] / pars["conv_sh"])) * int(ceil(pars["conv_kw"] / pars["conv_sw"])) * int("conv_oc",),
+    calc_max_row_len_func=lambda num_pre, num_post, pars: ceil(pars["conv_kh"] / pars["conv_sh"]) * ceil(pars["conv_kw"] / pars["conv_sw"]) * pars("conv_oc",),
 
     calc_kernel_size_func=lambda pars: [pars["conv_kh"], pars["conv_kw"], pars["conv_ic"], pars["conv_oc"]],
 
@@ -100,8 +100,8 @@ class AvgPoolConv2D(Connectivity):
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
         self.pool_output_shape = (
-            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+            ceil((pool_ih - pool_kh + 1) / pool_sh),
+            ceil((pool_iw - pool_kw + 1) / pool_sw),
             pool_ic)
 
         conv_kh, conv_kw = self.conv_size
@@ -109,12 +109,12 @@ class AvgPoolConv2D(Connectivity):
         conv_ih, conv_iw, conv_ic = self.pool_output_shape
         if self.conv_padding == PadMode.VALID:
             self.output_shape = (
-                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
-                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
+                ceil((conv_ih - conv_kh + 1) / conv_sh),
+                ceil((conv_iw - conv_kw + 1) / conv_sw),
                 self.filters)
         elif self.conv_padding == PadMode.SAME:
-            self.output_shape = (ceil(float(conv_ih) / float(conv_sh)),
-                                 ceil(float(conv_iw) / float(conv_sw)),
+            self.output_shape = (ceil(conv_ih / conv_sh),
+                                 ceil(conv_iw / conv_sw),
                                  self.filters)
 
         # Update target shape
@@ -172,7 +172,7 @@ class AvgPoolConv2D(Connectivity):
                 matrix_type=SynapseMatrixType.TOEPLITZ,
                 weight=scaled_weight, delay=self.delay)
         else:
-            conn_init = init_connectivity(genn_snippet, {
+            conn_init = init_sparse_connectivity(genn_snippet, {
                 "pool_kh": pool_kh, "pool_kw": pool_kw,
                 "pool_sh": pool_sh, "pool_sw": pool_sw,
                 "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,

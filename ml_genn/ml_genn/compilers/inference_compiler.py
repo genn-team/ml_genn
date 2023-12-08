@@ -13,7 +13,7 @@ from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel
 from ..utils.network import PopulationType
 
-from pygenn.genn_model import create_var_ref, create_psm_var_ref
+from pygenn import create_var_ref, create_psm_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
@@ -374,9 +374,9 @@ class InferenceCompiler(Compiler):
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
                                                   connection_populations)
-        
+
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
-        
+
         # If insyn should be reset between batches
         if self.reset_in_syn_between_batches:
             # Add callbacks to zero insyn on all connections requiring them

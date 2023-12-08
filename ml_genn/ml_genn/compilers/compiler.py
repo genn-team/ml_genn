@@ -386,10 +386,10 @@ class Compiler:
                 conn.name, connect_snippet.matrix_type, axonal_delay,
                 neuron_populations[conn.source()],
                 neuron_populations[conn.target()],
-                init_weight_update(genn_wum, wum_param_vals, wum_var_vals),
+                init_weight_update(genn_wum, wum_param_vals, wum_var_vals,
                                    wum_pre_var_vals, wum_post_var_vals),
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals),
-                connectivity_initialiser=connect_snippet.snippet)
+                connect_snippet.snippet)
 
             # If connectivity snippet has pre and postsynaptic
             # indices, set them in synapse group

@@ -2,7 +2,7 @@ from .sparse_base import SparseBase
 from ..utils.snippet import ConstantValueDescriptor
 from ..utils.value import InitValue
 
-from pygenn import init_connectivity
+from pygenn import init_sparse_connectivity
 
 
 class FixedProbability(SparseBase):
@@ -27,4 +27,4 @@ class FixedProbability(SparseBase):
                    else "FixedProbability")
         return super(FixedProbability, self)._get_snippet(
             supported_matrix_type, 
-            init_connectivity(snippet, {"prob": self.p}))
+            init_sparse_connectivity(snippet, {"prob": self.p}))

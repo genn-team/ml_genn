@@ -3,7 +3,7 @@ from ..utils.connectivity import PadMode, KernelInit
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from pygenn import (create_sparse_connect_init_snippet, init_connectivity)
+from pygenn import (create_sparse_connect_init_snippet, init_sparse_connectivity)
 from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
@@ -99,7 +99,7 @@ class Conv2DTranspose(Connectivity):
             conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        conn_init = init_connectivity(genn_snippet, {
+        conn_init = init_sparse_connectivity(genn_snippet, {
             "conv_kh": conv_kh, "conv_kw": conv_kw,
             "conv_sh": conv_sh, "conv_sw": conv_sw,
             "conv_padh": conv_padh, "conv_padw": conv_padw,

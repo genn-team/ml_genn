@@ -6,7 +6,7 @@ from ..utils.connectivity import PadMode, KernelInit
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from pygenn import init_connectivity, init_toeplitz_connectivity
+from pygenn import init_sparse_connectivity, init_toeplitz_connectivity
 from ..utils.connectivity import (get_conv_same_padding, get_param_2d,
                                   update_target_shape)
 from ..utils.value import is_value_array
@@ -31,12 +31,12 @@ class Conv2D(Connectivity):
         conv_ih, conv_iw, conv_ic = source.shape
         if self.conv_padding == PadMode.VALID:
             self.output_shape = (
-                ceil(float(conv_ih - conv_kh + 1) / float(conv_sh)),
-                ceil(float(conv_iw - conv_kw + 1) / float(conv_sw)),
+                ceil((conv_ih - conv_kh + 1) / conv_sh),
+                ceil((conv_iw - conv_kw + 1) / conv_sw),
                 self.filters)
         elif self.conv_padding == PadMode.SAME:
-            self.output_shape = (ceil(float(conv_ih) / float(conv_sh)),
-                                 ceil(float(conv_iw) / float(conv_sw)),
+            self.output_shape = (ceil(conv_ih / conv_sh),
+                                 ceil(conv_iw / conv_sw),
                                  self.filters)
 
         # Update target shape
@@ -85,7 +85,7 @@ class Conv2D(Connectivity):
                 matrix_type=SynapseMatrixType.TOEPLITZ,
                 weight=self.weight, delay=self.delay)
         else:
-            conn_init = init_connectivity("Conv2D", {
+            conn_init = init_sparse_connectivity("Conv2D", {
                 "conv_kh": conv_kh, "conv_kw": conv_kw,
                 "conv_sh": conv_sh, "conv_sw": conv_sw,
                 "conv_padh": conv_padh, "conv_padw": conv_padw,

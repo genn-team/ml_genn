@@ -751,7 +751,7 @@ class EventPropCompiler(Compiler):
             # **YUCK** backend-specific code shouldn't be required in models
             # **TODO** something when OpenCL
             use_atomic = (
-                (connect_snippet.matrix_type & SynapseMatrixWeight_KERNEL)
+                (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
                 and compile_state.backend_name == "CUDA")
 
             # Create basic weight update model
