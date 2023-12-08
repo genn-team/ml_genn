@@ -2,20 +2,16 @@ from ml_genn.compilers.compiler import SupportedMatrixType
 
 from pytest import raises
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                 SynapseMatrixType_PROCEDURAL_KERNELG,
-                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
-                                 SynapseMatrixType_TOEPLITZ_KERNELG)
+from pygenn import SynapseMatrixType
 
 def test_supported_matrix_type():
-    supported_matrix_types = [SynapseMatrixType_DENSE_INDIVIDUALG,
-                              SynapseMatrixType_SPARSE_INDIVIDUALG,
-                              SynapseMatrixType_PROCEDURAL_KERNELG,
-                              SynapseMatrixType_TOEPLITZ_KERNELG]
+    supported_matrix_types = [SynapseMatrixType.DENSE,
+                              SynapseMatrixType.SPARSE,
+                              SynapseMatrixType.PROCEDURAL_KERNELG,
+                              SynapseMatrixType.TOEPLITZ]
     
     a = SupportedMatrixType(supported_matrix_types)
-    assert a.get_best([SynapseMatrixType_PROCEDURAL_PROCEDURALG]) is None
-    assert (a.get_best([SynapseMatrixType_SPARSE_INDIVIDUALG,
-                        SynapseMatrixType_DENSE_INDIVIDUALG])
-            == SynapseMatrixType_DENSE_INDIVIDUALG)
+    assert a.get_best([SynapseMatrixType.PROCEDURAL]) is None
+    assert (a.get_best([SynapseMatrixType.SPARSE,
+                        SynapseMatrixType.DENSE])
+            == SynapseMatrixType.DENSE)

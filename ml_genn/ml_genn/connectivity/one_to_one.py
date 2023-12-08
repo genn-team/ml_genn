@@ -1,7 +1,7 @@
 from .sparse_base import SparseBase
 from ..utils.value import InitValue
 
-from pygenn.genn_model import init_connectivity
+from pygenn import init_connectivity
 
 
 class OneToOne(SparseBase):
@@ -19,4 +19,4 @@ class OneToOne(SparseBase):
     def get_snippet(self, connection, supported_matrix_type):
         return super(OneToOne, self)._get_snippet(
             supported_matrix_type,
-            init_connectivity("OneToOne", {}))
+            init_connectivity("OneToOne"))

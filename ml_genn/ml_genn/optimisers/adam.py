@@ -1,5 +1,5 @@
-from pygenn.genn_wrapper.Models import (VarAccessMode_READ_ONLY,
-                                        VarAccessMode_READ_WRITE)
+from pygenn import VarAccessMode
+
 from .optimiser import Optimiser
 from ..utils.model import CustomUpdateModel
 from ..utils.snippet import ConstantValueDescriptor
@@ -14,7 +14,7 @@ genn_model = {
     "extra_global_params": [("Alpha", "scalar"),
                             ("MomentScale1", "scalar"),
                             ("MomentScale2", "scalar")],
-    "var_refs": [("Gradient", "scalar", VarAccessMode_READ_ONLY),
+    "var_refs": [("Gradient", "scalar", VarAccessMode.READ_ONLY),
                  ("Variable", "scalar")],
     "update_code":
         """
@@ -65,7 +65,7 @@ class Adam(Optimiser):
         if zero_gradient:
             # Change variable access model of gradient to read-write
             model.set_var_ref_access_mode("Gradient",
-                                          VarAccessMode_READ_WRITE)
+                                          VarAccessMode.READ_WRITE)
 
             # Add update code to zero the gradient
             model.append_update_code(

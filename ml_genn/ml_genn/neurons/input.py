@@ -5,7 +5,7 @@ from abc import ABC
 from abc import abstractmethod
 from copy import deepcopy
 
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from pygenn import VarAccess
 
 
 def _replace_neuron_code(nm, source, target):
@@ -45,7 +45,7 @@ class InputBase(Input):
         if self.input_frames == 1:
             # Add read-only input variable
             nm_copy.add_var(self.var_name, "scalar", 0.0,
-                            VarAccess_READ_ONLY_DUPLICATE)
+                            VarAccess.READ_ONLY_DUPLICATE)
 
             # Replace input with reference to new variable
             nm_copy.replace_sim_code(replace_input, f"$({self.var_name})")

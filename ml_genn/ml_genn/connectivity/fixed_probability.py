@@ -2,7 +2,7 @@ from .sparse_base import SparseBase
 from ..utils.snippet import ConstantValueDescriptor
 from ..utils.value import InitValue
 
-from pygenn.genn_model import init_connectivity
+from pygenn import init_connectivity
 
 
 class FixedProbability(SparseBase):

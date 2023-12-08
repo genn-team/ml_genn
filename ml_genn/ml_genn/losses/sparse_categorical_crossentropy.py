@@ -3,7 +3,7 @@ import numpy as np
 from .loss import Loss
 from ..utils.model import NeuronModel
 
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_SHARED_NEURON
+from pygenn import VarAccess
 
 
 class SparseCategoricalCrossentropy(Loss):
@@ -11,7 +11,7 @@ class SparseCategoricalCrossentropy(Loss):
                       batch_size: int, example_timesteps: int):
         # Add variable, shared across neurons to hold true label for batch
         model.add_var("YTrue", "uint8_t", 0, 
-                      VarAccess_READ_ONLY_SHARED_NEURON)
+                      VarAccess.READ_ONLY_SHARED_NEURON)
 
         # Add sim-code to convert label to one-hot
         model.append_sim_code(

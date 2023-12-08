@@ -2,14 +2,12 @@ import numpy as np
 
 from numbers import Number
 from typing import Any, MutableMapping, Sequence, Union
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
-                                        VarAccess_READ_WRITE,
-                                        VarAccessMode_READ_WRITE)
+from pygenn import VarAccess
 from .value import Value
 
 from copy import deepcopy
 from textwrap import dedent
-from pygenn.genn_model import init_var
+from pygenn import init_var
 from .value import (get_values, is_value_constant,
                     is_value_array, is_value_initializer)
 
@@ -42,7 +40,7 @@ class Model:
         self.param_vals[name] = value
 
     def add_var(self, name: str, type: str, value: Value,
-                access_mode: int = VarAccess_READ_WRITE):
+                access_mode: int = VarAccess.READ_WRITE):
         assert not self.has_var(name)
         self._add_to_list("var_name_types", (name, type, access_mode))
         self.var_vals[name] = value

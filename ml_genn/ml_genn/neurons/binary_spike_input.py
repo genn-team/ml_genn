@@ -1,4 +1,3 @@
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
 from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
