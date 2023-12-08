@@ -3,13 +3,8 @@ import numpy as np
 
 from string import Template
 from typing import Iterator, Sequence
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
-                                        VarAccess_READ_ONLY_DUPLICATE,
-                                        VarAccess_READ_ONLY_SHARED_NEURON,
-                                        VarAccess_REDUCE_BATCH_SUM,
-                                        VarAccess_REDUCE_NEURON_MAX,
-                                        VarAccess_REDUCE_NEURON_SUM,
-                                        VarAccessMode_READ_ONLY)
+from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
+                    SynapseMatrixType, SynapseMatrixWeight)
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
@@ -29,18 +24,11 @@ from ..utils.model import CustomUpdateModel, WeightUpdateModel
 from ..utils.network import PopulationType
 
 from copy import deepcopy
-from pygenn.genn_model import (create_egp_ref, create_var_ref,
-                               create_wu_var_ref)
+from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 from ..utils.value import is_value_constant
-
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                 SynapseMatrixType_PROCEDURAL_KERNELG,
-                                 SynapseMatrixType_TOEPLITZ_KERNELG,
-                                 SynapseMatrixWeight_KERNEL)
 
 from .compiler import softmax_1_model, softmax_2_model
 from ..optimisers import default_optimisers
@@ -224,7 +212,7 @@ class ZeroInSynLastTimestep(Callback):
 # **NOTE** feedback is added if required
 weight_update_model = {
     "param_name_types": [("TauSyn", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
+    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("Gradient", "scalar")],
 
     "sim_code": """
@@ -242,7 +230,7 @@ weight_update_model = {
 # **YUCK** you should NEVER have to use backend-specific code in models
 weight_update_model_atomic_cuda = {
     "param_name_types": [("TauSyn", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
+    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("Gradient", "scalar")],
 
     "sim_code": """
@@ -268,7 +256,7 @@ static_weight_update_model = {
     """}
 
 gradient_batch_reduce_model = {
-    "var_name_types": [("ReducedGradient", "scalar", VarAccess_REDUCE_BATCH_SUM)],
+    "var_name_types": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
     $(ReducedGradient) = $(Gradient);
@@ -335,10 +323,10 @@ class EventPropCompiler(Compiler):
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None, **genn_kwargs):
-        supported_matrix_types = [SynapseMatrixType_TOEPLITZ_KERNELG,
-                                  SynapseMatrixType_PROCEDURAL_KERNELG,
-                                  SynapseMatrixType_DENSE_INDIVIDUALG,
-                                  SynapseMatrixType_SPARSE_INDIVIDUALG]
+        supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
+                                  SynapseMatrixType.PROCEDURAL_KERNELG,
+                                  SynapseMatrixType.DENSE,
+                                  SynapseMatrixType.SPARSE]
         super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
                                                 batch_size, rng_seed,
                                                 kernel_profiling,
@@ -386,11 +374,11 @@ class EventPropCompiler(Compiler):
             # **HACK** we don't want to call add_to_neuron on loss function as
             # it will add unwanted code to end of neuron but we do want this
             model_copy.add_var("YTrue", "uint8_t", 0, 
-                               VarAccess_READ_ONLY_SHARED_NEURON)
+                               VarAccess.READ_ONLY_SHARED_NEURON)
 
             # Add second variable to hold the true label for the backward pass
             model_copy.add_var("YTrueBack", "uint8_t", 0, 
-                               VarAccess_READ_ONLY_SHARED_NEURON)
+                               VarAccess.READ_ONLY_SHARED_NEURON)
 
             # If neuron model is a leaky integrator
             if isinstance(pop.neuron, LeakyIntegrate):
@@ -469,7 +457,7 @@ class EventPropCompiler(Compiler):
                 else:
                     # Add state variable to hold softmax of output
                     model_copy.add_var("Softmax", "scalar", 0.0,
-                                       VarAccess_READ_ONLY_DUPLICATE)
+                                       VarAccess.READ_ONLY_DUPLICATE)
 
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
@@ -517,7 +505,7 @@ class EventPropCompiler(Compiler):
                     elif isinstance(pop.neuron.readout, MaxVar):
                         # Add state variable to hold vmax from previous trial
                         model_copy.add_var("VMaxTimeBack", "scalar", 0.0,
-                                           VarAccess_READ_ONLY_DUPLICATE)
+                                           VarAccess.READ_ONLY_DUPLICATE)
 
                         model_copy.prepend_sim_code(
                             f"""
@@ -667,7 +655,7 @@ class EventPropCompiler(Compiler):
                         # during forward and backward pass
                         model_copy.add_var("SpikeCount", "int", 0)
                         model_copy.add_var("SpikeCountBack", "int", 0,
-                                           VarAccess_READ_ONLY_DUPLICATE)
+                                           VarAccess.READ_ONLY_DUPLICATE)
 
                         # Add parameters for regulariser
                         model_copy.add_param("RegNuUpper", "int",
@@ -909,9 +897,9 @@ class EventPropCompiler(Compiler):
         # third softmax pass and add to model
         softmax_3 = CustomUpdateModel(
             {
-                "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
-                             ("MaxVal", "scalar", VarAccessMode_READ_ONLY),
-                             ("SumExpVal", "scalar", VarAccessMode_READ_ONLY),
+                "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
+                             ("MaxVal", "scalar", VarAccessMode.READ_ONLY),
+                             ("SumExpVal", "scalar", VarAccessMode.READ_ONLY),
                              ("RingWriteOffset", "int")],
                 "extra_global_param_refs": [("RingSoftmaxV", "scalar*")],
                 "update_code": f"""

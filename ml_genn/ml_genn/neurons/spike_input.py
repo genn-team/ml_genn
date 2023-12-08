@@ -1,7 +1,7 @@
 import numpy as np
 
 from collections import namedtuple
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from pygenn import VarAccess
 from typing import Sequence, Union
 from .input import Input
 from .neuron import Neuron
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 genn_model = {
     "var_name_types": [("StartSpike", "unsigned int"),
                        ("EndSpike", "unsigned int",
-                        VarAccess_READ_ONLY_DUPLICATE)],
+                        VarAccess.READ_ONLY_DUPLICATE)],
     "extra_global_params": [("SpikeTimes", "scalar*")],
     "threshold_condition_code":
         """

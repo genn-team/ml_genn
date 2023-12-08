@@ -2,8 +2,7 @@ import logging
 import numpy as np
 
 from typing import Iterator, Sequence
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
-                                        VarAccess_REDUCE_BATCH_SUM)
+from pygenn import CustomUpdateVarAccess, SynapseMatrixType, VarAccess
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
@@ -20,13 +19,11 @@ from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel, WeightUpdateModel
 
 from copy import deepcopy
-from pygenn.genn_model import create_var_ref, create_wu_var_ref
+from pygenn import create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.value import is_value_constant
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG)
 from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
 
@@ -123,7 +120,7 @@ class CompileState:
 eprop_lif_model = {
     "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"), 
                          ("FTarget", "scalar"), ("AlphaFAv", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
+    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("eFiltered", "scalar"), ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
     "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
@@ -163,7 +160,7 @@ eprop_alif_model = {
     "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"),
                          ("Rho", "scalar"), ("FTarget", "scalar"),
                          ("AlphaFAv", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
+    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("eFiltered", "scalar"), ("epsilonA", "scalar"),
                        ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
@@ -213,7 +210,7 @@ eprop_alif_model = {
 
 output_learning_model = {
     "param_name_types": [("Alpha", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
+    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
 
@@ -233,7 +230,7 @@ output_learning_model = {
     """}
 
 gradient_batch_reduce_model = {
-    "var_name_types": [("ReducedGradient", "scalar", VarAccess_REDUCE_BATCH_SUM)],
+    "var_name_types": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
     $(ReducedGradient) = $(Gradient);
@@ -248,8 +245,8 @@ class EPropCompiler(Compiler):
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):
-        supported_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                  SynapseMatrixType_DENSE_INDIVIDUALG]
+        supported_matrix_types = [SynapseMatrixType.SPARSE,
+                                  SynapseMatrixType.DENSE]
         super(EPropCompiler, self).__init__(supported_matrix_types, dt,
                                             batch_size, rng_seed,
                                             kernel_profiling,

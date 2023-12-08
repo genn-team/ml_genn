@@ -1,6 +1,7 @@
 import numpy as np
 
 from collections import deque, namedtuple
+from pygenn import SynapseMatrixType
 from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
@@ -17,11 +18,6 @@ from ..utils.module import get_object_mapping
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                 SynapseMatrixType_PROCEDURAL_KERNELG,
-                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
-                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..metrics import default_metrics
 
 
@@ -198,17 +194,17 @@ class FewSpikeCompiler(Compiler):
                  communicator: Communicator = None, **genn_kwargs):
         # Determine matrix type order of preference based on flag
         if prefer_in_memory_connect:
-            supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                     SynapseMatrixType_DENSE_INDIVIDUALG,
-                                     SynapseMatrixType_TOEPLITZ_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG]
+            supported_matrix_type = [SynapseMatrixType.SPARSE,
+                                     SynapseMatrixType.DENSE,
+                                     SynapseMatrixType.TOEPLITZ,
+                                     SynapseMatrixType.PROCEDURAL_KERNELG,
+                                     SynapseMatrixType.PROCEDURAL]
         else:
-            supported_matrix_type = [SynapseMatrixType_TOEPLITZ_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG,
-                                     SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                     SynapseMatrixType_DENSE_INDIVIDUALG]
+            supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
+                                     SynapseMatrixType.PROCEDURAL_KERNELG,
+                                     SynapseMatrixType.PROCEDURAL,
+                                     SynapseMatrixType.SPARSE,
+                                     SynapseMatrixType.DENSE]
         super(FewSpikeCompiler, self).__init__(supported_matrix_type, dt,
                                                batch_size, rng_seed,
                                                kernel_profiling, communicator,

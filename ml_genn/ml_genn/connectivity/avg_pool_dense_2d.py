@@ -1,36 +1,31 @@
 import numpy as np
 from math import ceil
 
+from pygenn import SynapseMatrixType
 from .connectivity import Connectivity
 from ..initializers import Wrapper
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from pygenn.genn_model import create_custom_init_var_snippet_class
+from pygenn import create_init_var_snippet
 from ..utils.connectivity import get_param_2d
 from ..utils.value import is_value_array
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_DENSE_PROCEDURALG)
 
-genn_snippet = create_custom_init_var_snippet_class(
+genn_snippet = create_init_var_snippet(
     "avepool2d_dense",
 
-    param_names=[
-        "pool_kh", "pool_kw",
-        "pool_sh", "pool_sw",
-        "pool_ih", "pool_iw", "pool_ic",
-        "dense_ih", "dense_iw", "dense_ic",
-        "dense_units"],
+    params=[
+        ("pool_kh", "int"), ("pool_kw", "int"),
+        ("pool_sh", "int"), ("pool_sw", "int"),
+        ("pool_ih", "int"), ("pool_iw", "int"), ("pool_ic", "int"),
+        ("dense_ih", "int"), "dense_iw", "int"), ("dense_ic", "int"),
+        ("dense_units", "int")],
 
     extra_global_params=[("weights", "scalar*")],
 
     var_init_code=
         """
-        const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
-        const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-        const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-
         // Convert presynaptic neuron ID to row, column and channel in pool input
         const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
         const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
@@ -116,11 +111,11 @@ class AvgPoolDense2D(Connectivity):
             "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
             "dense_units": int(np.prod(connection.target().shape))},
             {"weights": self.weight.flatten() / (pool_kh * pool_kw)})
-        
+
         # Get best supported matrix type
         best_matrix_type = supported_matrix_type.get_best(
-            [SynapseMatrixType_DENSE_INDIVIDUALG, 
-             SynapseMatrixType_DENSE_PROCEDURALG])
+            [SynapseMatrixType.DENSE,
+             SynapseMatrixType.DENSE_PROCEDURALG])
 
         if best_matrix_type is None:
             raise NotImplementedError("Compiler does not support "

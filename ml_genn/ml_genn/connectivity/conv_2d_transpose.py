@@ -34,7 +34,7 @@ genn_snippet = create_sparse_connect_init_snippet(
         const int maxOutRow = min($(conv_oh), max(0, (inRow * $(conv_sh)) + $(conv_kh) - $(conv_padh)));
         const int minOutCol = min($(conv_ow), max(0, (inCol * $(conv_sw)) - $(conv_padw)));
         const int maxOutCol = min($(conv_ow), max(0, (inCol * $(conv_sw)) + $(conv_kw) - $(conv_padw)));
-        
+
         int outRow = min($(conv_oh), max(0, (inRow * $(conv_sh)) - $(conv_padh)));
         for(;outRow < maxOutRow; outRow++) {
             const int kernRow = $(outRow) - $(strideRow);

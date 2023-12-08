@@ -16,7 +16,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 from ml_genn.compilers.eprop_compiler import default_params
-from pygenn.genn_wrapper.CUDABackend import DeviceSelect_MANUAL
+from pygenn.cuda_backend import DeviceSelect
 
 NUM_HIDDEN = 256
 BATCH_SIZE = 512
@@ -76,8 +76,7 @@ if TRAIN:
                             losses="sparse_categorical_crossentropy",
                             optimiser="adam", batch_size=BATCH_SIZE,
                             communicator=communicator,
-                            selectGPUByDeviceID=True,
-                            deviceSelectMethod=DeviceSelect_MANUAL)
+                            device_select_method=DeviceSelect.MANUAL)
     compiled_net = compiler.compile(network)
 
     with compiled_net:

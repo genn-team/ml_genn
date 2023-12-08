@@ -3,11 +3,8 @@ import numpy as np
 import os
 
 from collections import defaultdict, namedtuple
-from pygenn import GeNNModel
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY, 
-                                        VarAccess_REDUCE_NEURON_MAX,
-                                        VarAccess_REDUCE_NEURON_SUM,
-                                        VarAccessMode_READ_ONLY)
+from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
+
 from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
@@ -19,11 +16,9 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import copy, deepcopy
-from pygenn.genn_model import (create_custom_custom_update_class,
-                               create_custom_neuron_class,
-                               create_custom_postsynaptic_class,
-                               create_custom_weight_update_class,
-                               create_var_ref)
+from pygenn import (create_custom_update_model, create_neuron_model,
+                    create_postsynaptic_model, create_weight_update_model,
+                    create_var_ref, init_postsynaptic, init_weight_update)
 from string import digits
 from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
@@ -33,26 +28,26 @@ from ..utils.value import is_value_constant
 
 # First pass of softmax - calculate max
 softmax_1_model = {
-    "var_name_types": [("MaxVal", "scalar", VarAccess_REDUCE_NEURON_MAX)],
-    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY)],
+    "var_name_types": [("MaxVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_MAX)],
+    "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
     $(MaxVal) = $(Val);
     """}
 
 # Second pass of softmax - calculate scaled sum of exp(value)
 softmax_2_model = {
-    "var_name_types": [("SumExpVal", "scalar", VarAccess_REDUCE_NEURON_SUM)],
-    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
-                 ("MaxVal", "scalar", VarAccessMode_READ_ONLY)],
+    "var_name_types": [("SumExpVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_SUM)],
+    "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
+                 ("MaxVal", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
     $(SumExpVal) = exp($(Val) - $(MaxVal));
     """}
 
 # Third pass of softmax - calculate softmax value
 softmax_3_model = {
-    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
-                 ("MaxVal", "scalar", VarAccessMode_READ_ONLY),
-                 ("SumExpVal", "scalar", VarAccessMode_READ_ONLY),
+    "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
+                 ("MaxVal", "scalar", VarAccessMode.READ_ONLY),
+                 ("SumExpVal", "scalar", VarAccessMode.READ_ONLY),
                  ("SoftmaxVal", "scalar")],
     "update_code": """
     $(SoftmaxVal) = exp($(Val) - $(MaxVal)) / $(SumExpVal);
@@ -76,7 +71,7 @@ def set_var_egps(var_egp_vals, var_dict):
 
 def create_reset_custom_update(reset_vars, var_ref_creator):
     # Create empty model
-    model = CustomUpdateModel(model={"param_name_types": [],
+    model = CustomUpdateModel(model={"params": [],
                                      "var_refs": [],
                                      "update_code": ""},
                               param_vals={}, var_vals={}, var_refs={})
@@ -94,7 +89,7 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
             if len(existing_reset_var) == 0:
                 # Add read-only variable reference to other variable
                 model.add_var_ref(value, type, var_ref_creator(value))
-                model.set_var_ref_access_mode(value, VarAccessMode_READ_ONLY)
+                model.set_var_ref_access_mode(value, VarAccessMode.READ_ONLY)
 
             # Add code to set var
             model.append_update_code(f"$({name}) = $({value});")
@@ -130,8 +125,8 @@ class ZeroInSyn(Callback):
         self.genn_syn_pop = genn_syn_pop
 
     def on_batch_begin(self, batch):
-        self.genn_syn_pop.in_syn[:]= 0.0
-        self.genn_syn_pop.push_in_syn_to_device()
+        self.genn_syn_pop.out_post.view[:]= 0.0
+        self.genn_syn_pop.out_post.push_to_device()
 
 
 class Compiler:
@@ -298,13 +293,13 @@ class Compiler:
         # **NOTE** this only works with CUDA backend
         genn_kwargs = copy(self.genn_kwargs)
         if self.communicator is not None:
-            genn_kwargs["enableNCCLReductions"] = True
+            genn_kwargs["enable_nccl_reductions"] = True
 
         # Create GeNN model and set basic properties
         genn_model = GeNNModel("float", clean_name, **genn_kwargs)
-        genn_model.dT = self.dt
+        genn_model.dt = self.dt
         genn_model.batch_size = self.batch_size
-        genn_model._model.set_seed(self.rng_seed)
+        genn_model.seed = self.rng_seed
         genn_model.timing_enabled = self.kernel_profiling
 
         # Run any pre-compilation logic
@@ -329,8 +324,8 @@ class Compiler:
                     compile_state).process()
 
             # Create custom neuron model
-            genn_neuron_model = create_custom_neuron_class("NeuronModel",
-                                                           **neuron_model)
+            genn_neuron_model = create_neuron_model("NeuronModel",
+                                                    **neuron_model)
             # Add neuron population
             genn_pop = genn_model.add_neuron_population(
                 pop.name, np.prod(pop.shape),
@@ -362,8 +357,7 @@ class Compiler:
                                          compile_state).process()
 
             # Create custom postsynaptic model
-            genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
-                                                        **psm)
+            genn_psm = create_postsynaptic_model("PostsynapticModel", **psm)
             # Get connectivity init snippet
             connect_snippet =\
                 conn.connectivity.get_snippet(conn,
@@ -381,8 +375,7 @@ class Compiler:
                                                compile_state).process()
 
             # Create custom weight update model
-            genn_wum = create_custom_weight_update_class("WeightUpdateModel",
-                                                         **wum)
+            genn_wum = create_weight_update_model("WeightUpdateModel", **wum)
 
             # If delays are constant, use as axonal delay otherwise, disable
             axonal_delay = (delay if is_value_constant(delay)
@@ -393,9 +386,9 @@ class Compiler:
                 conn.name, connect_snippet.matrix_type, axonal_delay,
                 neuron_populations[conn.source()],
                 neuron_populations[conn.target()],
-                genn_wum, wum_param_vals, wum_var_vals,
-                wum_pre_var_vals, wum_post_var_vals,
-                genn_psm, psm_param_vals, psm_var_vals,
+                init_weight_update(genn_wum, wum_param_vals, wum_var_vals),
+                                   wum_pre_var_vals, wum_post_var_vals),
+                init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals),
                 connectivity_initialiser=connect_snippet.snippet)
 
             # If connectivity snippet has pre and postsynaptic

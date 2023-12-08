@@ -12,7 +12,7 @@ from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
 
-from pygenn.genn_wrapper.Models import VarAccessDuplication_SHARED_NEURON
+from pygenn import VarAccessDim
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class VarRecorder(Callback):
                                f"{self._var} to record")
 
         # Determine if var is shared
-        self.shared = (var.access & VarAccessDuplication_SHARED_NEURON) != 0
+        self.shared = not (var.access & VarAccessDim.NEURON)
 
         # If variable is shared and neuron mask was set, give warning
         if self.shared and not np.all(self._neuron_mask):
