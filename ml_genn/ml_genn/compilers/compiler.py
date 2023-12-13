@@ -213,7 +213,7 @@ class Compiler:
          cu_var_refs, cu_egp_refs) = model.process()
 
         # Create custom update model
-        genn_cum = create_custom_custom_update_class("CustomUpdate",
+        genn_cum = create_custom_custom_update_model("CustomUpdate",
                                                      **cu_model)
 
         # Add custom update
