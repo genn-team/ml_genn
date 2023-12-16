@@ -244,7 +244,6 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
-            self.genn_model.t = 0.0
 
         # Apply inputs to model
         self.set_input(x)
