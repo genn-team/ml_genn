@@ -1,6 +1,7 @@
 import numpy as np
 
 from typing import Optional
+from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..connectivity.sparse_base import SparseBase
@@ -219,9 +220,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
         
         # Loop through synapse groups with variables to be checkpointed
         for genn_pop in self.checkpoint_synapse_groups:
-            # If synapse group has ragged connectivity, download  
+            # If synapse group has sparse connectivity, download  
             # connectivity so variables can be accessed correctly
-            if genn_pop.is_ragged:
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
                 genn_pop.pull_connectivity_from_device()
 
         # Loop through connection variables to checkpoint
