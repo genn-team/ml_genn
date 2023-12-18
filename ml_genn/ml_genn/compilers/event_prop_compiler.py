@@ -268,24 +268,24 @@ gradient_batch_reduce_model = {
 # Template used to generate backward passes for neurons
 neuron_backward_pass = Template(
     """
-    const int ringOffset = ($batch * num_neurons * $max_spikes) + ($id * $max_spikes);
-    const scalar backT = $example_time - $t - dt;
+    const int ringOffset = (batch * num_neurons * $max_spikes) + (id * $max_spikes);
+    const scalar backT = $example_time - t - dt;
 
     // Backward pass
     $dynamics
-    if ($BackSpike) {
+    if (BackSpike) {
         $transition
 
         // Decrease read pointer
-        $RingReadOffset--;
-        if ($RingReadOffset < 0) {
-            $RingReadOffset = $max_spikes - 1;
+        RingReadOffset--;
+        if (RingReadOffset < 0) {
+            RingReadOffset = $max_spikes - 1;
         }
-        $BackSpike = false;
+        BackSpike = false;
     }
     // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if ($RingReadOffset != $RingReadEndOffset && fabs(backT - $RingSpikeTime[ringOffset + $RingReadOffset] - dt) < 1e-3*dt) {
-        $BackSpike = true;
+    if (RingReadOffset != RingReadEndOffset && fabs(backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) < 1e-3*dt) {
+        BackSpike = true;
     }
 
     // Forward pass
@@ -294,15 +294,15 @@ neuron_backward_pass = Template(
 # Template used to generate reset code for neurons
 neuron_reset = Template(
     """
-    if($RingWriteOffset != $RingReadEndOffset) {
+    if(RingWriteOffset != RingReadEndOffset) {
         // Write spike time and I-V to tape
-        $RingSpikeTime[ringOffset + $RingWriteOffset] = $t;
+        RingSpikeTime[ringOffset + RingWriteOffset] = t;
         $write
-        $RingWriteOffset++;
+        RingWriteOffset++;
 
         // Loop around if we've reached end of circular buffer
-        if ($RingWriteOffset >= $max_spikes) {
-            $RingWriteOffset = 0;
+        if (RingWriteOffset >= $max_spikes) {
+            RingWriteOffset = 0;
         }
     }
     $strict_check
