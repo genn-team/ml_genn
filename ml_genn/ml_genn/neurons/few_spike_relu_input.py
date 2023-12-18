@@ -12,7 +12,7 @@ genn_model = {
         const int kInt = (int)$(K);
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)($(t) / dt);
 
         const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
         """,
@@ -35,7 +35,7 @@ genn_model_signed = {
         const int halfK = (int)$(K) / 2;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)($(t) / dt);
 
         // Split timestep into interleaved positive and negative
         const int halfPipetimestep = pipeTimestep / 2;

@@ -17,7 +17,7 @@ genn_model = {
         const int kInt = (int)$(K);
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)($(t) / dt);
 
         // Calculate magic constants. For RelU hT=h=T
         // **NOTE** d uses last timestep as that was when spike was SENT
@@ -58,7 +58,7 @@ genn_model_upstream_signed = {
         const int kInt = (int)$(K);
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)($(t) / dt);
 
         // Calculate magic constants. For RelU hT=h=T
         const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));

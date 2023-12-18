@@ -23,7 +23,7 @@ class PoissonInput(Neuron, InputBase):
         genn_model = {
             "sim_code":
                 """
-                const bool spike = $(gennrand_uniform) >= exp(-fabs($(Input)) * DT);
+                const bool spike = $(gennrand_uniform) >= exp(-fabs($(Input)) * dt);
                 """,
             "threshold_condition_code":
                 """

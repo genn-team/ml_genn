@@ -76,7 +76,7 @@ class AdaptiveLeakyIntegrateFire(Neuron):
                     $(V) = ($(Alpha) * $(V)) + $(Isyn);
                     $(A) *= $(Rho);
                     if ($(RefracTime) > 0.0) {
-                        $(RefracTime) -= DT;
+                        $(RefracTime) -= dt;
                     }
                     """
             else:
@@ -84,7 +84,7 @@ class AdaptiveLeakyIntegrateFire(Neuron):
                     """
                     $(A) *= $(Rho);
                     if ($(RefracTime) > 0.0) {
-                        $(RefracTime) -= DT;
+                        $(RefracTime) -= dt;
                     }
                     else {
                         $(V) = ($(Alpha) * $(V)) + $(Isyn);

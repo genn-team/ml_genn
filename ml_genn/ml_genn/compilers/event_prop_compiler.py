@@ -267,7 +267,7 @@ gradient_batch_reduce_model = {
 neuron_backward_pass = Template(
     """
     const int ringOffset = ($$(batch) * $$(num) * $max_spikes) + ($$(id) * $max_spikes);
-    const scalar backT = $example_time - $$(t) - DT;
+    const scalar backT = $example_time - $$(t) - dt;
 
     // Backward pass
     $dynamics
@@ -282,7 +282,7 @@ neuron_backward_pass = Template(
         $$(BackSpike) = false;
     }
     // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if ($$(RingReadOffset) != $$(RingReadEndOffset) && fabs(backT - $$(RingSpikeTime)[ringOffset + $$(RingReadOffset)] - DT) < 1e-3*DT) {
+    if ($$(RingReadOffset) != $$(RingReadEndOffset) && fabs(backT - $$(RingSpikeTime)[ringOffset + $$(RingReadOffset)] - dt) < 1e-3*dt) {
         $$(BackSpike) = true;
     }
 
@@ -537,7 +537,7 @@ class EventPropCompiler(Compiler):
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
-                    const float backT = {self.example_timesteps * self.dt} - $(t) - DT;
+                    const float backT = {self.example_timesteps * self.dt} - $(t) - dt;
 
                     // Backward pass
                     scalar drive = 0.0;

@@ -72,14 +72,14 @@ class LeakyIntegrateFire(Neuron):
                     f"""
                     {v_update}
                     if ($(RefracTime) > 0.0) {{
-                        $(RefracTime) -= DT;
+                        $(RefracTime) -= dt;
                     }}
                     """
             else:
                 genn_model["sim_code"] =\
                     f"""
                     if ($(RefracTime) > 0.0) {{
-                        $(RefracTime) -= DT;
+                        $(RefracTime) -= dt;
                     }}
                     else {{
                         {v_update}
