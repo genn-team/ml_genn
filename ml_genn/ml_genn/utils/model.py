@@ -125,8 +125,8 @@ class Model:
                     var_vals_copy[name] = val
 
         # Return modified model and; params, var values and EGPs
-        return (model_copy, constant_param_vals, var_vals_copy, 
-                self.egp_vals, var_egp)
+        return (model_copy, constant_param_vals, self.dynamic_param_names,
+                var_vals_copy, self.egp_vals, var_egp)
 
     @property
     def reset_vars(self):

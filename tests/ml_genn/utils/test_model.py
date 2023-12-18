@@ -15,7 +15,7 @@ def test_process():
                      "V", {"P1": 3.0, "P2": np.arange(4), "P3": Uniform()},
                      {"V": 1.0})
     
-    model_copy, constant_param_vals, var_vals, _, _ = nm.process()
+    model_copy, constant_param_vals, _, var_vals, _, _ = nm.process()
     
     assert "P1" in constant_param_vals
     assert "P2" in var_vals

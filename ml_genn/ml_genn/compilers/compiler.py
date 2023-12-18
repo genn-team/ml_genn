@@ -53,6 +53,10 @@ softmax_3_model = {
     $(SoftmaxVal) = exp($(Val) - $(MaxVal)) / $(SumExpVal);
     """}
 
+def set_dynamic_param(param_names, set_param_dynamic):
+    for p in param_names:
+        set_param_dynamic(p, True)
+
 def set_egp(egp_vals, egp_dict):
     for egp, value in egp_vals.items():
         if isinstance(value, np.ndarray):
@@ -211,8 +215,8 @@ class Compiler:
                           model: CustomUpdateModel,
                           group: str, name: str):
         # Process model
-        (cu_model, cu_param_vals, cu_var_vals,
-         cu_egp_vals, cu_var_egp_vals, 
+        (cu_model, cu_param_vals, cu_dynamic_param_names,
+         cu_var_vals, cu_egp_vals, cu_var_egp_vals, 
          cu_var_refs, cu_egp_refs) = model.process()
 
         # Create custom update model
@@ -224,6 +228,9 @@ class Compiler:
                                                genn_cum, cu_param_vals, 
                                                cu_var_vals, cu_var_refs,
                                                cu_egp_refs)
+
+        # Configure dynamic parameters
+        set_dynamic_param(cu_dynamic_param_names, genn_cu.set_param_dynamic)
 
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
@@ -321,7 +328,8 @@ class Compiler:
             neuron = pop.neuron
             neuron_model = neuron.get_model(pop, self.dt, self.batch_size)
 
-            neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
+            (neuron_model, param_vals, dynamic_param_names, 
+             var_vals, egp_vals, var_egp_vals) =\
                 self.build_neuron_model(
                     pop, neuron_model,
                     compile_state).process()
@@ -338,6 +346,9 @@ class Compiler:
             genn_pop.spike_recording_enabled = pop.record_spikes
             genn_pop.spike_event_recording_enabled = pop.record_spike_events
 
+            # Configure dynamic parameters
+            set_dynamic_param(dynamic_param_names, genn_pop.set_param_dynamic)
+
             # Configure EGPs
             set_egp(egp_vals, genn_pop.extra_global_params)
 
@@ -352,9 +363,8 @@ class Compiler:
         for conn in network.connections:
             # Build postsynaptic model
             syn = conn.synapse
-            (psm, psm_param_vals, psm_var_vals, 
-             psm_egp_vals, psm_var_egp_vals,
-             psm_neuron_var_refs) =\
+            (psm, psm_param_vals, psm_dynamic_param_names, psm_var_vals,
+             psm_egp_vals, psm_var_egp_vals, psm_neuron_var_refs) =\
                 self.build_synapse_model(conn,
                                          syn.get_model(conn, self.dt,
                                                        self.batch_size),
@@ -373,7 +383,7 @@ class Compiler:
                                          compile_state)
 
             # Build weight update model
-            (wum, wum_param_vals, wum_var_vals,
+            (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals,
              wum_pre_neuron_var_refs, wum_post_neuron_var_refs) =\
@@ -417,6 +427,12 @@ class Compiler:
                 and connect_snippet.post_ind is not None):
                     genn_pop.set_sparse_connections(connect_snippet.pre_ind,
                                                     connect_snippet.post_ind)
+
+            # Configure dynamic parameters
+            set_dynamic_param(wum_dynamic_param_names,
+                              genn_pop.set_wu_param_dynamic)
+            set_dynamic_param(psm_dynamic_param_names,
+                              genn_pop.set_ps_param_dynamic)
 
             # Configure EGPs
             set_egp(wum_egp_vals, genn_pop.extra_global_params)
