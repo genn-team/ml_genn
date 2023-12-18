@@ -103,7 +103,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 // Checkout GeNN
                 echo "Checking out GeNN";
                 sh "rm -rf genn";
-                sh "git clone --branch master https://github.com/genn-team/genn.git";
+                sh "git clone --branch event_merging https://github.com/genn-team/genn.git";
 
                 dir("genn") {
                     // Build dynamic LibGeNN
@@ -111,7 +111,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     def messagesLibGeNN = "libgenn_${NODE_NAME}.txt";
                     def commandsLibGeNN = """
                     rm -f ${messagesLibGeNN}
-                    make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/genn_wrapper/  1>>\"${messagesLibGeNN}\" 2>&1
+                    make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/  1>>\"${messagesLibGeNN}\" 2>&1
                     """;
                     def statusLibGeNN = sh script:commandsLibGeNN, returnStatus:true;
                     archive messagesLibGeNN;
