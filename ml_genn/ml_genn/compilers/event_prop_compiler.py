@@ -192,9 +192,8 @@ class UpdateTrial(Callback):
         self.genn_pop = genn_pop
 
     def on_batch_begin(self, batch: int):
-        # Set extra global parameter to batch ID
-        # **TODO** this should be modifiable parameter in GeNN 5
-        self.genn_pop.extra_global_params["Trial"].view[:] = batch
+        # Set dynamic parameter to batch ID
+        self.genn_pop.set_dynamic_param_value("Trial", batch)
 
 # Callback which clamps in_syn to 0 one timestep before  
 # trial end to avoid bleeding spikes into the next trial
@@ -214,7 +213,9 @@ weight_update_model = {
     "param_name_types": [("TauSyn", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("Gradient", "scalar")],
-
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
+                             
     "sim_code": """
     $(addToInSyn, $(g));
     """,
@@ -247,6 +248,7 @@ weight_update_model_atomic_cuda = {
 # **NOTE** feedback is added if required
 static_weight_update_model = {
     "param_name_types": [("g", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "sim_code":
         """
         $(addToInSyn, $(g));
@@ -349,7 +351,7 @@ class EventPropCompiler(Compiler):
                     if p.neuron.readout is not None]
 
         return CompileState(self.losses, readouts,
-                            genn_model.use_backend)
+                            genn_model.backend_name)
 
     def build_neuron_model(self, pop, model, compile_state):
         # Make copy of model
@@ -398,9 +400,10 @@ class EventPropCompiler(Compiler):
                 model_copy.add_param("A", "scalar", 
                                      tau_mem / (tau_mem - tau_syn))
 
-                # Add extra global parameter to contain trial index and add 
+                # Add dynamic parameter to contain trial index and add 
                 # population to list of those which require it updating
-                model_copy.add_egp("Trial", "unsigned int", 0)
+                model_copy.add_param("Trial", "unsigned int", 0)
+                model_copy.set_param_dynamic("Trial")
                 compile_state.update_trial_pops.append(pop)
 
                 # Prepend standard code to update LambdaV and LambdaI
@@ -753,13 +756,16 @@ class EventPropCompiler(Compiler):
             use_atomic = (
                 (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
                 and compile_state.backend_name == "CUDA")
+            assert not use_atomic
 
             # Create basic weight update model
             wum = WeightUpdateModel(
                 model=deepcopy(weight_update_model_atomic_cuda if use_atomic
                                else weight_update_model),
                 param_vals={"TauSyn": tau_syn},
-                var_vals={"g": connect_snippet.weight, "Gradient": 0.0})
+                var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
+                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
+                post_neuron_var_refs={"LambdaI_post": "LambdaI"})
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "g"))
 
@@ -767,8 +773,10 @@ class EventPropCompiler(Compiler):
             compile_state.weight_optimiser_connections.append(conn)
         # Otherwise, e.g. it's a pooling layer
         else:
-            wum = WeightUpdateModel(model=deepcopy(static_weight_update_model),
-                                    param_vals={"g": connect_snippet.weight})
+            wum = WeightUpdateModel(
+                model=deepcopy(static_weight_update_model),
+                param_vals={"g": connect_snippet.weight},
+                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
 
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
@@ -778,6 +786,7 @@ class EventPropCompiler(Compiler):
 
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
+                wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
                 wum.append_event_code("$(addToPre, $(g) * ($(LambdaV_post) - $(LambdaI_post)));")
 
         # Return weight update model
@@ -933,13 +942,11 @@ class EventPropCompiler(Compiler):
             genn_reduction = self.add_custom_update(
                 genn_model, reduction_optimiser_model, 
                 "GradientBatchReduce", "CUBatchReduce" + name_suffix)
-            wu = genn_reduction.custom_wu_update
-            reduced_gradient = (create_wu_var_ref(genn_reduction,
-                                                  "ReducedGradient") if wu
-                                else create_var_ref(genn_reduction, 
-                                                    "ReducedGradient"))
+
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
+            reduced_gradient = create_wu_var_ref(genn_reduction,
+                                                 "ReducedGradient")
             optimiser_model = self._optimiser.get_model(reduced_gradient, 
                                                         var_ref, False)
         # Otherwise

@@ -332,6 +332,14 @@ class WeightUpdateModel(Model):
         self.pre_neuron_var_refs = pre_neuron_var_refs
         self.post_neuron_var_refs = post_neuron_var_refs
     
+    def add_pre_neuron_var_ref(self, name, type, target):
+        self._add_to_list("pre_neuron_var_refs", (name, type))
+        self.pre_neuron_var_refs[name] = target
+    
+    def add_post_neuron_var_ref(self, name, type, target):
+        self._add_to_list("post_neuron_var_refs", (name, type))
+        self.post_neuron_var_refs[name] = target
+        
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
     
