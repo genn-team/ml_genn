@@ -39,16 +39,12 @@ genn_snippet = create_var_init_snippet(
 
         $(value) = 0.0;
         if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-            const int dense_ih = $(dense_ih), dense_iw = $(dense_iw), dense_ic = $(dense_ic);
-
             if ((poolOutRow < dense_ih) && (poolOutCol < dense_iw)) {
-                const int dense_units = $(dense_units);
                 const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
-                const int dense_out_unit = $(id_post);
 
                 $(value) = $(weights)[
                     dense_in_unit * (dense_units) +
-                    dense_out_unit];
+                    id_post];
             }
         }
         """)

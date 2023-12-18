@@ -125,7 +125,6 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # Reset time to 0
             # **YUCK** I don't REALLY like this
             self.genn_model.timestep = 0
-            self.genn_model.t = 0.0
 
             # If there is any data remaining,
             if data_remaining:
