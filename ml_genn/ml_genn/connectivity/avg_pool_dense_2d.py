@@ -27,9 +27,9 @@ genn_snippet = create_var_init_snippet(
     var_init_code=
         """
         // Convert presynaptic neuron ID to row, column and channel in pool input
-        const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
-        const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
-        const int poolInChan = $(id_pre) % pool_ic;
+        const int poolInRow = (id_pre / pool_ic) / pool_iw;
+        const int poolInCol = (id_pre / pool_ic) % pool_iw;
+        const int poolInChan = id_pre % pool_ic;
 
         // Calculate corresponding pool output
         const int poolOutRow = poolInRow / pool_sh;
@@ -37,12 +37,12 @@ genn_snippet = create_var_init_snippet(
         const int poolOutCol = poolInCol / pool_sw;
         const int poolStrideCol = poolOutCol * pool_sw;
 
-        $(value) = 0.0;
+        value = 0.0;
         if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
             if ((poolOutRow < dense_ih) && (poolOutCol < dense_iw)) {
                 const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
 
-                $(value) = $(weights)[
+                value = weights[
                     dense_in_unit * (dense_units) +
                     id_post];
             }

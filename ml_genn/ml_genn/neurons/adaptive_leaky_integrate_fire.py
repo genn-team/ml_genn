@@ -44,7 +44,7 @@ class AdaptiveLeakyIntegrateFire(Neuron):
             "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar"),
                                  ("Alpha", "scalar"), ("Beta", "scalar"), 
                                  ("Rho", "scalar")],
-            "threshold_condition_code": "$(V) >= ($(Vthresh) + ($(Beta) * $(A)))",
+            "threshold_condition_code": "V >= (Vthresh + (Beta * A))",
             "is_auto_refractory_required": False}
 
         # Build reset code depending on whether
@@ -52,14 +52,14 @@ class AdaptiveLeakyIntegrateFire(Neuron):
         if self.relative_reset:
             genn_model["reset_code"] =\
                 """
-                $(V) -= ($(Vthresh) - $(Vreset));
-                $(A) += 1.0;
+                V -= (Vthresh - Vreset);
+                A += 1.0;
                 """
         else:
             genn_model["reset_code"] =\
                 """
-                $(V) = $(Vreset);
-                $(A) += 1.0;
+                V = Vreset;
+                A += 1.0;
                 """
 
         # If neuron has refractory period
@@ -73,39 +73,39 @@ class AdaptiveLeakyIntegrateFire(Neuron):
             if self.integrate_during_refrac:
                 genn_model["sim_code"] =\
                     """
-                    $(V) = ($(Alpha) * $(V)) + $(Isyn);
-                    $(A) *= $(Rho);
-                    if ($(RefracTime) > 0.0) {
-                        $(RefracTime) -= dt;
+                    V = (Alpha * V) + Isyn;
+                    A *= Rho;
+                    if (RefracTime > 0.0) {
+                        RefracTime -= dt;
                     }
                     """
             else:
                 genn_model["sim_code"] =\
                     """
-                    $(A) *= $(Rho);
-                    if ($(RefracTime) > 0.0) {
-                        $(RefracTime) -= dt;
+                    A *= Rho;
+                    if (RefracTime > 0.0) {
+                        RefracTime -= dt;
                     }
                     else {
-                        $(V) = ($(Alpha) * $(V)) + $(Isyn);
+                        V = (Alpha * V) + Isyn;
                     }
                     """
 
             # Add refractory period initialisation to reset code
             genn_model["reset_code"] +=\
                 """
-                $(RefracTime) = $(TauRefrac);
+                RefracTime = TauRefrac;
                 """
 
             # Add refractory check to threshold condition
             genn_model["threshold_condition_code"] +=\
-                " && $(RefracTime) <= 0.0"
+                " && RefracTime <= 0.0"
         # Otherwise, build non-refractory sim-code
         else:
             genn_model["sim_code"] =\
                 """
-                $(V) = ($(Alpha) * $(V)) + $(Isyn);
-                $(A) *= $(Rho);
+                V = (Alpha * V) + Isyn;
+                A *= Rho;
                 """
 
         # Return model

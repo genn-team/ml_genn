@@ -49,7 +49,7 @@ class MaxVar(Readout):
                 f"""
                 if ($({self.output_var_name}) > $({max_var_name})) {{
                     $({max_var_name})= $({self.output_var_name});
-                    $({max_time_var_name}) = $(t);
+                    $({max_time_var_name}) = t;
                 }}
                 """)
         # Otherwise, just add code to update max variable

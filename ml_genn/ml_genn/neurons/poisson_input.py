@@ -23,11 +23,11 @@ class PoissonInput(Neuron, InputBase):
         genn_model = {
             "sim_code":
                 """
-                const bool spike = $(gennrand_uniform) >= exp(-fabs($(Input)) * dt);
+                const bool spike = gennrand_uniform() >= exp(-fabs(Input) * dt);
                 """,
             "threshold_condition_code":
                 """
-                $(Input) > 0.0 && spike
+                Input > 0.0 && spike
                 """,
             "is_auto_refractory_required": False}
 
@@ -35,8 +35,8 @@ class PoissonInput(Neuron, InputBase):
         if self.signed_spikes:
             genn_model["negative_threshold_condition_code"] =\
                 """
-                $(Input_pre) < 0.0 && spike
+                Input_pre < 0.0 && spike
                 """
         return self.create_input_model(
             NeuronModel(genn_model, None, {}, {}),
-            batch_size, population.shape, replace_input="$(Input)")
+            batch_size, population.shape, replace_input="Input")

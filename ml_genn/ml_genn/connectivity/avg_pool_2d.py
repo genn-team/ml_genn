@@ -25,9 +25,9 @@ genn_snippet = create_sparse_connect_init_snippet(
     row_build_code=
         """
         // Convert presynaptic neuron ID to row, column and channel in pool input
-        const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
-        const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
-        const int poolInChan = $(id_pre) % pool_ic;
+        const int poolInRow = (id_pre / pool_ic) / pool_iw;
+        const int poolInCol = (id_pre / pool_ic) % pool_iw;
+        const int poolInChan = id_pre % pool_ic;
 
         // Calculate corresponding pool output
         const int poolOutRow = poolInRow / pool_sh;

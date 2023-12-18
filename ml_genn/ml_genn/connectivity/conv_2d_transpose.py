@@ -26,25 +26,25 @@ genn_snippet = create_sparse_connect_init_snippet(
 
     row_build_code=
         """
-        const int inRow = ($(id_pre) / $(conv_ic)) / $(conv_iw);
-        const int inCol = ($(id_pre) / $(conv_ic)) % $(conv_iw);
-        const int inChan = $(id_pre) % $(conv_ic);
-        const int strideRow = (inRow * $(conv_sh)) - $(conv_padh);
-        const int strideCol = (inCol * $(conv_sw)) - $(conv_padw);
-        const int maxOutRow = min($(conv_oh), max(0, (inRow * $(conv_sh)) + $(conv_kh) - $(conv_padh)));
-        const int minOutCol = min($(conv_ow), max(0, (inCol * $(conv_sw)) - $(conv_padw)));
-        const int maxOutCol = min($(conv_ow), max(0, (inCol * $(conv_sw)) + $(conv_kw) - $(conv_padw)));
+        const int inRow = (id_pre / conv_ic) / conv_iw;
+        const int inCol = (id_pre / conv_ic) % conv_iw;
+        const int inChan = id_pre % conv_ic;
+        const int strideRow = (inRow * conv_sh) - conv_padh;
+        const int strideCol = (inCol * conv_sw) - conv_padw;
+        const int maxOutRow = min(conv_oh, max(0, (inRow * conv_sh) + conv_kh - conv_padh));
+        const int minOutCol = min(conv_ow, max(0, (inCol * conv_sw) - conv_padw));
+        const int maxOutCol = min(conv_ow, max(0, (inCol * conv_sw) + conv_kw - conv_padw));
 
-        int outRow = min($(conv_oh), max(0, (inRow * $(conv_sh)) - $(conv_padh)));
+        int outRow = min(conv_oh, max(0, (inRow * conv_sh) - conv_padh));
         for(;outRow < maxOutRow; outRow++) {
-            const int kernRow = $(outRow) - $(strideRow);
-            for (int outCol = $(minOutCol); outCol < $(maxOutCol); outCol++) {
-                const int kernCol = outCol - $(strideCol);
-                for (int outChan = 0; outChan < $(conv_oc); outChan++) {
-                    const int idPost = (($(outRow) * $(conv_ow) * $(conv_oc)) +
-                                        (outCol * $(conv_oc)) +
+            const int kernRow = outRow - strideRow;
+            for (int outCol = minOutCol; outCol < maxOutCol; outCol++) {
+                const int kernCol = outCol - strideCol;
+                for (int outChan = 0; outChan < conv_oc; outChan++) {
+                    const int idPost = ((outRow * conv_ow * conv_oc) +
+                                        (outCol * conv_oc) +
                                         outChan);
-                    $(addSynapse, idPost, kernRow, kernCol, outChan, inChan);
+                    addSynapse(idPost, kernRow, kernCol, outChan, inChan);
                 }
             }
         }

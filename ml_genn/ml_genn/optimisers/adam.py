@@ -18,13 +18,13 @@ genn_model = {
     "update_code":
         """
         // Update biased first moment estimate
-        $(M) = ($(Beta1) * $(M)) + ((1.0 - $(Beta1)) * $(Gradient));
+        M = (Beta1 * M) + ((1.0 - Beta1) * Gradient);
 
         // Update biased second moment estimate
-        $(V) = ($(Beta2) * $(V)) + ((1.0 - $(Beta2)) * $(Gradient) * $(Gradient));
+        V = (Beta2 * V) + ((1.0 - Beta2) * Gradient * Gradient);
 
         // Add gradient to variable, scaled by learning rate
-        $(Variable) -= ($(Alpha) * $(M) * $(MomentScale1)) / (sqrt($(V) * $(MomentScale2)) + $(Epsilon));
+        Variable -= (Alpha * M * MomentScale1) / (sqrt(V * MomentScale2) + Epsilon);
         """}
 
 
@@ -74,7 +74,7 @@ class Adam(Optimiser):
             model.append_update_code(
                 """
                 // Zero gradient
-                $(Gradient) = 0.0;
+                Gradient = 0.0;
                 """)
 
         # Return model

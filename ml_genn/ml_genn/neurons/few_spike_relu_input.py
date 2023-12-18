@@ -9,20 +9,20 @@ genn_model = {
     "sim_code":
         """
         // Convert K to integer
-        const int kInt = (int)$(K);
+        const int kInt = (int)K;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / dt);
+        const int pipeTimestep = (int)(t / dt);
 
-        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar hT = Scale * (1 << (kInt - (1 + pipeTimestep)));
         """,
     "threshold_condition_code":
         """
-        $(V) >= hT
+        V >= hT
         """,
     "reset_code":
         """
-        $(V) -= hT;
+        V -= hT;
         """,
     "is_auto_refractory_required": False}
 
@@ -32,27 +32,27 @@ genn_model_signed = {
     "sim_code":
         """
         // Convert K to integer
-        const int halfK = (int)$(K) / 2;
+        const int halfK = (int)K / 2;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / dt);
+        const int pipeTimestep = (int)(t / dt);
 
         // Split timestep into interleaved positive and negative
         const int halfPipetimestep = pipeTimestep / 2;
         const bool positive = (pipeTimestep % 2) == 0;
-        const scalar hT = $(Scale) * (1 << (halfK - (1 + halfPipetimestep)));
+        const scalar hT = Scale * (1 << (halfK - (1 + halfPipetimestep)));
         """,
     "threshold_condition_code":
         """
-        (positive && $(V) >= hT) || (!positive && $(V) < -hT)
+        (positive && V >= hT) || (!positive && V < -hT)
         """,
     "reset_code":
         """
         if(positive) {
-            $(V) -= hT;
+            V -= hT;
         }
         else {
-            $(V) += hT;
+            V += hT;
         }
         """,
     "is_auto_refractory_required": False}

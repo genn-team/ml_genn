@@ -16,10 +16,10 @@ class MeanSquareError(Loss):
         # Add sim-code to read out correct yTrue value 
         model.append_sim_code(
             f"""
-            const unsigned int timestep = (int)round($(t) / dt);
-            const unsigned int index = (timestep * $(num_batch) * $(num))
-                                       + ($(batch) * $(num)) + $(id);
-            const scalar yTrue = $(YTrue)[index];
+            const unsigned int timestep = (int)round(t / dt);
+            const unsigned int index = (timestep * num_batch * num)
+                                       + (batch * num) + id;
+            const scalar yTrue = YTrue[index];
             """)
 
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 

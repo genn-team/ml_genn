@@ -4,11 +4,11 @@ from ..utils.model import SynapseModel
 genn_model = {
     "apply_input_code":
         """
-        $(Isyn) += $(inSyn);
+        Isyn += inSyn;
         """,
     "decay_code":
         """
-        $(inSyn) = 0;
+        inSyn = 0;
         """}
         
 class Delta(Synapse):

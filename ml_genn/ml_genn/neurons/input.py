@@ -71,8 +71,8 @@ class InputBase(Input):
                 # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)];
+                    const int timestep = min((int)(t / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
+                    const scalar input = $({self.egp_name})[(t * {flat_shape}) + id];
                     """)
             else:
                 # Add EGP
@@ -85,8 +85,8 @@ class InputBase(Input):
                 # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)];
+                    const int timestep = min((int)(t / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
+                    const scalar input = $({self.egp_name})[(batch * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + id];
                     """)
         return nm_copy
 

@@ -33,9 +33,9 @@ genn_snippet = create_sparse_connect_init_snippet(
     row_build_code=
         """
         // Convert presynaptic neuron ID to row, column and channel in pool input
-        const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
-        const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
-        const int poolInChan = $(id_pre) % pool_ic;
+        const int poolInRow = (id_pre / pool_ic) / pool_iw;
+        const int poolInCol = (id_pre / pool_ic) % pool_iw;
+        const int poolInChan = id_pre % pool_ic;
 
         // Calculate corresponding pool output
         const int poolOutRow = poolInRow / pool_sh;
@@ -46,9 +46,9 @@ genn_snippet = create_sparse_connect_init_snippet(
         if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
             if ((poolOutRow < conv_ih) && (poolOutCol < conv_iw)) {
                 // Calculate range of output rows and columns which this pool output connects to
-                const int minOutRow = min($(conv_oh), max(0, 1 + (int) floor((poolOutRow + $(conv_padh) - $(conv_kh)) / $(conv_sh))));
+                const int minOutRow = min(conv_oh, max(0, 1 + (int) floor((poolOutRow + conv_padh - conv_kh) / conv_sh)));
                 const int maxOutRow = min(conv_oh, max(0, 1 + ((poolOutRow + conv_padh) / conv_sh)));
-                const int minOutCol = min($(conv_ow), max(0, 1 + (int) floor((poolOutCol + $(conv_padw) - $(conv_kw)) / $(conv_sw))));
+                const int minOutCol = min(conv_ow, max(0, 1 + (int) floor((poolOutCol + conv_padw - conv_kw) / conv_sw)));
                 const int maxOutCol = min(conv_ow, max(0, 1 + ((poolOutCol + conv_padw) / conv_sw)));
 
                 // Loop through output rows, columns and channels

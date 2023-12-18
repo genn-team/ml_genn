@@ -23,11 +23,11 @@ class BinarySpikeInput(Neuron, InputBase):
         genn_model = {
             "sim_code":
                 """
-                const bool spike = $(Input) != 0.0;
+                const bool spike = Input != 0.0;
                 """,
             "threshold_condition_code":
                 """
-                $(Input) > 0.0 && spike
+                Input > 0.0 && spike
                 """,
             "is_auto_refractory_required": False}
 
@@ -35,9 +35,9 @@ class BinarySpikeInput(Neuron, InputBase):
         if self.signed_spikes:
             genn_model["negative_threshold_condition_code"] =\
                 """
-                $(Input_pre) < 0.0 && spike
+                Input_pre < 0.0 && spike
                 """
 
         # Add standard input logic to model and return
         return self.create_input_model(NeuronModel(genn_model, None, {}, {}),
-                                       batch_size, population.shape, replace_input="$(Input)")
+                                       batch_size, population.shape, replace_input="Input")

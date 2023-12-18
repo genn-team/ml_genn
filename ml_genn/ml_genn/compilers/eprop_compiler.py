@@ -129,34 +129,34 @@ eprop_lif_model = {
                              ("E_post", "scalar")],
 
     "pre_spike_code": """
-    $(ZFilter) += 1.0;
+    ZFilter += 1.0;
     """,
     "pre_dynamics_code": """
-    $(ZFilter) *= $(Alpha);
+    ZFilter *= Alpha;
     """,
 
     "post_spike_code": """
-    $(FAvg) += (1.0 - $(AlphaFAv));
+    FAvg += (1.0 - AlphaFAv);
     """,
     "post_dynamics_code": """
-    $(FAvg) *= $(AlphaFAv);
-    if ($(RefracTime_post) > 0.0) {
-      $(Psi) = 0.0;
+    FAvg *= AlphaFAv;
+    if (RefracTime_post > 0.0) {
+      Psi = 0.0;
     }
     else {
-      $(Psi) = (1.0 / $(Vthresh_post)) * 0.3 * fmax(0.0, 1.0 - fabs(($(V_post) - $(Vthresh_post)) / $(Vthresh_post)));
+      Psi = (1.0 / Vthresh_post) * 0.3 * fmax(0.0, 1.0 - fabs((V_post - Vthresh_post) / Vthresh_post));
     }
     """,
 
     "sim_code": """
-    $(addToInSyn, $(g));
+    addToPost(g);
     """,
     "synapse_dynamics_code": """
-    const scalar e = $(ZFilter) * $(Psi);
-    scalar eF = $(eFiltered);
-    eF = (eF * $(Alpha)) + e;
-    $(DeltaG) += (eF * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
-    $(eFiltered) = eF;
+    const scalar e = ZFilter * Psi;
+    scalar eF = eFiltered;
+    eF = (eF * Alpha) + e;
+    DeltaG += (eF * E_post) + ((FAvg - FTarget) * CReg * e);
+    eFiltered = eF;
     """}
 
 eprop_alif_model = {
@@ -173,45 +173,45 @@ eprop_alif_model = {
                              ("A_post", "scalar"), ("E_post", "scalar")],
  
     "pre_spike_code": """
-    $(ZFilter) += 1.0;
+    ZFilter += 1.0;
     """,
     "pre_dynamics_code": """
-    $(ZFilter) *= $(Alpha);
+    ZFilter *= Alpha;
     """,
 
     "post_spike_code": """
-    $(FAvg) += (1.0 - $(AlphaFAv));
+    FAvg += (1.0 - AlphaFAv);
     """,
     "post_dynamics_code": """
-    $(FAvg) *= $(AlphaFAv);
-    if ($(RefracTime_post) > 0.0) {
-      $(Psi) = 0.0;
+    FAvg *= AlphaFAv;
+    if (RefracTime_post > 0.0) {
+      Psi = 0.0;
     }
     else {
-      $(Psi) = (1.0 / $(Vthresh_post)) * 0.3 * fmax(0.0, 1.0 - fabs(($(V_post) - ($(Vthresh_post) + ($(Beta_post) * $(A_post)))) / $(Vthresh_post)));
+      Psi = (1.0 / Vthresh_post) * 0.3 * fmax(0.0, 1.0 - fabs((V_post - (Vthresh_post + (Beta_post * A_post))) / Vthresh_post));
     }
     """,
 
     "sim_code": """
-    $(addToInSyn, $(g));
+    addToPost(g);
     """,
     "synapse_dynamics_code": """
     // Calculate some common factors in e and epsilon update
-    scalar epsA = $(epsilonA);
-    const scalar psiZFilter = $(Psi) * $(ZFilter);
-    const scalar psiBetaEpsilonA = $(Psi) * $(Beta_post) * epsA;
+    scalar epsA = epsilonA;
+    const scalar psiZFilter = Psi * ZFilter;
+    const scalar psiBetaEpsilonA = Psi * Beta_post * epsA;
 
     // Calculate e and episilonA
     const scalar e = psiZFilter  - psiBetaEpsilonA;
-    $(epsilonA) = psiZFilter + (($(Rho) * epsA) - psiBetaEpsilonA);
+    epsilonA = psiZFilter + ((Rho * epsA) - psiBetaEpsilonA);
 
     // Calculate filtered version of eligibility trace
-    scalar eF = $(eFiltered);
-    eF = (eF * $(Alpha)) + e;
+    scalar eF = eFiltered;
+    eF = (eF * Alpha) + e;
     
     // Apply weight update
-    $(DeltaG) += (eF * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
-    $(eFiltered) = eF;
+    DeltaG += (eF * E_post) + ((FAvg - FTarget) * CReg * e);
+    eFiltered = eF;
     """}
 
 output_learning_model = {
@@ -222,14 +222,14 @@ output_learning_model = {
     "post_neuron_var_refs": [("E_post", "scalar")],
 
     "pre_spike_code": """
-    $(ZFilter) += 1.0;
+    ZFilter += 1.0;
     """,
     "pre_dynamics_code": """
-    $(ZFilter) *= $(Alpha);
+    ZFilter *= Alpha;
     """,
 
     "sim_code": """
-    $(addToInSyn, $(g));
+    addToPost(g);
     """,
     "synapse_dynamics_code": """
     DeltaG += ZFilter * E_post;
@@ -323,7 +323,7 @@ class EPropCompiler(Compiler):
             # Add sim-code to calculate error
             model_copy.append_sim_code(
                 f"""
-                $(E) = $({model_copy.output_var_name}) - yTrue;
+                E = $({model_copy.output_var_name}) - yTrue;
                 """)
 
             # If we should train output biases
@@ -337,7 +337,7 @@ class EPropCompiler(Compiler):
                 model_copy.add_var("DeltaBias", "scalar", 0.0)
 
                 # Add sim-code to update DeltaBias
-                model_copy.append_sim_code("$(DeltaBias) += $(E);")
+                model_copy.append_sim_code("DeltaBias += E;")
 
                 # Add population to list of those with biases to optimise
                 compile_state.bias_optimiser_populations.append(pop)
@@ -361,7 +361,7 @@ class EPropCompiler(Compiler):
             model_copy.add_var("E", "scalar", 0.0)
 
             # Add sim code to store incoming feedback in new state variable
-            model_copy.append_sim_code("$(E) = $(ISynFeedback);")
+            model_copy.append_sim_code("E = ISynFeedback;")
 
             # If neuron model is LIF or ALIF
             if isinstance(pop.neuron, (AdaptiveLeakyIntegrateFire,

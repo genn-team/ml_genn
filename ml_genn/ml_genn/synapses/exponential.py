@@ -10,11 +10,11 @@ genn_model = {
     "param_name_types": [("ExpDecay", "scalar")],
     "apply_input_code":
         """
-        $(Isyn) += $(inSyn);
+        Isyn += inSyn;
         """,
     "decay_code":
         """
-        $(inSyn) *= $(ExpDecay);
+        inSyn *= ExpDecay;
         """}
 
 class Exponential(Synapse):

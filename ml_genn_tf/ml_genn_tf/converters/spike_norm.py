@@ -26,8 +26,8 @@ threshold_1_model = {
                         CustomUpdateVarAccess.READ_ONLY_SHARED_NEURON)],
     "var_refs": [("V", "scalar")],
     "update_code": """
-    $(MaxV) = fmax($(V), $(Vthresh));
-    $(V) = 0.0;
+    MaxV = fmax(V, Vthresh);
+    V = 0.0;
     """}
 
 # Second pass of threshold update - calculate max across neurons
@@ -35,7 +35,7 @@ threshold_2_model = {
     "var_refs": [("MaxV", "scalar", VarAccessMode.READ_ONLY),
                  ("Vthresh", "scalar", VarAccessMode.REDUCE_MAX)],
     "update_code": """
-    $(Vthresh) = $(MaxV);
+    Vthresh = MaxV;
     """}
 
 class NormCompiler(InferenceCompiler):

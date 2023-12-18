@@ -2,34 +2,34 @@ static_pulse_model = {
     "param_name_types": [("g", "scalar")],
     "sim_code":
         """
-        $(addToInSyn, $(g));
+        addToPost(g);
         """}
 
 static_pulse_delay_model = {
     "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
     "sim_code":
         """
-        $(addToInSynDelay, $(g), $(d));
+        addToPostDelay(g, d);
         """}
 
 signed_static_pulse_model = {
     "param_name_types": [("g", "scalar")],
     "sim_code":
         """
-        $(addToInSyn, $(g));
+        addToPost(g);
         """,
     "event_code":
         """
-        $(addToInSyn, -$(g));
+        addToPost(-g);
         """}
 
 signed_static_pulse_delay_model = {
     "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
     "sim_code":
         """
-        $(addToInSynDelay, $(g), $(d));
+        addToPostDelay(g, d);
         """,
     "event_code":
         """
-        $(addToInSynDelay, $(g), -$(d));
+        addToPostDelay(g, -d);
         """}

@@ -17,7 +17,7 @@ class SpikeCount(Readout):
         model_copy = deepcopy(model)
 
         # Add code to increment spike count
-        model_copy.append_reset_code("$(Scount)++;")
+        model_copy.append_reset_code("Scount++;")
 
         # Add integer spike count variable and initialise to zero
         model_copy.add_var("Scount", "unsigned int", 0)

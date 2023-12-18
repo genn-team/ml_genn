@@ -9,15 +9,15 @@ genn_model = {
     "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar")],
     "sim_code":
         """
-        $(V) += $(Isyn);
+        V += Isyn;
         """,
     "threshold_condition_code":
         """
-        $(V) >= $(Vthresh)
+        V >= Vthresh
         """,
     "reset_code":
         """
-        $(V) = $(Vreset);
+        V = Vreset;
         """,
     "is_auto_refractory_required": False}
 

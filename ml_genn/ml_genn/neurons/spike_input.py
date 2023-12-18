@@ -22,11 +22,11 @@ genn_model = {
     "extra_global_params": [("SpikeTimes", "scalar*")],
     "threshold_condition_code":
         """
-        $(StartSpike) != $(EndSpike) && $(t) >= $(SpikeTimes)[$(StartSpike)]
+        StartSpike != EndSpike && t >= SpikeTimes[StartSpike]
         """,
     "reset_code":
         """
-        $(StartSpike)++;
+        StartSpike++;
         """,            
     "is_auto_refractory_required": False}
 

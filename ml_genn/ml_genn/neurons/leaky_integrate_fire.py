@@ -37,7 +37,7 @@ class LeakyIntegrateFire(Neuron):
             "var_name_types": [("V", "scalar")],
             "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar"),
                                  ("Alpha", "scalar")],
-            "threshold_condition_code": "$(V) >= $(Vthresh)",
+            "threshold_condition_code": "V >= Vthresh",
             "is_auto_refractory_required": False}
 
         # Build reset code depending on whether
@@ -45,18 +45,18 @@ class LeakyIntegrateFire(Neuron):
         if self.relative_reset:
             genn_model["reset_code"] =\
                 """
-                $(V) -= ($(Vthresh) - $(Vreset));
+                V -= (Vthresh - Vreset);
                 """
         else:
             genn_model["reset_code"] =\
                 """
-                $(V) = $(Vreset);
+                V = Vreset;
                 """
         # Define integration code based on whether I should be scaled
         if self.scale_i:
-            v_update = "$(V) = ($(Alpha) * $(V)) + ((1.0 - $(Alpha)) * $(Isyn));"
+            v_update = "V = (Alpha * V) + ((1.0 - Alpha) * Isyn);"
         else:
-            v_update = "$(V) = ($(Alpha) * $(V)) + $(Isyn);"
+            v_update = "V = (Alpha * V) + Isyn;"
 
         # If neuron has refractory period
         if self.tau_refrac is not None:
@@ -71,15 +71,15 @@ class LeakyIntegrateFire(Neuron):
                 genn_model["sim_code"] =\
                     f"""
                     {v_update}
-                    if ($(RefracTime) > 0.0) {{
-                        $(RefracTime) -= dt;
+                    if (RefracTime > 0.0) {{
+                        RefracTime -= dt;
                     }}
                     """
             else:
                 genn_model["sim_code"] =\
                     f"""
-                    if ($(RefracTime) > 0.0) {{
-                        $(RefracTime) -= dt;
+                    if (RefracTime > 0.0) {{
+                        RefracTime -= dt;
                     }}
                     else {{
                         {v_update}
@@ -89,12 +89,12 @@ class LeakyIntegrateFire(Neuron):
             # Add refractory period initialisation to reset code
             genn_model["reset_code"] +=\
                 """
-                $(RefracTime) = $(TauRefrac);
+                RefracTime = TauRefrac;
                 """
 
             # Add refractory check to threshold condition
             genn_model["threshold_condition_code"] +=\
-                " && $(RefracTime) <= 0.0"
+                " && RefracTime <= 0.0"
         # Otherwise, build non-refractory sim-code
         else:
             genn_model["sim_code"] = v_update

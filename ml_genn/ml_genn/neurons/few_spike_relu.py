@@ -14,36 +14,36 @@ genn_model = {
     "sim_code":
         """
         // Convert K to integer
-        const int kInt = (int)$(K);
+        const int kInt = (int)K;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / dt);
+        const int pipeTimestep = (int)(t / dt);
 
         // Calculate magic constants. For RelU hT=h=T
         // **NOTE** d uses last timestep as that was when spike was SENT
-        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
-        const scalar d = $(SrcScale) * (1 << ((kInt - pipeTimestep) % kInt));
+        const scalar hT = Scale * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar d = SrcScale * (1 << ((kInt - pipeTimestep) % kInt));
 
         // Accumulate input
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
-        $(Fx) += ($(Isyn) * d);
+        Fx += (Isyn * d);
 
         // If this is the first timestep, apply input
         // **NOTE** this cannot be done in custom update as it
         // needs to occur in the middle of neuron update
         if(pipeTimestep == 0) {
-            $(V) = $(Fx);
-            $(Fx) = 0.0;
+            V = Fx;
+            Fx = 0.0;
         }
         """,
     "threshold_condition_code":
         """
-        $(V) >= hT
+        V >= hT
         """,
     "reset_code":
         """
-        $(V) -= hT;
+        V -= hT;
         """,
     "is_auto_refractory_required": False}
 
@@ -55,40 +55,40 @@ genn_model_upstream_signed = {
     "sim_code":
         """
         // Convert K to integer
-        const int kInt = (int)$(K);
+        const int kInt = (int)K;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / dt);
+        const int pipeTimestep = (int)(t / dt);
 
         // Calculate magic constants. For RelU hT=h=T
-        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar hT = Scale * (1 << (kInt - (1 + pipeTimestep)));
 
         // Split timestep into interleaved positive and negative
         // **NOTE** sign is flipped compared to input model
         // as we want sign of PREVIOUS timestep
         const scalar dSign = ((pipeTimestep % 2) == 0) ? -1.0 : 1.0;
-        const scalar d = dSign * $(SrcScale) * (1 << (((kInt - pipeTimestep) % kInt) / 2));
+        const scalar d = dSign * SrcScale * (1 << (((kInt - pipeTimestep) % kInt) / 2));
 
         // Accumulate input
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
-        $(Fx) += ($(Isyn) * d);
+        Fx += (Isyn * d);
         
         // If this is the first timestep, apply input
         // **NOTE** this cannot be done in custom update as it
         // needs to occur in the middle of neuron update
         if(pipeTimestep == 0) {
-            $(V) = $(Fx);
-            $(Fx) = 0.0;
+            V = Fx;
+            Fx = 0.0;
         }
         """,
     "threshold_condition_code":
         """
-        $(V) >= hT
+        V >= hT
         """,
     "reset_code":
         """
-        $(V) -= hT;
+        V -= hT;
         """,
     "is_auto_refractory_required": False}
 

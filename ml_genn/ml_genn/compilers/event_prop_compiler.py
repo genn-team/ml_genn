@@ -153,12 +153,12 @@ class CompileState:
                 # Add additional update code to update ring buffer offsets
                 model.append_update_code(
                     f"""
-                    $(RingReadOffset) = $(RingWriteOffset) - 1;
-                    if ($(RingReadOffset) < 0) {{
-                        $(RingReadOffset) = {compiler.max_spikes - 1};
+                    RingReadOffset = RingWriteOffset - 1;
+                    if (RingReadOffset < 0) {{
+                        RingReadOffset = {compiler.max_spikes - 1};
                     }}
-                    $(RingReadEndOffset) = $(RingWriteStartOffset);
-                    $(RingWriteStartOffset) = $(RingReadOffset);
+                    RingReadEndOffset = RingWriteStartOffset;
+                    RingWriteStartOffset = RingReadOffset;
                     """)
             # Otherwise, if we want to add code to reset a voltage ring buffer
             elif r_v:
@@ -172,9 +172,9 @@ class CompileState:
                 # Add additional update code to update ring buffer offsets
                 model.append_update_code(
                     f"""
-                    $(RingReadOffset) = $(RingWriteOffset);
-                    if ($(RingWriteOffset) >= {2 * compiler.example_timesteps}) {{
-                        $(RingWriteOffset) = 0;
+                    RingReadOffset = RingWriteOffset;
+                    if (RingWriteOffset >= {2 * compiler.example_timesteps}) {{
+                        RingWriteOffset = 0;
                     }}
                     """)
             
@@ -204,8 +204,8 @@ class ZeroInSynLastTimestep(Callback):
 
     def on_timestep_begin(self, timestep: int):
         if timestep == (self.example_timesteps - 1):
-            self.genn_syn_pop.in_syn[:]= 0.0
-            self.genn_syn_pop.push_in_syn_to_device()
+            self.genn_syn_pop.out_post.view[:]= 0.0
+            self.genn_syn_pop.out_post.push_to_device()
 
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
@@ -217,13 +217,13 @@ weight_update_model = {
     "post_neuron_var_refs": [("LambdaI_post", "scalar")],
                              
     "sim_code": """
-    $(addToInSyn, $(g));
+    addToPost(g);
     """,
     "event_threshold_condition_code": """
-    $(BackSpike_pre)
+    BackSpike_pre
     """,
     "event_code": """
-    $(Gradient) -= ($(LambdaI_post) * $(TauSyn));
+    Gradient -= (LambdaI_post * TauSyn);
     """}
 
 # EventProp weight update model used on KERNEL weights when atomics required
@@ -235,13 +235,13 @@ weight_update_model_atomic_cuda = {
                        ("Gradient", "scalar")],
 
     "sim_code": """
-    $(addToInSyn, $(g));
+    addToPost(g);
     """,
     "event_threshold_condition_code": """
-    $(BackSpike_pre)
+    BackSpike_pre
     """,
     "event_code": """
-    atomicAdd(&$(Gradient), -($(LambdaI_post) * $(TauSyn)));
+    atomicAdd(&Gradient, -(LambdaI_post * TauSyn));
     """}
 
 # Weight update model used on non-trainable connections
@@ -251,41 +251,41 @@ static_weight_update_model = {
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "sim_code":
         """
-        $(addToInSyn, $(g));
+        addToPost(g);
         """,
     "event_threshold_condition_code": """
-    $(BackSpike_pre)
+    BackSpike_pre
     """}
 
 gradient_batch_reduce_model = {
     "var_name_types": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
-    $(ReducedGradient) = $(Gradient);
-    $(Gradient) = 0;
+    ReducedGradient = Gradient;
+    Gradient = 0;
     """}
 
 # Template used to generate backward passes for neurons
 neuron_backward_pass = Template(
     """
-    const int ringOffset = ($$(batch) * $$(num) * $max_spikes) + ($$(id) * $max_spikes);
-    const scalar backT = $example_time - $$(t) - dt;
+    const int ringOffset = ($batch * num_neurons * $max_spikes) + ($id * $max_spikes);
+    const scalar backT = $example_time - $t - dt;
 
     // Backward pass
     $dynamics
-    if ($$(BackSpike)) {
+    if ($BackSpike) {
         $transition
 
         // Decrease read pointer
-        $$(RingReadOffset)--;
-        if ($$(RingReadOffset) < 0) {
-            $$(RingReadOffset) = $max_spikes - 1;
+        $RingReadOffset--;
+        if ($RingReadOffset < 0) {
+            $RingReadOffset = $max_spikes - 1;
         }
-        $$(BackSpike) = false;
+        $BackSpike = false;
     }
     // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if ($$(RingReadOffset) != $$(RingReadEndOffset) && fabs(backT - $$(RingSpikeTime)[ringOffset + $$(RingReadOffset)] - dt) < 1e-3*dt) {
-        $$(BackSpike) = true;
+    if ($RingReadOffset != $RingReadEndOffset && fabs(backT - $RingSpikeTime[ringOffset + $RingReadOffset] - dt) < 1e-3*dt) {
+        $BackSpike = true;
     }
 
     // Forward pass
@@ -294,15 +294,15 @@ neuron_backward_pass = Template(
 # Template used to generate reset code for neurons
 neuron_reset = Template(
     """
-    if($$(RingWriteOffset) != $$(RingReadEndOffset)) {
+    if($RingWriteOffset != $RingReadEndOffset) {
         // Write spike time and I-V to tape
-        $$(RingSpikeTime)[ringOffset + $$(RingWriteOffset)] = $$(t);
+        $RingSpikeTime[ringOffset + $RingWriteOffset] = $t;
         $write
-        $$(RingWriteOffset)++;
+        $RingWriteOffset++;
 
         // Loop around if we've reached end of circular buffer
-        if ($$(RingWriteOffset) >= $max_spikes) {
-            $$(RingWriteOffset) = 0;
+        if ($RingWriteOffset >= $max_spikes) {
+            $RingWriteOffset = 0;
         }
     }
     $strict_check
@@ -311,7 +311,7 @@ neuron_reset = Template(
 # Code used to add optional strict checking after neuron reset
 neuron_reset_strict_check = """
     else {
-        printf("%f: hidden: ring buffer violation in neuron %d, read end offset: %d, write start offset: %d, read offset: %d, write offset: %d\\n", $(t), $(id), $(RingReadEndOffset), $(RingWriteStartOffset), $(RingReadOffset), $(RingWriteOffset));
+        printf("%f: hidden: ring buffer violation in neuron %d, read end offset: %d, write start offset: %d, read offset: %d, write offset: %d\\n", t, id, RingReadEndOffset, RingWriteStartOffset, RingReadOffset, RingWriteOffset);
         assert(false);
     }
     """
@@ -409,8 +409,8 @@ class EventPropCompiler(Compiler):
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
-                    $(LambdaI) = drive + (($(LambdaI) - drive) * $(Beta)) + ($(A) * ($(LambdaV) - drive) * ($(Alpha) - $(Beta)));
-                    $(LambdaV) = drive + (($(LambdaV) - drive) * $(Alpha));
+                    LambdaI = drive + ((LambdaI - drive) * Beta) + (A * (LambdaV - drive) * (Alpha - Beta));
+                    LambdaV = drive + ((LambdaV - drive) * Alpha);
                     """)
 
                 # If we want to calculate per-timestep loss
@@ -432,12 +432,12 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         model_copy.prepend_sim_code(
                             f"""
-                            const int ringOffset = ($(batch) * $(num) * {2 * self.example_timesteps}) + ($(id) * {2 * self.example_timesteps});
-                            if ($(Trial) > 0) {{
-                                $(RingReadOffset)--;
-                                const scalar softmax = $(RingSoftmaxV)[ringOffset + $(RingReadOffset)];
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - softmax) : -softmax;
-                                drive = g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
+                            const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                            if (Trial > 0) {{
+                                RingReadOffset--;
+                                const scalar softmax = RingSoftmaxV[ringOffset + RingReadOffset];
+                                const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
+                                drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -466,9 +466,9 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         model_copy.prepend_sim_code(
                             f"""
-                            if ($(Trial) > 0) {{
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                drive = g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
+                            if (Trial > 0) {{
+                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -489,9 +489,9 @@ class EventPropCompiler(Compiler):
                         local_t_scale = 1.0 / (self.dt * self.example_timesteps)
                         model_copy.prepend_sim_code(
                             f"""
-                            if ($(Trial) > 0) {{
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                drive = (g * exp(-(1.0 - ($(t) * {local_t_scale})))) / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
+                            if (Trial > 0) {{
+                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (TauM * num_batch * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -512,9 +512,9 @@ class EventPropCompiler(Compiler):
 
                         model_copy.prepend_sim_code(
                             f"""
-                            if ($(Trial) > 0 && fabs(backT - $(VMaxTimeBack)) < 1e-3*DT) {{
-                                const scalar g = ($(id) == $(YTrueBack)) ? (1.0 - $(Softmax)) : -$(Softmax);
-                                drive = g / ($(TauM) * $(num_batch) * {self.dt * self.example_timesteps});
+                            if (Trial > 0 && fabs(backT - VMaxTimeBack) < 1e-3*DT) {{
+                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
                             }}
 
                             // Forward pass
@@ -540,7 +540,7 @@ class EventPropCompiler(Compiler):
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
-                    const float backT = {self.example_timesteps * self.dt} - $(t) - dt;
+                    const float backT = {self.example_timesteps * self.dt} - t - dt;
 
                     // Backward pass
                     scalar drive = 0.0;
@@ -643,7 +643,7 @@ class EventPropCompiler(Compiler):
 
                     # On backward pass transition, update LambdaV
                     transition_code = """
-                        $(LambdaV) += (1.0 / $(RingIMinusV)[ringOffset + $(RingReadOffset)]) * ($(Vthresh) * $(LambdaV) + $(RevISyn));
+                        LambdaV += (1.0 / RingIMinusV[ringOffset + RingReadOffset]) * (Vthresh * LambdaV + RevISyn);
                         """
 
                     # List of variables aside from those in base 
@@ -678,16 +678,16 @@ class EventPropCompiler(Compiler):
 
                         # Add additional transition code to apply regularisation
                         transition_code += """
-                        if ($(SpikeCountBack) > $(RegNuUpper)) {
-                            $(LambdaV) -= $(RegLambdaUpper) * ($(SpikeCountBack) - $(RegNuUpper));
+                        if (SpikeCountBack > RegNuUpper) {
+                            LambdaV -= RegLambdaUpper * (SpikeCountBack - RegNuUpper);
                         }
                         else {
-                            $(LambdaV) -= $(RegLambdaLower) * ($(SpikeCountBack) - $(RegNuUpper));
+                            LambdaV -= RegLambdaLower * (SpikeCountBack - RegNuUpper);
                         }
                         """
 
                         # Add code to update SpikeCount in forward reset code
-                        model_copy.append_reset_code("$(SpikeCount)++;")
+                        model_copy.append_reset_code("SpikeCount++;")
 
                     # Add reset logic to reset adjoint state variables 
                     # as well as any state variables from the original model
@@ -702,8 +702,8 @@ class EventPropCompiler(Compiler):
                             max_spikes=self.max_spikes,
                             example_time=(self.example_timesteps * self.dt),
                             dynamics="""
-                            $(LambdaI) = ($(A) * $(LambdaV) * ($(Beta) - $(Alpha))) + ($(LambdaI) * $(Beta));
-                            $(LambdaV) *= $(Alpha);
+                            LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
+                            LambdaV *= Alpha;
                             """,
                             transition=transition_code))
 
@@ -712,7 +712,7 @@ class EventPropCompiler(Compiler):
                     model_copy.prepend_reset_code(
                         neuron_reset.substitute(
                             max_spikes=self.max_spikes,
-                            write="$(RingIMinusV)[ringOffset + $(RingWriteOffset)] = $(Isyn) - $(V);",
+                            write="RingIMinusV[ringOffset + RingWriteOffset] = Isyn - V;",
                             strict_check=(neuron_reset_strict_check 
                                           if self.strict_buffer_checking
                                           else "")))
@@ -787,7 +787,7 @@ class EventPropCompiler(Compiler):
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
                 wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
-                wum.append_event_code("$(addToPre, $(g) * ($(LambdaV_post) - $(LambdaI_post)));")
+                wum.append_event_code("addToPost(g * (LambdaV_post - LambdaI_post));")
 
         # Return weight update model
         return wum
@@ -912,9 +912,9 @@ class EventPropCompiler(Compiler):
                              ("RingWriteOffset", "int")],
                 "extra_global_param_refs": [("RingSoftmaxV", "scalar*")],
                 "update_code": f"""
-                const int ringOffset = ($(batch) * $(num) * {2 * self.example_timesteps}) + ($(id) * {2 * self.example_timesteps});
-                $(RingSoftmaxV)[ringOffset + $(RingWriteOffset)]= exp($(Val) - $(MaxVal)) / $(SumExpVal);
-                $(RingWriteOffset)++;
+                const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                RingSoftmaxV[ringOffset + RingWriteOffset]= exp(Val - MaxVal) / SumExpVal;
+                RingWriteOffset++;
                 """}, 
             {}, {},
             {"Val": create_var_ref(genn_pop, input_var_name),

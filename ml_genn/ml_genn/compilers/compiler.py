@@ -31,7 +31,7 @@ softmax_1_model = {
     "var_name_types": [("MaxVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_MAX)],
     "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
-    $(MaxVal) = $(Val);
+    MaxVal = Val;
     """}
 
 # Second pass of softmax - calculate scaled sum of exp(value)
@@ -40,7 +40,7 @@ softmax_2_model = {
     "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
                  ("MaxVal", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
-    $(SumExpVal) = exp($(Val) - $(MaxVal));
+    SumExpVal = exp(Val - MaxVal);
     """}
 
 # Third pass of softmax - calculate softmax value
@@ -50,7 +50,7 @@ softmax_3_model = {
                  ("SumExpVal", "scalar", VarAccessMode.READ_ONLY),
                  ("SoftmaxVal", "scalar")],
     "update_code": """
-    $(SoftmaxVal) = exp($(Val) - $(MaxVal)) / $(SumExpVal);
+    SoftmaxVal = exp(Val - MaxVal) / SumExpVal;
     """}
 
 def set_dynamic_param(param_names, set_param_dynamic):

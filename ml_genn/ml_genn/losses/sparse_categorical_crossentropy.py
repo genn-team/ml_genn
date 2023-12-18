@@ -16,7 +16,7 @@ class SparseCategoricalCrossentropy(Loss):
         # Add sim-code to convert label to one-hot
         model.append_sim_code(
             f"""
-            const scalar yTrue = ($(id) == $(YTrue)) ? 1.0 : 0.0;
+            const scalar yTrue = (id == YTrue) ? 1.0 : 0.0;
             """)
 
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
