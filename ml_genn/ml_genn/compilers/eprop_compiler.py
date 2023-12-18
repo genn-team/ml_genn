@@ -124,6 +124,8 @@ eprop_lif_model = {
                        ("eFiltered", "scalar"), ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
     "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
+    "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
+                             ("E_post", "scalar")],
 
     "pre_spike_code": """
     $(ZFilter) += 1.0;
@@ -165,7 +167,9 @@ eprop_alif_model = {
                        ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
     "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
-
+    "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
+                             ("A_post", "scalar"), ("E_post", "scalar")],
+ 
     "pre_spike_code": """
     $(ZFilter) += 1.0;
     """,
@@ -213,6 +217,7 @@ output_learning_model = {
     "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
+    "post_neuron_var_refs": [("E_post", "scalar")],
 
     "pre_spike_code": """
     $(ZFilter) += 1.0;
@@ -225,16 +230,16 @@ output_learning_model = {
     $(addToInSyn, $(g));
     """,
     "synapse_dynamics_code": """
-    $(DeltaG) += $(ZFilter) * $(E_post);
-    $(addToPre, $(g) * $(E_post));
+    DeltaG += ZFilter * E_post;
+    addToPre(g * E_post);
     """}
 
 gradient_batch_reduce_model = {
     "var_name_types": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
-    $(ReducedGradient) = $(Gradient);
-    $(Gradient) = 0;
+    ReducedGradient = Gradient;
+    Gradient = 0;
     """}
 
 class EPropCompiler(Compiler):
@@ -407,7 +412,9 @@ class EPropCompiler(Compiler):
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
-                post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+                post_var_vals={"Psi": 0.0, "FAvg": 0.0},
+                post_neuron_var_refs={"RefracTime_post": "RefracTime",
+                                      "V_post": "V", "E_post": "E"})
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
@@ -421,7 +428,10 @@ class EPropCompiler(Compiler):
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
-                post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+                post_var_vals={"Psi": 0.0, "FAvg": 0.0},
+                post_neuron_var_refs={"RefracTime_post": "RefracTime",
+                                      "V_post": "V", "A_post": "A", 
+                                      "E_post": "E"})
         # Otherwise, if target neuron is readout, create 
         # weight update model with simple output learning rule
         elif target_neuron.readout is not None:
@@ -429,7 +439,8 @@ class EPropCompiler(Compiler):
                 model=output_learning_model,
                 param_vals={"Alpha": alpha},
                 var_vals={"g": connect_snippet.weight, "DeltaG": 0.0},
-                pre_var_vals={"ZFilter": 0.0})
+                pre_var_vals={"ZFilter": 0.0},
+                post_neuron_var_refs={"E_post": "E"})
 
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
@@ -446,8 +457,8 @@ class EPropCompiler(Compiler):
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
         # Fuse pre and postsynaptic updates for efficiency
-        genn_model._model.set_fuse_postsynaptic_models(True)
-        genn_model._model.set_fuse_pre_post_weight_update_models(True)
+        genn_model.fuse_postsynaptic_models = True
+        genn_model.fuse_pre_post_weight_update_models = True
 
         # Correctly target feedback
         for c in compile_state.feedback_connections:
@@ -460,7 +471,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
+                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True))
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -468,7 +479,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
-                    create_var_ref(genn_pop, "DeltaBias"), genn_model))
+                    create_var_ref(genn_pop, "DeltaBias"), genn_model, False))
 
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
@@ -511,7 +522,7 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model):
+                                        gradient_ref, genn_model, wu):
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -523,7 +534,6 @@ class EPropCompiler(Compiler):
             genn_reduction = self.add_custom_update(
                 genn_model, reduction_optimiser_model, 
                 "GradientBatchReduce", "CUBatchReduce" + name_suffix)
-            wu = genn_reduction.custom_wu_update
             reduced_gradient = (create_wu_var_ref(genn_reduction,
                                                   "ReducedGradient") if wu
                                 else create_var_ref(genn_reduction, 

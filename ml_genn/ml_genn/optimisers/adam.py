@@ -10,10 +10,9 @@ from copy import deepcopy
 genn_model = {
     "var_name_types": [("M", "scalar"), ("V", "scalar")],
     "param_name_types": [("Beta1", "scalar"), ("Beta2", "scalar"),
-                         ("Epsilon", "scalar")],
-    "extra_global_params": [("Alpha", "scalar"),
-                            ("MomentScale1", "scalar"),
-                            ("MomentScale2", "scalar")],
+                         ("Epsilon", "scalar"), ("Alpha", "scalar"),
+                         ("MomentScale1", "scalar"), 
+                         ("MomentScale2", "scalar")],
     "var_refs": [("Gradient", "scalar", VarAccessMode.READ_ONLY),
                  ("Variable", "scalar")],
     "update_code":
@@ -46,19 +45,23 @@ class Adam(Optimiser):
         moment_scale_1 = 1.0 / (1.0 - (self.beta1 ** (step + 1)))
         moment_scale_2 = 1.0 / (1.0 - (self.beta2 ** (step + 1)))
 
-        genn_cu.extra_global_params["Alpha"].view[:] = self.alpha
-        genn_cu.extra_global_params["MomentScale1"].view[:] = moment_scale_1
-        genn_cu.extra_global_params["MomentScale2"].view[:] = moment_scale_2
+        genn_cu.set_dynamic_param_value("Alpha", self.alpha)
+        genn_cu.set_dynamic_param_value("MomentScale1", moment_scale_1)
+        genn_cu.set_dynamic_param_value("MomentScale2", moment_scale_2)
 
     def get_model(self, gradient_ref, var_ref, zero_gradient: bool):
         model = CustomUpdateModel(
             deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,
-             "Epsilon": self.epsilon},
+             "Epsilon": self.epsilon, "Alpha": self.alpha, 
+             "MomentScale1": 0.0, "MomentScale2": 0.0},
             {"M": 0.0, "V": 0.0},
-            {"Gradient": gradient_ref, "Variable": var_ref},
-            {"Alpha": self.alpha, "FirstMomentScale": 0.0,
-             "SecondMomentScale": 0.0})
+            {"Gradient": gradient_ref, "Variable": var_ref})
+
+        # Make parameters dynamic
+        model.set_param_dynamic("Alpha")
+        model.set_param_dynamic("MomentScale1")
+        model.set_param_dynamic("MomentScale2")
 
         # If a optimiser than automatically zeros
         # gradients should be provided

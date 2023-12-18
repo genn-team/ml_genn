@@ -22,6 +22,7 @@ class Model:
         self.model = model
 
         self.param_vals = param_vals
+        self.dynamic_param_names = set()
         self.var_vals = var_vals
         self.egp_vals = egp_vals
 
@@ -49,30 +50,20 @@ class Model:
         assert not self.has_egp(name)
         self._add_to_list("extra_global_params", (name, type))
         self.egp_vals[name] = value
-    
-    def convert_param_to_egp(self, param_name: str):
-        # Search for parameter definition
-        param_index, param = self._search_list("param_name_types", param_name)
 
-        # Remove parameter from model
-        self.model["param_name_types"].pop(param_index)
-
-        # Remove parameter value from dictionary
-        param_val = self.param_vals.pop(param_name)
-
-        # Give error if value is an initialiser
-        if is_value_initializer(param_val):
-            raise RuntimeError("Parameters with values specified with "
-                               "initialisers cannot be converted to EGPs.")
-
-        # Add EGP to replace it
-        self.add_egp(param_name, param[1], param_val)
+    def set_param_dynamic(self, name: str, dynamic: bool = True):
+        assert self.has_param(name)
+        if dynamic:
+            self.dynamic_param_names.add(name)
+        else:
+            self.dynamic_param_names.discard(name)
 
     def set_var_access_mode(self, name: str, access_mode: int):
         self._set_access_model("var_name_types", name, access_mode)
 
     def make_param_var(self, param_name: str, 
                        access_mode: int = VarAccess.READ_ONLY):
+        assert param_name not in self.dynamic_param_names
         self._make_param_var("var_name_types", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
@@ -81,7 +72,7 @@ class Model:
         model_copy = deepcopy(self.model)
 
         # Remove param names and types from copy of model (those that will "
-        # be implemented as GeNN parameters will live in param_names)
+        # be implemented as GeNN parameters will live in params)
         if "param_name_types" in model_copy:
             param_name_types = model_copy["param_name_types"]
             del model_copy["param_name_types"]
@@ -107,18 +98,20 @@ class Model:
                 var_vals_copy[name] = val
 
         # Loop through parameters in model
-        model_copy["param_names"] = []
+        model_copy["params"] = []
         constant_param_vals = {}
         for name, ptype in param_name_types:
             # Get value
             val = self.param_vals[name]
 
-            # If value is a plain number, add it's name to parameter names
+            # If value is a plain number, add to parameters
             if is_value_constant(val):
-                model_copy["param_names"].append(name)
+                model_copy["params"].append((name, ptype))
                 constant_param_vals[name] = val
             # Otherwise, turn it into a (read-only) variable
             else:
+                assert name not in self.dynamic_param_names
+    
                 model_copy["var_name_types"].append((name, ptype,
                                                      VarAccess.READ_ONLY))
                 if is_value_initializer(val):
@@ -305,28 +298,39 @@ class NeuronModel(Model):
         return output_var
 
 class SynapseModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, egp_vals={}):
+    def __init__(self, model, param_vals={}, var_vals={}, egp_vals={},
+                 neuron_var_refs={}):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
-    
+
+        self.neuron_var_refs = neuron_var_refs
+
+    def process(self):
+        return (super(SynapseModel, self).process() 
+                + (self.neuron_var_refs,))
+
     @staticmethod
     def from_val_descriptors(model, inst, dt, 
-                             param_vals={}, var_vals={}, egp_vals={}):
+                             param_vals={}, var_vals={},
+                             egp_vals={}, neuron_var_refs={}):
         return SynapseModel(
             model, 
             get_values(inst, model.get("param_name_types", []), dt, param_vals),
             get_values(inst, model.get("var_name_types", []), dt, var_vals),
-            egp_vals)
+            egp_vals, neuron_var_refs)
 
 
 class WeightUpdateModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
-                 post_var_vals={}, egp_vals={}):
+                 post_var_vals={}, egp_vals={}, pre_neuron_var_refs={},
+                 post_neuron_var_refs={},):
         super(WeightUpdateModel, self).__init__(model, param_vals, 
                                                 var_vals, egp_vals)
-        
+
         self.pre_var_vals = pre_var_vals
         self.post_var_vals = post_var_vals
+        self.pre_neuron_var_refs = pre_neuron_var_refs
+        self.post_neuron_var_refs = post_neuron_var_refs
     
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
@@ -339,7 +343,8 @@ class WeightUpdateModel(Model):
 
     def process(self):
         return (super(WeightUpdateModel, self).process() 
-                + (self.pre_var_vals, self.post_var_vals))
+                + (self.pre_var_vals, self.post_var_vals,
+                   self.pre_neuron_var_refs, self.post_neuron_var_refs))
 
     @property
     def reset_pre_vars(self):

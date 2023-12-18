@@ -103,6 +103,9 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
     return model
 
+def create_local_var_refs(refs, genn_group):
+    return {n: create_var_ref(genn_group, v) for n, v in refs.items()}
+
 class SupportedMatrixType:
     def __init__(self, supported: List[int]):
         # Build dictionary of supported connectivity types and order
@@ -350,14 +353,16 @@ class Compiler:
             # Build postsynaptic model
             syn = conn.synapse
             (psm, psm_param_vals, psm_var_vals, 
-             psm_egp_vals, psm_var_egp_vals) =\
+             psm_egp_vals, psm_var_egp_vals,
+             psm_neuron_var_refs) =\
                 self.build_synapse_model(conn,
                                          syn.get_model(conn, self.dt,
                                                        self.batch_size),
                                          compile_state).process()
-
+            
             # Create custom postsynaptic model
             genn_psm = create_postsynaptic_model("PostsynapticModel", **psm)
+            
             # Get connectivity init snippet
             connect_snippet =\
                 conn.connectivity.get_snippet(conn,
@@ -370,7 +375,8 @@ class Compiler:
             # Build weight update model
             (wum, wum_param_vals, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
-             wum_pre_var_vals, wum_post_var_vals) =\
+             wum_pre_var_vals, wum_post_var_vals,
+             wum_pre_neuron_var_refs, wum_post_neuron_var_refs) =\
                 self.build_weight_update_model(conn, connect_snippet,
                                                compile_state).process()
 
@@ -381,14 +387,28 @@ class Compiler:
             axonal_delay = (delay if is_value_constant(delay)
                             else 0)
 
+            # Get pre and postsynaptic GeNN populations
+            pre_genn_group = neuron_populations[conn.source()]
+            post_genn_group = neuron_populations[conn.target()]
+
+            # Use to create local variable references
+            psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
+                                                        post_genn_group)
+            wum_pre_neuron_var_refs = create_local_var_refs(
+                wum_pre_neuron_var_refs, pre_genn_group)
+            wum_post_neuron_var_refs = create_local_var_refs(
+                wum_post_neuron_var_refs, post_genn_group)
+    
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
                 conn.name, connect_snippet.matrix_type, axonal_delay,
-                neuron_populations[conn.source()],
-                neuron_populations[conn.target()],
+                pre_genn_group, post_genn_group,
                 init_weight_update(genn_wum, wum_param_vals, wum_var_vals,
-                                   wum_pre_var_vals, wum_post_var_vals),
-                init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals),
+                                   wum_pre_var_vals, wum_post_var_vals,
+                                   wum_pre_neuron_var_refs, 
+                                   wum_post_neuron_var_refs),
+                init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
+                                  psm_neuron_var_refs),
                 connect_snippet.snippet)
 
             # If connectivity snippet has pre and postsynaptic

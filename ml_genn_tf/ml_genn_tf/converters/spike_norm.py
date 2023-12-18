@@ -45,10 +45,7 @@ class NormCompiler(InferenceCompiler):
             # Make a copy of model with threshold
             # parameter implemented as EGP 
             model = deepcopy(model)
-            model.convert_param_to_egp("Vthresh")
-            
-            # Set it's value to infinity
-            model.egp_vals["Vthresh"] = np.inf
+            model.set_param_dynamic("Vthresh")
 
         # Build neuron model
         return super(NormCompiler, self).build_neuron_model(
