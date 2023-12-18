@@ -162,7 +162,8 @@ eprop_lif_model = {
 eprop_alif_model = {
     "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"),
                          ("Rho", "scalar"), ("FTarget", "scalar"),
-                         ("AlphaFAv", "scalar"), ("Vthresh_post", "scalar")],
+                         ("AlphaFAv", "scalar"), ("Vthresh_post", "scalar"),
+                         ("Beta_post", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("eFiltered", "scalar"), ("epsilonA", "scalar"),
                        ("DeltaG", "scalar")],
@@ -196,13 +197,13 @@ eprop_alif_model = {
     """,
     "synapse_dynamics_code": """
     // Calculate some common factors in e and epsilon update
-    scalar epsilonA = $(epsilonA);
+    scalar epsA = $(epsilonA);
     const scalar psiZFilter = $(Psi) * $(ZFilter);
-    const scalar psiBetaEpsilonA = $(Psi) * $(Beta_post) * epsilonA;
+    const scalar psiBetaEpsilonA = $(Psi) * $(Beta_post) * epsA;
 
     // Calculate e and episilonA
     const scalar e = psiZFilter  - psiBetaEpsilonA;
-    $(epsilonA) = psiZFilter + (($(Rho) * epsilonA) - psiBetaEpsilonA);
+    $(epsilonA) = psiZFilter + (($(Rho) * epsA) - psiBetaEpsilonA);
 
     // Calculate filtered version of eligibility trace
     scalar eF = $(eFiltered);
@@ -427,7 +428,8 @@ class EPropCompiler(Compiler):
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
                             "AlphaFAv": np.exp(-self.dt / self.tau_reg),
-                            "Vthresh_post": target_neuron.v_thresh},
+                            "Vthresh_post": target_neuron.v_thresh,
+                            "Beta_post": target_neuron.beta},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
