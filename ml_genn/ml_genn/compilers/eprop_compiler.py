@@ -119,7 +119,8 @@ class CompileState:
 
 eprop_lif_model = {
     "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"), 
-                         ("FTarget", "scalar"), ("AlphaFAv", "scalar")],
+                         ("FTarget", "scalar"), ("AlphaFAv", "scalar"),
+                         ("Vthresh_post", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("eFiltered", "scalar"), ("DeltaG", "scalar")],
     "pre_var_name_types": [("ZFilter", "scalar")],
@@ -152,16 +153,16 @@ eprop_lif_model = {
     """,
     "synapse_dynamics_code": """
     const scalar e = $(ZFilter) * $(Psi);
-    scalar eFiltered = $(eFiltered);
-    eFiltered = (eFiltered * $(Alpha)) + e;
-    $(DeltaG) += (eFiltered * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
-    $(eFiltered) = eFiltered;
+    scalar eF = $(eFiltered);
+    eF = (eF * $(Alpha)) + e;
+    $(DeltaG) += (eF * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
+    $(eFiltered) = eF;
     """}
 
 eprop_alif_model = {
     "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"),
                          ("Rho", "scalar"), ("FTarget", "scalar"),
-                         ("AlphaFAv", "scalar")],
+                         ("AlphaFAv", "scalar"), ("Vthresh_post", "scalar")],
     "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
                        ("eFiltered", "scalar"), ("epsilonA", "scalar"),
                        ("DeltaG", "scalar")],
@@ -204,12 +205,12 @@ eprop_alif_model = {
     $(epsilonA) = psiZFilter + (($(Rho) * epsilonA) - psiBetaEpsilonA);
 
     // Calculate filtered version of eligibility trace
-    scalar eFiltered = $(eFiltered);
-    eFiltered = (eFiltered * $(Alpha)) + e;
+    scalar eF = $(eFiltered);
+    eF = (eF * $(Alpha)) + e;
     
     // Apply weight update
-    $(DeltaG) += (eFiltered * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
-    $(eFiltered) = eFiltered;
+    $(DeltaG) += (eF * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
+    $(eFiltered) = eF;
     """}
 
 output_learning_model = {
@@ -408,7 +409,8 @@ class EPropCompiler(Compiler):
                 model=eprop_lif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
-                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg),
+                            "Vthresh_post": target_neuron.v_thresh},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
@@ -424,7 +426,8 @@ class EPropCompiler(Compiler):
                 model=eprop_alif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
-                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg),
+                            "Vthresh_post": target_neuron.v_thresh},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
