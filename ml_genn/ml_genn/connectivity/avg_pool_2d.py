@@ -41,7 +41,7 @@ genn_snippet = create_sparse_connect_init_snippet(
                 const int idPost = ((poolOutRow * pool_ow * pool_oc) +
                                     (poolOutCol * pool_oc) +
                                     poolInChan);
-                $(addSynapse, idPost);
+                addSynapse(idPost);
             }
         }
         """)
