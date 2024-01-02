@@ -95,7 +95,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 ${env.PYTHON} -m venv ${WORKSPACE}/venv
                 . ${WORKSPACE}/venv/bin/activate
                 pip install -U pip
-                pip install numpy pytest pytest-cov wheel flake8
+                pip install numpy pytest pytest-cov wheel flake8 psutil
                 """;
             }
 
@@ -103,29 +103,16 @@ for (b = 0; b < builderNodes.size(); b++) {
                 // Checkout GeNN
                 echo "Checking out GeNN";
                 sh "rm -rf genn";
-                sh "git clone --branch event_merging https://github.com/genn-team/genn.git";
+                sh "git clone --branch genn_5_tidy https://github.com/genn-team/genn.git";
 
                 dir("genn") {
-                    // Build dynamic LibGeNN
-                    echo "Building LibGeNN";
-                    def messagesLibGeNN = "libgenn_${NODE_NAME}.txt";
-                    def commandsLibGeNN = """
-                    rm -f ${messagesLibGeNN}
-                    make DYNAMIC=1 LIBRARY_DIRECTORY=`pwd`/pygenn/  1>>\"${messagesLibGeNN}\" 2>&1
-                    """;
-                    def statusLibGeNN = sh script:commandsLibGeNN, returnStatus:true;
-                    archive messagesLibGeNN;
-                    if (statusLibGeNN != 0) {
-                        setBuildStatus("Building LibGeNN (${NODE_NAME})", "FAILURE");
-                    }
-
                     // Build PyGeNN module
                     echo "Building and installing PyGeNN";
                     def messagesPyGeNN = "pygenn_${NODE_NAME}.txt";
                     def commandsPyGeNN = """
                     . ${WORKSPACE}/venv/bin/activate
                     rm -f ${messagesPyGeNN}
-                    pip install . 1>>\"${messagesPyGeNN}\" 2>&1
+                    pip install -e . 1>>\"${messagesPyGeNN}\" 2>&1
                     """;
                     def statusPyGeNN = sh script:commandsPyGeNN, returnStatus:true;
                     archive messagesPyGeNN;
