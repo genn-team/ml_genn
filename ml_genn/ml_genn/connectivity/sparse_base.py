@@ -27,7 +27,7 @@ class SparseBase(Connectivity):
         # Build list of available matrix types, adding procedural
         # if indices aren't provided and weights aren't arrays
         # **NOTE** same as PROCEDURAL_GLOBALG for constant weights/delays
-        available_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG]
+        available_matrix_types = [SynapseMatrixType.SPARSE]
         if not inds_provided and not array_weight_delay:
             available_matrix_types.append(SynapseMatrixType.PROCEDURAL)
 

@@ -37,7 +37,9 @@ void setBuildStatus(String message, String state) {
 // All the types of build we'll ideally run if suitable nodes exist
 def desiredBuilds = [
     ["cpu_only", "linux", "x86_64"] as Set,
+    ["cuda10", "linux", "x86_64"] as Set,
     ["cuda11", "linux", "x86_64"] as Set,
+    ["cuda12", "linux", "x86_64"] as Set,
     ["cpu_only", "mac"] as Set,
 ]
 
