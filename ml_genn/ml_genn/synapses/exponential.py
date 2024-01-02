@@ -8,12 +8,9 @@ from ..utils.value import is_value_initializer
 
 genn_model = {
     "param_name_types": [("ExpDecay", "scalar")],
-    "apply_input_code":
+    "sim_code":
         """
-        Isyn += inSyn;
-        """,
-    "decay_code":
-        """
+        injectCurrent(inSyn);
         inSyn *= ExpDecay;
         """}
 

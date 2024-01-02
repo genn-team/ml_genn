@@ -2,12 +2,9 @@ from .synapse import Synapse
 from ..utils.model import SynapseModel
 
 genn_model = {
-    "apply_input_code":
+    "sim_code":
         """
-        Isyn += inSyn;
-        """,
-    "decay_code":
-        """
+        injectCurrent(inSyn);
         inSyn = 0;
         """}
         
