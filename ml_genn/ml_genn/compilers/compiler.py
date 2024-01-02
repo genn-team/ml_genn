@@ -393,10 +393,6 @@ class Compiler:
             # Create custom weight update model
             genn_wum = create_weight_update_model("WeightUpdateModel", **wum)
 
-            # If delays are constant, use as axonal delay otherwise, disable
-            axonal_delay = (delay if is_value_constant(delay)
-                            else 0)
-
             # Get pre and postsynaptic GeNN populations
             pre_genn_group = neuron_populations[conn.source()]
             post_genn_group = neuron_populations[conn.target()]
@@ -411,7 +407,7 @@ class Compiler:
     
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
-                conn.name, connect_snippet.matrix_type, axonal_delay,
+                conn.name, connect_snippet.matrix_type,
                 pre_genn_group, post_genn_group,
                 init_weight_update(genn_wum, wum_param_vals, wum_var_vals,
                                    wum_pre_var_vals, wum_post_var_vals,
@@ -420,6 +416,10 @@ class Compiler:
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
                                   psm_neuron_var_refs),
                 connect_snippet.snippet)
+
+            # If delays are constant, use as axonal delay
+            if is_value_constant(delay):
+                genn_pop.axonal_delay_steps = delay
 
             # If connectivity snippet has pre and postsynaptic
             # indices, set them in synapse group
