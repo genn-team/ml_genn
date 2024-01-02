@@ -204,9 +204,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
         
         # Loop through connections and their corresponding synapse groups
         for c, genn_pop in self.connection_populations.items():
-            # If synapse group has ragged connectivity, download  
+            # If synapse group has sparse connectivity, download  
             # connectivity and save pre and postsynaptic indices
-            if genn_pop.is_ragged:
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
                 genn_pop.pull_connectivity_from_device()
                 serialiser.serialise(keys + (c, "pre_ind"),
                                      genn_pop.get_sparse_pre_inds())
