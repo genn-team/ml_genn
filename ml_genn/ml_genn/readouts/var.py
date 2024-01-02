@@ -27,7 +27,7 @@ class Var(Readout):
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull variable from genn
-        genn_pop.pull_var_from_device(self.output_var_name)
+        genn_pop.vars[self.output_var_name].pull_from_device()
 
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars[self.output_var_name].view,

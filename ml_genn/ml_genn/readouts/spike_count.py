@@ -26,7 +26,7 @@ class SpikeCount(Readout):
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull spike count from genn
-        genn_pop.pull_var_from_device("Scount")
+        genn_pop.vars["Scount"].pull_from_device()
 
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars["Scount"].view,

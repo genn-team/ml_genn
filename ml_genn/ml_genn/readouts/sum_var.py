@@ -43,14 +43,13 @@ class SumVar(Readout):
         return model_copy
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
-        sum_var_name = self.output_var_name + "Sum"
+        sum_var = genn_pop.vars[self.output_var_name + "Sum"]
 
         # Pull variable from genn
-        genn_pop.pull_var_from_device(sum_var_name)
+        sum_var.pull_from_device()
 
         # Return contents, reshaped as desired
-        return np.reshape(genn_pop.vars[sum_var_name].view,
-                          (batch_size,) + shape)
+        return np.reshape(sum_var.view, (batch_size,) + shape)
 
     @property
     def reset_vars(self):

@@ -142,7 +142,7 @@ class InputBase(Input):
                         ((0, batch_size - input_batch_size), (0, 0)))
 
             # Push variable to device
-            genn_pop.push_var_to_device(self.var_name)
+            genn_pop.vars[self.var_name].push_to_device()
         # Otherwise
         else:
             # Check time dimension matches
@@ -189,5 +189,5 @@ class InputBase(Input):
                                           (0, 0))).flatten()
 
             # Push variable to device
-            genn_pop.push_extra_global_param_to_device(self.egp_name)
+            genn_pop.extra_global_params[self.egp_name].push_to_device()
 
