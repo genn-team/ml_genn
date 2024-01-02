@@ -26,7 +26,7 @@ genn_snippet = create_sparse_connect_init_snippet(
         ("conv_ih", "int"), ("conv_iw", "int"), ("conv_ic", "int"),
         ("conv_oh", "int"), ("conv_ow", "int"), ("conv_oc", "int")],
 
-    calc_max_row_len_func=lambda num_pre, num_post, pars: ceil(pars["conv_kh"] / pars["conv_sh"]) * ceil(pars["conv_kw"] / pars["conv_sw"]) * pars("conv_oc",),
+    calc_max_row_len_func=lambda num_pre, num_post, pars: ceil(pars["conv_kh"] / pars["conv_sh"]) * ceil(pars["conv_kw"] / pars["conv_sw"]) * pars["conv_oc"],
 
     calc_kernel_size_func=lambda pars: [pars["conv_kh"], pars["conv_kw"], pars["conv_ic"], pars["conv_oc"]],
 
