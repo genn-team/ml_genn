@@ -60,18 +60,19 @@ def set_dynamic_param(param_names, set_param_dynamic):
 def set_egp(egp_vals, egp_dict):
     for egp, value in egp_vals.items():
         if isinstance(value, np.ndarray):
-            egp_dict[egp].set_values(value.flatten())
+            egp_dict[egp].set_init_values(value.flatten())
         else:
-            egp_dict[egp].set_values(value)
+            egp_dict[egp].set_init_values(value)
 
 
 def set_var_egps(var_egp_vals, var_dict):
     for var, var_egp in var_egp_vals.items():
         for p, value in var_egp.items():
+            egp = var_dict[var].extra_global_params[p]
             if isinstance(value, np.ndarray):
-                var_dict[var].set_extra_global_init_param(p, value.flatten())
+                egp.set_init_values(value.flatten())
             else:
-                var_dict[var].set_extra_global_init_param(p, value)
+                egp.set_init_values(value)
 
 def create_reset_custom_update(reset_vars, var_ref_creator):
     # Create empty model
@@ -202,7 +203,7 @@ class Compiler:
                  else deepcopy(signed_static_pulse_model)), param_vals)
 
             # Insert negative threshold condition code from neuron model
-            wum.model["event_threshold_condition_code"] =\
+            wum.model["pre_event_threshold_condition_code"] =\
                 src_neuron_model.model["negative_threshold_condition_code"]
 
             return wum

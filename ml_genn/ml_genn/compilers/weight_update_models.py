@@ -18,7 +18,7 @@ signed_static_pulse_model = {
         """
         addToPost(g);
         """,
-    "event_code":
+    "pre_event_syn_code":
         """
         addToPost(-g);
         """}
@@ -29,7 +29,7 @@ signed_static_pulse_delay_model = {
         """
         addToPostDelay(g, d);
         """,
-    "event_code":
+    "pre_event_syn_code":
         """
         addToPostDelay(g, -d);
         """}

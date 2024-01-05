@@ -346,8 +346,8 @@ class WeightUpdateModel(Model):
     def append_pre_spike_syn_code(self, code):
         self._append_code("pre_spike_syn_code", code)
     
-    def append_event_code(self, code):
-        self._append_code("event_code", code)
+    def append_pre_event_syn_code(self, code):
+        self._append_code("pre_event_syn_code", code)
 
     def process(self):
         return (super(WeightUpdateModel, self).process() 

@@ -227,15 +227,15 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Loop through connection variables to checkpoint
         for c, v in self.checkpoint_connection_vars:
-            genn_pop = self.connection_populations[c]
-            genn_pop.pull_var_from_device(v)
-            serialiser.serialise(keys + (c, v), genn_pop.get_var_values(v))
+            genn_var = self.connection_populations[c].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (c, v), genn_var.values)
 
         # Loop through population variables to checkpoint
         for p, v in self.checkpoint_population_vars:
-            genn_pop = self.neuron_populations[p]
-            genn_pop.pull_var_from_device(v)
-            serialiser.serialise(keys + (p, v), genn_pop.vars[v].view)
+            genn_var = self.neuron_populations[p].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (p, v), genn_var.values)
     
     def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
                         callback_list: CallbackList):

@@ -218,10 +218,10 @@ weight_update_model = {
     "pre_spike_syn_code": """
     addToPost(g);
     """,
-    "event_threshold_condition_code": """
+    "pre_event_threshold_condition_code": """
     BackSpike_pre
     """,
-    "event_code": """
+    "pre_event_syn_code": """
     Gradient -= (LambdaI_post * TauSyn);
     """}
 
@@ -235,10 +235,10 @@ weight_update_model_atomic_cuda = {
     "pre_spike_syn_code": """
     addToPost(g);
     """,
-    "event_threshold_condition_code": """
+    "pre_event_threshold_condition_code": """
     BackSpike_pre
     """,
-    "event_code": """
+    "pre_event_syn_code": """
     atomicAdd(&Gradient, -(LambdaI_post * TauSyn));
     """}
 
@@ -251,7 +251,7 @@ static_weight_update_model = {
         """
         addToPost(g);
         """,
-    "event_threshold_condition_code": """
+    "pre_event_threshold_condition_code": """
     BackSpike_pre
     """}
 
@@ -785,7 +785,7 @@ class EventPropCompiler(Compiler):
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
                 wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
-                wum.append_event_code("addToPre(g * (LambdaV_post - LambdaI_post));")
+                wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post - LambdaI_post));")
 
         # Return weight update model
         return wum

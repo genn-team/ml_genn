@@ -32,4 +32,4 @@ class SparseCategoricalCrossentropy(Loss):
         genn_pop.vars["YTrue"].view[:len(y_true), 0] = y_true
 
         # Push YTrue to device
-        genn_pop.push_var_to_device("YTrue")
+        genn_pop.vars["YTrue"].push_to_device()

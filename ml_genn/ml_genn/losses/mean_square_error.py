@@ -35,5 +35,5 @@ class MeanSquareError(Loss):
         genn_pop.extra_global_params["YTrue"].view[:] = y_true.flatten()
 
         # Push YTrue to device
-        genn_pop.push_extra_global_param_to_device("YTrue")
+        genn_pop.extra_global_params["YTrue"].push_to_device()
 
