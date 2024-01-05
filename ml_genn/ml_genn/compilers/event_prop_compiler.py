@@ -785,7 +785,7 @@ class EventPropCompiler(Compiler):
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
                 wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
-                wum.append_event_code("addToPost(g * (LambdaV_post - LambdaI_post));")
+                wum.append_event_code("addToPre(g * (LambdaV_post - LambdaI_post));")
 
         # Return weight update model
         return wum
