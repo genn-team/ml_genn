@@ -10,7 +10,7 @@ class AvgVarExpWeight(Readout):
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
-        if "var_name_types" not in model.model:
+        if "vars" not in model.model:
             raise RuntimeError("AvgVarExpWeight readout can only be used "
                                "with models with state variables")
         if self.output_var_name is None:
@@ -19,7 +19,7 @@ class AvgVarExpWeight(Readout):
 
         # Find output variable
         try:
-            output_var = next(v for v in model.model["var_name_types"]
+            output_var = next(v for v in model.model["vars"]
                               if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "

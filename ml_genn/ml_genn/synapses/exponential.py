@@ -7,7 +7,7 @@ from ..utils.value import InitValue, ValueDescriptor
 from ..utils.value import is_value_initializer
 
 genn_model = {
-    "param_name_types": [("ExpDecay", "scalar")],
+    "params": [("ExpDecay", "scalar")],
     "sim_code":
         """
         injectCurrent(inSyn);

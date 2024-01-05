@@ -5,8 +5,8 @@ from ..utils.value import InitValue, ValueDescriptor
 
 
 genn_model = {
-    "var_name_types": [("V", "scalar")],
-    "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar")],
+    "vars": [("V", "scalar")],
+    "params": [("Vthresh", "scalar"), ("Vreset", "scalar")],
     "sim_code":
         """
         V += Isyn;
@@ -18,8 +18,7 @@ genn_model = {
     "reset_code":
         """
         V = Vreset;
-        """,
-    "is_auto_refractory_required": False}
+        """}
 
 
 class IntegrateFire(Neuron):

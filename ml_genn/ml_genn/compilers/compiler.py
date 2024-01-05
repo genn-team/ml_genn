@@ -28,7 +28,7 @@ from ..utils.value import is_value_constant
 
 # First pass of softmax - calculate max
 softmax_1_model = {
-    "var_name_types": [("MaxVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_MAX)],
+    "vars": [("MaxVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_MAX)],
     "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
     MaxVal = Val;
@@ -36,7 +36,7 @@ softmax_1_model = {
 
 # Second pass of softmax - calculate scaled sum of exp(value)
 softmax_2_model = {
-    "var_name_types": [("SumExpVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_SUM)],
+    "vars": [("SumExpVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_SUM)],
     "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
                  ("MaxVal", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """

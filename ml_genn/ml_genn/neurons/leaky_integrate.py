@@ -25,9 +25,8 @@ class LeakyIntegrate(Neuron):
 
     def get_model(self, population, dt, batch_size):
         genn_model = {
-            "var_name_types": [("V", "scalar")],
-            "param_name_types": [("Alpha", "scalar"), ("Bias", "scalar")],
-            "is_auto_refractory_required": False}
+            "vars": [("V", "scalar")],
+            "params": [("Alpha", "scalar"), ("Bias", "scalar")]}
 
         # Define integration code based on whether I should be scaled
         if self.scale_i:

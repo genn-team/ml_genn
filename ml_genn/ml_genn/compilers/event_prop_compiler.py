@@ -210,13 +210,12 @@ class ZeroInSynLastTimestep(Callback):
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
 weight_update_model = {
-    "param_name_types": [("TauSyn", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
-                       ("Gradient", "scalar")],
+    "params": [("TauSyn", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "post_neuron_var_refs": [("LambdaI_post", "scalar")],
                              
-    "sim_code": """
+    "pre_spike_syn_code": """
     addToPost(g);
     """,
     "event_threshold_condition_code": """
@@ -230,11 +229,10 @@ weight_update_model = {
 # **NOTE** feedback is added if required
 # **YUCK** you should NEVER have to use backend-specific code in models
 weight_update_model_atomic_cuda = {
-    "param_name_types": [("TauSyn", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
-                       ("Gradient", "scalar")],
+    "params": [("TauSyn", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
 
-    "sim_code": """
+    "pre_spike_syn_code": """
     addToPost(g);
     """,
     "event_threshold_condition_code": """
@@ -247,9 +245,9 @@ weight_update_model_atomic_cuda = {
 # Weight update model used on non-trainable connections
 # **NOTE** feedback is added if required
 static_weight_update_model = {
-    "param_name_types": [("g", "scalar")],
+    "params": [("g", "scalar")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "sim_code":
+    "pre_spike_syn_code":
         """
         addToPost(g);
         """,
@@ -258,7 +256,7 @@ static_weight_update_model = {
     """}
 
 gradient_batch_reduce_model = {
-    "var_name_types": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
+    "vars": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
     ReducedGradient = Gradient;

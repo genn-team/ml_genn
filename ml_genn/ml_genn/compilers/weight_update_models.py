@@ -1,20 +1,20 @@
 static_pulse_model = {
-    "param_name_types": [("g", "scalar")],
-    "sim_code":
+    "params": [("g", "scalar")],
+    "pre_spike_syn_code":
         """
         addToPost(g);
         """}
 
 static_pulse_delay_model = {
-    "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
-    "sim_code":
+    "params": [("g", "scalar"), ("d", "uint8_t")],
+    "pre_spike_syn_code":
         """
         addToPostDelay(g, d);
         """}
 
 signed_static_pulse_model = {
-    "param_name_types": [("g", "scalar")],
-    "sim_code":
+    "params": [("g", "scalar")],
+    "pre_spike_syn_code":
         """
         addToPost(g);
         """,
@@ -24,8 +24,8 @@ signed_static_pulse_model = {
         """}
 
 signed_static_pulse_delay_model = {
-    "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
-    "sim_code":
+    "params": [("g", "scalar"), ("d", "uint8_t")],
+    "pre_spike_syn_code":
         """
         addToPostDelay(g, d);
         """,

@@ -8,11 +8,10 @@ from copy import deepcopy
 
 
 genn_model = {
-    "var_name_types": [("M", "scalar"), ("V", "scalar")],
-    "param_name_types": [("Beta1", "scalar"), ("Beta2", "scalar"),
-                         ("Epsilon", "scalar"), ("Alpha", "scalar"),
-                         ("MomentScale1", "scalar"), 
-                         ("MomentScale2", "scalar")],
+    "vars": [("M", "scalar"), ("V", "scalar")],
+    "params": [("Beta1", "scalar"), ("Beta2", "scalar"),
+               ("Epsilon", "scalar"), ("Alpha", "scalar"),
+               ("MomentScale1", "scalar"), ("MomentScale2", "scalar")],
     "var_refs": [("Gradient", "scalar", VarAccessMode.READ_ONLY),
                  ("Variable", "scalar")],
     "update_code":

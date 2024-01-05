@@ -8,10 +8,9 @@ from pygenn import VarAccess
 from pytest import raises
 
 def test_process():
-    nm = NeuronModel({"param_name_types": [("P1", "scalar"),
-                                           ("P2", "scalar"),
-                                           ("P3", "scalar")],
-                      "var_name_types": [("V", "scalar")]},
+    nm = NeuronModel({"params": [("P1", "scalar"), ("P2", "scalar"),
+                                 ("P3", "scalar")],
+                      "vars": [("V", "scalar")]},
                      "V", {"P1": 3.0, "P2": np.arange(4), "P3": Uniform()},
                      {"V": 1.0})
     
@@ -23,9 +22,9 @@ def test_process():
     assert "V" in var_vals
 
 def test_reset_vars():
-    nm = NeuronModel({"var_name_types": [("V", "scalar"),
-                                         ("VRW", "scalar", VarAccess.READ_WRITE),
-                                         ("VRO", "int", VarAccess.READ_ONLY)]},
+    nm = NeuronModel({"vars": [("V", "scalar"),
+                               ("VRW", "scalar", VarAccess.READ_WRITE),
+                               ("VRO", "int", VarAccess.READ_ONLY)]},
                     "V", {}, {"V": 1.0, "VRW": 2.0, "VRO": 3.0})
     reset_vars = nm.reset_vars
     assert len(reset_vars) == 2
@@ -34,12 +33,12 @@ def test_reset_vars():
 
 def test_weight_update_pre_post_reset_vars():
     wum = WeightUpdateModel(
-        {"pre_var_name_types": [("Pre", "scalar"),
-                                ("PreRW", "scalar", VarAccess.READ_WRITE),
-                                ("PreRO", "int", VarAccess.READ_ONLY)],
-         "post_var_name_types": [("Post", "scalar"),
-                                 ("PostRW", "scalar", VarAccess.READ_WRITE),
-                                 ("PostRO", "int", VarAccess.READ_ONLY)]},
+        {"pre_vars": [("Pre", "scalar"),
+                      ("PreRW", "scalar", VarAccess.READ_WRITE),
+                      ("PreRO", "int", VarAccess.READ_ONLY)],
+         "post_vars": [("Post", "scalar"),
+                       ("PostRW", "scalar", VarAccess.READ_WRITE),
+                       ("PostRO", "int", VarAccess.READ_ONLY)]},
         {}, {}, {"Pre": 1.0, "PreRW": 2.0, "PreRO": 3.0},
         {"Post": 4.0, "PostRW": 5.0, "PostRO": 6.0})
 

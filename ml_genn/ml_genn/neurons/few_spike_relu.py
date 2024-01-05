@@ -7,9 +7,9 @@ from ..utils.snippet import ConstantValueDescriptor
 # Standard FS ReLU model where upstream
 # neurons are FS ReLU or FS unsigned input
 genn_model = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar"),
+    "params": [("K", "int"), ("Scale", "scalar"),
                          ("SrcScale", "scalar")],
-    "var_name_types": [("Fx", "scalar"), ("V", "scalar")],
+    "vars": [("Fx", "scalar"), ("V", "scalar")],
 
     "sim_code":
         """
@@ -44,14 +44,13 @@ genn_model = {
     "reset_code":
         """
         V -= hT;
-        """,
-    "is_auto_refractory_required": False}
+        """}
 
 # FS ReLU model where upstream neurons are FS signed input
 genn_model_upstream_signed = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar"),
-                         ("SrcScale", "scalar")],
-    "var_name_types": [("Fx", "scalar"), ("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar"),
+               ("SrcScale", "scalar")],
+    "vars": [("Fx", "scalar"), ("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
@@ -89,8 +88,7 @@ genn_model_upstream_signed = {
     "reset_code":
         """
         V -= hT;
-        """,
-    "is_auto_refractory_required": False}
+        """}
 
 
 class FewSpikeRelu(Neuron):

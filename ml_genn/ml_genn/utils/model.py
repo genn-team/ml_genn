@@ -27,23 +27,23 @@ class Model:
         self.egp_vals = egp_vals
 
     def has_param(self, name):
-        return self._is_in_list("param_name_types", name)
+        return self._is_in_list("params", name)
 
     def has_var(self, name):
-        return self._is_in_list("var_name_types", name)
+        return self._is_in_list("vars", name)
 
     def has_egp(self, name):
         return self._is_in_list("extra_global_params", name)
 
     def add_param(self, name: str, type: str, value: Value):
         assert not self.has_param(name)
-        self._add_to_list("param_name_types", (name, type))
+        self._add_to_list("params", (name, type))
         self.param_vals[name] = value
 
     def add_var(self, name: str, type: str, value: Value,
                 access_mode: int = VarAccess.READ_WRITE):
         assert not self.has_var(name)
-        self._add_to_list("var_name_types", (name, type, access_mode))
+        self._add_to_list("vars", (name, type, access_mode))
         self.var_vals[name] = value
 
     def add_egp(self, name: str, type: str, value: EGPValue):
@@ -59,12 +59,12 @@ class Model:
             self.dynamic_param_names.discard(name)
 
     def set_var_access_mode(self, name: str, access_mode: int):
-        self._set_access_model("var_name_types", name, access_mode)
+        self._set_access_model("vars", name, access_mode)
 
     def make_param_var(self, param_name: str, 
                        access_mode: int = VarAccess.READ_ONLY):
         assert param_name not in self.dynamic_param_names
-        self._make_param_var("var_name_types", param_name, 
+        self._make_param_var("vars", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
     def process(self):
@@ -73,15 +73,15 @@ class Model:
 
         # Remove param names and types from copy of model (those that will "
         # be implemented as GeNN parameters will live in params)
-        if "param_name_types" in model_copy:
-            param_name_types = model_copy["param_name_types"]
-            del model_copy["param_name_types"]
+        if "params" in model_copy:
+            params = model_copy["params"]
+            del model_copy["params"]
         else:
-            param_name_types = []
+            params = []
 
         # If there aren't any variables already, add dictionary
-        if "var_name_types" not in model_copy:
-            model_copy["var_name_types"] = []
+        if "vars" not in model_copy:
+            model_copy["vars"] = []
 
         # Convert any initializers to GeNN
         var_vals_copy = {}
@@ -100,7 +100,7 @@ class Model:
         # Loop through parameters in model
         model_copy["params"] = []
         constant_param_vals = {}
-        for name, ptype in param_name_types:
+        for name, ptype in params:
             # Get value
             val = self.param_vals[name]
 
@@ -112,8 +112,8 @@ class Model:
             else:
                 assert name not in self.dynamic_param_names
     
-                model_copy["var_name_types"].append((name, ptype,
-                                                     VarAccess.READ_ONLY))
+                model_copy["vars"].append((name, ptype,
+                                           VarAccess.READ_ONLY))
                 if is_value_initializer(val):
                     snippet = val.get_snippet()
                     var_vals_copy[name] = init_var(snippet.snippet,
@@ -130,7 +130,7 @@ class Model:
 
     @property
     def reset_vars(self):
-        return self._get_reset_vars("var_name_types", self.var_vals)
+        return self._get_reset_vars("vars", self.var_vals)
 
     def _search_list(self, name: str, value: str):
         item = [(i, p) for i, p in enumerate(self.model[name])
@@ -182,10 +182,10 @@ class Model:
     def _make_param_var(self, var_name: str, param_name: str,
                         param_vals, var_vals, access_mode):
         # Search for parameter definition
-        param_index, param = self._search_list("param_name_types", param_name)
+        param_index, param = self._search_list("params", param_name)
 
         # Remove parameter
-        self.model["param_name_types"].pop(param_index)
+        self.model["params"].pop(param_index)
 
         # Add variable to replace it
         self._add_to_list(var_name, param[:2] + (access_mode,))
@@ -279,21 +279,21 @@ class NeuronModel(Model):
                              param_vals={}, var_vals={}, egp_vals={}):
         return NeuronModel(
             model, output_var_name, 
-            get_values(inst, model.get("param_name_types", []), dt, param_vals),
-            get_values(inst, model.get("var_name_types", []), dt, var_vals),
+            get_values(inst, model.get("params", []), dt, param_vals),
+            get_values(inst, model.get("vars", []), dt, var_vals),
             egp_vals)
 
     @property
     def output_var(self):
         # Check model has variables and that
         # output variable name is specified
-        if "var_name_types" not in self.model:
+        if "vars" not in self.model:
             raise RuntimeError("Model has no state variables")
         if self.output_var_name is None:
             raise RuntimeError("Output variable not specified")
 
         # Find output variable
-        _, output_var = self._search_list("var_name_types",
+        _, output_var = self._search_list("vars",
                                           self.output_var_name)
         return output_var
 
@@ -315,8 +315,8 @@ class SynapseModel(Model):
                              egp_vals={}, neuron_var_refs={}):
         return SynapseModel(
             model, 
-            get_values(inst, model.get("param_name_types", []), dt, param_vals),
-            get_values(inst, model.get("var_name_types", []), dt, var_vals),
+            get_values(inst, model.get("params", []), dt, param_vals),
+            get_values(inst, model.get("vars", []), dt, var_vals),
             egp_vals, neuron_var_refs)
 
 
@@ -343,8 +343,8 @@ class WeightUpdateModel(Model):
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
     
-    def append_sim_code(self, code):
-        self._append_code("sim_code", code)
+    def append_pre_spike_syn_code(self, code):
+        self._append_code("pre_spike_syn_code", code)
     
     def append_event_code(self, code):
         self._append_code("event_code", code)
@@ -356,8 +356,8 @@ class WeightUpdateModel(Model):
 
     @property
     def reset_pre_vars(self):
-        return self._get_reset_vars("pre_var_name_types", self.pre_var_vals)
+        return self._get_reset_vars("pre_vars", self.pre_var_vals)
 
     @property
     def reset_post_vars(self):
-        return self._get_reset_vars("post_var_name_types", self.post_var_vals)
+        return self._get_reset_vars("post_vars", self.post_var_vals)

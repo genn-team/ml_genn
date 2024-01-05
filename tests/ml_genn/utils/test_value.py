@@ -27,8 +27,8 @@ def test_get_genn_name():
 def test_get_values():
     x = Model(1.0, 2.0, 3.0)
     
-    var_name_types = [("X", "int"), ("Y", "scalar"), ("Z", "scalar")]
-    var_vals = get_values(x, var_name_types, 0.1)
+    vars = [("X", "int"), ("Y", "scalar"), ("Z", "scalar")]
+    var_vals = get_values(x, vars, 0.1)
     
     assert var_vals["X"] == approx(1.0)
     assert var_vals["Z"] == approx(0.3)

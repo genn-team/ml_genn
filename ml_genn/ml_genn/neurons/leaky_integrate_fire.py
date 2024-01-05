@@ -34,11 +34,10 @@ class LeakyIntegrateFire(Neuron):
     def get_model(self, population, dt, batch_size):
         # Build basic model
         genn_model = {
-            "var_name_types": [("V", "scalar")],
-            "param_name_types": [("Vthresh", "scalar"), ("Vreset", "scalar"),
-                                 ("Alpha", "scalar")],
-            "threshold_condition_code": "V >= Vthresh",
-            "is_auto_refractory_required": False}
+            "vars": [("V", "scalar")],
+            "params": [("Vthresh", "scalar"), ("Vreset", "scalar"),
+                       ("Alpha", "scalar")],
+            "threshold_condition_code": "V >= Vthresh"}
 
         # Build reset code depending on whether
         # reset should be relative or not
@@ -61,10 +60,9 @@ class LeakyIntegrateFire(Neuron):
         # If neuron has refractory period
         if self.tau_refrac is not None:
             # Add state variable and parameter to control refractoryness
-            genn_model["var_name_types"].append(("RefracTime", "scalar"))
-            genn_model["param_name_types"].append(("TauRefrac", "scalar"))
+            genn_model["vars"].append(("RefracTime", "scalar"))
+            genn_model["params"].append(("TauRefrac", "scalar"))
 
-            
             # Build correct sim code depending on whether
             # we should integrate during refractory period
             if self.integrate_during_refrac:

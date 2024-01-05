@@ -20,10 +20,8 @@ logger = logging.getLogger(__name__)
 
 # First pass of threshold update - calculate max across batches and zero
 threshold_1_model = {
-    "var_name_types": [("MaxV", "scalar",
-                        CustomUpdateVarAccess.REDUCE_BATCH_MAX),
-                       ("Vthresh", "scalar",
-                        CustomUpdateVarAccess.READ_ONLY_SHARED_NEURON)],
+    "vars": [("MaxV", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_MAX),
+             ("Vthresh", "scalar", CustomUpdateVarAccess.READ_ONLY_SHARED_NEURON)],
     "var_refs": [("V", "scalar")],
     "update_code": """
     MaxV = fmax(V, Vthresh);

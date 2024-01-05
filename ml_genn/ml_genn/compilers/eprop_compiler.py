@@ -118,13 +118,13 @@ class CompileState:
                                       "different time constants")
 
 eprop_lif_model = {
-    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"), 
-                         ("FTarget", "scalar"), ("AlphaFAv", "scalar"),
-                         ("Vthresh_post", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
-                       ("eFiltered", "scalar"), ("DeltaG", "scalar")],
-    "pre_var_name_types": [("ZFilter", "scalar")],
-    "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
+    "params": [("CReg", "scalar"), ("Alpha", "scalar"), 
+               ("FTarget", "scalar"), ("AlphaFAv", "scalar"),
+               ("Vthresh_post", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY),
+             ("eFiltered", "scalar"), ("DeltaG", "scalar")],
+    "pre_vars": [("ZFilter", "scalar")],
+    "post_vars": [("Psi", "scalar"), ("FAvg", "scalar")],
     "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
                              ("E_post", "scalar")],
 
@@ -148,7 +148,7 @@ eprop_lif_model = {
     }
     """,
 
-    "sim_code": """
+    "pre_spike_syn_code": """
     addToPost(g);
     """,
     "synapse_dynamics_code": """
@@ -160,15 +160,14 @@ eprop_lif_model = {
     """}
 
 eprop_alif_model = {
-    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"),
-                         ("Rho", "scalar"), ("FTarget", "scalar"),
-                         ("AlphaFAv", "scalar"), ("Vthresh_post", "scalar"),
-                         ("Beta_post", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
-                       ("eFiltered", "scalar"), ("epsilonA", "scalar"),
-                       ("DeltaG", "scalar")],
-    "pre_var_name_types": [("ZFilter", "scalar")],
-    "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
+    "params": [("CReg", "scalar"), ("Alpha", "scalar"), ("Rho", "scalar"),
+               ("FTarget", "scalar"),("AlphaFAv", "scalar"),
+               ("Vthresh_post", "scalar"), ("Beta_post", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY),
+             ("eFiltered", "scalar"), ("epsilonA", "scalar"),
+             ("DeltaG", "scalar")],
+    "pre_vars": [("ZFilter", "scalar")],
+    "post_vars": [("Psi", "scalar"), ("FAvg", "scalar")],
     "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
                              ("A_post", "scalar"), ("E_post", "scalar")],
  
@@ -192,7 +191,7 @@ eprop_alif_model = {
     }
     """,
 
-    "sim_code": """
+    "pre_spike_syn_code": """
     addToPost(g);
     """,
     "synapse_dynamics_code": """
@@ -215,10 +214,9 @@ eprop_alif_model = {
     """}
 
 output_learning_model = {
-    "param_name_types": [("Alpha", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess.READ_ONLY),
-                       ("DeltaG", "scalar")],
-    "pre_var_name_types": [("ZFilter", "scalar")],
+    "params": [("Alpha", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("DeltaG", "scalar")],
+    "pre_vars": [("ZFilter", "scalar")],
     "post_neuron_var_refs": [("E_post", "scalar")],
 
     "pre_spike_code": """
@@ -228,7 +226,7 @@ output_learning_model = {
     ZFilter *= Alpha;
     """,
 
-    "sim_code": """
+    "pre_spike_syn_code": """
     addToPost(g);
     """,
     "synapse_dynamics_code": """
@@ -237,7 +235,7 @@ output_learning_model = {
     """}
 
 gradient_batch_reduce_model = {
-    "var_name_types": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
+    "vars": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
     ReducedGradient = Gradient;

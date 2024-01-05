@@ -4,8 +4,8 @@ from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
 
 genn_model = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar")],
-    "var_name_types": [("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar")],
+    "vars": [("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
@@ -23,12 +23,11 @@ genn_model = {
     "reset_code":
         """
         V -= hT;
-        """,
-    "is_auto_refractory_required": False}
+        """}
 
 genn_model_signed = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar")],
-    "var_name_types": [("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar")],
+    "vars": [("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
@@ -54,8 +53,7 @@ genn_model_signed = {
         else {
             V += hT;
         }
-        """,
-    "is_auto_refractory_required": False}
+        """}
 
 
 class FewSpikeReluInput(Neuron, InputBase):
