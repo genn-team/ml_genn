@@ -35,7 +35,7 @@ class AvgVar(Readout):
         # Add code to update average variable
         scale = 1.0 / kwargs["example_timesteps"]
         model_copy.append_sim_code(
-            f"$({avg_var_name}) += {scale} * $({self.output_var_name});")
+            f"{avg_var_name} += {scale} * {self.output_var_name};")
 
         # Add average variable with same type as output
         # variable and initialise to zero

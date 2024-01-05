@@ -48,9 +48,9 @@ class InputBase(Input):
                             VarAccess.READ_ONLY_DUPLICATE)
 
             # Replace input with reference to new variable
-            nm_copy.replace_sim_code(replace_input, f"$({self.var_name})")
-            nm_copy.replace_threshold_condition_code(replace_input, f"$({self.var_name})")
-            nm_copy.replace_reset_code(replace_input, f"$({self.var_name})")
+            nm_copy.replace_sim_code(replace_input, self.var_name)
+            nm_copy.replace_threshold_condition_code(replace_input, self.var_name)
+            nm_copy.replace_reset_code(replace_input, self.var_name)
         else:
             # Check there isn't a variable which conflicts with EGP
             assert not nm_copy.has_var(self.egp_name)
@@ -72,7 +72,7 @@ class InputBase(Input):
                 nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)(t / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[(t * {flat_shape}) + id];
+                    const scalar input = {self.egp_name}[(t * {flat_shape}) + id];
                     """)
             else:
                 # Add EGP
@@ -86,7 +86,7 @@ class InputBase(Input):
                 nm_copy.prepend_sim_code(
                     f"""
                     const int timestep = min((int)(t / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[(batch * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + id];
+                    const scalar input = {self.egp_name}[(batch * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + id];
                     """)
         return nm_copy
 

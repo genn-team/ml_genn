@@ -321,7 +321,7 @@ class EPropCompiler(Compiler):
             # Add sim-code to calculate error
             model_copy.append_sim_code(
                 f"""
-                E = $({model_copy.output_var_name}) - yTrue;
+                E = {model_copy.output_var_name} - yTrue;
                 """)
 
             # If we should train output biases

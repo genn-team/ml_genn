@@ -34,7 +34,7 @@ class SumVar(Readout):
 
         # Add code to update sum variable
         model_copy.append_sim_code(
-            f"$({sum_var_name}) += $({self.output_var_name});")
+            f"{sum_var_name} += {self.output_var_name};")
 
         # Add sum variable with same type as output
         # variable and initialise to zero

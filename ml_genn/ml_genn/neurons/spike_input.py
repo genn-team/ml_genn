@@ -52,7 +52,7 @@ class SpikeInput(Neuron, Input):
         spike_times_egp.push_to_device()
 
         # Calculate start and end spike indices
-        end_spikes_view[:] = batched_spikes.end_spikes
+        end_spikes_var.view[:] = batched_spikes.end_spikes
         start_spikes_var.view[:] = calc_start_spikes(batched_spikes.end_spikes)
         start_spikes_var.push_to_device()
         end_spikes_var.push_to_device()

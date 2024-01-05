@@ -96,14 +96,14 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
                 model.set_var_ref_access_mode(value, VarAccessMode.READ_ONLY)
 
             # Add code to set var
-            model.append_update_code(f"$({name}) = $({value});")
+            model.append_update_code(f"{name} = {value};")
         # Otherwise
         else:
             # Add reset value parameter
             model.add_param(name + "Reset", type, value)
 
             # Add code to set var
-            model.append_update_code(f"$({name}) = $({name}Reset);")
+            model.append_update_code(f"{name} = {name}Reset;")
 
     return model
 
