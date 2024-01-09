@@ -70,8 +70,9 @@ class CompiledNetwork:
                 self.genn_model.build()
             # Otherwise, at least ensure it is finalised
             # **HACK** GeNN should handle this
+            # **UHOH** THIS ISN'T ENOUGH ANY MORE - model needs building to correctly generate data structures
             else:
-                self.genn_model._model.finalize()
+                self.genn_model.finalize()
 
         # If there is a communicator, wait for all ranks to reach this point
         if self.communicator is not None:
@@ -82,17 +83,18 @@ class CompiledNetwork:
 
         # If there is a communicator
         if self.communicator is not None:
+            # Get CUDA-specific state from runtime
+            runtime_state = self.genn_model.runtime.state
+
             # Generate unique ID for our NCCL 'clique' on first rank
             if first_rank:
-                self.genn_model._slm.nccl_generate_unique_id()
+                runtime_state.nccl_generate_unique_id()
 
             # Broadcast our  NCCL clique ID across all ranks
-            nccl_unique_id_view =\
-                self.genn_model._slm.nccl_assign_external_unique_id()
-            self.communicator.broadcast(nccl_unique_id_view, 0)
+            self.communicator.broadcast(runtime_state.nccl_unique_id, 0)
 
             # Initialise NCCL communicator
-            self.genn_model._slm.nccl_init_communicator(
+            self.runtime_state.nccl_init_communicator(
                 self.communicator.rank, self.communicator.num_ranks)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
