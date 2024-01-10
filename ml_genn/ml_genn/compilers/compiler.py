@@ -306,6 +306,11 @@ class Compiler:
         if self.communicator is not None:
             genn_kwargs["enable_nccl_reductions"] = True
 
+            # **HACK** only the first rank should build any code so turn of CUDA block size optimization
+            if self.communicator.rank != 0:
+                from pygenn.cuda_backend import BlockSizeSelect
+                genn_kwargs["block_size_select_method"] = BlockSizeSelect.MANUAL
+
         # Create GeNN model and set basic properties
         genn_model = GeNNModel("float", clean_name, **genn_kwargs)
         genn_model.dt = self.dt
