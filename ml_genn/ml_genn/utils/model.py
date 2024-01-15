@@ -331,23 +331,26 @@ class WeightUpdateModel(Model):
         self.post_var_vals = post_var_vals
         self.pre_neuron_var_refs = pre_neuron_var_refs
         self.post_neuron_var_refs = post_neuron_var_refs
-    
+
     def add_pre_neuron_var_ref(self, name, type, target):
         self._add_to_list("pre_neuron_var_refs", (name, type))
         self.pre_neuron_var_refs[name] = target
-    
+
     def add_post_neuron_var_ref(self, name, type, target):
         self._add_to_list("post_neuron_var_refs", (name, type))
         self.post_neuron_var_refs[name] = target
-        
+
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
-    
+
     def append_pre_spike_syn_code(self, code):
         self._append_code("pre_spike_syn_code", code)
-    
+
     def append_pre_event_syn_code(self, code):
         self._append_code("pre_event_syn_code", code)
+
+    def append_post_dynamics_code(self, code):
+        self._append_code("post_dynamics_code", code)
 
     def process(self):
         return (super(WeightUpdateModel, self).process() 

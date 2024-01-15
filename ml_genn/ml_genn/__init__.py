@@ -15,10 +15,12 @@ from . import neurons
 from . import optimisers
 from . import readouts
 from . import serialisers
+from . import surrogate_gradients
 from . import synapses
 from . import utils
 
 __all__ = ["Connection", "InputLayer", "Layer", "Network", "Population",
            "SequentialNetwork", "callbacks", "communicators", "compilers",
            "connectivity", "initializers", "losses", "metrics", "neurons",
-           "optimisers", "readouts", "serialisers", "synapses", "utils"]
+           "optimisers", "readouts", "serialisers", "surrogate_gradients",
+           "synapses", "utils"]

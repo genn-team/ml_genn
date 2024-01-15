@@ -13,6 +13,7 @@ from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
                        LeakyIntegrate, LeakyIntegrateFire, 
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
+from ..surrogate_gradients import EProp, SurrogateGradient
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -24,8 +25,9 @@ from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.value import is_value_constant
 
-from ml_genn.optimisers import default_optimisers
-from ml_genn.losses import default_losses
+from ..optimisers import default_optimisers
+from ..losses import default_losses
+from ..surrogate_gradients import default_surrogate_gradients
 
 logger = logging.getLogger(__name__)
 
@@ -119,14 +121,12 @@ class CompileState:
 
 eprop_lif_model = {
     "params": [("CReg", "scalar"), ("Alpha", "scalar"), 
-               ("FTarget", "scalar"), ("AlphaFAv", "scalar"),
-               ("Vthresh_post", "scalar")],
+               ("FTarget", "scalar"), ("AlphaFAv", "scalar")],
     "vars": [("g", "scalar", VarAccess.READ_ONLY),
              ("eFiltered", "scalar"), ("DeltaG", "scalar")],
     "pre_vars": [("ZFilter", "scalar")],
     "post_vars": [("Psi", "scalar"), ("FAvg", "scalar")],
-    "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
-                             ("E_post", "scalar")],
+    "post_neuron_var_refs": [("E_post", "scalar")],
 
     "pre_spike_code": """
     ZFilter += 1.0;
@@ -140,12 +140,6 @@ eprop_lif_model = {
     """,
     "post_dynamics_code": """
     FAvg *= AlphaFAv;
-    if (RefracTime_post > 0.0) {
-      Psi = 0.0;
-    }
-    else {
-      Psi = (1.0 / Vthresh_post) * 0.3 * fmax(0.0, 1.0 - fabs((V_post - Vthresh_post) / Vthresh_post));
-    }
     """,
 
     "pre_spike_syn_code": """
@@ -161,15 +155,13 @@ eprop_lif_model = {
 
 eprop_alif_model = {
     "params": [("CReg", "scalar"), ("Alpha", "scalar"), ("Rho", "scalar"),
-               ("FTarget", "scalar"),("AlphaFAv", "scalar"),
-               ("Vthresh_post", "scalar"), ("Beta_post", "scalar")],
+               ("FTarget", "scalar"),("AlphaFAv", "scalar")],
     "vars": [("g", "scalar", VarAccess.READ_ONLY),
              ("eFiltered", "scalar"), ("epsilonA", "scalar"),
              ("DeltaG", "scalar")],
     "pre_vars": [("ZFilter", "scalar")],
     "post_vars": [("Psi", "scalar"), ("FAvg", "scalar")],
-    "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
-                             ("A_post", "scalar"), ("E_post", "scalar")],
+    "post_neuron_var_refs": [("E_post", "scalar")],
  
     "pre_spike_code": """
     ZFilter += 1.0;
@@ -183,12 +175,6 @@ eprop_alif_model = {
     """,
     "post_dynamics_code": """
     FAvg *= AlphaFAv;
-    if (RefracTime_post > 0.0) {
-      Psi = 0.0;
-    }
-    else {
-      Psi = (1.0 / Vthresh_post) * 0.3 * fmax(0.0, 1.0 - fabs((V_post - (Vthresh_post + (Beta_post * A_post))) / Vthresh_post));
-    }
     """,
 
     "pre_spike_syn_code": """
@@ -242,11 +228,12 @@ gradient_batch_reduce_model = {
     Gradient = 0;
     """}
 
+
 class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
-                 dt: float = 1.0, batch_size: int = 1,
+                 surrogate_gradient="e_prop", dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):
@@ -261,6 +248,10 @@ class EPropCompiler(Compiler):
         self.losses = losses
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
+        self._surrogate_gradient = get_object(surrogate_gradient,
+                                              SurrogateGradient,
+                                              "SurrogateGradient",
+                                              default_surrogate_gradients)
         self.tau_reg = tau_reg
         self.c_reg = c_reg
         self.f_target = f_target
@@ -405,41 +396,41 @@ class EPropCompiler(Compiler):
         target_neuron = conn.target().neuron
         if isinstance(target_neuron, LeakyIntegrateFire):
             wum = WeightUpdateModel(
-                model=eprop_lif_model,
+                model=deepcopy(eprop_lif_model),
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
-                            "AlphaFAv": np.exp(-self.dt / self.tau_reg),
-                            "Vthresh_post": target_neuron.v_thresh},
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0},
-                post_neuron_var_refs={"RefracTime_post": "RefracTime",
-                                      "V_post": "V", "E_post": "E"})
+                post_neuron_var_refs={"E_post": "E"})
+
+            # Add surrogate gradient logic to weight update model
+            self._surrogate_gradient.add_to_weight_update("Psi", wum, target_neuron)
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
             rho = np.exp(-self.dt / compile_state.tau_adapt)
 
             wum = WeightUpdateModel(
-                model=eprop_alif_model,
+                model=deepcopy(eprop_alif_model),
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
-                            "AlphaFAv": np.exp(-self.dt / self.tau_reg),
-                            "Vthresh_post": target_neuron.v_thresh,
-                            "Beta_post": target_neuron.beta},
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
                 post_var_vals={"Psi": 0.0, "FAvg": 0.0},
-                post_neuron_var_refs={"RefracTime_post": "RefracTime",
-                                      "V_post": "V", "A_post": "A", 
-                                      "E_post": "E"})
+                post_neuron_var_refs={"E_post": "E"})
+
+            # Add surrogate gradient logic to weight update model
+            self._surrogate_gradient.add_to_weight_update("Psi", wum, target_neuron)
         # Otherwise, if target neuron is readout, create 
         # weight update model with simple output learning rule
         elif target_neuron.readout is not None:
             wum = WeightUpdateModel(
-                model=output_learning_model,
+                model=deepcopy(output_learning_model),
                 param_vals={"Alpha": alpha},
                 var_vals={"g": connect_snippet.weight, "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
