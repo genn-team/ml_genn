@@ -13,7 +13,7 @@ from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
                        LeakyIntegrate, LeakyIntegrateFire, 
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
-from ..surrogate_gradients import EProp, SurrogateGradient
+from ..surrogate_gradients import SurrogateGradient
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -233,7 +233,7 @@ class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
-                 surrogate_gradient="e_prop", dt: float = 1.0, batch_size: int = 1,
+                 surrogate_gradient="triangle", dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):

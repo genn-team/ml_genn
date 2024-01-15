@@ -3,7 +3,7 @@ from ..neurons import AdaptiveLeakyIntegrateFire, LeakyIntegrateFire, Neuron
 from ..utils.model import WeightUpdateModel
 
 
-class EProp(SurrogateGradient):
+class Triangle(SurrogateGradient):
     def __init__(self, gamma: float = 0.3):
         self.gamma = gamma
 
@@ -52,6 +52,6 @@ class EProp(SurrogateGradient):
                 }}
                 """)
         else:
-            raise NotImplementedError(f"E-prop surrogate gradient "
+            raise NotImplementedError(f"Triangle surrogate gradient "
                                       f"function doesn't support "
                                       f"{type(pop.neuron).__name__} neurons")

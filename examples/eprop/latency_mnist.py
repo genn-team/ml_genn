@@ -51,6 +51,7 @@ if TRAIN:
     compiler = EPropCompiler(example_timesteps=max_example_timesteps,
                              losses="sparse_categorical_crossentropy",
                              optimiser="adam", batch_size=BATCH_SIZE,
+                             surrogate_gradient="boxcar",
                              kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
