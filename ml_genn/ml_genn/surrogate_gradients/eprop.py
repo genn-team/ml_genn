@@ -51,3 +51,7 @@ class EProp(SurrogateGradient):
                     {surrogate_var_name} = (1.0 / Vthresh_post) * {self.gamma} * fmax(0.0, 1.0 - fabs((V_post - (Vthresh_post + (Beta_post * A_post))) / Vthresh_post));
                 }}
                 """)
+        else:
+            raise NotImplementedError(f"E-prop surrogate gradient "
+                                      f"function doesn't support "
+                                      f"{type(pop.neuron).__name__} neurons")
