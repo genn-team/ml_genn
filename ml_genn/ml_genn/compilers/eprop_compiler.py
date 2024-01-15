@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 
-from typing import Iterator, Sequence
+from typing import Iterator, Optional, Sequence
 from pygenn import CustomUpdateVarAccess, SynapseMatrixType, VarAccess
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
@@ -233,8 +233,10 @@ class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
-                 surrogate_gradient="triangle", dt: float = 1.0, batch_size: int = 1,
-                 rng_seed: int = 0, kernel_profiling: bool = False,
+                 surrogate_gradient="triangle", dt: float = 1.0,
+                 error_quantization_levels: Optional[int] = None,
+                 batch_size: int = 1, rng_seed: int = 0,
+                 kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
@@ -256,6 +258,7 @@ class EPropCompiler(Compiler):
         self.c_reg = c_reg
         self.f_target = f_target
         self.train_output_bias = train_output_bias
+        self.error_quantization_levels = error_quantization_levels
         self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, genn_model, **kwargs):
@@ -312,8 +315,21 @@ class EPropCompiler(Compiler):
             # Add sim-code to calculate error
             model_copy.append_sim_code(
                 f"""
-                E = {model_copy.output_var_name} - yTrue;
+                const scalar e = {model_copy.output_var_name} - yTrue;
                 """)
+
+            # If no error quantisation is required, feed back error directly
+            if self.error_quantization_levels is None:
+                model_copy.append_sim_code(
+                    """
+                    E = e;
+                    """)
+            # Otherwise, quantise error
+            else:
+                model_copy.append_sim_code(
+                    f"""
+                    E = {1.0 / self.error_quantization_levels} * round(fmin(1.0, fmax(-1.0f, e)) * {float(self.error_quantization_levels)});
+                    """)
 
             # If we should train output biases
             if self.train_output_bias:
@@ -326,7 +342,7 @@ class EPropCompiler(Compiler):
                 model_copy.add_var("DeltaBias", "scalar", 0.0)
 
                 # Add sim-code to update DeltaBias
-                model_copy.append_sim_code("DeltaBias += E;")
+                model_copy.append_sim_code("DeltaBias += e;")
 
                 # Add population to list of those with biases to optimise
                 compile_state.bias_optimiser_populations.append(pop)
