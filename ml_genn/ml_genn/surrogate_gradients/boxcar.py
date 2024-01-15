@@ -4,7 +4,7 @@ from ..utils.model import WeightUpdateModel
 
 
 class Boxcar(SurrogateGradient):
-    def __init__(self, threshold: float = 0.3, value: float = 0.5):
+    def __init__(self, threshold: float = 0.5, value: float = 0.3):
         self.threshold = threshold
         self.value = value
 
@@ -29,7 +29,7 @@ class Boxcar(SurrogateGradient):
                     {surrogate_var_name} = 0.0;
                 }}
                 else {{
-                    {surrogate_var_name} = (fabs((V_post - Vthresh_post) / Vthresh_post) > {self.threshold}) ? {self.value} : 0.0;
+                    {surrogate_var_name} = (fabs((V_post - Vthresh_post) / Vthresh_post) < {self.threshold}) ? {self.value} : 0.0;
                 }}
                 """)
 
@@ -49,7 +49,7 @@ class Boxcar(SurrogateGradient):
                     {surrogate_var_name} = 0.0;
                 }}
                 else {{
-                    {surrogate_var_name} = fabs((V_post - (Vthresh_post + (Beta_post * A_post))) / Vthresh_post) > {self.threshold}) ? {self.value} : 0.0;
+                    {surrogate_var_name} = (fabs((V_post - (Vthresh_post + (Beta_post * A_post))) / Vthresh_post) < {self.threshold}) ? {self.value} : 0.0;
                 }}
                 """)
         else:
