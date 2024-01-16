@@ -235,8 +235,8 @@ class EPropCompiler(Compiler):
                  f_target: float = 10.0, train_output_bias: bool = True,
                  surrogate_gradient="triangle", dt: float = 1.0,
                  error_quantization_levels: Optional[int] = None,
-                 batch_size: int = 1, rng_seed: int = 0,
-                 kernel_profiling: bool = False,
+                 log_quantization: bool = True, batch_size: int = 1, 
+                 rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
@@ -259,6 +259,7 @@ class EPropCompiler(Compiler):
         self.f_target = f_target
         self.train_output_bias = train_output_bias
         self.error_quantization_levels = error_quantization_levels
+        self.log_quantization = log_quantization
         self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, genn_model, **kwargs):
@@ -324,7 +325,21 @@ class EPropCompiler(Compiler):
                     """
                     E = e;
                     """)
-            # Otherwise, quantise error
+            # Otherwise, if errors should be quantised on a log scale
+            elif self.log_quantization:
+                assert self.error_quantization_levels < 6
+                scale = np.exp(self.error_quantization_levels - 1.0)
+                model_copy.append_sim_code(
+                    f"""
+                    if(e == 0.0) {{
+                        E = 0.0;
+                    }}
+                    else {{
+                        E = {1.0 / scale} * exp(round(log(round(fabs(fmin(1.0, fmax(-1.0f, e))) * {scale}))));
+                        E = copysign(E, e);
+                    }}
+                    """)
+            # Otherwise, linear quantize
             else:
                 model_copy.append_sim_code(
                     f"""
