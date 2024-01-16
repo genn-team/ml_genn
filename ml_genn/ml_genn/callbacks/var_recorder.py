@@ -3,16 +3,17 @@ import numpy as np
 
 from itertools import chain
 
+from pygenn import VarAccessDim
 from typing import Optional
 from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 from ..utils.network import PopulationType
 
+from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
 
-from pygenn import VarAccessDim
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class VarRecorder(Callback):
             pop = compiled_network.neuron_populations[self._pop]
 
             # Get neuronmodel variables
-            pop_vars = pop.neuron.get_vars()
+            pop_vars = pop.neuron_model.get_vars()
 
             # Find variable
             var = next(v for v in pop_vars if v.name == self._var)
@@ -66,7 +67,7 @@ class VarRecorder(Callback):
                                f"{self._var} to record")
 
         # Determine if var is shared
-        self.shared = not (var.access & VarAccessDim.NEURON)
+        self.shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
 
         # If variable is shared and neuron mask was set, give warning
         if self.shared and not np.all(self._neuron_mask):
