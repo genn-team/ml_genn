@@ -58,7 +58,7 @@ class VarRecorder(Callback):
             pop = compiled_network.neuron_populations[self._pop]
 
             # Get neuronmodel variables
-            pop_vars = pop.neuron_model.get_vars()
+            pop_vars = pop.model.get_vars()
 
             # Find variable
             var = next(v for v in pop_vars if v.name == self._var)
