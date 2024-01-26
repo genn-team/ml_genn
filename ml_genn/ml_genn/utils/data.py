@@ -131,7 +131,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                                           (neuron_range, timestep_range))[0]
 
         # Find indices of bins where there are enough events
-        thresh_id, thresh_t = np.where(spike_event_hist > histogram_thresh)
+        thresh_id, thresh_t = np.where(spike_event_hist >= histogram_thresh)
 
         # Preprocess
         return preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
