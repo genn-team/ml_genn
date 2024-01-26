@@ -30,8 +30,8 @@ class LeakyIntegrate(Neuron):
 
         # Define integration code based on whether I should be scaled
         if self.scale_i:
-            genn_model["sim_code"] = "V = (Alpha * V) + ((1.0 - Alpha) * Isyn);"
+            genn_model["sim_code"] = "V = (Alpha * V) + ((1.0 - Alpha) * Isyn) + Bias;"
         else:
-            genn_model["sim_code"] = "V = (Alpha * V) + Isyn;"
+            genn_model["sim_code"] = "V = (Alpha * V) + Isyn + Bias;"
 
         return NeuronModel.from_val_descriptors(genn_model, "V", self, dt)
