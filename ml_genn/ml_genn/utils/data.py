@@ -82,8 +82,9 @@ def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
 
 # **TODO** maybe this could be a static from_tonic method 
 def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
-                            shape: Tuple,
-                            time_scale=1.0 / 1000.0) -> PreprocessedSpikes:
+                            shape: Tuple, time_scale=1.0 / 1000.0,
+                            dt: Optional[float] = None,
+                            histogram_thresh : Optional[int] = None) -> PreprocessedSpikes:
     # Calculate cumulative sum of each neuron's spike count
     num_neurons = np.product(shape) 
 
@@ -114,10 +115,26 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
             spike_event_ids = events["p"] + (events["x"] * shape[2])
         else:
             raise RuntimeError("Only 1D and 2D sensors supported")
+    
+    scaled_t = events["t"] * time_scale
+    if histogram_thresh is None:
+        return preprocess_spikes(scaled_t, spike_event_ids,
+                                 num_neurons)
+    else:
+        # Build ranges for neuron ids and timesteps
+        assert dt is not None
+        neuron_range = np.arange(num_neurons + 1)
+        timestep_range = np.arange(0.0, np.amax(scaled_t) + dt, dt)
 
-    # Preprocess scaled times and flattened IDs
-    return preprocess_spikes(events["t"] * time_scale, spike_event_ids,
-                             num_neurons)
+        # Compute histogram
+        spike_event_hist = np.histogram2d(spike_event_ids, scaled_t,
+                                          (neuron_range, timestep_range))[0]
+
+        # Find indices of bins where there are enough events
+        thresh_id, thresh_t = np.where(spike_event_hist >= histogram_thresh)
+
+        # Preprocess
+        return preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
 
 def linear_latency_encode_data(data: np.ndarray, max_time: float,
                                min_time: float = 0.0,
