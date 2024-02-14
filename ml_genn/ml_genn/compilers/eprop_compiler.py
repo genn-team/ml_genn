@@ -234,7 +234,7 @@ class EPropCompiler(Compiler):
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
                  surrogate_gradient="triangle", dt: float = 1.0,
-                 error_quantization_levels: Optional[int] = None,
+                 quantization_scale: Optional[float] = None,
                  log_quantization: bool = True, batch_size: int = 1, 
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
@@ -258,7 +258,7 @@ class EPropCompiler(Compiler):
         self.c_reg = c_reg
         self.f_target = f_target
         self.train_output_bias = train_output_bias
-        self.error_quantization_levels = error_quantization_levels
+        self.quantization_scale = quantization_scale
         self.log_quantization = log_quantization
         self.reset_time_between_batches = reset_time_between_batches
 
@@ -320,22 +320,20 @@ class EPropCompiler(Compiler):
                 """)
 
             # If no error quantisation is required, feed back error directly
-            if self.error_quantization_levels is None:
+            if self.quantization_scale is None:
                 model_copy.append_sim_code(
                     """
                     E = e;
                     """)
             # Otherwise, if errors should be quantised on a log scale
             elif self.log_quantization:
-                assert self.error_quantization_levels < 6
-                scale = np.exp(self.error_quantization_levels - 1.0)
                 model_copy.append_sim_code(
                     f"""
                     if(e == 0.0) {{
                         E = 0.0;
                     }}
                     else {{
-                        E = {1.0 / scale} * exp(round(log(round(fabs(fmin(1.0, fmax(-1.0f, e))) * {scale}))));
+                        E = exp({1.0 / self.quantization_scale} * round(log(fabs(fmin(1.0, fmax(-1.0f, e)))) * {self.quantization_scale}));
                         E = copysign(E, e);
                     }}
                     """)
@@ -343,7 +341,7 @@ class EPropCompiler(Compiler):
             else:
                 model_copy.append_sim_code(
                     f"""
-                    E = {1.0 / self.error_quantization_levels} * round(fmin(1.0, fmax(-1.0f, e)) * {float(self.error_quantization_levels)});
+                    E = {1.0 / self.quantization_scale} * round(fmin(1.0, fmax(-1.0f, e)) * {self.quantization_scale});
                     """)
 
             # If we should train output biases
