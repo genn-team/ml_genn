@@ -235,8 +235,9 @@ class EPropCompiler(Compiler):
                  f_target: float = 10.0, train_output_bias: bool = True,
                  surrogate_gradient="triangle", dt: float = 1.0,
                  quantization_scale: Optional[float] = None,
-                 log_quantization: bool = True, batch_size: int = 1, 
-                 rng_seed: int = 0, kernel_profiling: bool = False,
+                 log_quantization: bool = True, log_min: Float = -5.0,
+                 batch_size: int = 1, rng_seed: int = 0, 
+                 kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
@@ -260,6 +261,7 @@ class EPropCompiler(Compiler):
         self.train_output_bias = train_output_bias
         self.quantization_scale = quantization_scale
         self.log_quantization = log_quantization
+        self.log_min = log_min
         self.reset_time_between_batches = reset_time_between_batches
 
     def pre_compile(self, network, genn_model, **kwargs):
@@ -333,7 +335,7 @@ class EPropCompiler(Compiler):
                         E = 0.0;
                     }}
                     else {{
-                        E = exp({1.0 / self.quantization_scale} * round(log(fabs(fmin(1.0, fmax(-1.0f, e)))) * {self.quantization_scale}));
+                        E = pow(10.0, {1.0 / self.quantization_scale} * round(fmax({self.log_min}, log10(fabs(fmin(1.0, fmax(-1.0f, e))))) * {self.quantization_scale}));
                         E = copysign(E, e);
                     }}
                     """)
