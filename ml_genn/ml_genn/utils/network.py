@@ -1,9 +1,10 @@
 from typing import Sequence, Union
+from ..connection import Connection
 from ..population import Population
 from ..layer import InputLayer, Layer
 
 PopulationType = Union[InputLayer, Layer, Population]
-
+ConnectionType = Union[Layer, Connection]
 
 def get_underlying_pop(obj: PopulationType) -> Population:
     # Get underling population from object
@@ -15,6 +16,14 @@ def get_underlying_pop(obj: PopulationType) -> Population:
         raise RuntimeError(f"{obj} is not a valid Population, "
                            f"InputLayer or Layer object")
 
+def get_underlying_conn(obj: ConnectionType) -> Connection:
+    # Get underling connection from object
+    if isinstance(obj, Connection):
+        return obj
+    elif isinstance(obj, Layer):
+        return obj.connection()
+    else:
+        raise RuntimeError(f"{obj} is not a valid Connection or Layer object")
 
 def get_network_dag(inputs, outputs):
     # Convert inputs and outputs to tuples

@@ -9,5 +9,7 @@ class Optimiser(ABC):
         pass
 
     @abstractmethod
-    def get_model(self, gradient_ref, var_ref, zero_gradient: bool):
+    def get_model(self, gradient_ref, var_ref, zero_gradient: bool,
+                  positive_sign_change_egp_ref=None, 
+                  negative_sign_change_egp_ref=None):
         pass
