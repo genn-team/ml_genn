@@ -74,3 +74,9 @@ class CustomUpdateOnTimestepEnd(CustomUpdate):
         logger.debug(f"Running custom update {self.name} "
                      f"at start of timestep {timestep}")
         self._custom_update()
+
+class CustomUpdateOnTrainBegin(CustomUpdate):
+    def on_train_begin(self):
+        logger.debug(f"Running custom update {self.name} "
+                     f"at start of training")
+        self._custom_update()
