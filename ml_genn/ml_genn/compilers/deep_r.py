@@ -54,7 +54,7 @@ deep_r_1_model = {
 }
 
 deep_r_2_model = {
-    "params": [("RowWords", "unsigned int"), ("MaxRowLength", "unsigned int")],
+    "params": [("RowWords", "unsigned int")],
     "pre_vars": [("NumDormant", "unsigned int"), ("NumActivations", "unsigned int")],
     "extra_global_param_refs": [("Connectivity", "uint32_t*")],
     
@@ -69,9 +69,9 @@ deep_r_2_model = {
     }
     
     // Loop through all rows but last
-    size_t numTotalPaddingSynapses = (MaxRowLength * num_pre) - num_synapses;
+    size_t numTotalPaddingSynapses = (row_stride * num_pre) - num_synapses;
     for(unsigned int i = 0; i < (num_pre - 1); i++) {
-        const unsigned int numRowPaddingSynapses = MaxRowLength - row_length[i];
+        const unsigned int numRowPaddingSynapses = row_stride - row_length[i];
         if(numRowPaddingSynapses > 0 && numTotalPaddingSynapses > 0) {
             const scalar prob = (scalar)numRowPaddingSynapses / numTotalPaddingSynapses;
             
