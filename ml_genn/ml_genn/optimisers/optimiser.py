@@ -22,6 +22,8 @@ class Optimiser(ABC):
 
     @abstractmethod
     def get_model(self, gradient_ref, var_ref, zero_gradient: bool,
+                  positive_sign_change_egp_ref=None, 
+                  negative_sign_change_egp_ref=None
                   clamp_var: Optional[Tuple[float, float]] = None) -> CustomUpdateModel:
         """Gets model described by this optimiser
 

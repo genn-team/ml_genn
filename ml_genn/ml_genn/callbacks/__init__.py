@@ -4,7 +4,8 @@ from .checkpoint import Checkpoint
 from .conn_var_recorder import ConnVarRecorder
 from .custom_update import (CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd,
                             CustomUpdateOnEpochBegin, CustomUpdateOnEpochEnd,
-                            CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd)
+                            CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd,
+                            CustomUpdateOnTrainBegin)
 from .optimiser_param_schedule import OptimiserParamSchedule
 from .progress_bar import BatchProgressBar
 from .spike_recorder import SpikeRecorder
@@ -16,6 +17,7 @@ default_callbacks = get_module_classes(globals(), Callback)
 
 __all__ = ["Callback", "Checkpoint", "ConnVarRecorder", 
            "CustomUpdateOnBatchBegin", "CustomUpdateOnBatchEnd", 
-           "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd", 
-           "OptimiserParamSchedule", "BatchProgressBar", "SpikeRecorder",
-           "VarRecorder", "default_callbacks"]
+           "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd",
+           "CustomUpdateOnTrainBegin", "OptimiserParamSchedule",
+           "BatchProgressBar", "SpikeRecorder", "VarRecorder",
+           "default_callbacks"]

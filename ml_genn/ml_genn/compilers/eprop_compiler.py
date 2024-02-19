@@ -7,7 +7,8 @@ from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd,
+                         CustomUpdateOnTrainBegin)
 from ..communicators import Communicator
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..metrics import MetricsType
@@ -24,7 +25,9 @@ from ..utils.snippet import ConnectivitySnippet
 from copy import deepcopy
 from pygenn import create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
+from .deep_r import add_deep_r
 from ..utils.module import get_object, get_object_mapping
+from ..utils.network import get_underlying_conn
 from ..utils.value import is_value_constant
 
 from ml_genn.optimisers import default_optimisers
@@ -301,7 +304,10 @@ class EPropCompiler(Compiler):
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
-                 communicator: Communicator = None, **genn_kwargs):
+                 communicator: Communicator = None, 
+                 deep_r_exc_conns: Sequence = [],
+                 deep_r_inh_conns: Sequence = [],
+                 **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
                                   SynapseMatrixType.DENSE]
         super(EPropCompiler, self).__init__(supported_matrix_types, dt,
@@ -318,6 +324,10 @@ class EPropCompiler(Compiler):
         self.f_target = f_target
         self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
+        self.deep_r_exc_conns = set(get_underlying_conn(c)
+                                    for c in deep_r_exc_conns)
+        self.deep_r_inh_conns = set(get_underlying_conn(c)
+                                    for c in deep_r_inh_conns)
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -529,17 +539,26 @@ class EPropCompiler(Compiler):
         optimiser_cus = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
+
+            # Create Deep-R infrastructure if required
+            positive_sign_change_egp_ref = (add_deep_r(genn_pop, genn_model, self)
+                                            if c in self.deep_r_inh_conns else None)
+            negative_sign_change_egp_ref = (add_deep_r(genn_pop, genn_model, self)
+                                            if c in self.deep_r_exc_conns else None)
+
             cu = self._create_optimiser_custom_update(
                 f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True)
+                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True,
+                positive_sign_change_egp_ref, negative_sign_change_egp_ref)
             optimiser_cus.append(cu)
-
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
             genn_pop = neuron_populations[p]
+
             cu = self._create_optimiser_custom_update(
                 f"Bias{i}", create_var_ref(genn_pop, "Bias"),
-                create_var_ref(genn_pop, "DeltaBias"), genn_model, False)
+                create_var_ref(genn_pop, "DeltaBias"), genn_model,
+                False, None, None)
             optimiser_cus.append(cu)
 
         # Loop through populations requiring softmax
@@ -563,6 +582,13 @@ class EPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+        
+        # If Deep-R is required on any connections, 
+        # trigger Deep-R callbacks at end of batch
+        if len(self.deep_r_exc_conns) > 0 or len(self.deep_r_inh_conns) > 0:
+            base_train_callbacks.append(CustomUpdateOnTrainBegin("DeepRInit"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
 
         # If softmax is required, add three stage reduction to callbacks
         # **NOTE** this is also required for validation because readout is configured this way
@@ -588,7 +614,14 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model, wu):
+                                        gradient_ref, genn_model, wu, 
+                                        positive_sign_change_egp_ref, 
+                                        negative_sign_change_egp_ref):
+        # Check this is either an optimiser for a weight update model 
+        # OR no sign change tracking references are provided
+        assert (wu or (positive_sign_change_egp_ref is None 
+                       and negative_sign_change_egp_ref is None))
+
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -606,8 +639,9 @@ class EPropCompiler(Compiler):
                                                     "ReducedGradient"))
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
-            optimiser_model = self._optimiser.get_model(reduced_gradient, 
-                                                        var_ref, False, None)
+            optimiser_model = self._optimiser.get_model(
+                reduced_gradient, var_ref, False, None,
+                positive_sign_change_egp_ref, negative_sign_change_egp_ref)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
