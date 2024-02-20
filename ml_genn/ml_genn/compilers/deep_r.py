@@ -50,11 +50,6 @@ deep_r_1_model_template = {
             remove_synapse();
         }
     }
-
-    // Zero sign change
-    for(int i = 0; i < NumRowWords; i++) {
-        rowSignChange[i] = 0;
-    }
     """)}
 
 deep_r_2_model = {
@@ -138,19 +133,19 @@ def add_deep_r(synapse_group, genn_model, compiler,
     genn_deep_r_2 = compiler.add_custom_connectivity_update(
         genn_model, deep_r_2, synapse_group,
         "DeepR2", "DeepR2" + synapse_group.name)
-    """
+
     # Create custom connectivity update model to  
     # implement first deep-r pass and add to model
     deep_r_1 = CustomConnectivityUpdateModel(
         deep_r_1_model, param_vals={"NumRowWords": num_row_words}, 
         pre_var_refs={"NumDormant": create_pre_var_ref(genn_deep_r_2, "NumDormant")},
-        var_refs={"g", weight_var_ref},
+        var_refs={"g": weight_var_ref},
         egp_refs={"Connectivity": create_egp_ref(genn_deep_r_2, "Connectivity")})
 
     compiler.add_custom_connectivity_update(
         genn_model, deep_r_1, synapse_group, 
         "DeepR1", "DeepR1" + synapse_group.name)
-    """
+
     # Create custom connectivity update model to  
     # implement deep-r initialisation and add to model
     deep_r_init = CustomConnectivityUpdateModel(
