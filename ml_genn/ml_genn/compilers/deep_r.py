@@ -2,6 +2,7 @@ import numpy as np
 
 from string import Template
 from pygenn import VarAccessMode
+from ..callbacks import Callback
 from ..utils.model import CustomConnectivityUpdateModel
 
 from copy import deepcopy
@@ -55,7 +56,7 @@ deep_r_1_model_template = {
 deep_r_2_model = {
     "params": [("NumRowWords", "unsigned int")],
     "pre_vars": [("NumDormant", "unsigned int"), ("NumActivations", "unsigned int")],
-    "extra_global_params": [("Connectivity", "uint32_t*")],
+    "extra_global_params": [("Connectivity", "uint32_t*"), ("NumRewirings", "uint64_t*")],
     
     "host_update_code": """
     pullNumDormantFromDevice();
@@ -69,6 +70,9 @@ deep_r_2_model = {
         numSynapses += row_length[i];
         NumActivations[i] = 0;
     }
+
+    // Record number of rewirings
+    NumRewirings[0] = numRemainingDormant;
 
     // Loop through all rows but last
     size_t numTotalPaddingSynapses = (row_stride * num_pre) - numSynapses;
@@ -109,6 +113,24 @@ deep_r_2_model = {
     }
     """}
 
+class RewiringRecord(Callback):
+    def __init__(self, deep_r_2_ccu, key=None):
+        self.num_rewirings = deep_r_2_ccu.extra_global_params["NumRewirings"]
+        self.key = key
+
+    def set_params(self, data, **kwargs):
+        # Create empty list to hold recorded data
+        data[self.key] = []
+        self._data = data[self.key]
+
+    def on_batch_end(self, batch, metrics):
+        # Read number of rewirings out of view and add to list
+        self._data.append(self.num_rewirings.view[0])
+    
+    def get_data(self):
+        return self.key, self._data
+
+
 def add_deep_r(synapse_group, genn_model, compiler,
                weight_var_ref, excitatory):
     # Calculate bitmask sizes 
@@ -128,7 +150,8 @@ def add_deep_r(synapse_group, genn_model, compiler,
     deep_r_2 = CustomConnectivityUpdateModel(
         deep_r_2_model, param_vals={"NumRowWords": num_row_words},
         pre_var_vals={"NumDormant": 0, "NumActivations": 0},
-        egp_vals={"Connectivity": np.zeros(num_words, dtype=np.uint32)})
+        egp_vals={"Connectivity": np.zeros(num_words, dtype=np.uint32),
+                  "NumRewirings": np.zeros(1, dtype=np.uint64)})
 
     genn_deep_r_2 = compiler.add_custom_connectivity_update(
         genn_model, deep_r_2, synapse_group,
@@ -155,4 +178,7 @@ def add_deep_r(synapse_group, genn_model, compiler,
     compiler.add_custom_connectivity_update(
         genn_model, deep_r_init, synapse_group, 
         "DeepRInit", "DeepRInit" + synapse_group.name)
+
+    # Return GeNN custom connectivity update used for second pass
+    return genn_deep_r_2
 
