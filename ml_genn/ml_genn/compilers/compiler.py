@@ -253,14 +253,7 @@ class Compiler:
         # Create custom conenctivity update model
         genn_ccum = create_custom_connectivity_update_model(
             "CustomConnectivityUpdate", **ccu_model)
-        
-        """
-        cu_name, group_name, syn_group,
-                                       custom_conn_update_model,
-                                       params={}, vars={}, pre_vars={},
-                                       post_vars={}, var_refs={},
-                                       pre_var_refs={}, post_var_refs={},
-                                       egp_refs={}):"""
+
         # Add custom connectivity update
         genn_ccu = genn_model.add_custom_connectivity_update(
             name, group, synapse_group, genn_ccum, 
@@ -271,7 +264,7 @@ class Compiler:
         set_dynamic_param(ccu_dynamic_param_names, genn_ccu.set_param_dynamic)
 
         # Configure var init EGPs
-        set_var_egps(ccu_egp_vals, genn_ccu.vars)
+        set_var_egps(ccu_var_egp_vals, genn_ccu.vars)
         return genn_ccu
 
     def add_softmax_custom_updates(self, genn_model, genn_pop, 

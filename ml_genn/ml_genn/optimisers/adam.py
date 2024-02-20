@@ -48,9 +48,7 @@ class Adam(Optimiser):
         genn_cu.set_dynamic_param_value("MomentScale1", moment_scale_1)
         genn_cu.set_dynamic_param_value("MomentScale2", moment_scale_2)
 
-    def get_model(self, gradient_ref, var_ref, zero_gradient: bool, 
-                  positive_sign_change_egp_ref=None, 
-                  negative_sign_change_egp_ref=None):
+    def get_model(self, gradient_ref, var_ref, zero_gradient: bool):
         model = CustomUpdateModel(
             deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,
@@ -76,36 +74,6 @@ class Adam(Optimiser):
                 """
                 // Zero gradient
                 Gradient = 0.0;
-                """)
-        
-        # Check we're not tracking positive AND negative
-        assert (positive_sign_change_egp_ref is None 
-                or negative_sign_change_egp_ref is None)
-
-        if positive_sign_change_egp_ref is not None:
-            # Add EGP ref
-            model.add_egp_ref("SignChange", "uint32_t*",
-                              positive_sign_change_egp_ref)
-            
-            # Add update code to set bit if variable goes positive
-            model.append_update_code(
-                """
-                if(Variable > 0.0) {
-                    atomic_or(SignChange + (id_syn / 32), 1 << (id_syn % 32));
-                }
-                """)
-        
-        if negative_sign_change_egp_ref is not None:
-            # Add EGP ref
-            model.add_egp_ref("SignChange", "uint32_t*",
-                              negative_sign_change_egp_ref)
-            
-            # Add update code to set bit if variable goes negative
-            model.append_update_code(
-                """
-                if(Variable < 0.0) {
-                    atomic_or(SignChange + (id_syn / 32), 1 << (id_syn % 32));
-                }
                 """)
 
         # Return model
