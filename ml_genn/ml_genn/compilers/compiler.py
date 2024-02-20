@@ -348,6 +348,9 @@ class Compiler:
 
         # Configure dynamic parameters
         set_dynamic_param(cu_dynamic_param_names, genn_cu.set_param_dynamic)
+        
+        # Configure EGPs
+        set_egp(cu_egp_vals, genn_cu.extra_global_params)
 
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
@@ -374,7 +377,10 @@ class Compiler:
 
         # Configure dynamic parameters
         set_dynamic_param(ccu_dynamic_param_names, genn_ccu.set_param_dynamic)
-
+        
+        # Configure EGPs
+        set_egp(ccu_egp_vals, genn_ccu.extra_global_params)
+    
         # Configure var init EGPs
         set_var_egps(ccu_var_egp_vals, genn_ccu.vars)
         return genn_ccu
