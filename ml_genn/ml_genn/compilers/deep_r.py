@@ -3,11 +3,18 @@ import numpy as np
 from string import Template
 from pygenn import VarAccessMode
 from ..callbacks import Callback
-from ..utils.model import CustomConnectivityUpdateModel
+from ..utils.model import CustomConnectivityUpdateModel, CustomUpdateModel
 
 from copy import deepcopy
 from pygenn import create_egp_ref, create_pre_var_ref
 
+deep_r_l1_model_template = {
+    "params": [("C", "scalar")],
+    "var_refs": [("Variable", "scalar")],
+    "update_code": Template("""
+    Variable $assign C;
+    """)}
+    
 deep_r_init_model = {
     "params": [("NumRowWords", "unsigned int")],
     "extra_global_param_refs": [("Connectivity", "uint32_t*")],
@@ -131,11 +138,33 @@ class RewiringRecord(Callback):
         return self.key, self._data
 
 
-def add_deep_r(synapse_group, genn_model, compiler,
-               weight_var_ref, excitatory):
+def add_deep_r(synapse_group, genn_model, compiler, l1_strength, 
+               delta_weight_var_ref, weight_var_ref, excitatory):
     # Calculate bitmask sizes 
     num_row_words = (synapse_group.trg.num_neurons + 31) // 32
     num_words = synapse_group.src.num_neurons * num_row_words
+
+    # If L1 regularization is enabled
+    if l1_strength > 0.0:
+        # Make copy of L1 model with correct assignment operator
+        # **NOTE** regularization is applied to GRADIENTS which are
+        # SUBTRACTED from weight by optimizer so we want to subtract
+        # positive values to push excitatory weights towards zero and
+        # negative values to push inhibitory weights towards zero
+        assign = "+=" if excitatory else "-="
+        deep_r_l1_model = deepcopy(deep_r_l1_model_template)
+        deep_r_l1_model["update_code"] =\
+            deep_r_l1_model["update_code"].substitute(assign=assign)
+
+        # Create custom update model to apply L1 regularisation in correct direction
+        deep_r_l1 = CustomUpdateModel(
+            deep_r_l1_model,
+            param_vals={"C": l1_strength},
+            var_refs={"Variable": delta_weight_var_ref})
+
+        compiler.add_custom_update(
+            genn_model, deep_r_l1,
+            "DeepRL1", "DeepRL1" + synapse_group.name)
 
     # Make copy of first pass model with correct comparison operator
     comp = "<" if excitatory else ">"
