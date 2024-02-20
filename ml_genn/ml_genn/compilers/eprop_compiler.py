@@ -5,6 +5,7 @@ from typing import Iterator, Sequence
 from pygenn import CustomUpdateVarAccess, SynapseMatrixType, VarAccess
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .deep_r import RewiringRecord
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd,
                          CustomUpdateOnTrainBegin)
@@ -255,6 +256,7 @@ class EPropCompiler(Compiler):
                  communicator: Communicator = None, 
                  deep_r_exc_conns: Sequence = [],
                  deep_r_inh_conns: Sequence = [],
+                 deep_r_record_rewirings = {},
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
                                   SynapseMatrixType.DENSE]
@@ -276,6 +278,7 @@ class EPropCompiler(Compiler):
                                     for c in deep_r_exc_conns)
         self.deep_r_inh_conns = set(get_underlying_conn(c)
                                     for c in deep_r_inh_conns)
+        self.deep_r_record_rewirings = deep_r_record_rewirings
 
     def pre_compile(self, network, genn_model, **kwargs):
         # Build list of output populations
@@ -479,18 +482,24 @@ class EPropCompiler(Compiler):
 
         # Add optimisers to connection weights that require them
         optimiser_custom_updates = []
+        deep_r_record_rewirings_ccus = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
 
-            # Create Deep-R infrastructure if required
+            # If connection is in list of those to use Deep-R on
             weight_var_ref = create_wu_var_ref(genn_pop, "g")
-            if c in self.deep_r_inh_conns:
-                add_deep_r(genn_pop, genn_model, self,
-                           weight_var_ref, False)
-            elif c in self.deep_r_exc_conns:
-                add_deep_r(genn_pop, genn_model, self,
-                           weight_var_ref, True)
-           
+            if c in self.deep_r_inh_conns or c in self.deep_r_exc_conns:
+                # Add infrastructure
+                excitatory = (c in self.deep_r_exc_conns)
+                deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
+                                           weight_var_ref, excitatory)
+                
+                # If we should record rewirings from
+                # this connection, add to list with key
+                if c in self.deep_r_record_rewirings:
+                    deep_r_record_rewirings_ccus.append(
+                        (deep_r_2_ccu, self.deep_r_record_rewirings[c]))
+            # Add optimiser
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", weight_var_ref,
@@ -534,6 +543,10 @@ class EPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnTrainBegin("DeepRInit"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
+        
+        # Add callbacks to record number of rewirings
+        for c, k in deep_r_record_rewirings_ccus:
+            base_train_callbacks.append(RewiringRecord(c, k))
 
         # If softmax is required, add three stage reduction to callbacks
         # **NOTE** this is also required for validation because readout is configured this way
