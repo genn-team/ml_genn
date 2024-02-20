@@ -541,24 +541,25 @@ class EPropCompiler(Compiler):
             genn_pop = connection_populations[c]
 
             # Create Deep-R infrastructure if required
-            positive_sign_change_egp_ref = (add_deep_r(genn_pop, genn_model, self)
-                                            if c in self.deep_r_inh_conns else None)
-            negative_sign_change_egp_ref = (add_deep_r(genn_pop, genn_model, self)
-                                            if c in self.deep_r_exc_conns else None)
+            weight_var_ref = create_wu_var_ref(genn_pop, "g")
+            if c in self.deep_r_inh_conns:
+                add_deep_r(genn_pop, genn_model, self,
+                           weight_var_ref, False)
+            elif c in self.deep_r_exc_conns:
+                add_deep_r(genn_pop, genn_model, self,
+                           weight_var_ref, True)
 
             cu = self._create_optimiser_custom_update(
                 f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True,
-                positive_sign_change_egp_ref, negative_sign_change_egp_ref)
+                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True)
             optimiser_cus.append(cu)
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
             genn_pop = neuron_populations[p]
-
             cu = self._create_optimiser_custom_update(
                 f"Bias{i}", create_var_ref(genn_pop, "Bias"),
-                create_var_ref(genn_pop, "DeltaBias"), genn_model,
-                False, None, None)
+                create_var_ref(genn_pop, "DeltaBias"),
+                genn_model, False)
             optimiser_cus.append(cu)
 
         # Loop through populations requiring softmax
@@ -614,14 +615,7 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model, wu, 
-                                        positive_sign_change_egp_ref, 
-                                        negative_sign_change_egp_ref):
-        # Check this is either an optimiser for a weight update model 
-        # OR no sign change tracking references are provided
-        assert (wu or (positive_sign_change_egp_ref is None 
-                       and negative_sign_change_egp_ref is None))
-
+                                        gradient_ref, genn_model, wu):
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -640,14 +634,13 @@ class EPropCompiler(Compiler):
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
             optimiser_model = self._optimiser.get_model(
-                reduced_gradient, var_ref, False, None,
-                positive_sign_change_egp_ref, negative_sign_change_egp_ref)
+                reduced_gradient, var_ref, False)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
             optimiser_model = self._optimiser.get_model(
-                gradient_ref, var_ref, True, None)
+                gradient_ref, var_ref, True)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
