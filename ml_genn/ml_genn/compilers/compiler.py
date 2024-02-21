@@ -4,9 +4,7 @@ import os
 
 from collections import defaultdict, namedtuple
 from pygenn import (CustomUpdateVarAccess, GeNNModel,
-                    VarAccess, VarAccessMode)
-# **YUCK**
-from pygenn.genn import SynapseGroup
+                    SynapseGroup, VarAccess, VarAccessMode)
 
 from typing import List, Optional
 from .compiled_network import CompiledNetwork
