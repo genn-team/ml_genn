@@ -26,11 +26,13 @@ from ..utils.network import PopulationType
 from copy import deepcopy
 from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
+from .quantisation import SignedWeightQuantise
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 from ..utils.value import is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
+from .quantisation import add_wum_quantisation
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -215,9 +217,6 @@ weight_update_model = {
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "post_neuron_var_refs": [("LambdaI_post", "scalar")],
                              
-    "pre_spike_syn_code": """
-    addToPost(g);
-    """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """,
@@ -232,9 +231,6 @@ weight_update_model_atomic_cuda = {
     "params": [("TauSyn", "scalar")],
     "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
 
-    "pre_spike_syn_code": """
-    addToPost(g);
-    """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """,
@@ -247,10 +243,7 @@ weight_update_model_atomic_cuda = {
 static_weight_update_model = {
     "params": [("g", "scalar")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "pre_spike_syn_code":
-        """
-        addToPost(g);
-        """,
+
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """}
@@ -320,6 +313,8 @@ class EventPropCompiler(Compiler):
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
+                 quantise_num_weight_bits: int = None,
+                 quantise_weight_percentile: float = 99.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None, **genn_kwargs):
@@ -340,6 +335,8 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
+        self.quantise_num_weight_bits = quantise_num_weight_bits
+        self.quantise_weight_percentile = quantise_weight_percentile
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
@@ -776,6 +773,13 @@ class EventPropCompiler(Compiler):
                 param_vals={"g": connect_snippet.weight},
                 pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
 
+        # If weights should be quantised, add quantised forward pass
+        if self.quantise_num_weight_bits is not None:
+            add_wum_quantisation(wum, "g")
+        # Otherwise, append standard forward pass
+        else:
+            wum.append_pre_spike_syn_code("addToPost(g);")
+
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
         if not isinstance(source_neuron, Input):
@@ -861,6 +865,16 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+        
+        # If quantisation is enabled
+        if self.quantise_num_weight_bits is not None:
+            # Loop through connection_populations
+            for sg in connection_populations.values():
+                # Add signed weight quantisation callback
+                base_train_callbacks.append(
+                    SignedWeightQuantise(
+                        sg, "g", self.quantise_weight_percentile,
+                        self.quantise_num_weight_bits))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
