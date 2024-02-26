@@ -44,7 +44,6 @@ from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
                                  SynapseMatrixWeight_KERNEL)
 
 from .compiler import softmax_1_model, softmax_2_model
-from .quantisation import add_wum_quantisation
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -788,9 +787,17 @@ class EventPropCompiler(Compiler):
             wum = WeightUpdateModel(model=deepcopy(static_weight_update_model),
                                     param_vals={"g": connect_snippet.weight})
 
-        # If weights should be quantised, add quantised forward pass
+        # If weights should be quantised
         if self.quantise_num_weight_bits is not None:
-            add_wum_quantisation(wum, "g")
+            # Add additional variable to hold quantised forward weight
+            wum.add_var("gQuant", "scalar", 0.0, VarAccess.READ_ONLY)
+            
+            # Append forward pass using this
+            wum.append_pre_spike_syn_code("addToPost(gQuant);")
+
+            # Add to list of checkpoint variables
+            if connect_snippet.trainable:
+                compile_state.checkpoint_connection_vars.append((conn, "gQuant"))
         # Otherwise, append standard forward pass
         else:
             wum.append_pre_spike_syn_code("addToPost(g);")
@@ -882,12 +889,12 @@ class EventPropCompiler(Compiler):
         
         # If quantisation is enabled
         if self.quantise_num_weight_bits is not None:
-            # Loop through connection_populations
+            # Loop through connection_populations 
+            # and add weight quantisation callbacks
             for sg in connection_populations.values():
-                # Add signed weight quantisation callback
                 base_train_callbacks.append(
                     SignedWeightQuantise(
-                        sg, "g", self.quantise_weight_percentile,
+                        sg, "g", "gQuant", self.quantise_weight_percentile,
                         self.quantise_num_weight_bits))
 
         return CompiledTrainingNetwork(
