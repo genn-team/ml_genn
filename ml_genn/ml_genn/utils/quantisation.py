@@ -1,18 +1,24 @@
 import math
 import numpy as np
 
+from numbers import Number
+
 def find_signed_scale(data, num_bits: int, percentile: float):
-    # Split data into positive and negative
-    positive_mask = (data > 0)
-    positive_data = data[positive_mask]
-    negative_data = data[np.logical_not(positive_mask)]
-
     # Calculate desired percentile
-    positive_perc = np.percentile(positive_data, percentile)
-    negative_perc = np.percentile(-negative_data, percentile)
+    if isinstance(data, Number):
+        max_val = data
+    else:
+        # Split data into positive and negative
+        positive_mask = (data > 0)
+        positive_data = data[positive_mask]
+        negative_data = data[np.logical_not(positive_mask)]
 
-    # Calculate the largest of these
-    max_val = max(positive_perc, negative_perc)
+        # Calculate desired percentile
+        positive_perc = np.percentile(positive_data, percentile)
+        negative_perc = np.percentile(-negative_data, percentile)
+
+        # Calculate the largest of these
+        max_val = max(positive_perc, negative_perc)
     
     # Calculate high bit and low bit
     # **NOTE** we floor so max is 2**(high_bit + 1) - 1
@@ -32,7 +38,10 @@ def find_signed_scale(data, num_bits: int, percentile: float):
 
 def find_unsigned_scale(data, num_bits: int, percentile: float):
     # Calculate desired percentile
-    perc = np.percentile(data, percentile)
+    if isinstance(data, Number):
+        perc = data
+    else:
+        perc = np.percentile(data, percentile)
     
     # Calculate high bit and low bit
     # **NOTE** we floor so max is 2**(high_bit + 1) - 1

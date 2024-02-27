@@ -5,7 +5,7 @@ from pygenn import VarAccess
 from ..callbacks import Callback
 from ..utils.quantisation import quantise_signed
 
-class SignedWeightQuantise(Callback):
+class WeightQuantiseBase(Callback):
     def __init__(self, synapse_group, weight_var_name,
                  quant_weight_var_name, percentile, num_weight_bits):
         self.synapse_group = synapse_group
@@ -14,7 +14,7 @@ class SignedWeightQuantise(Callback):
         self.percentile = percentile
         self.num_weight_bits = num_weight_bits
 
-    def on_batch_begin(self, batch):
+    def _apply(self):
         # Download weights
         self.weight_var.pull_from_device()
         
@@ -23,3 +23,11 @@ class SignedWeightQuantise(Callback):
                                                         self.num_weight_bits,
                                                         self.percentile)
         self.quant_weight_var.push_to_device()
+        
+class WeightQuantiseBatch(WeightQuantiseBase):
+    def on_batch_begin(self, batch):
+        self._apply()
+
+class WeightQuantiseTrain(WeightQuantiseBase):
+    def on_train_begin(self):
+        self._apply()
