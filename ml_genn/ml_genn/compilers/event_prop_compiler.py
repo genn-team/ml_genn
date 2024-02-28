@@ -794,7 +794,7 @@ class EventPropCompiler(Compiler):
 
                 # Add additional state variable to hold unquantised weight
                 wum.add_var("gBack", "scalar", connect_snippet.weight,
-                            VarAccess.READ_ONLY)
+                            VarAccess_READ_ONLY)
     
                 # Also checkpoint this variable
                 compile_state.checkpoint_connection_vars.append(
@@ -808,7 +808,8 @@ class EventPropCompiler(Compiler):
                 wum.var_vals["g"] = connect_snippet.weight
         # Otherwise, e.g. it's a pooling layer
         else:
-            wum = WeightUpdateModel(model=deepcopy(static_weight_update_model))
+            wum = WeightUpdateModel(
+                model=deepcopy(static_weight_update_model))
 
             # If quantisation is enabled
             if quantise_enabled:
