@@ -13,6 +13,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .weight_quantisation import WeightQuantiseBatch, WeightQuantiseTrain
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
@@ -32,7 +33,6 @@ from copy import deepcopy
 from pygenn.genn_model import (create_egp_ref, create_var_ref,
                                create_wu_var_ref)
 from .compiler import create_reset_custom_update
-from .weight_quantisation import WeightQuantiseBatch, WeightQuantiseTrain
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
 from ..utils.quantisation import quantise_signed
@@ -932,7 +932,7 @@ class EventPropCompiler(Compiler):
         # Add train quantisation callbacks for connections that require it
         for c in compile_state.train_quantise_connections:
             base_train_callbacks.append(
-                WeightQuantiseTrain(connection_populations[c], "gBack", "g",
+                WeightQuantiseTrain(connection_populations[c], "g", "g",
                                     self.quantise_weight_percentile,
                                     self.quantise_num_weight_bits))
 
