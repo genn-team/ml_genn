@@ -31,3 +31,7 @@ class WeightQuantiseBatch(WeightQuantiseBase):
 class WeightQuantiseTrain(WeightQuantiseBase):
     def on_train_begin(self):
         self._apply()
+
+class WeightQuantiseTest(WeightQuantiseBase):
+    def on_test_begin(self):
+        self._apply()

@@ -4,20 +4,30 @@ from typing import Iterator, Sequence, Union
 from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
 from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
+from .weight_quantisation import WeightQuantiseTest
+from .. import Connection
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..communicators import Communicator
 from ..metrics import Metric
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
-from ..utils.model import CustomUpdateModel
+from ..utils.model import CustomUpdateModel, WeightUpdateModel
 from ..utils.network import PopulationType
+from ..utils.snippet import ConnectivitySnippet
 
+from copy import copy, deepcopy
 from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
+from ..utils.quantisation import quantise_signed
+from ..utils.value import is_value_constant
 
+from .weight_update_models import (static_pulse_model,
+                                   static_pulse_delay_model,
+                                   signed_static_pulse_model,
+                                   signed_static_pulse_delay_model)
 from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
                                  SynapseMatrixType_SPARSE_INDIVIDUALG,
                                  SynapseMatrixType_PROCEDURAL_KERNELG,
@@ -266,6 +276,7 @@ class CompileState:
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
         self.in_syn_zero_conns = []
+        self.test_quantise_connections = []
 
     def add_neuron_reset_vars(self, model, pop, reset_model_vars):
         if reset_model_vars:
@@ -310,6 +321,8 @@ class CompileState:
 
 class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
+                 quantise_num_weight_bits: int = None,
+                 quantise_weight_percentile: float = 99.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  prefer_in_memory_connect=True, 
@@ -336,7 +349,10 @@ class InferenceCompiler(Compiler):
                                                 kernel_profiling,
                                                 communicator,
                                                 **genn_kwargs)
+
         self.evaluate_timesteps = evaluate_timesteps
+        self.quantise_num_weight_bits = quantise_num_weight_bits
+        self.quantise_weight_percentile = quantise_weight_percentile
         self.reset_time_between_batches = reset_time_between_batches
         self.reset_vars_between_batches = reset_vars_between_batches
         self.reset_in_syn_between_batches = reset_in_syn_between_batches
@@ -372,16 +388,65 @@ class InferenceCompiler(Compiler):
 
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, compile_state)
+ 
+    def build_weight_update_model(self, connection: Connection,
+                                  connect_snippet: ConnectivitySnippet,
+                                  compile_state):
+        # If source neuron model defines a negative threshold condition
+        src_pop = connection.source()
+        src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt,
+                                                    self.batch_size)
+        het_delay = not is_value_constant(connect_snippet.delay)
+        if "negative_threshold_condition_code" in src_neuron_model.model:
+            wum = WeightUpdateModel(
+                deepcopy(signed_static_pulse_delay_model if het_delay
+                         else signed_static_pulse_model))
 
+            # Insert negative threshold condition code from neuron model
+            wum.model["event_threshold_condition_code"] =\
+                src_neuron_model.model["negative_threshold_condition_code"]
+        else:
+            wum = WeightUpdateModel(
+                deepcopy(static_pulse_delay_model if het_delay
+                         else static_pulse_model))
+
+        # If delay is heterogeneus, add as a parameter
+        if het_delay:
+            wum.param_vals["d"] = connect_snippet.delay
+
+        # If quantisation is enabled
+        if self.quantise_num_weight_bits is not None:
+            # If weight is initialised on device
+            if is_value_initializer(connect_snippet.weight):
+                # Initially zero the quantised forward weight
+                # and force it to be implemented as a variable
+                wum.param_vals["g"] = 0.0
+                wum.make_param_var("g")
+                
+                # Add connection to list of those 
+                # requiring quantisation at start of training
+                compile_state.test_quantise_connections.append(conn)
+            # Otherwise, directly initialise 
+            # forward weights with quantised version
+            else:
+                wum.param_vals["g"] = quantise_signed(
+                    connect_snippet.weight, self.quantise_num_weight_bits,
+                    self.quantise_weight_percentile)
+        # Otherwise, initialise forward weights directly
+        else:
+            wum.param_vals["g"] = connect_snippet.weight
+
+        return wum
+ 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
                                                   connection_populations)
-        
+
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
-        
+
         # If insyn should be reset between batches
         if self.reset_in_syn_between_batches:
             # Add callbacks to zero insyn on all connections requiring them
@@ -389,6 +454,13 @@ class InferenceCompiler(Compiler):
             for c in compile_state.in_syn_zero_conns:
                 base_callbacks.append(ZeroInSyn(connection_populations[c]))
 
+        # Add train quantisation callbacks for connections that require it
+        for c in compile_state.test_quantise_connections:
+            base_callbacks.append(
+                WeightQuantiseTest(connection_populations[c], "g", "g",
+                                   self.quantise_weight_percentile,
+                                   self.quantise_num_weight_bits))
+        
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,
                                         self.communicator,
