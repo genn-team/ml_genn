@@ -36,9 +36,9 @@ def test_recording(batch_size, neuron_filter, example_filter, request):
         
         # Loop through examples
         examples = range(5) if example_filter is None else example_filter
-        for i in examples:
+        for i, e in enumerate(examples):
             # Check recorded value in all timesteps matches input
             if neuron_filter is None:
-                assert np.allclose(x[i], cb_data["in"][i])
+                assert np.allclose(x[e], cb_data["in"][i])
             else:
-                assert np.allclose(x[i][neuron_filter], cb_data["in"][i])
+                assert np.allclose(x[e][neuron_filter], cb_data["in"][i])
