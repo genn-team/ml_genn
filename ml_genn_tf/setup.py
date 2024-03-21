@@ -7,5 +7,5 @@ setup(
 
     python_requires=">=3.7.0",
     install_requires = [
-        "tensorflow>=2.0",
+        "tensorflow<2.15.0",
         "ml_genn>=2.1.0"])
