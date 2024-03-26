@@ -13,6 +13,7 @@ from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .weight_quantisation import WeightQuantiseBatch, WeightQuantiseTrain
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
@@ -34,7 +35,8 @@ from pygenn.genn_model import (create_egp_ref, create_var_ref,
 from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
-from ..utils.value import is_value_constant
+from ..utils.quantisation import quantise_signed
+from ..utils.value import is_value_constant, is_value_initializer
 
 from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
                                  SynapseMatrixType_SPARSE_INDIVIDUALG,
@@ -131,6 +133,8 @@ class CompileState:
         self.timestep_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
+        self.batch_quantise_connections = []
+        self.train_quantise_connections = []
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -332,6 +336,8 @@ class EventPropCompiler(Compiler):
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
+                 quantise_num_weight_bits: int = None,
+                 quantise_weight_percentile: float = 99.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None, **genn_kwargs):
@@ -352,6 +358,8 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
+        self.quantise_num_weight_bits = quantise_num_weight_bits
+        self.quantise_weight_percentile = quantise_weight_percentile
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
@@ -750,6 +758,7 @@ class EventPropCompiler(Compiler):
                                       "support heterogeneous delays")
 
         # If this is some form of trainable connectivity
+        quantise_enabled = (self.quantise_num_weight_bits is not None)
         if connect_snippet.trainable:
             # **NOTE** this is probably not necessary as 
             # it's also checked in build_neuron_model
@@ -771,16 +780,58 @@ class EventPropCompiler(Compiler):
                 model=deepcopy(weight_update_model_atomic_cuda if use_atomic
                                else weight_update_model),
                 param_vals={"TauSyn": tau_syn},
-                var_vals={"g": connect_snippet.weight, "Gradient": 0.0})
+                var_vals={"Gradient": 0.0})
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "g"))
 
             # Add connection to list of connections to optimise
             compile_state.weight_optimiser_connections.append(conn)
+            
+            # If quantisation is enabled
+            if quantise_enabled:
+                # Initially zero the quantised forward weight
+                wum.var_vals["g"] = 0.0
+
+                # Add additional state variable to hold unquantised weight
+                wum.add_var("gBack", "scalar", connect_snippet.weight,
+                            VarAccess_READ_ONLY)
+    
+                # Also checkpoint this variable
+                compile_state.checkpoint_connection_vars.append(
+                    (conn, "gBack"))
+
+                # Add connection to list of those 
+                # requiring quantisation every batch
+                compile_state.batch_quantise_connections.append(conn)
+            # Otherwise, initialise forward weights directly
+            else:
+                wum.var_vals["g"] = connect_snippet.weight
         # Otherwise, e.g. it's a pooling layer
         else:
-            wum = WeightUpdateModel(model=deepcopy(static_weight_update_model),
-                                    param_vals={"g": connect_snippet.weight})
+            wum = WeightUpdateModel(
+                model=deepcopy(static_weight_update_model))
+
+            # If quantisation is enabled
+            if quantise_enabled:
+                # If weight is initialised on device
+                if is_value_initializer(connect_snippet.weight):
+                    # Initially zero the quantised forward weight
+                    # and force it to be implemented as a variable
+                    wum.param_vals["g"] = 0.0
+                    wum.make_param_var("g")
+                    
+                    # Add connection to list of those 
+                    # requiring quantisation at start of training
+                    compile_state.train_quantise_connections.append(conn)
+                # Otherwise, directly initialise 
+                # forward weights with quantised version
+                else:
+                    wum.param_vals["g"] = quantise_signed(
+                        connect_snippet.weight, self.quantise_num_weight_bits,
+                        self.quantise_weight_percentile)
+            # Otherwise, initialise forward weights directly
+            else:
+                wum.param_vals["g"] = connect_snippet.weight
 
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
@@ -789,8 +840,11 @@ class EventPropCompiler(Compiler):
             compile_state.feedback_connections.append(conn)
 
             # If it's LIF, add additional event code to backpropagate gradient
+            weight = ("gBack" 
+                      if quantise_enabled and connect_snippet.trainable
+                      else "g")
             if isinstance(source_neuron, LeakyIntegrateFire):
-                wum.append_event_code("$(addToPre, $(g) * ($(LambdaV_post) - $(LambdaI_post)));")
+                wum.append_event_code(f"$(addToPre, $({weight}) * ($(LambdaV_post) - $(LambdaI_post)));")
 
         # Return weight update model
         return wum
@@ -805,9 +859,10 @@ class EventPropCompiler(Compiler):
         optimiser_custom_updates = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
+            weight = "g" if self.quantise_num_weight_bits is None else "gBack"
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
+                    f"Weight{i}", create_wu_var_ref(genn_pop, weight),
                     create_wu_var_ref(genn_pop, "Gradient"), genn_model))
 
         # Add per-batch softmax custom updates for each population that requires them
@@ -866,6 +921,20 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+
+        # Add batch quantisation callbacks for connections that require it
+        for c in compile_state.batch_quantise_connections:
+            base_train_callbacks.append(
+                WeightQuantiseBatch(connection_populations[c], "gBack", "g",
+                                    self.quantise_weight_percentile,
+                                    self.quantise_num_weight_bits))
+        
+        # Add train quantisation callbacks for connections that require it
+        for c in compile_state.train_quantise_connections:
+            base_train_callbacks.append(
+                WeightQuantiseTrain(connection_populations[c], "g", "g",
+                                    self.quantise_weight_percentile,
+                                    self.quantise_num_weight_bits))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
