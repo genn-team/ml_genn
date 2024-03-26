@@ -21,19 +21,24 @@ class WeightQuantiseBase(Callback):
         for s in self.synapse_groups:
             s.pull_var_from_device(self.weight_var_name)
 
-        # Build stack of weight views
-        weight_views = np.stack([s.vars[self.weight_var_name].view
-                                 for s in self.synapse_groups])
+        # Concatenate weight views
+        weight_views = np.concatenate([s.vars[self.weight_var_name].view
+                                       for s in self.synapse_groups])
 
         # Quantise together
         quant_weights = quantise_signed(weight_views, self.num_weight_bits,
                                         self.percentile)
 
         # Loop through synapse groups
-        for i, s in enumerate(self.synapse_groups):
-            # Copy row of quantised weights into view
+        start = 0
+        for s in self.synapse_groups:
+            # Get view to insert quantised weights into
             quant_view = s.vars[self.quant_weight_var_name].view
-            quant_view[:] = quant_weights[i,:]
+
+            # Copy slice of quantised weights into view
+            num_weights = len(quant_view)
+            quant_view[:] = quant_weights[start:(start + num_weights)]
+            start += num_weights
 
             # Push back to device
             s.push_var_to_device(self.quant_weight_var_name)
