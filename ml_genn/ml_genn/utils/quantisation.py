@@ -1,7 +1,10 @@
+import logging
 import math
 import numpy as np
 
 from numbers import Number
+
+logger = logging.getLogger(__name__)
 
 def find_signed_scale(data, num_bits: int, percentile: float):
     # Calculate desired percentile
@@ -61,6 +64,7 @@ def quantise_signed(data, num_bits: int, percentile: float):
     # Find scaling factors
     min_quant, max_quant, scale = find_signed_scale(data, num_bits,
                                                     percentile)
+    logger.info(f"Min: {min_quant}, Max: {max_quant}, Scale: {scale}")
 
     # Quantise, clip and return
     return np.clip(scale * np.round(data / scale), min_quant, max_quant)
@@ -70,6 +74,7 @@ def quantise_unsigned(data, num_bits: int, percentile: float):
     # Find scaling factors
     min_quant, max_quant, scale = find_unsigned_scale(data, num_bits,
                                                       percentile)
+    logger.info(f"Min: {min_quant}, Max: {max_quant}, Scale: {scale}")
 
     # Quantise, clip and return
     return np.clip(scale * np.round(data / scale), min_quant, max_quant)

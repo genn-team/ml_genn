@@ -21,7 +21,6 @@ from pygenn.genn_model import create_var_ref, create_psm_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
-from ..utils.quantisation import quantise_signed
 from ..utils.value import is_value_constant
 
 from .weight_update_models import (static_pulse_model,
@@ -40,10 +39,13 @@ class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
                  evaluate_timesteps: int, base_callbacks: list,
+                 checkpoint_connection_vars: list = [],
+                 checkpoint_population_vars: list = [],
                  reset_time_between_batches: bool = True):
         super(CompiledInferenceNetwork, self).__init__(
             genn_model, neuron_populations, connection_populations,
-            communicator, evaluate_timesteps)
+            communicator, evaluate_timesteps, checkpoint_connection_vars,
+            checkpoint_population_vars)
 
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
@@ -276,7 +278,6 @@ class CompileState:
         self._neuron_reset_vars = {}
         self._psm_reset_vars = {}
         self.in_syn_zero_conns = []
-        self.test_quantise_connections = []
 
     def add_neuron_reset_vars(self, model, pop, reset_model_vars):
         if reset_model_vars:
@@ -323,6 +324,7 @@ class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
                  quantise_num_weight_bits: int = None,
                  quantise_weight_percentile: float = 99.0,
+                 quantise_per_population: bool = True,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  prefer_in_memory_connect=True, 
@@ -353,6 +355,7 @@ class InferenceCompiler(Compiler):
         self.evaluate_timesteps = evaluate_timesteps
         self.quantise_num_weight_bits = quantise_num_weight_bits
         self.quantise_weight_percentile = quantise_weight_percentile
+        self.quantise_per_population = quantise_per_population
         self.reset_time_between_batches = reset_time_between_batches
         self.reset_vars_between_batches = reset_vars_between_batches
         self.reset_in_syn_between_batches = reset_in_syn_between_batches
@@ -392,49 +395,13 @@ class InferenceCompiler(Compiler):
     def build_weight_update_model(self, connection: Connection,
                                   connect_snippet: ConnectivitySnippet,
                                   compile_state):
-        # If source neuron model defines a negative threshold condition
-        src_pop = connection.source()
-        src_neuron_model = src_pop.neuron.get_model(src_pop, self.dt,
-                                                    self.batch_size)
-        het_delay = not is_value_constant(connect_snippet.delay)
-        if "negative_threshold_condition_code" in src_neuron_model.model:
-            wum = WeightUpdateModel(
-                deepcopy(signed_static_pulse_delay_model if het_delay
-                         else signed_static_pulse_model))
-
-            # Insert negative threshold condition code from neuron model
-            wum.model["event_threshold_condition_code"] =\
-                src_neuron_model.model["negative_threshold_condition_code"]
-        else:
-            wum = WeightUpdateModel(
-                deepcopy(static_pulse_delay_model if het_delay
-                         else static_pulse_model))
-
-        # If delay is heterogeneus, add as a parameter
-        if het_delay:
-            wum.param_vals["d"] = connect_snippet.delay
-
-        # If quantisation is enabled
+        wum = super(InferenceCompiler, self).build_weight_update_model(
+            connection, connect_snippet, compile_state)
+        
+        # If quantisation is enabled, force weight
+        # to be implemented as a variable
         if self.quantise_num_weight_bits is not None:
-            # If weight is initialised on device
-            if is_value_initializer(connect_snippet.weight):
-                # Initially zero the quantised forward weight
-                # and force it to be implemented as a variable
-                wum.param_vals["g"] = 0.0
-                wum.make_param_var("g")
-                
-                # Add connection to list of those 
-                # requiring quantisation at start of training
-                compile_state.test_quantise_connections.append(conn)
-            # Otherwise, directly initialise 
-            # forward weights with quantised version
-            else:
-                wum.param_vals["g"] = quantise_signed(
-                    connect_snippet.weight, self.quantise_num_weight_bits,
-                    self.quantise_weight_percentile)
-        # Otherwise, initialise forward weights directly
-        else:
-            wum.param_vals["g"] = connect_snippet.weight
+            wum.make_param_var("g")
 
         return wum
  
@@ -453,17 +420,38 @@ class InferenceCompiler(Compiler):
             # **NOTE** it would be great to be able to do this on device
             for c in compile_state.in_syn_zero_conns:
                 base_callbacks.append(ZeroInSyn(connection_populations[c]))
-
-        # Add train quantisation callbacks for connections that require it
-        for c in compile_state.test_quantise_connections:
-            base_callbacks.append(
-                WeightQuantiseTest(connection_populations[c], "g", "g",
-                                   self.quantise_weight_percentile,
-                                   self.quantise_num_weight_bits))
         
-        return CompiledInferenceNetwork(genn_model, neuron_populations,
-                                        connection_populations,
-                                        self.communicator,
-                                        self.evaluate_timesteps,
-                                        base_callbacks,
-                                        self.reset_time_between_batches)
+        # If quantisation is enabled
+        if self.quantise_num_weight_bits is not None:
+            # Add all weights to list of checkpoint variables
+            checkpoint_connection_vars =\
+                [(c, "g") for c in connection_populations.keys()]
+        
+            # If we're quantizing per-population
+            if self.quantise_per_population:
+                # Loop through neuron populations and add quantisation
+                # callback across all their incoming connections
+                for n in neuron_populations.keys():
+                    if len(n.incoming_connections) > 0:
+                        base_callbacks.append(
+                            WeightQuantiseTest(
+                                [connection_populations[c()]
+                                 for c in n.incoming_connections],
+                                "g", "g", self.quantise_weight_percentile,
+                                self.quantise_num_weight_bits))
+            # Otherwise
+            else:
+                # Loop through synapse groups and add quantisation callbacks
+                for s in connection_populations.values():
+                    base_callbacks.append(
+                        WeightQuantiseTest([s], "g", "g",
+                                           self.quantise_weight_percentile,
+                                           self.quantise_num_weight_bits))
+        # Otherwise, there's nothing to checkpoint
+        else:
+            checkpoint_connection_vars = []
+     
+        return CompiledInferenceNetwork(
+            genn_model, neuron_populations, connection_populations,
+            self.communicator, self.evaluate_timesteps, base_callbacks,
+            checkpoint_connection_vars, [], self.reset_time_between_batches)
