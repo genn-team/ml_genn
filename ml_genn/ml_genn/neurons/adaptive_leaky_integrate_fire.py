@@ -8,23 +8,43 @@ from ..utils.value import InitValue, ValueDescriptor
 from ..utils.decorators import network_default_params
 
 class AdaptiveLeakyIntegrateFire(Neuron):
+    """A leaky-integrate and fire neuron with an adaptive firing threshold
+    as described by [Bellec2018]_.
+    """
+    
     v_thresh = ValueDescriptor("Vthresh")
+    """Membrane voltage firing threshold"""
+    
     v_reset = ValueDescriptor("Vreset")
+    """After a spike is emitted, this value is *subtracted* from the 
+       membrane voltage ``v`` if ``relative_reset`` is ``True``. Otherwise,
+       if ``relative_reset`` is ``False``, the membrane voltage is set to this value.
+    """
+    
     v = ValueDescriptor("V")
+    """State variable containing the membrane voltage"""
+    
     a = ValueDescriptor("A")
+    """State variable containing the adaptation variable"""
+    
     beta = ValueDescriptor("Beta")
+    
     tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
+    """Time constant of membrane voltage dynamics [ms]"""
+    
     tau_refrac = ValueDescriptor("TauRefrac")
+    """Duration of refractory period [ms]"""
+    
     tau_adapt = ValueDescriptor("Rho", lambda val, dt: np.exp(-dt / val))
-
+    """Time constant of adaptation variable dynamics [ms]"""
+    
     @network_default_params
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, a: InitValue = 0.0, beta: InitValue = 0.0174,
                  tau_mem: InitValue = 20.0, tau_refrac: InitValue = None,
                  tau_adapt: InitValue = 2000.0, relative_reset: bool = True,
-                 integrate_during_refrac: bool = True,
-                 softmax: Optional[bool] = None, readout=None):
-        super(AdaptiveLeakyIntegrateFire, self).__init__(softmax, readout)
+                 integrate_during_refrac: bool = True, readout=None):
+        super(AdaptiveLeakyIntegrateFire, self).__init__(readout)
 
         self.v_thresh = v_thresh
         self.v_reset = v_reset

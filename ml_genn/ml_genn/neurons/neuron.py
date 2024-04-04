@@ -21,15 +21,9 @@ class Neuron(ABC):
     Attributes:
         readout: Type of readout to attach to this neuron's output variable
     """
-    def __init__(self, softmax: Optional[bool] = None,
-                 readout: Optional[Readout] = None, **kwargs):
+    def __init__(self, readout: Optional[Readout] = None, **kwargs):
         super(Neuron, self).__init__(**kwargs)
         self.readout = readout
-
-        # Give warning if softmax argument is used
-        if softmax is not None:
-            warn("The softmax argument is no longer "
-                 "required and will be removed", DeprecationWarning)
 
     @abstractmethod
     def get_model(self, population: Population,

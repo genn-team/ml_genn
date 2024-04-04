@@ -27,9 +27,8 @@ class IntegrateFire(Neuron):
     v = ValueDescriptor("V")
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
-                 v: InitValue = 0.0, softmax: Optional[bool] = None,
-                 readout=None, **kwargs):
-        super(IntegrateFire, self).__init__(softmax, readout, **kwargs)
+                 v: InitValue = 0.0, readout=None, **kwargs):
+        super(IntegrateFire, self).__init__(readout, **kwargs)
 
         self.v_thresh = v_thresh
         self.v_reset = v_reset

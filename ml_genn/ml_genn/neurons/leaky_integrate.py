@@ -15,8 +15,8 @@ class LeakyIntegrate(Neuron):
     @network_default_params
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, scale_i : bool = False,
-                 softmax: Optional[bool] = None, readout=None):
-        super(LeakyIntegrate, self).__init__(softmax, readout)
+                 readout=None):
+        super(LeakyIntegrate, self).__init__(readout)
 
         self.v = v
         self.bias = bias
