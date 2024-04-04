@@ -1,5 +1,7 @@
 .. py:currentmodule:: ml_genn
 
+.. _section-building_networks:
+
 Building networks
 =================
 One of the key aims of mlGeNN is to make it simple to define Spiking Neural Networks (SNNs)

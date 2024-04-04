@@ -35,9 +35,12 @@ on top of GeNN’s GPU-optimised sparse data structures and algorithms.
     :titlesonly:
 
     usage/building_networks
+    usage/datasets
+    usage/training_networks
     usage/callbacks_recording
     usage/metrics
     usage/converting_tf
+    usage/bibliography
 
     mlGeNN reference <source/ml_genn>
     mlGeNN TF reference <source/ml_genn_tf>

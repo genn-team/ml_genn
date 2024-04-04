@@ -1,5 +1,7 @@
 .. py:currentmodule:: ml_genn
 
+.. _section-callbacks-recording:
+
 Callbacks and recording
 =======================
 In order to run custom logic mid-simulation including for recording state, 
