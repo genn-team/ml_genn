@@ -33,11 +33,12 @@ author = "James Turner, Jamie Knight"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    "sphinx_autodoc_typehints",
+    "sphinx_rtd_theme",
 ]
 
 napoleon_use_param = True
 napoleon_use_ivar = True
+napoleon_use_rtype = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -49,6 +50,13 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # Mock imports for readthedocs
 autodoc_mock_imports = ["pygenn", "tensorflow"]
+
+autodoc_typehints = "description"
+
+autodoc_inherit_docstrings = True
+
+# Combine __init__ documentation with class to remove need to duplicate in derived
+autoclass_content = "both"
 
 # -- Options for HTML output -------------------------------------------------
 
