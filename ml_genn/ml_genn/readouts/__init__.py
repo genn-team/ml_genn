@@ -1,3 +1,8 @@
+""" Readouts are used to convert the internal state of an output neuron population
+into a form that can be used for classification. Unlike ANNs where this this is typically
+just the activation of the neurons, with SNNs it can be some function of their internal 
+state over time or the spike times.
+"""
 from .avg_var import AvgVar
 from .avg_var_exp_weight import AvgVarExpWeight
 from .max_var import MaxVar

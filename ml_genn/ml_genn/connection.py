@@ -21,10 +21,18 @@ class Connection:
     
     Attributes:
         connectivity:   Type of connectivity to connect populations
-        synapse:        What type of synapse shaping to 
+        synapse:        What type of synapse dynamics to 
                         apply to input delivered via this connection
         name:           Name of connection (only really used 
                         for debugging purposes)
+    
+    Args:
+        source:         Source population to connect
+        target:         Target population to connect
+        connectivity:   Connectivity to connect ``source`` to ``target``.
+        synapse:        What type of synapse dynamics to 
+                        apply to input delivered via this connection
+        name:           Name of connection (only used for debugging purposes)
     """
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,

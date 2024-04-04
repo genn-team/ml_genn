@@ -2,6 +2,17 @@ from .network import Network
 
 
 class SequentialNetwork(Network):
+    """Feedforward network model
+    
+    Attributes:
+        layers:    List of all layers in network
+    
+    Args:
+        default_params: Default parameters to use for neuron and synapse
+                        models created within the scope of this network.
+                        These are typically provided by the compiler.
+    """
+
     def __init__(self, default_params: dict = {}):
         super(SequentialNetwork, self).__init__(default_params)
 

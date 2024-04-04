@@ -7,6 +7,7 @@ from copy import deepcopy
 
 
 class SumVar(Readout):
+    """Read out per-neuron sum of neuron model's output variable"""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 

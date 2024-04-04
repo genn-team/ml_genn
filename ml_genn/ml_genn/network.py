@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import Tuple, Union
 from .serialisers import Serialiser
 
 from .utils.module import get_object
@@ -21,6 +21,11 @@ class Network:
     Attributes:
         populations:    List of all populations in network
         connections:    List of all connections in network
+    
+    Args:
+        default_params: Default parameters to use for neuron and synapse
+                        models created within the scope of this network.
+                        These are typically provided by the compiler.
     """
     _context = None
 
@@ -29,7 +34,16 @@ class Network:
         self.populations = []
         self.connections = []
 
-    def load(self, keys=(), serialiser: SerialiserInitializer = "numpy"):
+    def load(self, keys: Tuple = (),
+             serialiser: SerialiserInitializer = "numpy"):
+        """Load network state from checkpoints
+
+        Args:
+            keys:       tuple of keys used to select correct checkpoint.
+                        Typically might contain epoch number or configuration.
+            serialiser: Serialiser to load checkpoints with (should be the 
+                        same type of serialiser which was used to create them)
+        """
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)

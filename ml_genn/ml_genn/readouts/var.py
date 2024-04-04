@@ -5,6 +5,7 @@ from ..utils.model import NeuronModel
 
 
 class Var(Readout):
+    """Read out instantaneous value of neuron model's output variable"""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 

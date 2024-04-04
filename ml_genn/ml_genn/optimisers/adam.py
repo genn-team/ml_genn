@@ -28,10 +28,23 @@ genn_model = {
 
 
 class Adam(Optimiser):
+    """Optimizer that implements the Adam algorithm [Kingma2014]_.
+    Adam optimization is a stochastic gradient descent method that 
+    is based on adaptive estimation of first-order and second-order moments.
+    """
     alpha = ConstantValueDescriptor()
+    """ Learning rate"""
+    
     beta1 = ConstantValueDescriptor()
+    """ The exponential decay rate for the 1st moment estimates. """
+    
     beta2 = ConstantValueDescriptor()
+    """ The exponential decay rate for the 2nd moment estimates. """
+    
     epsilon = ConstantValueDescriptor()
+    """A small constant for numerical stability. This 
+    is the epsilon in Algorithm 1 of the [Kingma2014]_.
+    """
 
     def __init__(self, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
         self.alpha = alpha
@@ -48,7 +61,8 @@ class Adam(Optimiser):
         genn_cu.set_dynamic_param_value("MomentScale1", moment_scale_1)
         genn_cu.set_dynamic_param_value("MomentScale2", moment_scale_2)
 
-    def get_model(self, gradient_ref, var_ref, zero_gradient: bool):
+    def get_model(self, gradient_ref, var_ref, 
+                  zero_gradient: bool) -> CustomUpdateModel:
         model = CustomUpdateModel(
             deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,

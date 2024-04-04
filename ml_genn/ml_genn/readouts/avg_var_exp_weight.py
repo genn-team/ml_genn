@@ -7,6 +7,8 @@ from copy import deepcopy
 
 
 class AvgVarExpWeight(Readout):
+    """Read out per-neuron average of neuron model's output variable
+    with exponential weighting as described by [Nowotny2024]_."""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 

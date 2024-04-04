@@ -8,6 +8,12 @@ from .serialiser import Serialiser
 logger = logging.getLogger(__name__)
 
 class Numpy(Serialiser):
+    """Basic numpy based serialiser. Stores arrays as individual numpy binary
+    files with paths mapped to filesystem directory structure.
+    
+    Args:
+        path:   File system path to serialise and deserialise relative to
+    """
     def __init__(self, path: str = ""):
         self.path = path
         
