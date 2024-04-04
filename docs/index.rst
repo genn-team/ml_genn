@@ -45,7 +45,6 @@ computational savings over rate-based networks17.
     usage/converting_tf
 
     mlGeNN reference <source/ml_genn>
-    mlGeNN eProp reference <source/ml_genn_eprop>
     mlGeNN TF reference <source/ml_genn_tf>
 
 
