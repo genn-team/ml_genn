@@ -9,7 +9,7 @@ from abc import abstractmethod
 
 
 class Readout(ABC):
-    """Base class for all optimisers"""
+    """Base class for all readouts"""
     
     @abstractmethod
     def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
