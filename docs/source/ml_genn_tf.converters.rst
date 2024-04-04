@@ -1,6 +1,11 @@
 ml\_genn\_tf.converters package
 ===============================
 
+.. automodule:: ml_genn_tf.converters
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Submodules
 ----------
 
@@ -48,14 +53,6 @@ ml\_genn\_tf.converters.spike\_norm module
 ------------------------------------------
 
 .. automodule:: ml_genn_tf.converters.spike_norm
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: ml_genn_tf.converters
    :members:
    :undoc-members:
    :show-inheritance:
