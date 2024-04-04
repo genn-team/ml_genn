@@ -13,27 +13,22 @@ While there are already a plethora of SNN simulators, most are designed for
 Computational Neuroscience applications and, as such, not only provide unfamiliar
 abstractions for ML researchers but also don't support standard ML workflows
 such as data-parallel batch training. 
+Because of this, researchers have chosen to stick with familiar frameworks such as PyTorch 
+and built libraries to adapt them for SNNs such as `BindsNET <https://github.com/BindsNET/bindsnet>`_, 
+`NORSE <https://github.com/norse/norse>`_, `SNNTorch <https://snntorch.readthedocs.io/en/latest/>`_ 
+and `Spiking Jelly <https://github.com/fangwei123456/spikingjelly>`_.
 
-To provid
-While previous libraries for spike-based ML such as BindsNET22 have allowed SNNs to 
-be defined in a familiar environment for ML researchers, they have been implemented 
-on top of libraries like PyTorch. When using these libraries, the activity of a 
-population of neurons is typically represented as a vector of rates and, for an SNN, 
-this vector is populated with ones for spiking and zeros for non-spiking neurons. 
+However, these libraries are all constrained by the underlying nature of ML frameworks 
+where the activity of populations of neurons is typically represented as a vector of 
+activities and, for an SNN, this vector is populated with ones for spiking and zeros for non-spiking neurons. 
 This representation allows one to apply the existing infrastructure of the underlying 
-ML library to SNNs but, as real neurons often spike at comparatively low rates, 
+ML framework to SNNs but, as spiking neurons often spike at comparatively low rates, 
 propagating the activity of inactive neurons through the network leads to 
 unnecessary computation.
 
-mlGeNN aims to provi, spike-based ML which harnesses GeNN’s GPU-optimised sparse data
-structures and algorithms.
-
-mlGeNN 
-researchers have chosen to stick with familiar tools such as PyTorch which are 
-highly-optimised for rate-based models, but do not take advantage of the 
-spatio-temporal sparsity of SNNs which have the potential to enable massive 
-computational savings over rate-based networks17. 
-
+mlGeNN provides user friendly implementations of novel SNN training algorithms
+such as e-prop [Bellec2020]_ and EventProp [Wunderlich2021]_ to enable spike-based ML 
+on top of GeNN’s GPU-optimised sparse data structures and algorithms.
 
 .. toctree::
     :maxdepth: 3
