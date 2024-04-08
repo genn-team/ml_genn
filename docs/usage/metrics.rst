@@ -1,5 +1,7 @@
 .. py:currentmodule:: ml_genn
 
+.. _section-metrics:
+
 Metrics
 =======
 mlGeNN can calculate different types of metric when evaluating datasets. 
