@@ -57,6 +57,18 @@ genn_model_signed = {
 
 
 class FewSpikeReluInput(Neuron, InputBase):
+    """A few-spike neuron to encode inputs using a 
+    ReLU activation as described by [Stockl2021]_.
+    
+    Should typically be created by converting an ANN to an SNN using
+    :class:`ml_genn_tf.converters.FewSpike`.
+    
+    Args:
+        k:              Number of timesteps to encode activation over.
+        alpha:          Scaling factor to apply to activations.
+        signed_input:   Are inputs expected to be both positive and negative?
+    """
+    
     k = ConstantValueDescriptor()
     alpha = ConstantValueDescriptor()
 

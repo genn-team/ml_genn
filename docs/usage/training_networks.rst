@@ -40,8 +40,13 @@ Like in Keras, additional logic such as checkpointing and recording of
 state variables can be added to the standard training loop using callbacks 
 as described in the :ref:`section-callbacks-recording` section.
 
-Custom training loops
----------------------
+Augmentation
+------------
+Like when using Keras, sometimes, merely adding callbacks to the standard
+training loop is insufficient and you want to perform additional manual processing.
+One common case of this is augmentation where you want to modify the data being trained
+on each epoch. This can be implemented by manually looping over epochs and providing new 
+data each time like this:
 
 .. code-block:: python
 
@@ -53,8 +58,7 @@ Custom training loops
                                              start_epoch=e, num_epochs=1,
                                              shuffle=True)
 
-merr
-
+where ``augment`` is a function that returns an augmented version of a spike dataset (see ref:`section-datasets`).
 
 Default parameters
 ------------------
@@ -80,5 +84,4 @@ a sequential network and hence the leaky integrate-and-fire layer within it:
         ...
         hidden = Layer(Dense(1.0), LeakyIntegrateFire(v_thresh=0.61, tau_mem=20.0, tau_refrac=5.0), 128)
 
-pass
 

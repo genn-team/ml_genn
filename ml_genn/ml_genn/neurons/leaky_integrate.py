@@ -8,6 +8,16 @@ from ..utils.value import InitValue, ValueDescriptor
 from ..utils.decorators import network_default_params
 
 class LeakyIntegrate(Neuron):
+    """A leaky-integrator, typically used as an output neuron
+
+    Args:
+        v:          Initial value of membrane voltage
+        bias:       Initial value of bias curremt
+        tau_mem:    Time constant of membrane voltage [ms]
+        scale_i:    Should input current ``x`` be scaled by :math:`1-e^\\frac{-dt}{\\tau_\\text{mem}}`?
+        readout:    Type of readout to attach to this neuron's output variable
+    """
+    
     v = ValueDescriptor("V")
     bias = ValueDescriptor("Bias")
     tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))

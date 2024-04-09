@@ -4,6 +4,26 @@ from ..utils.value import InitValue
 
 
 class LeakyIntegrateFireInput(LeakyIntegrateFire, InputBase):
+    """A leaky-integrate and fire input neuron.
+    
+    Args:
+        v_thresh:                   Membrane voltage firing threshold
+        v_reset:                    After a spike is emitted, this value is
+                                    *subtracted* from the membrane voltage
+                                    ``v`` if ``relative_reset`` is ``True``.
+                                    Otherwise, if ``relative_reset`` is 
+                                    ``False``, the membrane voltage is set to
+                                    this value.
+        v:                          Initial value of membrane voltage
+        tau_mem:                    Time constant of membrane voltage [ms]
+        tau_refrac:                 Duration of refractory period [ms]
+        relative_reset:             How is ``v`` reset after a spike?
+        integrate_during_refrac:    Should ``v`` continue to integrate inputs
+                                    during refractory period?
+        input_frames:               How many frames does each input have?
+        input_frame_timesteps:      How many timesteps should each frame of 
+                                    input be presented for?
+    """
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
                  tau_refrac: InitValue = None, relative_reset: bool = True,

@@ -8,6 +8,16 @@ if TYPE_CHECKING:
     from .. import Population
 
 class PoissonInput(Neuron, InputBase):
+    """Input neuron which generates spikes using a Poisson process 
+    whose rate is proportional to the magnitude of the input.
+    
+    Args:
+        signed_spikes:          Should negative spikes be emitted
+                                if input is less than zero?
+        input_frames:           How many frames does each input have?
+        input_frame_timesteps:  How many timesteps should each frame of 
+                                input be presented for?
+    """
     def __init__(self, signed_spikes=False, input_frames=1, 
                  input_frame_timesteps=1):
         super(PoissonInput, self).__init__(

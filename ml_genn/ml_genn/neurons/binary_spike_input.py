@@ -8,6 +8,17 @@ if TYPE_CHECKING:
     from .. import Population
 
 class BinarySpikeInput(Neuron, InputBase):
+    """Input neuron which simply emits a spike if the input is greater
+    than zero. Optionally, it can also emit a 'negative' spike if input 
+    is less than zero.
+    
+    Args:
+        signed_spikes:          Should negative spikes be emitted
+                                if input is less than zero?
+        input_frames:           How many frames does each input have?
+        input_frame_timesteps:  How many timesteps should each frame of 
+                                input be presented for?
+    """
     def __init__(self, signed_spikes=False, input_frames=1,
                  input_frame_timesteps=1):
         super(BinarySpikeInput, self).__init__(

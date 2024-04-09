@@ -15,12 +15,34 @@ def _replace_neuron_code(nm, source, target):
 
 
 class Input:
+    """Base class for all types of input neuron"""
     @abstractmethod
-    def set_input(self, compiled_net, pop, input):
+    def set_input(self, genn_pop, batch_size: int, shape, input):
+        """
+        Copy provided data to GPU.
+        
+        Args:
+            genn_pop:   GeNN ``NeuronGroup`` object population has been
+                        compiled into
+            batch_size: Batch size of compiled network
+            shape:      Shape of input population
+            input:      Input data
+        """
         pass
 
 
 class InputBase(Input):
+    """Base class for all types of input neuron for non-spiking datasets.
+    
+    Args:
+        var_name:               Name of state variable to add to 
+                                model to hold current static input
+        egp_name:               Name of Extra Global Parameter to add to 
+                                model to hold current time-varying input
+        input_frames:           How many frames does each input have?
+        input_frame_timesteps:  How many timesteps should each frame of 
+                                input be presented for?
+     """
     def __init__(self, var_name="Input", egp_name=None,
                  input_frames=1, input_frame_timesteps=1,
                  **kwargs):
@@ -38,6 +60,15 @@ class InputBase(Input):
 
     def create_input_model(self, base_model, batch_size: int, shape,
                            replace_input: str = None):
+        """Convert standard neuron model into input neuron model.
+        
+        Args:
+            base_model:     Standard neuron model
+            batch_size:     Batch size of compiled network
+            shape:          Shape of input population
+            replace_input:  Name of variable in neuron model code 
+                            to replace with input (typically Isyn)
+        """
         # Make copy of model
         nm_copy = deepcopy(base_model)
 

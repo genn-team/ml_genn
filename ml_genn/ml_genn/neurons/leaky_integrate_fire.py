@@ -8,6 +8,26 @@ from ..utils.value import InitValue, ValueDescriptor
 from ..utils.decorators import network_default_params
 
 class LeakyIntegrateFire(Neuron):
+    """A leaky-integrate and fire neuron.
+    
+    Args:
+        v_thresh:                   Membrane voltage firing threshold
+        v_reset:                    After a spike is emitted, this value is
+                                    *subtracted* from the membrane voltage
+                                    ``v`` if ``relative_reset`` is ``True``.
+                                    Otherwise, if ``relative_reset`` is 
+                                    ``False``, the membrane voltage is set to
+                                    this value.
+        v:                          Initial value of membrane voltage
+        tau_mem:                    Time constant of membrane voltage [ms]
+        tau_refrac:                 Duration of refractory period [ms]
+        relative_reset:             How is ``v`` reset after a spike?
+        integrate_during_refrac:    Should ``v`` continue to integrate inputs
+                                    during refractory period?
+        readout:                    Type of readout to attach to this
+                                    neuron's output variable
+    """
+    
     v_thresh = ValueDescriptor("Vthresh")
     v_reset = ValueDescriptor("Vreset")
     v = ValueDescriptor("V")

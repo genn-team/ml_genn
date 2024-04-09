@@ -8,7 +8,7 @@ from ..utils.snippet import ConstantValueDescriptor
 # neurons are FS ReLU or FS unsigned input
 genn_model = {
     "params": [("K", "int"), ("Scale", "scalar"),
-                         ("SrcScale", "scalar")],
+               ("SrcScale", "scalar")],
     "vars": [("Fx", "scalar"), ("V", "scalar")],
 
     "sim_code":
@@ -92,6 +92,17 @@ genn_model_upstream_signed = {
 
 
 class FewSpikeRelu(Neuron):
+    """A few-spike neuron to encode a ReLU ANN activation
+    as described by [Stockl2021]_.
+    
+    Should typically be created by converting an ANN to an SNN using
+    :class:`ml_genn_tf.converters.FewSpike`.
+    
+    Args:
+        k:          Number of timesteps to encode activation over.
+        alpha:      Scaling factor to apply to activations.
+        readout:    Type of readout to attach to this neuron's output variable
+    """
     pipelined = True
 
     k = ConstantValueDescriptor()

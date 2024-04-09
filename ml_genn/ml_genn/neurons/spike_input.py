@@ -30,6 +30,16 @@ genn_model = {
 
 
 class SpikeInput(Neuron, Input):
+    """An input neuron which emits spike trains provided as
+    :class:`ml_genn.utils.data.PreprocessedSpikes` objects
+    
+    Args:
+        max_spikes: Maximum total number of spikes this population can emit
+                    for any example. This needs to include batch size i.e.
+                    if batch size is 32 and there are 100 neurons in the 
+                    population, each of which emits a maximum of one spike
+                    per example, :math:`\\text{max_spikes} = 32 * 100 * 1 = 3200`
+    """
     def __init__(self, max_spikes=1000000):
         super(SpikeInput, self).__init__()
 

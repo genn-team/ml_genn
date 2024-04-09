@@ -4,6 +4,17 @@ from ..utils.value import InitValue
 
 
 class IntegrateFireInput(IntegrateFire, InputBase):
+    """An integrate and fire input neuron.
+    
+    Args:
+        v_thresh:               Membrane voltage firing threshold
+        v_reset:                After a spike is emitted, the membrane
+                                voltage is set to this value.
+        v:                      Initial value of membrane voltage
+        input_frames:           How many frames does each input have?
+        input_frame_timesteps:  How many timesteps should each frame of 
+                                input be presented for?
+    """
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, input_frames=1, input_frame_timesteps=1):
         super(IntegrateFireInput, self).__init__(
