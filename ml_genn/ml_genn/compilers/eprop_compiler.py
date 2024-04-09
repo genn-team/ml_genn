@@ -246,7 +246,7 @@ class EPropCompiler(Compiler):
     """Compiler for training models using e-prop [Bellec2020]_.
     
     The e-prop compiler support :class:`ml_genn.neurons.LeakyIntegrateFire` and
-    :class:`ml_genn.neurons.AdaptiveLeakyIntegrateFire` hidden neuron models and 
+    :class:`ml_genn.neurons.AdaptiveLeakyIntegrateFire` hidden neuron models; and 
     :class:`ml_genn.losses.SparseCategoricalCrossentropy` loss functions for classification
     and :class:`ml_genn.losses.MeanSquareError` for regression.
     

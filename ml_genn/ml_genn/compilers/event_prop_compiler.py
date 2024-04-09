@@ -315,6 +315,91 @@ neuron_reset_strict_check = """
     """
 
 class EventPropCompiler(Compiler):
+    """Compiler for training models using EventProp [Wunderlich2021]_.
+
+    The EventProp compiler support :class:`ml_genn.neurons.LeakyIntegrateFire`
+    hidden neuron models and the :class:`ml_genn.losses.SparseCategoricalCrossentropy` 
+    loss functions for classification.
+
+    EventProp implements a fully event-driven backward pass meaning that its memory 
+    overhead scales with number of spikes per-trial rather than sequence length. 
+    
+    In the original paper, [Wunderlich2021]_ 
+    derived EventProp to support loss functions of the form:
+
+    .. math::
+
+        {\\cal L} = l_p(t^{\\text{post}}) + \\int_0^T l_V(V(t),t) dt
+    
+    such as
+
+    .. math::
+
+        l_V= -\\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\log \\left( \\frac{\\exp\\left(V_{l(m)}^m(t)\\right)}{\\sum_{k=1}^{N_{\\text{class}}} \\exp\\left(V_{k}^m(t) \\right)} \\right)
+    
+    where a function of output neuron membrane voltage is calculated each
+    timestep -- in mlGeNN, we refer to these as *per-timestep loss functions*.
+    However, [Nowotny2024]_ showed that tasks with more complex temporal 
+    structure cannot be learned using these loss functions and extended 
+    the framework to support loss functions of the form:
+
+    .. math::
+
+        {\\cal L}_F = F\\left(\\textstyle \\int_0^T l_V(V(t),t) \\, dt\\right)
+    
+    such as:
+    
+    .. math::
+
+        {\\mathcal L_{\\text{sum}}} = - \\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\log \\left( \\frac{\\exp\\left(\\int_0^T V_{l(m)}^m(t) dt\\right)}{\\sum_{k=1}^{N_{\\text{out}}} \\exp\\left(\\int_0^T V_{k}^m(t) dt\\right)} \\right)
+
+    where a function of the integral of voltage is calculated once per-trial.
+
+    Args:
+        example_timesteps:          How many timestamps each example will be
+                                    presented to the network for
+        losses:                     Either a dictionary mapping loss functions
+                                    to output populations or a single loss
+                                    function to apply to all outputs
+        optimiser:                  Optimiser to use when applying weights
+        reg_lambda_upper:           Regularisation strength, should typically
+                                    be the same as ``reg_lambda_lower``.
+        reg_lambda_lower:           Regularisation strength, should typically
+                                    be the same as ``reg_lambda_upper``.
+        reg_nu_upper:               Target number of hidden neuron neuron
+                                    spikes used for regularisation [Hz]
+        max_spikes:                 What is the maximum number of spikes each
+                                    neuron (input and hidden) can emit each
+                                    trial? This is used to allocate memory 
+                                    for the backward pass.
+        strict_buffer_checking:     For performance reasons, if neurons emit
+                                    more than ``max_spikes`` they are normally
+                                    ignored but, if this flag is set, 
+                                    this will cause an error.
+        per_timestep_loss:          Should we use the per-timestep or
+                                    per-trial loss functions described above?
+        dt:                         Simulation timestep [ms]
+        batch_size:                 What batch size should be used for
+                                    training? In our experience, e-prop works
+                                    well with very large batch sizes (512)
+        rng_seed:                   What value should GeNN's GPU RNG be seeded
+                                    with? This is used for all GPU randomness
+                                    e.g. weight initialisation and poisson 
+                                    spike train generation
+        kernel_profiling:           Should GeNN record the time spent in each
+                                    GPU kernel? These values can be extracted
+                                    directly from the GeNN model which can be 
+                                    accessed via the ``genn_model`` property
+                                    of the compiled model.
+        reset_time_between_batches: Should time be reset to zero at the start
+                                    of each example or allowed to run
+                                    continously? 
+        communicator:               Communicator used for inter-process
+                                    communications when training using
+                                    multiple GPUs.
+        
+    """
+
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
