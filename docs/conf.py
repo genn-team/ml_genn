@@ -34,7 +34,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
-]
+    "nbsphinx"]
 
 napoleon_use_param = True
 napoleon_use_ivar = True
@@ -57,6 +57,9 @@ autodoc_inherit_docstrings = True
 
 # Combine __init__ documentation with class to remove need to duplicate in derived
 autoclass_content = "both"
+
+# Never actually run tutorial notebooks
+nbsphinx_execute = "never"
 
 # -- Options for HTML output -------------------------------------------------
 

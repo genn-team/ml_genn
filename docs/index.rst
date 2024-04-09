@@ -41,6 +41,8 @@ on top of GeNN’s GPU-optimised sparse data structures and algorithms.
     usage/metrics
     usage/converting_tf
     usage/bibliography
+    
+    tutorials/index
 
     mlGeNN reference <source/ml_genn>
     mlGeNN TF reference <source/ml_genn_tf>
