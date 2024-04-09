@@ -23,7 +23,7 @@ In mlGeNN, this functionality is implemented using callbacks.
 Spikes
 ^^^^^^
 Because spike recording uses `GeNN's spike recording system <https://github.com/genn-team/genn/pull/372>`_,
-you need to set the `record_spikes=True` keyword argument on :class:`~population.Population`, 
+you need to set the ``record_spikes=True`` keyword argument on :class:`~population.Population`, 
 :class:`~layer.InputLayer` or :class:`~layer.Layer` objects you wish to record spikes from when you construct the model. 
 For example:
 
@@ -41,7 +41,7 @@ Then you can add :class:`~callbacks.var_recorder.SpikeRecorder` callbacks to a m
     metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01}, {output: testing_labels},
                                               callbacks=callbacks)
 
-The ``key'' argument is used to uniquely identify data produced by callbacks in the ``cb_data``  dictionary
+The ``key`` argument is used to uniquely identify data produced by callbacks in the ``cb_data``  dictionary
 returned by ``evaluate`` and can be any hashable type. If no key is provided, the integer index of the 
 callback will be used e.g. in this case, the key of the SpikeRecorder would be 1. For example, the following code-block
 produces a raster plot of all the spikes emitted by all neurons during the fifth example using matplotlib:
