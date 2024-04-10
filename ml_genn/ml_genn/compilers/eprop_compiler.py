@@ -5,6 +5,7 @@ from typing import Iterator, Sequence
 from pygenn import CustomUpdateVarAccess, SynapseMatrixType, VarAccess
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
@@ -16,7 +17,9 @@ from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
-from ..utils.model import CustomUpdateModel, WeightUpdateModel
+from ..utils.model import (CustomUpdateModel, NeuronModel,
+                           SynapseModel, WeightUpdateModel)
+from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
 from pygenn import create_var_ref, create_wu_var_ref
@@ -316,14 +319,16 @@ class EPropCompiler(Compiler):
         self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
 
-    def pre_compile(self, network, genn_model, **kwargs):
+    def pre_compile(self, network: Network, 
+                    genn_model, **kwargs) -> CompileState:
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
 
         return CompileState(self.losses, readouts)
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state: CompileState) -> NeuronModel:
         # Make copy of model
         model_copy = deepcopy(model)
 
@@ -434,7 +439,8 @@ class EPropCompiler(Compiler):
         # Build neuron model and return
         return model_copy
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state: CompileState) -> SynapseModel:
         if not isinstance(conn.synapse, Delta):
             raise NotImplementedError("E-prop compiler only "
                                       "supports Delta synapses")
@@ -442,7 +448,9 @@ class EPropCompiler(Compiler):
         # Return model
         return model
 
-    def build_weight_update_model(self, conn, connect_snippet, compile_state):
+    def build_weight_update_model(self, conn: Connection,
+                                  connect_snippet: ConnectivitySnippet,
+                                  compile_state: CompileState) -> WeightUpdateModel:
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
@@ -506,8 +514,9 @@ class EPropCompiler(Compiler):
         # Return weight update model
         return wum
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict,
+                                compile_state: CompileState) -> CompiledTrainingNetwork:
         # Fuse pre and postsynaptic updates for efficiency
         genn_model.fuse_postsynaptic_models = True
         genn_model.fuse_pre_post_weight_update_models = True

@@ -4,13 +4,14 @@ from typing import Iterator, Sequence, Union
 from pygenn import SynapseMatrixType
 from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
+from .. import Connection, Population, Network
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..communicators import Communicator
 from ..metrics import Metric
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
-from ..utils.model import CustomUpdateModel
+from ..utils.model import CustomUpdateModel, NeuronModel, SynapseModel
 from ..utils.network import PopulationType
 
 from pygenn import create_var_ref, create_psm_var_ref
@@ -335,10 +336,12 @@ class InferenceCompiler(Compiler):
         self.reset_vars_between_batches = reset_vars_between_batches
         self.reset_in_syn_between_batches = reset_in_syn_between_batches
 
-    def pre_compile(self, network, genn_model, **kwargs):
+    def pre_compile(self, network: Network, 
+                    genn_model, **kwargs) -> CompileState:
         return CompileState()
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state: CompileState) -> NeuronModel:
         # If population has a readout i.e. it's an output
         # Add readout logic to model
         if pop.neuron.readout is not None:
@@ -354,7 +357,8 @@ class InferenceCompiler(Compiler):
         return super(InferenceCompiler, self).build_neuron_model(
             pop, model, compile_state)
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state: CompileState) -> SynapseModel:
         # Add any PSM reset variables to compile state
         if self.reset_vars_between_batches:
             compile_state.add_psm_reset_vars(model, conn)
@@ -367,8 +371,9 @@ class InferenceCompiler(Compiler):
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, compile_state)
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict,
+                                compile_state: CompileState) -> CompiledInferenceNetwork:
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,

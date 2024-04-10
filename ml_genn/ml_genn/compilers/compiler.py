@@ -138,6 +138,7 @@ class ZeroInSyn(Callback):
 
 
 class Compiler:
+    """Base class for all compilers"""
     def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
@@ -163,13 +164,41 @@ class Compiler:
             self.batch_size = batch_size
 
     def pre_compile(self, network: Network, genn_model, **kwargs):
+        """If any pre-processing is required before building neuron, synapse
+        and weight update models, compilers should implement it here. Any 
+        compiler-specific state that should be persistent across compilation
+        should be encapsulated in an object returned from this method.
+        
+        Args:
+            network:    Network to be compiled
+            genn_model: Empty ``GeNNModel`` created at start of compilation
+        """
         return None
 
     def calculate_delay(self, conn: Connection, delay, compile_state):
+        """Apply any compiler-specific processing to 
+        delay associated with a connection.
+        
+        Args:
+            conn:           Connection synapse model is associated with
+            delay:          Base delay specified by connectivity
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
         return delay
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
-                           compile_state):
+                           compile_state) -> NeuronModel:
+        """Apply compiler-specific processing to the base neuron model
+        returned by :meth:`ml_genn.neurons.Neuron.get_model`.
+        If modifications are made, this should be done to a (deep) copy.
+        
+        Args:
+            pop:            Population neuron model is associated with
+            model:          Base neuron model
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
         model_copy = deepcopy(model)
 
         # Delete negative threshold condition if there is one
@@ -180,13 +209,32 @@ class Compiler:
         return model_copy
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
-                            compile_state):
+                            compile_state) -> SynapseModel:
+        """Apply compiler-specific processing to the base synapse model
+        returned by :meth:`ml_genn.synapses.Synapse.get_model`.
+        If modifications are made, this should be done to a (deep) copy.
+        
+        Args:
+            conn:           Connection synapse model is associated with
+            model:          Base synapse model
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
         # Build model customised for parameters and values
         return model
 
     def build_weight_update_model(self, connection: Connection,
                                   connect_snippet: ConnectivitySnippet,
-                                  compile_state):
+                                  compile_state) -> WeightUpdateModel:
+        """Create compiler-specific weight update model for a connection.
+
+        Args:
+            connection:         Connection weight update 
+                                model willl be used for
+            connect_snippet:    Connectivity associated with connection
+            compile_state:      Compiler-specific state created by
+                                :meth:`.pre_compile`.
+        """
         # Build parameter values
         param_vals = {"g": connect_snippet.weight}
         het_delay = not is_value_constant(connect_snippet.delay)
@@ -215,6 +263,14 @@ class Compiler:
     def add_custom_update(self, genn_model: GeNNModel,
                           model: CustomUpdateModel,
                           group: str, name: str):
+        """Add a custom update to model.
+        
+        Args:
+            genn_model: ``GeNNModel`` being compiled
+            model:      Custom update model to add
+            group:      Name of custom update group to associate update with
+            name:       Name of custom update
+        """
         # Process model
         (cu_model, cu_param_vals, cu_dynamic_param_names,
          cu_var_vals, cu_egp_vals, cu_var_egp_vals, 
@@ -240,6 +296,27 @@ class Compiler:
     def add_softmax_custom_updates(self, genn_model, genn_pop, 
                                    input_var_name: str, output_var_name: str,
                                    custom_update_group_prefix: str = ""):
+        """Adds a numerically stable softmax to the model:
+        
+        .. math::
+
+            \\text{softmax}(x_i) = \\frac{e^{x_i - \\text{max}(x)}}{\\sum_j e^{x_j - \\text{max}(x)}}
+        
+        This softmax can then be calculated by triggering custom update groups
+        "Softmax1", "Softmax2" and "Softmax3" in sequence (with optional prefix)
+        
+        Args:
+            genn_model:                 ``GeNNModel`` being compiled
+            genn_pop:                   GeNN population input and output 
+                                        variables are associated with
+            input_var_name:             Name of variable to read ``x`` from
+            output_var_name:            Name of variable to write softmax to
+            custom_update_group_prefix: Optional prefix to add to names of 
+                                        custom update groups (enabling softmax
+                                        operations required by different parts
+                                        of the model to be triggered 
+                                        seperately)
+        """
         # Create custom update model to implement 
         # first softmax pass and add to model
         softmax_1 = CustomUpdateModel(
@@ -277,12 +354,42 @@ class Compiler:
             custom_update_group_prefix + "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict, compile_state):
+        """Perform any final compiler-specific modifications to compiled 
+        ``GeNNModel`` and return :class:`ml_genn.compilers.CompiledNetwork`
+        derived object.
+        
+        Args:
+            genn_model:             ``GeNNModel`` with all neuron and synapse
+                                    groups added
+            neuron_populations:     dictionary mapping 
+                                    :class:`ml_genn.Population` objects
+                                    to GeNN ``NeuronGroup`` objects they
+                                    have been compiled into
+            connection_populations: dictionary mapping 
+                                    :class:`ml_genn.Connection` objects
+                                    to GeNN ``SynapseGroup`` objects they
+                                    have been compiled into
+            compile_state:          Compiler-specific state created by
+                                    :meth:`.pre_compile`.
+            """
         return CompiledNetwork(genn_model, neuron_populations,
                                connection_populations, self.communicator)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
+        """Compiles network
+        
+        Args:
+            network:    Network to compile
+            name:       Optional name for model used to determine directory
+                        to generate code to. If not specified, name of module
+                        calling this function will be used.
+            kwargs:     Keyword arguments passed to :meth:`.pre_compile`.
+
+        Returns:
+            Compiled network
+        """
         # If no name is specifie
         if name is None:
             # Get the parent frame from our current frame

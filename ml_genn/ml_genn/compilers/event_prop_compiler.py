@@ -8,6 +8,7 @@ from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
@@ -20,8 +21,10 @@ from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
-from ..utils.model import CustomUpdateModel, WeightUpdateModel
+from ..utils.model import (CustomUpdateModel, NeuronModel, 
+                           SynapseModel, WeightUpdateModel)
 from ..utils.network import PopulationType
+from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
 from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
@@ -428,7 +431,8 @@ class EventPropCompiler(Compiler):
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
-    def pre_compile(self, network, genn_model, **kwargs):
+    def pre_compile(self, network: Network, 
+                    genn_model, **kwargs) -> CompileState:
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
@@ -436,7 +440,8 @@ class EventPropCompiler(Compiler):
         return CompileState(self.losses, readouts,
                             genn_model.backend_name)
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state: CompileState) -> NeuronModel:
         # Make copy of model
         model_copy = deepcopy(model)
 
@@ -808,7 +813,8 @@ class EventPropCompiler(Compiler):
         # Build neuron model and return
         return model_copy
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state: CompileState) -> SynapseModel:
         # **NOTE** this is probably not necessary as 
         # it's also checked in build_neuron_model
         if not isinstance(conn.synapse, Exponential):
@@ -818,7 +824,9 @@ class EventPropCompiler(Compiler):
         # Return model
         return model
 
-    def build_weight_update_model(self, conn, connect_snippet, compile_state):
+    def build_weight_update_model(self, conn: Connection,
+                                  connect_snippet: ConnectivitySnippet,
+                                  compile_state: CompileState) -> WeightUpdateModel:
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("EventProp compiler only "
                                       "support heterogeneous delays")
@@ -875,8 +883,9 @@ class EventPropCompiler(Compiler):
         # Return weight update model
         return wum
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict, 
+                                compile_state: CompileState) -> CompiledTrainingNetwork:
         # Correctly target feedback
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"

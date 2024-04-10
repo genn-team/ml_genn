@@ -6,13 +6,15 @@ from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
+from .. import Connection, Population, Network
 from ..communicators import Communicator
 from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..readouts import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
-
+from ..utils.model import NeuronModel, SynapseModel
+                           
 from ..utils.data import get_dataset_size
 from ..utils.module import get_object_mapping
 from ..utils.network import get_network_dag, get_underlying_pop
@@ -22,6 +24,9 @@ from ..metrics import default_metrics
 
 
 class CompiledFewSpikeNetwork(CompiledNetwork):
+    """Compiled network used for performing inference using
+    ANNs converted to SNN using FewSpike encoding [Stockl2021]_.
+    """
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
                  k: int, pop_pipeline_depth: dict):
@@ -210,7 +215,8 @@ class FewSpikeCompiler(Compiler):
                                                **genn_kwargs)
         self.k = k
 
-    def pre_compile(self, network, genn_model, inputs, outputs, **kwargs):
+    def pre_compile(self, network: Network, genn_model, 
+                    inputs, outputs, **kwargs) -> CompileState:
         dag = get_network_dag(inputs, outputs)
 
         # Loop through populations
@@ -246,13 +252,15 @@ class FewSpikeCompiler(Compiler):
         return CompileState(con_delay=con_delay,
                             pop_pipeline_depth=pop_pipeline_depth)
 
-    def calculate_delay(self, conn, delay, compile_state):
+    def calculate_delay(self, conn, delay,
+                        compile_state: CompileState):
         # Check that no delay is already set
         assert is_value_constant(delay) and delay == 0
 
         return compile_state.con_delay[conn]
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state: CompileState) -> NeuronModel:
         # Check neuron model is supported
         if not isinstance(pop.neuron, (FewSpikeRelu, FewSpikeReluInput)):
             raise NotImplementedError(
@@ -274,7 +282,8 @@ class FewSpikeCompiler(Compiler):
         return super(FewSpikeCompiler, self).build_neuron_model(
             pop, model, compile_state)
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state: CompileState) -> SynapseModel:
         if not isinstance(conn.synapse, Delta):
             raise NotImplementedError("FewSpike models only "
                                       "support Delta synapses")
@@ -282,8 +291,9 @@ class FewSpikeCompiler(Compiler):
         return super(FewSpikeCompiler, self).build_synapse_model(
             conn, model, compile_state)
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict, 
+                                compile_state: CompileState) -> CompiledFewSpikeNetwork:
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
                                        connection_populations,
                                        self.communicator, self.k,
