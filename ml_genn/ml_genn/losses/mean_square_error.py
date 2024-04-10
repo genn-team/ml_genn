@@ -5,6 +5,7 @@ from ..utils.model import NeuronModel
 
 
 class MeanSquareError(Loss):
+    """Computes the mean squared error between labels and prediction"""
     def add_to_neuron(self, model: NeuronModel, shape, 
                       batch_size: int, example_timesteps: int):
         # Add extra global parameter to store Y* throughout example

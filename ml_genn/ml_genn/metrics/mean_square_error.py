@@ -5,8 +5,7 @@ from .metric import Metric
 from ..communicators import Communicator
 
 class MeanSquareError(Metric):
-    """Computes the mean squared error between ``y_true`` and ``y_pred``"""
-
+    """Computes the mean squared error between labels and prediction"""
     def __init__(self):
         self.reset()
 

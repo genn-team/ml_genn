@@ -7,6 +7,8 @@ from pygenn import VarAccess
 
 
 class SparseCategoricalCrossentropy(Loss):
+    """Computes the crossentropy between labels and prediction 
+    when there are two or more label classes, specified as integers."""
     def add_to_neuron(self, model: NeuronModel, shape, 
                       batch_size: int, example_timesteps: int):
         # Add variable, shared across neurons to hold true label for batch

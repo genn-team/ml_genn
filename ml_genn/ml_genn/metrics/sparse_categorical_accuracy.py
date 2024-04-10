@@ -5,9 +5,8 @@ from .metric import Metric
 from ..communicators import Communicator
 
 class SparseCategoricalAccuracy(Metric):
-    """Crossentropy metric for use when there are two or more label
-    classes and ``y_true`` are specified as integers."""
-
+    """Computes the crossentropy between labels and prediction 
+    when there are two or more label classes, specified as integers."""
     def __init__(self):
         self.reset()
 

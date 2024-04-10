@@ -380,8 +380,8 @@ class EventPropCompiler(Compiler):
                                     per-trial loss functions described above?
         dt:                         Simulation timestep [ms]
         batch_size:                 What batch size should be used for
-                                    training? In our experience, e-prop works
-                                    well with very large batch sizes (512)
+                                    training? In our experience, EventProp works
+                                    best with modest batch sizes (32-128)
         rng_seed:                   What value should GeNN's GPU RNG be seeded
                                     with? This is used for all GPU randomness
                                     e.g. weight initialisation and poisson 
