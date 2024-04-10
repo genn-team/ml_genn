@@ -1,3 +1,5 @@
+"""mlGeNN TF converters take an ANN trained in TensorFlow 
+and convert it to an mlGeNN Network for SNN inference."""
 from .converter import Converter
 from .enum import InputType
 from .simple import Simple

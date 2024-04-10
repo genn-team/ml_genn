@@ -1,20 +1,30 @@
-import logging
+import logging  
 import tensorflow as tf
 
 from collections import namedtuple
+from typing import Dict, List, Tuple
 from ml_genn import Connection, Network, Population
-from ml_genn.compilers import InferenceCompiler
+from ml_genn.compilers import Compiler, InferenceCompiler
 from ml_genn.connectivity import (AvgPool2D, AvgPoolDense2D, AvgPoolConv2D, 
                                   Conv2D, Dense, OneToOne)
+from ml_genn.neurons import Neuron
 
 logger = logging.getLogger(__name__)
 
 class Converter:
-    def convert(self, tf_model):
-        """Create a ML GeNN model from a TensorFlow model
+    """Base class for all converters"""
+
+    def convert(self, 
+                tf_model: tf.keras.Model) -> Tuple[Network, List[Population],
+                                                   List[Population], 
+                                                   Dict[tf.keras.layers.Layer,
+                                                        Population]]:
+        """Convert a TensorFlow model to an mlGeNN network.
+        Returns network, list of input populations, list of output
+        populations and dictionary mapping TF layers to populations. 
 
         Args:
-        tf_model  --  TensorFlow model to be converted
+            tf_model: TensorFlow model to be converted
         """
 
         tf_activation_layers = (tf.keras.layers.Activation,
@@ -218,7 +228,7 @@ class Converter:
                         is_output=is_output,
                         has_activation=not tf_layer.activation is tf.keras.activations.linear,
                         neurons=self.create_neurons(tf_layer, pre_convert_output,
-                                                         is_output))
+                                                    is_output))
 
                     self.validate_tf_layer(tf_layer, config)
 
@@ -422,16 +432,59 @@ class Converter:
             
         return network, network_inputs, network_outputs, tf_layer_pops
     
-    def pre_convert(self, tf_model):
+    def create_input_neurons(self, pre_convert_output) -> Neuron:
+        """Create converter-specific input neuron model
+        
+        Args:
+            pre_convert_output: Compiler-specific state created by
+                                :meth:`.pre_convert`.
+        """
+        raise NotImplementedError
+
+    def create_neurons(self, tf_layer: tf.keras.layers.Layer,
+                       pre_convert_output, 
+                       is_output: bool) -> Neuron:
+        """Create converter-specific neuron model from TF layer
+        
+        Args:
+            tf_layer:           TF layer to convert
+            pre_convert_output: Compiler-specific state created by
+                                :meth:`.pre_convert`.
+            is_output:          Is this an output  layer?
+        """
+        raise NotImplementedError
+        
+    def pre_convert(self, tf_model: tf.keras.Model):
+        """If any pre-processing is required before converting TF model, 
+        converters should implement it here. Any converter-specific state 
+        that should be persistent across conversion should be encapsulated 
+        in an object returned from this method.
+
+        Args:
+            tf_model: TensorFlow model to be converted
+        """
         pass
     
-    def post_convert(self, mlg_network, mlg_network_inputs, mlg_model_outputs):
+    def post_convert(self, mlg_network: Network, 
+                     mlg_network_inputs: List[Population],
+                     mlg_model_outputs: List[Population]):
+        """If any post-processing is required to the network after
+        adding all layers, converters should implement it here.
+
+        Args:
+            mlg_network:        Populated network
+            mlg_network_inputs: List of input populations
+            mlg_model_outputs:  List of output populations
+        """
         pass
     
-    def create_compiler(self, **kwargs):
+    def create_compiler(self, **kwargs) -> Compiler:
+        """Create suitable compiler to compile 
+        networks produced by this converter"""
+        
         return InferenceCompiler(**kwargs)
 
-    def validate_tf_layer(self, tf_layer, config):
+    def validate_tf_layer(self, tf_layer: tf.keras.layers.Layer, config):
         if isinstance(tf_layer, (tf.keras.layers.Dense,
                                  tf.keras.layers.Conv2D)):
             if tf_layer.use_bias:

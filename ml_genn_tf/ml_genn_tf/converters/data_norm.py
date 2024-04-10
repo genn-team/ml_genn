@@ -5,7 +5,7 @@ import tensorflow as tf
 from collections import namedtuple
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
-                             IntegrateFireInput, PoissonInput)
+                             IntegrateFireInput, Neuron, PoissonInput)
 from .converter import Converter
 from .enum import InputType
 
@@ -16,14 +16,25 @@ logger = logging.getLogger(__name__)
 PreConvertOutput = namedtuple("PreConvertOutput", ["thresholds"])
 
 class DataNorm(Converter):
-    def __init__(self, evaluate_timesteps, signed_input=False,
+    """Converts ANNs to network of integrate-and-fire neurons, 
+    operating in a rate-based regime If normalisation data is provided,
+    thresholds are balancing using the algorithm proposed by [Diehl2015]_.
+    
+    Args:
+        evaluate_timesteps: ss
+        signed_input:       ss
+        norm_data:          paa
+        input_type:         sss
+    """
+    def __init__(self, evaluate_timesteps: int, signed_input=False,
                  norm_data=None, input_type=InputType.POISSON):
         self.norm_data = norm_data
         self.evaluate_timesteps = evaluate_timesteps
         self.signed_input = signed_input
         self.input_type = InputType(input_type)
 
-    def create_input_neurons(self, pre_convert_output):
+    def create_input_neurons(self,
+                             pre_convert_output: PreConvertOutput) -> Neuron:
         if self.input_type == InputType.SPIKE:
             return BinarySpikeInput(signed_spikes=self.signed_input)
         elif self.input_type == InputType.POISSON:
@@ -31,7 +42,9 @@ class DataNorm(Converter):
         elif self.input_type == InputType.IF:
             return IntegrateFireInput()
 
-    def create_neurons(self, tf_layer, pre_convert_output, is_output):
+    def create_neurons(self, tf_layer: tf.keras.layers.Layer,
+                       pre_convert_output: PreConvertOutput, 
+                       is_output: bool) -> Neuron:
         threshold = pre_convert_output.thresholds[tf_layer]
         logger.debug(f"layer {tf_layer.name}: threshold={threshold}")
               
