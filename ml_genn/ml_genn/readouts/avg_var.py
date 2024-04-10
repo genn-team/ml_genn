@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class AvgVar(Readout):
     """Read out per-neuron average of neuron model's output variable"""
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
