@@ -1,6 +1,5 @@
 from pygenn import VarAccessMode
 
-from numbers import Number
 from .optimiser import Optimiser
 from ..utils.model import CustomUpdateModel
 from ..utils.snippet import ConstantValueDescriptor
@@ -45,8 +44,8 @@ class Adam(Optimiser):
     beta2 = ConstantValueDescriptor()
     epsilon = ConstantValueDescriptor()
 
-    def __init__(self, alpha: Number = 0.001, beta1 : Number = 0.9,
-                 beta2: Number = 0.999, epsilon: Number = 1e-8):
+    def __init__(self, alpha: float = 0.001, beta1 : float = 0.9,
+                 beta2: float = 0.999, epsilon: float = 1e-8):
         self.alpha = alpha
         self.beta1 = beta1
         self.beta2 = beta2
