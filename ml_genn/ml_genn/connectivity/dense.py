@@ -1,16 +1,31 @@
+from __future__ import annotations
+
+from pygenn import SynapseMatrixType
+from typing import TYPE_CHECKING
 from .connectivity import Connectivity
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
+if TYPE_CHECKING:
+    from .. import Connection, Population
+    from ..compilers.compiler import SupportedMatrixType
+
 from ..utils.value import is_value_array
 
-from pygenn import SynapseMatrixType
 
 class Dense(Connectivity):
+    """Dense connectivity.
+    
+    Args:
+        weight: Connection weights. Must be either a constant
+                value, a :class:`ml_genn.initializers.Initializer` or
+                a numpy array whose shape is ``(source_size, target_size)``.
+        delay:  Connection delays
+    """
     def __init__(self, weight: InitValue, delay: InitValue = 0):
         super(Dense, self).__init__(weight, delay)
 
-    def connect(self, source, target):
+    def connect(self, source: Population, target: Population):
         # If weights are specified as 2D array
         if is_value_array(self.weight):
             if self.weight.ndim != 2:
@@ -33,7 +48,8 @@ class Dense(Connectivity):
                 raise RuntimeError("source population shape "
                                    "doesn't match weights")
 
-    def get_snippet(self, connection, supported_matrix_type):
+    def get_snippet(self, connection: Connection,
+                    supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         # Get best supported connectivity choice
         best_matrix_type = supported_matrix_type.get_best(
             [SynapseMatrixType.DENSE])

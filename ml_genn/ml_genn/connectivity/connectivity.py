@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import numpy as np
 
 from abc import ABC
+from typing import TYPE_CHECKING
+from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue, ValueDescriptor
 
 from abc import abstractmethod
 from ..utils.value import is_value_array
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .. import Connection, Population
@@ -14,6 +16,12 @@ if TYPE_CHECKING:
 
 
 class Connectivity(ABC):
+    """Base class for all connectivity classes.
+    
+    Args:
+        weight: Connection weights
+        delay:  Connection delays
+    """
     weight = ValueDescriptor("g")
     delay = ValueDescriptor("d")
 
@@ -30,10 +38,25 @@ class Connectivity(ABC):
                                "arrays, they should be the same shape")
 
     @abstractmethod
-    def connect(self, source: "Population", target: "Population"):
+    def connect(self, source: Population, target: Population):
+        """Called when two populations are connected to validate 
+        and potentially configure their shapes based on connectivity.
+        
+        Args:
+            source: Source population
+            target: Target population
+        """
         pass
 
     @abstractmethod
-    def get_snippet(self, connection: "Connection",
-                    supported_matrix_type: "SupportedMatrixType"):
+    def get_snippet(self, connection: Connection,
+                    supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
+        """Gets PyGeNN implementation of connectivity initializer
+
+        Args:
+            connection:             Connection this connectivity
+                                    is to be applied to
+            supported_matrix_type:  GeNN synaptic matrix datatypes 
+                                    supported by current compiler
+        """
         pass

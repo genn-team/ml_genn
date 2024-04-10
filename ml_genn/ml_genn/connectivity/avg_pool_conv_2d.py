@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 from math import ceil
 
 from pygenn import SynapseMatrixType
+from typing import Optional, TYPE_CHECKING
 from .connectivity import Connectivity
+from ..utils.connectivity import PadMode, Param2D, KernelInit
 from ..utils.snippet import ConnectivitySnippet
-from ..utils.connectivity import PadMode, KernelInit
 from ..utils.value import InitValue
+
+if TYPE_CHECKING:
+    from .. import Connection, Population
+    from ..compilers.compiler import SupportedMatrixType
 
 from pygenn import (create_sparse_connect_init_snippet,
                     init_sparse_connectivity, init_toeplitz_connectivity)
@@ -73,9 +80,41 @@ genn_snippet = create_sparse_connect_init_snippet(
 
 
 class AvgPoolConv2D(Connectivity):
-    def __init__(self, weight: InitValue, filters: int, pool_size, conv_size,
-                 flatten=False, pool_strides=None, conv_strides=None,
-                 conv_padding="valid", delay: InitValue = 0):
+    """Average pooling connectivity from source populations with 2D shape, 
+    fused with convolution. These are typically used when converting ANNs
+    where there is no non-linearity between Average Pooling and 
+    Convolutional layers.
+    
+    Args:
+        weight:         Convolution kernel weights. Must be either a constant
+                        value, a :class:`ml_genn.initializers.Initializer` or
+                        a numpy array whose shape matches ``conv_size`` 
+                        and ``filters``.
+        filters:        The number of filters in the convolution
+        pool_size:      Factors by which to downscale. If only one integer
+                        is specified, the same factor will be used 
+                        for both dimensions.
+        conv_size:      The size of the convolution window. If only one
+                        integer is specified, the same factor will be used
+                        for both dimensions.
+        flatten:        Should shape of output be flattened?
+        pool_strides:   Strides values for the pooling. These will default
+                        to ``pool_size``. If only one integer is specified,
+                        the same stride will be used for both dimensions.
+        conv_strides:   Strides values for the convoltion. These will default
+                        to ``(1, 1)``. If only one integer is specified, 
+                        the same stride will be used for both dimensions.
+        conv_padding:   either "valid" or "same". "valid" means no padding. 
+                        "same" results in padding evenly to the left/right 
+                        or up/down of the input. When padding="same" and 
+                        strides=1, the output has the same size as the input.
+        delay:          Homogeneous connection delays
+    """
+    def __init__(self, weight: InitValue, filters: int, pool_size: Param2D,
+                 conv_size: Param2D, flatten: bool = False, 
+                 pool_strides: Optional[Param2D] = None, 
+                 conv_strides: Optional[Param2D] = None,
+                 conv_padding: str = "valid", delay: InitValue = 0):
         super(AvgPoolConv2D, self).__init__(weight, delay)
         self.filters = filters
         self.pool_size = get_param_2d("pool_size", pool_size)
@@ -95,7 +134,7 @@ class AvgPoolConv2D(Connectivity):
         if self.conv_strides[0] != 1 or self.conv_strides[1] != 1:
             raise NotImplementedError("conv stride != 1 is not supported")
 
-    def connect(self, source, target):
+    def connect(self, source: Population, target: Population):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
@@ -126,7 +165,8 @@ class AvgPoolConv2D(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of AvgPoolConv2D kernel")
 
-    def get_snippet(self, connection, supported_matrix_type):
+    def get_snippet(self, connection: Connection,
+                    supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape

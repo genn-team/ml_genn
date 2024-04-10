@@ -1,12 +1,13 @@
+from pygenn import SynapseMatrixType
 from .connectivity import Connectivity
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue, ValueDescriptor
 
 from ..utils.value import is_value_array
 
-from pygenn import SynapseMatrixType
 
 class SparseBase(Connectivity):
+    """Base class for all sparse connectivity"""
     pre_ind = ValueDescriptor("pre_ind")
     post_ind = ValueDescriptor("post_ind")
     

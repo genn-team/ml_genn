@@ -1,11 +1,19 @@
+from __future__ import annotations
+
 import numpy as np
 from math import ceil
 
 from pygenn import SynapseMatrixType
+from typing import TYPE_CHECKING
 from .connectivity import Connectivity
 from ..initializers import Wrapper
+from ..utils.connectivity import Param2D
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
+
+if TYPE_CHECKING:
+    from .. import Connection, Population
+    from ..compilers.compiler import SupportedMatrixType
 
 from pygenn import create_var_init_snippet
 from ..utils.connectivity import get_param_2d
@@ -51,6 +59,21 @@ genn_snippet = create_var_init_snippet(
 
 
 class AvgPoolDense2D(Connectivity):
+    """Average pooling connectivity from source populations with 2D shape, 
+    fused with dense layer. These are typically used when converting ANNs
+    where there is no non-linearity between Average Pooling and 
+    dense layers.
+    
+    Args:
+        weight:         Connection weights
+        pool_size:      Factors by which to downscale. If only one integer
+                        is specified, the same factor will be used 
+                        for both dimensions.
+        pool_strides:   Strides values for the pooling. These will default
+                        to ``pool_size``. If only one integer is specified,
+                        the same stride will be used for both dimensions.
+        delay:          Homogeneous connection delays
+    """
     def __init__(self, weight: InitValue, pool_size, pool_strides=None,
                  delay: InitValue = 0):
         super(AvgPoolDense2D, self).__init__(weight, delay)
@@ -65,7 +88,7 @@ class AvgPoolDense2D(Connectivity):
             raise NotImplementedError("pool stride < pool size "
                                       "is not supported")
 
-    def connect(self, source, target):
+    def connect(self, source: Population, target: Population):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
@@ -94,7 +117,8 @@ class AvgPoolDense2D(Connectivity):
                 raise RuntimeError("pool output size doesn't "
                                    "match weights")
 
-    def get_snippet(self, connection, supported_matrix_type):
+    def get_snippet(self, connection: Connection,
+                    supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape

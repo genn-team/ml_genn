@@ -1,10 +1,18 @@
+from __future__ import annotations
+
 from math import ceil
 
 from pygenn import SynapseMatrixType
+from typing import Optional, TYPE_CHECKING
 from .connectivity import Connectivity
+from ..utils.connectivity import Param2D
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
+if TYPE_CHECKING:
+    from .. import Connection, Population
+    from ..compilers.compiler import SupportedMatrixType
+    
 from pygenn import (create_sparse_connect_init_snippet,
                     init_sparse_connectivity)
 from ..utils.connectivity import get_param_2d, update_target_shape
@@ -48,8 +56,21 @@ genn_snippet = create_sparse_connect_init_snippet(
 
 
 class AvgPool2D(Connectivity):
-    def __init__(self, pool_size, flatten=False,
-                 pool_strides=None, delay: InitValue = 0):
+    """Average pooling connectivity from source populations with 2D shape
+    
+    Args:
+        pool_size:      Factors by which to downscale. If only one integer
+                        is specified, the same factor will be used 
+                        for both dimensions.
+        flatten:        Should shape of output be flattened?
+        pool_strides:   Strides values. These will default to ``pool_size``.
+                        If only one integer is specified, the same stride 
+                        will be used for both dimensions.
+        delay:          Homogeneous connection delays
+    """
+    def __init__(self, pool_size: Param2D, flatten: bool = False,
+                 pool_strides: Optional[Param2D] = None, 
+                 delay: InitValue = 0):
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.flatten = flatten
         self.pool_strides = get_param_2d("pool_strides", pool_strides,
@@ -67,7 +88,7 @@ class AvgPool2D(Connectivity):
             raise NotImplementedError("AvgPool2D connectivity only "
                                       "supports constant delays")
 
-    def connect(self, source, target):
+    def connect(self, source: Population, target: Population):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
@@ -79,7 +100,8 @@ class AvgPool2D(Connectivity):
         # Update target shape
         update_target_shape(target, self.output_shape, self.flatten)
 
-    def get_snippet(self, connection, supported_matrix_type):
+    def get_snippet(self, connection: Connection,
+                    supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape
