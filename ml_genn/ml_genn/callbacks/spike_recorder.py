@@ -9,6 +9,19 @@ from ..utils.network import get_underlying_pop
 
 
 class SpikeRecorder(Callback):
+    """Callback used for recording spikes during simulation. 
+
+    Args:
+        pop:            Population to record from
+        example_filter: Filter used to select which examples to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        neuron_filter:  Filter used to select which neurons to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        record_counts:  Should only the (per-neuron) spike count be recorded 
+                        rather than all the spikes?
+    """
     def __init__(self, pop: PopulationType, key=None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,

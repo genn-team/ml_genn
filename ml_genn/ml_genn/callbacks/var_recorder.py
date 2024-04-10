@@ -18,6 +18,28 @@ from ..utils.value import get_genn_var_name
 logger = logging.getLogger(__name__)
 
 class VarRecorder(Callback):
+    """Callback used for recording state variables during simulation. 
+    Variables can specified either by the name of the mlGeNN 
+    :class:`ml_genn.utils.value.ValueDescriptor` class attribute corresponding to
+    the variable e.g. ``v`` for the membrane voltage of a 
+    :class:`ml_genn.neurons.LeakyIntegrateFire` neuron or by the internal name
+    of a GeNN state variable e.g. ``LambdaV`` which is a state variable
+    added to track gradients by :class:`ml_genn.compilers.EventPropCompiler`.
+    
+    Args:
+        pop:            Population to record from
+        var:            Name of variable to record
+        key:            Key to assign recording data produced by this 
+                        callback in dictionary  returned by 
+                        evaluation/training methods of compiled network
+        example_filter: Filter used to select which examples to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        neuron_filter:  Filter used to select which neurons to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        genn_var:       Internal name of variable to record
+    """
     def __init__(self, pop: PopulationType, var: Optional[str] = None,
                  key=None, example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,

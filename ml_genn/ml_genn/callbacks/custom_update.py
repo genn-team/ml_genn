@@ -6,7 +6,12 @@ logger = logging.getLogger(__name__)
 
 
 class CustomUpdate(Callback):
-    def __init__(self, name):
+    """Base class for callbacks that trigger a GeNN custom update.
+    
+    Args:
+        name:   Name of custom update to trigger
+    """
+    def __init__(self, name: str):
         self.name = name
 
     def set_params(self, compiled_network, **kwargs):
@@ -18,6 +23,8 @@ class CustomUpdate(Callback):
 
 
 class CustomUpdateOnBatchBegin(CustomUpdate):
+    """Callback that triggers a GeNN custom update 
+    at the beginning of every batch."""
     def on_batch_begin(self, batch):
         logger.debug(f"Running custom update {self.name} "
                      f"at start of batch {batch}")
@@ -25,6 +32,8 @@ class CustomUpdateOnBatchBegin(CustomUpdate):
 
 
 class CustomUpdateOnBatchEnd(CustomUpdate):
+    """Callback that triggers a GeNN custom update 
+    at the end of every batch."""
     def on_batch_end(self, batch, metrics):
         logger.debug(f"Running custom update {self.name} "
                      f"at end of batch {batch}")
@@ -32,6 +41,8 @@ class CustomUpdateOnBatchEnd(CustomUpdate):
 
 
 class CustomUpdateOnTimestepBegin(CustomUpdate):
+    """Callback that triggers a GeNN custom update 
+    at the beginning of every timestep."""
     def on_timestep_begin(self, timestep):
         logger.debug(f"Running custom update {self.name} "
                      f"at start of timestep {timestep}")
@@ -39,6 +50,8 @@ class CustomUpdateOnTimestepBegin(CustomUpdate):
 
 
 class CustomUpdateOnTimestepEnd(CustomUpdate):
+    """Callback that triggers a GeNN custom update 
+    at the end of every timestep."""
     def on_timestep_end(self, timestep):
         logger.debug(f"Running custom update {self.name} "
                      f"at start of timestep {timestep}")

@@ -1,3 +1,4 @@
+"""Callbacks are used to run custom logic mid-simulation including for recording state."""
 from .callback import Callback
 from .checkpoint import Checkpoint
 from .custom_update import (CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd,
