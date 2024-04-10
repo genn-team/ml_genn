@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import numpy as np
+
 from abc import ABC
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from warnings import warn
 from ..readouts import Readout
 from ..utils.model import NeuronModel
@@ -10,7 +12,6 @@ from abc import abstractmethod
 from ..utils.module import get_object
 
 from ..readouts import default_readouts
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .. import Population
@@ -28,28 +29,23 @@ class Neuron(ABC):
     @abstractmethod
     def get_model(self, population: Population,
                   dt: float, batch_size: int) -> NeuronModel:
-        """Gets model implementing this neuron
+        """Gets PyGeNN implementation of neuron model
 
         Args:
             population: Population this neuron is to be attached to
-            dt : Timestep of simulation (in ms)
-
-        Returns:
-            NeuronModel: PyGeNN implementation of neuron
+            dt :        Timestep of simulation (in ms)
+            batch_size: Batch size of the model
         """
         pass
 
-    def get_readout(self, genn_pop, batch_size: int, shape):
+    def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         """Use readout object associated with neuon to
-        read output from PyGeNN neuron group
+        read output from PyGeNN neuron group into numpy array
 
         Args:
             genn_pop: PyGeNN neuron group
             batch_size: Batch size of compiled model
             shape: Shape of population
-
-        Returns:
-            Numpy array containing read out value
         """
         if self.readout is None:
             raise RuntimeError("Cannot get readout from neuron "

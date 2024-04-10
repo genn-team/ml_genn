@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
+
+if TYPE_CHECKING:
+    from .. import Population
+
 
 genn_model = {
     "params": [("K", "int"), ("Scale", "scalar")],
@@ -79,7 +86,8 @@ class FewSpikeReluInput(Neuron, InputBase):
         self.alpha = alpha
         self.signed_input = signed_input
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         # Calculate scale
         if self.signed_input:
             scale = self.alpha * 2**(-self.k // 2)

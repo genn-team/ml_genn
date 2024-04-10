@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import numpy as np
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
+
+if TYPE_CHECKING:
+    from .. import Population
 
 from ..utils.decorators import network_default_params
 
@@ -51,7 +56,8 @@ class LeakyIntegrateFire(Neuron):
         self.integrate_during_refrac = integrate_during_refrac
         self.scale_i = scale_i
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         # Build basic model
         genn_model = {
             "vars": [("V", "scalar")],

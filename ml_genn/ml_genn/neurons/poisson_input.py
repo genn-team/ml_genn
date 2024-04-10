@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
@@ -29,7 +31,8 @@ class PoissonInput(Neuron, InputBase):
             raise NotImplementedError("Signed spike input cannot currently "
                                       "be used with time-varying inputs ")
 
-    def get_model(self, population: "Population", dt: float, batch_size: int):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         genn_model = {
             "sim_code":
                 """

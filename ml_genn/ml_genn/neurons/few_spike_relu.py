@@ -1,8 +1,14 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
 from .few_spike_relu_input import FewSpikeReluInput
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
+
+if TYPE_CHECKING:
+    from .. import Population
+
 
 # Standard FS ReLU model where upstream
 # neurons are FS ReLU or FS unsigned input
@@ -113,7 +119,8 @@ class FewSpikeRelu(Neuron):
         self.k = k
         self.alpha = alpha
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         # Loop through incoming connections
         source_alpha = None
         source_signed = None

@@ -1,8 +1,9 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .. import Population
@@ -30,7 +31,8 @@ class BinarySpikeInput(Neuron, InputBase):
             raise NotImplementedError("Signed spike input cannot currently "
                                       "be used with time-varying inputs ")
 
-    def get_model(self, population: "Population", dt: float, batch_size: int):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         genn_model = {
             "sim_code":
                 """

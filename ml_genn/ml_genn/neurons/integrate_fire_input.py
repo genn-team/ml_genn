@@ -1,6 +1,13 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from .input import InputBase
 from .integrate_fire import IntegrateFire
+from ..utils.model import NeuronModel
 from ..utils.value import InitValue
+
+if TYPE_CHECKING:
+    from .. import Population
 
 
 class IntegrateFireInput(IntegrateFire, InputBase):
@@ -23,7 +30,8 @@ class IntegrateFireInput(IntegrateFire, InputBase):
             input_frame_timesteps=input_frame_timesteps)
 
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         # Get standard integrate-and-fire model
         nm = super(IntegrateFireInput, self).get_model(population, dt,
                                                        batch_size)

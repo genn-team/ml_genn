@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import numpy as np
 
 from collections import namedtuple
 from pygenn import VarAccess
-from typing import Sequence, Union
+from typing import Sequence, Union, TYPE_CHECKING
 from .input import Input
 from .neuron import Neuron
 from ..utils.data import PreprocessedSpikes 
@@ -67,7 +69,8 @@ class SpikeInput(Neuron, Input):
         start_spikes_var.push_to_device()
         end_spikes_var.push_to_device()
 
-    def get_model(self, population: "Population", dt: float, batch_size: int):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         return NeuronModel(genn_model, None, {}, 
                            {"StartSpike": 0, "EndSpike": 0},
                            {"SpikeTimes": np.empty(self.max_spikes,

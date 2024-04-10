@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import numpy as np
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
+
+if TYPE_CHECKING:
+    from .. import Population
 
 from ..utils.decorators import network_default_params
 
@@ -33,7 +38,8 @@ class LeakyIntegrate(Neuron):
         self.tau_mem = tau_mem
         self.scale_i = scale_i
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         genn_model = {
             "vars": [("V", "scalar")],
             "params": [("Alpha", "scalar"), ("Bias", "scalar")]}

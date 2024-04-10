@@ -1,7 +1,12 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
+
+if TYPE_CHECKING:
+    from .. import Population
 
 
 genn_model = {
@@ -44,5 +49,6 @@ class IntegrateFire(Neuron):
         self.v_reset = v_reset
         self.v = v
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         return NeuronModel.from_val_descriptors(genn_model, "V", self, dt)

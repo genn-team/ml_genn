@@ -1,3 +1,5 @@
+"""Synapse models describe the dynamics (if any) applied to inputs delivered by a :class:`..Connection`.
+"""
 from .synapse import Synapse
 from .delta import Delta
 from .exponential import Exponential
