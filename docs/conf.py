@@ -74,3 +74,15 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 primary_domain = "py"
+
+def skip_model_attributes(app, what, name, obj, skip, options):
+    # If member is a value descriptor class attribute, skip it
+    from ml_genn.utils.snippet import ConstantValueDescriptor
+    from ml_genn.utils.value import ValueDescriptor
+    if isinstance(obj, (ConstantValueDescriptor, ValueDescriptor)):
+        return True
+    else:
+        return skip
+
+def setup(app):
+    app.connect("autodoc-skip-member", skip_model_attributes)
