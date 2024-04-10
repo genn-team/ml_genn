@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.abspath("../ml_genn"))
 sys.path.insert(0, os.path.abspath("../ml_genn_eprop"))
 sys.path.insert(0, os.path.abspath("../ml_genn_tf"))
 
+from ml_genn.utils.snippet import ConstantValueDescriptor
+from ml_genn.utils.value import ValueDescriptor
 
 # -- Project information -----------------------------------------------------
 
@@ -77,8 +79,6 @@ primary_domain = "py"
 
 def skip_model_attributes(app, what, name, obj, skip, options):
     # If member is a value descriptor class attribute, skip it
-    from ml_genn.utils.snippet import ConstantValueDescriptor
-    from ml_genn.utils.value import ValueDescriptor
     if isinstance(obj, (ConstantValueDescriptor, ValueDescriptor)):
         return True
     else:
