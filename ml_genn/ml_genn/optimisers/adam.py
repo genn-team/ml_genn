@@ -1,5 +1,6 @@
 from pygenn import VarAccessMode
 
+from numbers import Number
 from .optimiser import Optimiser
 from ..utils.model import CustomUpdateModel
 from ..utils.snippet import ConstantValueDescriptor
@@ -31,22 +32,21 @@ class Adam(Optimiser):
     """Optimizer that implements the Adam algorithm [Kingma2014]_.
     Adam optimization is a stochastic gradient descent method that 
     is based on adaptive estimation of first-order and second-order moments.
+    
+    Args:
+        alpha:      Learning rate
+        beta1:      The exponential decay rate for the 1st moment estimates.
+        beta2:      The exponential decay rate for the 2nd moment estimates.
+        epsilon:    A small constant for numerical stability. This is
+                    the epsilon in Algorithm 1 of the [Kingma2014]_
     """
     alpha = ConstantValueDescriptor()
-    """ Learning rate"""
-    
     beta1 = ConstantValueDescriptor()
-    """ The exponential decay rate for the 1st moment estimates. """
-    
     beta2 = ConstantValueDescriptor()
-    """ The exponential decay rate for the 2nd moment estimates. """
-    
     epsilon = ConstantValueDescriptor()
-    """A small constant for numerical stability. This 
-    is the epsilon in Algorithm 1 of the [Kingma2014]_.
-    """
 
-    def __init__(self, alpha=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
+    def __init__(self, alpha: Number = 0.001, beta1 : Number = 0.9,
+                 beta2: Number = 0.999, epsilon: Number = 1e-8):
         self.alpha = alpha
         self.beta1 = beta1
         self.beta2 = beta2
