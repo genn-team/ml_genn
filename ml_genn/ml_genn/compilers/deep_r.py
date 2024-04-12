@@ -200,7 +200,7 @@ def add_deep_r(synapse_group, genn_model, compiler, l1_strength,
         pre_var_vals={"NumDormant": 0, "NumActivations": 0},
         egp_vals={"Connectivity": np.zeros(num_words, dtype=np.uint32),
                   "NumRewirings": np.zeros(1, dtype=np.uint64),
-                  "NumFailedRewirings": np.zeros(1, type.np.uint64)})
+                  "NumFailedRewirings": np.zeros(1, dtype=np.uint64)})
 
     genn_deep_r_2 = compiler.add_custom_connectivity_update(
         genn_model, deep_r_2, synapse_group,
