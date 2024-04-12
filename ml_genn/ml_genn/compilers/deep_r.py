@@ -63,7 +63,8 @@ deep_r_1_model_template = {
 deep_r_2_model = {
     "params": [("NumRowWords", "unsigned int")],
     "pre_vars": [("NumDormant", "unsigned int"), ("NumActivations", "unsigned int")],
-    "extra_global_params": [("Connectivity", "uint32_t*"), ("NumRewirings", "uint64_t*")],
+    "extra_global_params": [("Connectivity", "uint32_t*"), ("NumRewirings", "uint64_t*"),
+                            ("NumFailedRewirings", "uint64_t*")],
     
     "host_update_code": """
     pullNumDormantFromDevice();
@@ -80,25 +81,41 @@ deep_r_2_model = {
 
     // Record number of rewirings
     NumRewirings[0] = numRemainingDormant;
-
-    // Loop through all rows but last
-    size_t numTotalPaddingSynapses = (row_stride * num_pre) - numSynapses;
-    for(unsigned int i = 0; i < (num_pre - 1); i++) {
-        const unsigned int numRowPaddingSynapses = row_stride - row_length[i];
-        if(numRowPaddingSynapses > 0 && numTotalPaddingSynapses > 0) {
-            const scalar prob = (scalar)numRowPaddingSynapses / numTotalPaddingSynapses;
-            
-            const unsigned int numRowActivations = min(numRowPaddingSynapses,
-                                                       gennrand_binomial(numRemainingDormant, prob));
-            NumActivations[i] = numRowActivations;
-            
-            numRemainingDormant -= numRowActivations;
-            numTotalPaddingSynapses -= numRowPaddingSynapses;
+    NumFailedRewirings[0] = 0;
+    
+    // While there are connections to rewire
+    while(numRemainingDormant > 0) {
+        // Pick a random row
+        const unsigned int i = gennrand() % num_pre;
+        
+        // If there's space on this row, add an activation and decrement dormant
+        if(row_length[i] < row_stride) {
+            NumActivations[i]++;
+            numRemainingDormant--;
+        }
+        // Otherwise, increment failed rewiring counter
+        else {
+            NumFailedRewirings[0]++;
         }
     }
+    // Loop through all rows but last
+    //size_t numTotalPaddingSynapses = (row_stride * num_pre) - numSynapses;
+    //for(unsigned int i = 0; i < (num_pre - 1); i++) {
+    //    const unsigned int numRowPaddingSynapses = row_stride - row_length[i];
+    //    if(numRowPaddingSynapses > 0 && numTotalPaddingSynapses > 0) {
+    //        const scalar prob = (scalar)numRowPaddingSynapses / numTotalPaddingSynapses;
+    //        
+    //        const unsigned int numRowActivations = min(numRowPaddingSynapses,
+    //                                                   gennrand_binomial(numRemainingDormant, prob));
+    //        NumActivations[i] = numRowActivations;
+    //        
+    //        numRemainingDormant -= numRowActivations;
+    //        numTotalPaddingSynapses -= numRowPaddingSynapses;
+    //    }
+    //}
     
     // Put remaining dormant synapses in last row
-    NumActivations[num_pre - 1] = numRemainingDormant;
+    //NumActivations[num_pre - 1] = numRemainingDormant;
     
     pushNumActivationsToDevice();
     """,
@@ -123,6 +140,7 @@ deep_r_2_model = {
 class RewiringRecord(Callback):
     def __init__(self, deep_r_2_ccu, key=None):
         self.num_rewirings = deep_r_2_ccu.extra_global_params["NumRewirings"]
+        self.num_failed_rewirings = deep_r_2_ccu.extra_global_params["NumFailedRewirings"]
         self.key = key
 
     def set_params(self, data, **kwargs):
@@ -132,7 +150,8 @@ class RewiringRecord(Callback):
 
     def on_batch_end(self, batch, metrics):
         # Read number of rewirings out of view and add to list
-        self._data.append(self.num_rewirings.view[0])
+        self._data.append((self.num_rewirings.view[0],
+                           self.num_failed_rewirings.view[0]))
     
     def get_data(self):
         return self.key, self._data
@@ -180,7 +199,8 @@ def add_deep_r(synapse_group, genn_model, compiler, l1_strength,
         deep_r_2_model, param_vals={"NumRowWords": num_row_words},
         pre_var_vals={"NumDormant": 0, "NumActivations": 0},
         egp_vals={"Connectivity": np.zeros(num_words, dtype=np.uint32),
-                  "NumRewirings": np.zeros(1, dtype=np.uint64)})
+                  "NumRewirings": np.zeros(1, dtype=np.uint64),
+                  "NumFailedRewirings": np.zeros(1, type.np.uint64)})
 
     genn_deep_r_2 = compiler.add_custom_connectivity_update(
         genn_model, deep_r_2, synapse_group,
