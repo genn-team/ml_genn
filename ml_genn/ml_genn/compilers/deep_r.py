@@ -89,7 +89,7 @@ deep_r_2_model = {
         const unsigned int i = gennrand() % num_pre;
         
         // If there's space on this row, add an activation and decrement dormant
-        if(row_length[i] < row_stride) {
+        if((row_length[i] + NumActivations[i]) < row_stride) {
             NumActivations[i]++;
             numRemainingDormant--;
         }
