@@ -5,10 +5,10 @@
 Building networks
 =================
 One of the key aims of mlGeNN is to make it simple to define Spiking Neural Networks (SNNs)
-with arbitrary topologys. Networks consist of homogenous groups of neurons described by 
+with arbitrary topologies. Networks consist of homogeneous groups of neurons described by 
 :class:`~population.Population` objects connected together with :class:`~connection.Connection` objects.
 All populations and connections are owned by a :class:`Network` which acts as a
-context manager so a network with two populations of neurons could be simply created like:
+context manager so a network with two populations of neurons could simply be created like:
 
 ..  code-block:: python
 
@@ -21,11 +21,11 @@ context manager so a network with two populations of neurons could be simply cre
     
         Connection(a, b, Dense(1.0))
 
-For simplicity, in this example, built in neuron models with default parameters are 
+For simplicity, in this example, built-in neuron models with default parameters are 
 specified using strings. However, if you wish to override some of the default model 
 parameters, use a model that does not have default parameters or use a model not 
 built into mlGeNN, you can also specify a neuron model using a :class:`~neurons.neuron.Neuron` 
-class instance. For example, if we wished for the poisson population to emit positive 
+class instance. For example, if we wished for the Poisson population to emit positive 
 and negative spikes for positive and negative input values and for the integrate-and-fire 
 neuron to have a higher firing threshold we could instantiate 
 :class:`~neurons.poisson_input.PoissonInput` and :class:`~neurons.integrate_fire.IntegrateFire`
@@ -46,7 +46,7 @@ objects ourselves like:
 By default, :class:`~connection.Connection` objects use a 'delta' synapse model where the 
 accumulated weight of incoming spikes is directly injected into neurons. However, if
 you wish to use a somewhat more realistic model where inputs are *shaped* to mimic the 
-dynamics of real ion channels, this can be swapped
+dynamics of real ion channels, this can be replaced. 
 This same general principle is also used for configuring many other aspects of mlGeNN,
 including loss functions, metrics and readouts. TODO link
 Many other aspec
@@ -55,7 +55,7 @@ Sequential networks
 -------------------
 While the flexibility to create networks with any topology is very useful,
 feed-forward networks are very common so mlGeNN provides a shorthand syntax for
-specifying them more tersely.
+specifying them more tersely:
 
 ..  code-block:: python
 

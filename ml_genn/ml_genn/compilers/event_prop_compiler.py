@@ -320,12 +320,12 @@ neuron_reset_strict_check = """
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
 
-    The EventProp compiler support :class:`ml_genn.neurons.LeakyIntegrateFire`
+    The EventProp compiler supports :class:`ml_genn.neurons.LeakyIntegrateFire`
     hidden neuron models and the :class:`ml_genn.losses.SparseCategoricalCrossentropy` 
     loss functions for classification.
 
     EventProp implements a fully event-driven backward pass meaning that its memory 
-    overhead scales with number of spikes per-trial rather than sequence length. 
+    overhead scales with the number of spikes per-trial rather than sequence length. 
     
     In the original paper, [Wunderlich2021]_ 
     derived EventProp to support loss functions of the form:
@@ -369,7 +369,7 @@ class EventPropCompiler(Compiler):
                                     be the same as ``reg_lambda_lower``.
         reg_lambda_lower:           Regularisation strength, should typically
                                     be the same as ``reg_lambda_upper``.
-        reg_nu_upper:               Target number of hidden neuron neuron
+        reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation [Hz]
         max_spikes:                 What is the maximum number of spikes each
                                     neuron (input and hidden) can emit each
@@ -387,7 +387,7 @@ class EventPropCompiler(Compiler):
                                     best with modest batch sizes (32-128)
         rng_seed:                   What value should GeNN's GPU RNG be seeded
                                     with? This is used for all GPU randomness
-                                    e.g. weight initialisation and poisson 
+                                    e.g. weight initialisation and Poisson 
                                     spike train generation
         kernel_profiling:           Should GeNN record the time spent in each
                                     GPU kernel? These values can be extracted
@@ -398,7 +398,7 @@ class EventPropCompiler(Compiler):
                                     of each example or allowed to run
                                     continously? 
         communicator:               Communicator used for inter-process
-                                    communications when training using
+                                    communications when training across
                                     multiple GPUs.
         
     """

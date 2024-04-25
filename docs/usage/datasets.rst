@@ -13,11 +13,11 @@ first dimension is the number of examples in the dataset.
 
 Static inputs
 ^^^^^^^^^^^^^
-For static inputs which do not change throughout the example, the remaining dimensions of the array should 
+For static inputs which do not change throughout each example, the remaining dimensions of the array should 
 match the shape of the input layer. For example, greyscale images from the MNIST training set might be encoded as 
 a numpy array of shape :math:`(60000, 28, 28)` for a spiking convolutional network.
 Static images are then encoded into a spatio-temporal spike train using an input neuron model.
-For example, the :class:`~neurons.neuron.PoissonInput` turns a static input into a spike rate code.
+For example, the :class:`~neurons.neuron.PoissonInput` turns a static input into a spike rate code with irregular spike train that have Poisson statistics.
 
 Time-varying inputs
 ^^^^^^^^^^^^^^^^^^^

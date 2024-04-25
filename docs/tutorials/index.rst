@@ -42,7 +42,7 @@ Directly train a simple three layer network of densely connected leaky integrate
 
 Training using TensorFlow and converting to an SNN using FewSpike
 =================================================================
-Create and train a simple convolutional neural network in Keras, convert to SNN using [[FewSpike](http://dx.doi.org/10.1038/s42256-021-00311-4)] and evaluate using mlGeNN
+Create and train a simple convolutional neural network in Keras, convert to SNN using `FewSpike <http://dx.doi.org/10.1038/s42256-021-00311-4>`_ and evaluate using mlGeNN
 
 .. toctree::
     :maxdepth: 3

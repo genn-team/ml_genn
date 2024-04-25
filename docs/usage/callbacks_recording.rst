@@ -6,7 +6,7 @@ Callbacks and recording
 =======================
 In order to run custom logic mid-simulation including for recording state, 
 mlGeNN has a callback system (very similar to https://keras.io/api/callbacks/).
-Currently the evaluate_XXX methods of compiled models all take a list of callback
+Currently the ``train`` and ``evaluate`` methods of compiled models all take a list of callback
 objects (or the names of default-constructable callbacks in the same style as neuron 
 models etc) which defaults to a list containing a :class:`~callbacks.progress_bar.BatchProgressBar`
 to show training or inference progress.
@@ -38,8 +38,9 @@ Then you can add :class:`~callbacks.var_recorder.SpikeRecorder` callbacks to a m
     from ml_genn.callbacks import VarRecorder
     ...
     callbacks = ["batch_progress_bar", SpikeRecorder(input, key="spikes_input")]
-    metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01}, {output: testing_labels},
-                                              callbacks=callbacks)
+    metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01},
+		                             {output: testing_labels},
+                                             callbacks=callbacks)
 
 The ``key`` argument is used to uniquely identify data produced by callbacks in the ``cb_data``  dictionary
 returned by ``evaluate`` and can be any hashable type. If no key is provided, the integer index of the 
@@ -67,8 +68,9 @@ For example, to record a state variable called `v` from a  :class:`~population.P
     from ml_genn.callbacks import VarRecorder
     ...
     callbacks = ["batch_progress_bar", VarRecorder(input, "v", key="v_input")]
-    metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01}, {output: testing_labels},
-                                              callbacks=callbacks)
+    metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01},
+		                             {output: testing_labels},
+                                             callbacks=callbacks)
 
 to record the population's `V` state variable over time. After the simulation has 
 completed, you could then plot the membrane voltage of all neurons during the first example using matplotlib with:
@@ -104,9 +106,9 @@ Similarly, neuron filters let you select which neurons to record from:
     SpikeRecorder(input, neuron_filter=[True]*10) # Only record from the first 10 neurons in a 1D population
     SpikeRecorder(input, neuron_filter=np.s_[0::2]) # Only record from every other neuron in a 1D population
 
-Because, in networks such as convolution neural networks, populations can have 
-multidimensional shapes this syntax also extends to multiple dimensions in the same w
-ay as numpy arrays, for example:
+Because, in networks such as convolutional neural networks, populations can have 
+multidimensional shapes this syntax also extends to multiple dimensions in the same way
+as numpy arrays, for example:
 
 ..  code-block:: python
 
@@ -124,15 +126,15 @@ Callbacks can implement any of the following methods which allow them to be trig
 * ``on_test_end(self, metrics)``: called at end of inference with metrics (see :ref:`section-metrics`) calculated from test set
 * ``on_train_begin(self)``: called at beginning of first epoch of training
 * ``on_train_end(self, metrics)``: called at end of training with metrics (see :ref:`section-metrics`) calculated during last epoch
-* ``on_epoch_begin(self, epoch)``: called at the start of training on epoch ``epoch``
-* ``on_epoch_end(self, epoch, metrics)``: called at the start of training on epoch ``epoch`` with metrics (see :ref:`section-metrics`) calculated during this epoch
+* ``on_epoch_begin(self, epoch)``: called at the start of training epoch ``epoch``
+* ``on_epoch_end(self, epoch, metrics)``: called at the start of training epoch ``epoch`` with metrics (see :ref:`section-metrics`) calculated during this epoch
 * ``on_batch_begin(self, batch)``: called at the start of batch ``batch``
-* ``on_batch_end(self, batch, metrics)``: called at the end of batch ``batch`` with the current metrics (see :ref:`section-metrics`) calculated during this epoch
+* ``on_batch_end(self, batch, metrics)``: called at the end of batch ``batch`` with the current metrics (see :ref:`section-metrics`) calculated during this batch
 * ``on_timestep_begin(self, timestep)``: called at the start of timestep ``timestep``
 * ``on_timestep_end(self, timestep)``: called at the end of timestep ``timestep``
 
 .. note::
-    These methods do not override methods in base class but, for performance reasons, are detected by inspecting 
+    These methods do not override methods in the base class but, for performance reasons, are detected by inspecting 
     callback objects.
 
 To give them access to properties of the 

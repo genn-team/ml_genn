@@ -248,7 +248,7 @@ gradient_batch_reduce_model = {
 class EPropCompiler(Compiler):
     """Compiler for training models using e-prop [Bellec2020]_.
     
-    The e-prop compiler support :class:`ml_genn.neurons.LeakyIntegrateFire` and
+    The e-prop compiler supports :class:`ml_genn.neurons.LeakyIntegrateFire` and
     :class:`ml_genn.neurons.AdaptiveLeakyIntegrateFire` hidden neuron models; and 
     :class:`ml_genn.losses.SparseCategoricalCrossentropy` loss functions for classification
     and :class:`ml_genn.losses.MeanSquareError` for regression.
@@ -257,19 +257,19 @@ class EPropCompiler(Compiler):
     backward pass meaning that its memory overhead does not scale with sequence length.
     However, e-prop requires a per-connection eligibility trace meaning that it is
     incompatible with connectivity like convolutions with shared weights. Furthermore,
-    because each connection has to updated every timestep, training performance is not
+    because each connection has to be updated every timestep, training performance is not
     improved by sparse activations.
     
     Args:
-        example_timesteps:          How many timestamps each example will be
+        example_timesteps:          How many timesteps each example will be
                                     presented to the network for
         losses:                     Either a dictionary mapping loss functions
                                     to output populations or a single loss
                                     function to apply to all outputs
         optimiser:                  Optimiser to use when applying weights
         tau_reg:                    Time constant with which hidden neuron
-                                    spike trains are filtered to obtain firing
-                                    rate used for regularisation [ms]
+                                    spike trains are filtered to obtain the
+                                    firing rate used for regularisation [ms]
         c_reg:                      Regularisation strength
         f_target:                   Target hidden neuron firing rate used for
                                     regularisation [Hz]
@@ -280,7 +280,7 @@ class EPropCompiler(Compiler):
                                     well with very large batch sizes (512)
         rng_seed:                   What value should GeNN's GPU RNG be seeded
                                     with? This is used for all GPU randomness
-                                    e.g. weight initialisation and poisson 
+                                    e.g. weight initialisation and Poisson 
                                     spike train generation
         kernel_profiling:           Should GeNN record the time spent in each
                                     GPU kernel? These values can be extracted
@@ -291,7 +291,7 @@ class EPropCompiler(Compiler):
                                     of each example or allowed to run
                                     continously? 
         communicator:               Communicator used for inter-process
-                                    communications when training using
+                                    communications when training across
                                     multiple GPUs.
         
     """

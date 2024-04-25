@@ -6,7 +6,7 @@ A key design goal of mlGeNN is that once a network topology has been defined usi
 :ref:`section-building_networks`, it can be trained using *any* supported training algorithm.
 :class:`.Network` and :class:`.SequentialNetwork` objects need to be *compiled* into
 GeNN models for training using a training algorithm compiler class. Currently the 
-following compilers for training networks are provide:
+following compilers for training networks are provided:
 
 e-prop
 ------
@@ -58,7 +58,7 @@ data each time like this:
                                              start_epoch=e, num_epochs=1,
                                              shuffle=True)
 
-where ``augment`` is a function that returns an augmented version of a spike dataset (see ref:`section-datasets`).
+where ``augment`` is a function that returns an augmented version of a spike dataset (see :ref:`section-datasets`).
 
 Default parameters
 ------------------
