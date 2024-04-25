@@ -73,7 +73,7 @@ if TRAIN:
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         metrics, _  = compiled_net.train({input: spikes},
                                          {output: labels},
-                                         num_epochs=50,
+                                         num_epochs=NUM_EPOCHS,
                                          callbacks=callbacks,
                                          shuffle=True)
         end_time = perf_counter()
