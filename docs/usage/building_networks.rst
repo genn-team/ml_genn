@@ -47,9 +47,8 @@ By default, :class:`~connection.Connection` objects use a 'delta' synapse model 
 accumulated weight of incoming spikes is directly injected into neurons. However, if
 you wish to use a somewhat more realistic model where inputs are *shaped* to mimic the 
 dynamics of real ion channels, this can be replaced. 
-This same general principle is also used for configuring many other aspects of mlGeNN,
-including loss functions, metrics and readouts. TODO link
-Many other aspec
+This same general principle is also used for specifying and configuring many other aspects of mlGeNN networks,
+including :mod:`ml_genn.losses`, :mod:`ml_genn.metrics and :mod:`ml_genn.readouts`.
 
 Sequential networks
 -------------------
