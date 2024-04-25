@@ -370,7 +370,7 @@ class EventPropCompiler(Compiler):
         reg_lambda_lower:           Regularisation strength, should typically
                                     be the same as ``reg_lambda_upper``.
         reg_nu_upper:               Target number of hidden neuron
-                                    spikes used for regularisation [Hz]
+                                    spikes used for regularisation
         max_spikes:                 What is the maximum number of spikes each
                                     neuron (input and hidden) can emit each
                                     trial? This is used to allocate memory 
