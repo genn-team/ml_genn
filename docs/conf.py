@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.abspath("../ml_genn_tf"))
 # -- Project information -----------------------------------------------------
 
 project = "mlGeNN"
-copyright = "2022, James Turner, Jamie Knight"
-author = "James Turner, Jamie Knight"
+copyright = "2022, Jamie Knight, James Turner"
+author = "Jamie Knight, James Turner"
 
 
 # -- General configuration ---------------------------------------------------
