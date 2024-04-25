@@ -48,7 +48,7 @@ accumulated weight of incoming spikes is directly injected into neurons. However
 you wish to use a somewhat more realistic model where inputs are *shaped* to mimic the 
 dynamics of real ion channels, this can be replaced. 
 This same general principle is also used for specifying and configuring many other aspects of mlGeNN networks,
-including :mod:`ml_genn.losses`, :mod:`ml_genn.metrics and :mod:`ml_genn.readouts`.
+including :mod:`ml_genn.losses`, :mod:`ml_genn.metrics` and :mod:`ml_genn.readouts`.
 
 Sequential networks
 -------------------
