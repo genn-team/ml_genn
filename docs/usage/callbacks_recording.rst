@@ -69,7 +69,7 @@ For example, to record a state variable called `v` from a  :class:`~population.P
     ...
     callbacks = ["batch_progress_bar", VarRecorder(input, "v", key="v_input")]
     metrics, cb_data = compiled_net.evaluate({input: testing_images * 0.01},
-		                             {output: testing_labels},
+                                             {output: testing_labels},
                                              callbacks=callbacks)
 
 to record the population's `V` state variable over time. After the simulation has 
@@ -137,8 +137,40 @@ Callbacks can implement any of the following methods which allow them to be trig
     These methods do not override methods in the base class but, for performance reasons, are detected by inspecting 
     callback objects.
 
-To give them access to properties of the 
-data
-compiled_network
-num_batches
-num_epochs
+To allow callback classes to access properties of the simulation, they can also provide a ``set_params`` method.
+This method is called when callbacks are build into a :class:`~utils.callback_list.CallbackList` and is typically provided with the following keyword arguments:
+
+* ``compiled_network``: the :class:`~compilers.CompiledNetwork`-derived object the network has been compiled into. This allows access to underlying GeNN model and thus it's neuron group and synapse group objects.
+* ``num_batches``: number of batches per-epoch
+* ``data``: dictionary used for storing recording data (see below)
+
+All ``set_params`` methods should ignore unknown keyword arguments using a trailing ``kwargs**`` argument e.g.
+
+..  code-block:: python
+
+    def set_params(self, num_batches, **kwargs):
+        pass
+
+Saving data
+^^^^^^^^^^^
+When callback classes are used for recording, they should not directly store data themselves.
+Instead, they should add data to the dictionary passed via the ``data`` keyword argument to ``set_params`` and provide a ``get_data`` method which returns the callback's key and the recorded data. For example, a callback which records to a list might do this:
+
+..  code-block:: python
+
+    from ml_genn.callbacks import Callback
+
+    class MyCallback(Callback):
+        def __init__(self, key):
+            self.key = key
+
+        def set_params(self, data, **kwargs):
+            data[self.key] = []
+            self._data = data[self.key]
+
+        def on_batch_end(self, batch, metrics):
+            # Append something to self._data
+            pass
+
+        def get_data(self):
+            return self.key, self._data
