@@ -3,10 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from collections import namedtuple
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY_SHARED_NEURON,
-                                        VarAccess_REDUCE_BATCH_MAX, 
-                                        VarAccessMode_READ_ONLY,
-                                        VarAccessMode_REDUCE_MAX)
+from pygenn import CustomUpdateVarAccess, VarAccessMode
 from ml_genn.callbacks import CustomUpdateOnTimestepEnd
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import (BinarySpikeInput, IntegrateFire,
@@ -16,27 +13,27 @@ from .converter import Converter
 from .enum import InputType
 
 from copy import deepcopy
-from pygenn.genn_model import create_var_ref
+from pygenn import create_var_ref
 from ml_genn.utils.network import get_network_dag
 
 logger = logging.getLogger(__name__)
 
 # First pass of threshold update - calculate max across batches and zero
 threshold_1_model = {
-    "var_name_types": [("MaxV", "scalar", VarAccess_REDUCE_BATCH_MAX),
-                       ("Vthresh", "scalar", VarAccess_READ_ONLY_SHARED_NEURON)],
+    "vars": [("MaxV", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_MAX),
+             ("Vthresh", "scalar", CustomUpdateVarAccess.READ_ONLY_SHARED_NEURON)],
     "var_refs": [("V", "scalar")],
     "update_code": """
-    $(MaxV) = fmax($(V), $(Vthresh));
-    $(V) = 0.0;
+    MaxV = fmax(V, Vthresh);
+    V = 0.0;
     """}
 
 # Second pass of threshold update - calculate max across neurons
 threshold_2_model = {
-    "var_refs": [("MaxV", "scalar", VarAccessMode_READ_ONLY),
-                 ("Vthresh", "scalar", VarAccessMode_REDUCE_MAX)],
+    "var_refs": [("MaxV", "scalar", VarAccessMode.READ_ONLY),
+                 ("Vthresh", "scalar", VarAccessMode.REDUCE_MAX)],
     "update_code": """
-    $(Vthresh) = $(MaxV);
+    Vthresh = MaxV;
     """}
 
 class NormCompiler(InferenceCompiler):
@@ -46,10 +43,7 @@ class NormCompiler(InferenceCompiler):
             # Make a copy of model with threshold
             # parameter implemented as EGP 
             model = deepcopy(model)
-            model.convert_param_to_egp("Vthresh")
-            
-            # Set it's value to infinity
-            model.egp_vals["Vthresh"] = np.inf
+            model.set_param_dynamic("Vthresh")
 
         # Build neuron model
         return super(NormCompiler, self).build_neuron_model(

@@ -1,111 +1,126 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
 from .few_spike_relu_input import FewSpikeReluInput
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
 
+if TYPE_CHECKING:
+    from .. import Population
+
+
 # Standard FS ReLU model where upstream
 # neurons are FS ReLU or FS unsigned input
 genn_model = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar"),
-                         ("SrcScale", "scalar")],
-    "var_name_types": [("Fx", "scalar"), ("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar"),
+               ("SrcScale", "scalar")],
+    "vars": [("Fx", "scalar"), ("V", "scalar")],
 
     "sim_code":
         """
         // Convert K to integer
-        const int kInt = (int)$(K);
+        const int kInt = (int)K;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)(t / dt);
 
         // Calculate magic constants. For RelU hT=h=T
         // **NOTE** d uses last timestep as that was when spike was SENT
-        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
-        const scalar d = $(SrcScale) * (1 << ((kInt - pipeTimestep) % kInt));
+        const scalar hT = Scale * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar d = SrcScale * (1 << ((kInt - pipeTimestep) % kInt));
 
         // Accumulate input
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
-        $(Fx) += ($(Isyn) * d);
+        Fx += (Isyn * d);
 
         // If this is the first timestep, apply input
         // **NOTE** this cannot be done in custom update as it
         // needs to occur in the middle of neuron update
         if(pipeTimestep == 0) {
-            $(V) = $(Fx);
-            $(Fx) = 0.0;
+            V = Fx;
+            Fx = 0.0;
         }
         """,
     "threshold_condition_code":
         """
-        $(V) >= hT
+        V >= hT
         """,
     "reset_code":
         """
-        $(V) -= hT;
-        """,
-    "is_auto_refractory_required": False}
+        V -= hT;
+        """}
 
 # FS ReLU model where upstream neurons are FS signed input
 genn_model_upstream_signed = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar"),
-                         ("SrcScale", "scalar")],
-    "var_name_types": [("Fx", "scalar"), ("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar"),
+               ("SrcScale", "scalar")],
+    "vars": [("Fx", "scalar"), ("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
-        const int kInt = (int)$(K);
+        const int kInt = (int)K;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)(t / dt);
 
         // Calculate magic constants. For RelU hT=h=T
-        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar hT = Scale * (1 << (kInt - (1 + pipeTimestep)));
 
         // Split timestep into interleaved positive and negative
         // **NOTE** sign is flipped compared to input model
         // as we want sign of PREVIOUS timestep
         const scalar dSign = ((pipeTimestep % 2) == 0) ? -1.0 : 1.0;
-        const scalar d = dSign * $(SrcScale) * (1 << (((kInt - pipeTimestep) % kInt) / 2));
+        const scalar d = dSign * SrcScale * (1 << (((kInt - pipeTimestep) % kInt) / 2));
 
         // Accumulate input
         // **NOTE** needs to be before applying input as
         // spikes from LAST timestep must be processed
-        $(Fx) += ($(Isyn) * d);
+        Fx += (Isyn * d);
         
         // If this is the first timestep, apply input
         // **NOTE** this cannot be done in custom update as it
         // needs to occur in the middle of neuron update
         if(pipeTimestep == 0) {
-            $(V) = $(Fx);
-            $(Fx) = 0.0;
+            V = Fx;
+            Fx = 0.0;
         }
         """,
     "threshold_condition_code":
         """
-        $(V) >= hT
+        V >= hT
         """,
     "reset_code":
         """
-        $(V) -= hT;
-        """,
-    "is_auto_refractory_required": False}
+        V -= hT;
+        """}
 
 
 class FewSpikeRelu(Neuron):
+    """A few-spike neuron to encode a ReLU ANN activation
+    as described by [Stockl2021]_.
+    
+    Should typically be created by converting an ANN to an SNN using
+    :class:`ml_genn_tf.converters.FewSpike`.
+    
+    Args:
+        k:          Number of timesteps to encode activation over.
+        alpha:      Scaling factor to apply to activations.
+        readout:    Type of readout to attach to this neuron's output variable
+    """
     pipelined = True
 
     k = ConstantValueDescriptor()
     alpha = ConstantValueDescriptor()
 
-    def __init__(self, k: int = 10, alpha: float = 25,
-                 softmax: Optional[bool] = None, readout=None):
-        super(FewSpikeRelu, self).__init__(softmax, readout)
+    def __init__(self, k: int = 10, alpha: float = 25, readout=None):
+        super(FewSpikeRelu, self).__init__(readout)
         self.k = k
         self.alpha = alpha
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         # Loop through incoming connections
         source_alpha = None
         source_signed = None

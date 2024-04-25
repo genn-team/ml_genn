@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import numpy as np
 
 from collections import namedtuple
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
-from typing import Sequence, Union
+from pygenn import VarAccess
+from typing import Sequence, Union, TYPE_CHECKING
 from .input import Input
 from .neuron import Neuron
 from ..utils.data import PreprocessedSpikes 
@@ -16,22 +18,30 @@ if TYPE_CHECKING:
     from .. import Population
 
 genn_model = {
-    "var_name_types": [("StartSpike", "unsigned int"),
-                       ("EndSpike", "unsigned int",
-                        VarAccess_READ_ONLY_DUPLICATE)],
+    "vars": [("StartSpike", "unsigned int"),
+             ("EndSpike", "unsigned int", VarAccess.READ_ONLY_DUPLICATE)],
     "extra_global_params": [("SpikeTimes", "scalar*")],
     "threshold_condition_code":
         """
-        $(StartSpike) != $(EndSpike) && $(t) >= $(SpikeTimes)[$(StartSpike)]
+        StartSpike != EndSpike && t >= SpikeTimes[StartSpike]
         """,
     "reset_code":
         """
-        $(StartSpike)++;
-        """,            
-    "is_auto_refractory_required": False}
+        StartSpike++;
+        """}
 
 
 class SpikeInput(Neuron, Input):
+    """An input neuron which emits spike trains provided as
+    :class:`ml_genn.utils.data.PreprocessedSpikes` objects
+    
+    Args:
+        max_spikes: Maximum total number of spikes this population can emit
+                    for any example. This needs to include batch size i.e.
+                    if batch size is 32 and there are 100 neurons in the 
+                    population, each of which emits a maximum of one spike
+                    per example, :math:`\\text{max_spikes} = 32 * 100 * 1 = 3200`
+    """
     def __init__(self, max_spikes=1000000):
         super(SpikeInput, self).__init__()
 
@@ -43,23 +53,24 @@ class SpikeInput(Neuron, Input):
         batched_spikes = batch_spikes(input, batch_size)
 
         # Get view
-        start_spikes_view = genn_pop.vars["StartSpike"].view
-        end_spikes_view = genn_pop.vars["EndSpike"].view
-        spike_times_view = genn_pop.extra_global_params["SpikeTimes"].view
+        start_spikes_var = genn_pop.vars["StartSpike"]
+        end_spikes_var = genn_pop.vars["EndSpike"]
+        spike_times_egp = genn_pop.extra_global_params["SpikeTimes"]
 
         # Check that spike times will fit in view, copy them and push them
         num_spikes = len(batched_spikes.spike_times) 
-        assert num_spikes <= len(spike_times_view)
-        spike_times_view[0:num_spikes] = batched_spikes.spike_times
-        genn_pop.push_extra_global_param_to_device("SpikeTimes")
+        assert num_spikes <= len(spike_times_egp.view)
+        spike_times_egp.view[0:num_spikes] = batched_spikes.spike_times
+        spike_times_egp.push_to_device()
 
         # Calculate start and end spike indices
-        end_spikes_view[:] = batched_spikes.end_spikes
-        start_spikes_view[:] = calc_start_spikes(batched_spikes.end_spikes)
-        genn_pop.push_var_to_device("StartSpike")
-        genn_pop.push_var_to_device("EndSpike")
+        end_spikes_var.view[:] = batched_spikes.end_spikes
+        start_spikes_var.view[:] = calc_start_spikes(batched_spikes.end_spikes)
+        start_spikes_var.push_to_device()
+        end_spikes_var.push_to_device()
 
-    def get_model(self, population: "Population", dt: float, batch_size: int):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         return NeuronModel(genn_model, None, {}, 
                            {"StartSpike": 0, "EndSpike": 0},
                            {"SpikeTimes": np.empty(self.max_spikes,

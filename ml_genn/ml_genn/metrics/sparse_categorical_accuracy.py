@@ -1,13 +1,17 @@
 import numpy as np
 
+from typing import Optional
 from .metric import Metric
 from ..communicators import Communicator
 
 class SparseCategoricalAccuracy(Metric):
+    """Computes the crossentropy between labels and prediction 
+    when there are two or more label classes, specified as integers."""
     def __init__(self):
         self.reset()
 
-    def update(self, y_true, y_pred, communicator: Communicator):
+    def update(self, y_true: np.ndarray, y_pred: np.ndarray,
+               communicator: Optional[Communicator]):
         y_true = np.asarray(y_true)
         if y_true.shape[0] != y_pred.shape[0]:
             raise RuntimeError(f"Prediction shape:{y_pred.shape} does "

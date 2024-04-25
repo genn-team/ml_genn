@@ -1,3 +1,5 @@
+"""Initializers are used to define model state variables and parameter
+initialization functions which can be offloaded to the GPU"""
 from .initializer import Initializer
 from .normal import Normal
 from .uniform import Uniform

@@ -5,6 +5,7 @@ from ..utils.model import NeuronModel
 
 
 class MeanSquareError(Loss):
+    """Computes the mean squared error between labels and prediction"""
     def add_to_neuron(self, model: NeuronModel, shape, 
                       batch_size: int, example_timesteps: int):
         # Add extra global parameter to store Y* throughout example
@@ -16,10 +17,10 @@ class MeanSquareError(Loss):
         # Add sim-code to read out correct yTrue value 
         model.append_sim_code(
             f"""
-            const unsigned int timestep = (int)round($(t) / DT);
-            const unsigned int index = (timestep * $(num_batch) * $(num))
-                                       + ($(batch) * $(num)) + $(id);
-            const scalar yTrue = $(YTrue)[index];
+            const unsigned int timestep = (int)round(t / dt);
+            const unsigned int index = (timestep * num_batch * num)
+                                       + (batch * num) + id;
+            const scalar yTrue = YTrue[index];
             """)
 
     def set_target(self, genn_pop, y_true, shape, batch_size: int, 
@@ -35,5 +36,5 @@ class MeanSquareError(Loss):
         genn_pop.extra_global_params["YTrue"].view[:] = y_true.flatten()
 
         # Push YTrue to device
-        genn_pop.push_extra_global_param_to_device("YTrue")
+        genn_pop.extra_global_params["YTrue"].push_to_device()
 

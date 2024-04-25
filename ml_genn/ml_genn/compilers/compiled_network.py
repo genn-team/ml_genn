@@ -10,6 +10,7 @@ OutputType = Union[np.ndarray, List[np.ndarray]]
 
 
 class CompiledNetwork:
+    """Base class for all compiled networks."""
     _context = None
 
     def __init__(self, genn_model, neuron_populations,
@@ -22,6 +23,12 @@ class CompiledNetwork:
         self.num_recording_timesteps = num_recording_timesteps
 
     def set_input(self, inputs: dict):
+        """Copy input data to GPU
+        
+        Args:
+            inputs: Dictionary mapping input populations or 
+                    layers to data to copy to them
+        """
         # Loop through populations
         for pop, input in inputs.items():
             # Find corresponding GeNN population and set input
@@ -30,17 +37,25 @@ class CompiledNetwork:
                                  self.genn_model.batch_size, pop.shape, input)
 
     def get_readout(self, outputs: Union[Sequence, PopulationType]) -> OutputType:
+        """Get output from population readouts"""
         if isinstance(outputs, Sequence):
             return [self._get_readout(p) for p in outputs]
         else:
             return self._get_readout(outputs)
 
     def custom_update(self, name: str):
-        """Perform custom update"""
+        """Perform custom update.
+        
+        Args:
+            name:   Name of custom update"""
         self.genn_model.custom_update(name)
 
     def step_time(self, callback_list: Optional[CallbackList] = None):
-        """Step the GeNN model
+        """Simulate one timestep
+        
+        Args:
+            callback_list:  Callbacks to potentially execute 
+                            at start and end of timestep
         """
         if callback_list is not None:
             callback_list.on_timestep_begin(self.genn_model.timestep)
@@ -51,7 +66,7 @@ class CompiledNetwork:
             callback_list.on_timestep_end(self.genn_model.timestep - 1)
 
     def reset_time(self):
-        """Reset the GeNN model"""
+        """Reset the GeNN models internal timestep to 0."""
         self.genn_model.timestep = 0
         self.genn_model.t = 0.0
 
@@ -68,10 +83,9 @@ class CompiledNetwork:
             # If this is the first rank, build model
             if first_rank:
                 self.genn_model.build()
-            # Otherwise, at least ensure it is finalised
-            # **HACK** GeNN should handle this
+            # Otherwise, build but ensure no code generated
             else:
-                self.genn_model._model.finalize()
+                self.genn_model.build(never_rebuild=True)
 
         # If there is a communicator, wait for all ranks to reach this point
         if self.communicator is not None:
@@ -82,17 +96,18 @@ class CompiledNetwork:
 
         # If there is a communicator
         if self.communicator is not None:
+            # Get CUDA-specific state from runtime
+            runtime_state = self.genn_model._runtime.state
+
             # Generate unique ID for our NCCL 'clique' on first rank
             if first_rank:
-                self.genn_model._slm.nccl_generate_unique_id()
+                runtime_state.nccl_generate_unique_id()
 
             # Broadcast our  NCCL clique ID across all ranks
-            nccl_unique_id_view =\
-                self.genn_model._slm.nccl_assign_external_unique_id()
-            self.communicator.broadcast(nccl_unique_id_view, 0)
+            self.communicator.broadcast(runtime_state.nccl_unique_id, 0)
 
             # Initialise NCCL communicator
-            self.genn_model._slm.nccl_init_communicator(
+            runtime_state.nccl_init_communicator(
                 self.communicator.rank, self.communicator.num_ranks)
 
     def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):

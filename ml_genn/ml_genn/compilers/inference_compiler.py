@@ -1,28 +1,24 @@
 import numpy as np
 
 from typing import Iterator, Sequence, Union
-from pygenn.genn_wrapper.Models import VarAccessMode_READ_WRITE
+from pygenn import SynapseMatrixType
 from .compiler import Compiler, ZeroInSyn
 from .compiled_network import CompiledNetwork
+from .. import Connection, Population, Network
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..communicators import Communicator
 from ..metrics import Metric
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
-from ..utils.model import CustomUpdateModel
+from ..utils.model import CustomUpdateModel, NeuronModel, SynapseModel
 from ..utils.network import PopulationType
 
-from pygenn.genn_model import create_var_ref, create_psm_var_ref
+from pygenn import create_var_ref, create_psm_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                 SynapseMatrixType_PROCEDURAL_KERNELG,
-                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG,
-                                 SynapseMatrixType_TOEPLITZ_KERNELG)
 from ..metrics import default_metrics
 
 
@@ -224,7 +220,6 @@ class CompiledInferenceNetwork(CompiledNetwork):
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
-            self.genn_model.t = 0.0
 
         # Apply inputs to model
         self.set_input(x)
@@ -320,17 +315,17 @@ class InferenceCompiler(Compiler):
                  **genn_kwargs):
         # Determine matrix type order of preference based on flag
         if prefer_in_memory_connect:
-            supported_matrix_type = [SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                     SynapseMatrixType_DENSE_INDIVIDUALG,
-                                     SynapseMatrixType_TOEPLITZ_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG]
+            supported_matrix_type = [SynapseMatrixType.SPARSE,
+                                     SynapseMatrixType.DENSE,
+                                     SynapseMatrixType.TOEPLITZ,
+                                     SynapseMatrixType.PROCEDURAL_KERNELG,
+                                     SynapseMatrixType.PROCEDURAL]
         else:
-            supported_matrix_type = [SynapseMatrixType_TOEPLITZ_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_KERNELG,
-                                     SynapseMatrixType_PROCEDURAL_PROCEDURALG,
-                                     SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                     SynapseMatrixType_DENSE_INDIVIDUALG]
+            supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
+                                     SynapseMatrixType.PROCEDURAL_KERNELG,
+                                     SynapseMatrixType.PROCEDURAL,
+                                     SynapseMatrixType.SPARSE,
+                                     SynapseMatrixType.DENSE]
         super(InferenceCompiler, self).__init__(supported_matrix_type, dt,
                                                 batch_size, rng_seed,
                                                 kernel_profiling,
@@ -341,10 +336,12 @@ class InferenceCompiler(Compiler):
         self.reset_vars_between_batches = reset_vars_between_batches
         self.reset_in_syn_between_batches = reset_in_syn_between_batches
 
-    def pre_compile(self, network, genn_model, **kwargs):
+    def pre_compile(self, network: Network, 
+                    genn_model, **kwargs) -> CompileState:
         return CompileState()
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state: CompileState) -> NeuronModel:
         # If population has a readout i.e. it's an output
         # Add readout logic to model
         if pop.neuron.readout is not None:
@@ -360,7 +357,8 @@ class InferenceCompiler(Compiler):
         return super(InferenceCompiler, self).build_neuron_model(
             pop, model, compile_state)
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state: CompileState) -> SynapseModel:
         # Add any PSM reset variables to compile state
         if self.reset_vars_between_batches:
             compile_state.add_psm_reset_vars(model, conn)
@@ -373,15 +371,16 @@ class InferenceCompiler(Compiler):
         return super(InferenceCompiler, self).build_synapse_model(
             conn, model, compile_state)
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict,
+                                compile_state: CompileState) -> CompiledInferenceNetwork:
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations,
                                                   connection_populations)
-        
+
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
-        
+
         # If insyn should be reset between batches
         if self.reset_in_syn_between_batches:
             # Add callbacks to zero insyn on all connections requiring them

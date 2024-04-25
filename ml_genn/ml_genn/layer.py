@@ -7,6 +7,29 @@ from .sequential_network import SequentialNetwork
 
 
 class InputLayer:
+    """An input layer for a :class:`.SequentialNetwork`
+    
+    Attributes:
+        population:             weak reference to underlying
+                                :class:`.Population` object.
+        connection:             weak reference to underlying
+                                :class:`.Connection` object.
+                        
+    Args:
+        neuron:                 Neuron model to use (typically derived from
+                                :class:`.neuron_models.Input`)
+        shape:                  Shape of layer
+        record_spikes:          Should spikes from this layer be recorded? 
+                                This is required to use 
+                                :class:`.callbacks.SpikeRecorder` 
+                                with this layer.
+        record_spike_events:    Should spike-like events from this layer be 
+                                recorded? This is required to use 
+                                :class:`.callbacks.SpikeRecorder` 
+                                with this layer.
+        name:                   Name of layer (only really used 
+                                for debugging purposes)
+    """
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
                  record_spikes: bool = False,
                  record_spike_events: bool = False,
@@ -22,6 +45,29 @@ class InputLayer:
 
 
 class Layer:
+    """An layer for a :class:`.SequentialNetwork`
+    
+    Attributes:
+        population:             weak reference to underlying
+                                :class:`.Population` object.
+
+    Args:
+        connectivity:           Connectivity to connect layer to previous
+        neuron:                 Neuron model to use
+        synapse:                What type of synapse dynamics to 
+                                apply to input delivered to this layers neurons
+        shape:                  Shape of layer
+        record_spikes:          Should spikes from this layer be recorded? 
+                                This is required to use 
+                                :class:`.callbacks.SpikeRecorder` 
+                                with this layer.
+        record_spike_events:    Should spike-like events from this layer be 
+                                recorded? This is required to use 
+                                :class:`.callbacks.SpikeRecorder` 
+                                with this layer.
+        name:                   Name of layer (only really used 
+                                for debugging purposes)
+    """
     def __init__(self, connectivity: ConnectivityInitializer,
                  neuron: NeuronInitializer, shape: Shape = None,
                  synapse: SynapseInitializer = "delta",

@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .. import Population
 
+Param2D = Union[None, int, Sequence[int]]
 
 class PadMode(Enum):
-    VALID = 'valid'
-    SAME = 'same'
+    VALID = "valid"
+    SAME = "same"
 
 
 class KernelInit(Initializer):
@@ -34,7 +35,7 @@ def get_conv_same_padding(in_size: int, conv_size: int, stride: int) -> int:
     else:
         return max(conv_size - (in_size % stride), 0) // 2
 
-def get_param_2d(name: str, param: Union[None, int, Sequence[int]],
+def get_param_2d(name: str, param: Param2D,
                  default=Tuple[int, int]) -> Tuple[int, int]:
     if param is None:
         if default is not None:

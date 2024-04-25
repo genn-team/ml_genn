@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 
 from abc import ABC
@@ -5,7 +7,7 @@ from abc import ABC
 from abc import abstractmethod
 from copy import deepcopy
 
-from pygenn.genn_wrapper.Models import VarAccess_READ_ONLY_DUPLICATE
+from pygenn import VarAccess
 
 
 def _replace_neuron_code(nm, source, target):
@@ -15,12 +17,34 @@ def _replace_neuron_code(nm, source, target):
 
 
 class Input:
+    """Base class for all types of input neuron"""
     @abstractmethod
-    def set_input(self, compiled_net, pop, input):
+    def set_input(self, genn_pop, batch_size: int, shape, input):
+        """
+        Copy provided data to GPU.
+        
+        Args:
+            genn_pop:   GeNN ``NeuronGroup`` object population has been
+                        compiled into
+            batch_size: Batch size of compiled network
+            shape:      Shape of input population
+            input:      Input data
+        """
         pass
 
 
 class InputBase(Input):
+    """Base class for all types of input neuron for non-spiking datasets.
+    
+    Args:
+        var_name:               Name of state variable to add to 
+                                model to hold current static input
+        egp_name:               Name of Extra Global Parameter to add to 
+                                model to hold current time-varying input
+        input_frames:           How many frames does each input have?
+        input_frame_timesteps:  How many timesteps should each frame of 
+                                input be presented for?
+     """
     def __init__(self, var_name="Input", egp_name=None,
                  input_frames=1, input_frame_timesteps=1,
                  **kwargs):
@@ -38,6 +62,15 @@ class InputBase(Input):
 
     def create_input_model(self, base_model, batch_size: int, shape,
                            replace_input: str = None):
+        """Convert standard neuron model into input neuron model.
+        
+        Args:
+            base_model:     Standard neuron model
+            batch_size:     Batch size of compiled network
+            shape:          Shape of input population
+            replace_input:  Name of variable in neuron model code 
+                            to replace with input (typically Isyn)
+        """
         # Make copy of model
         nm_copy = deepcopy(base_model)
 
@@ -45,12 +78,12 @@ class InputBase(Input):
         if self.input_frames == 1:
             # Add read-only input variable
             nm_copy.add_var(self.var_name, "scalar", 0.0,
-                            VarAccess_READ_ONLY_DUPLICATE)
+                            VarAccess.READ_ONLY_DUPLICATE)
 
             # Replace input with reference to new variable
-            nm_copy.replace_sim_code(replace_input, f"$({self.var_name})")
-            nm_copy.replace_threshold_condition_code(replace_input, f"$({self.var_name})")
-            nm_copy.replace_reset_code(replace_input, f"$({self.var_name})")
+            nm_copy.replace_sim_code(replace_input, self.var_name)
+            nm_copy.replace_threshold_condition_code(replace_input, self.var_name)
+            nm_copy.replace_reset_code(replace_input, self.var_name)
         else:
             # Check there isn't a variable which conflicts with EGP
             assert not nm_copy.has_var(self.egp_name)
@@ -71,8 +104,8 @@ class InputBase(Input):
                 # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * DT)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(t) * {flat_shape}) + $(id)];
+                    const int timestep = min((int)(t / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
+                    const scalar input = {self.egp_name}[(t * {flat_shape}) + id];
                     """)
             else:
                 # Add EGP
@@ -85,8 +118,8 @@ class InputBase(Input):
                 # local variable to correct EGP entry + synaptic input
                 nm_copy.prepend_sim_code(
                     f"""
-                    const int timestep = min((int)($(t) / ({self.input_frame_timesteps} * DT)), {self.input_frames - 1});
-                    const scalar input = $({self.egp_name})[($(batch) * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + $(id)];
+                    const int timestep = min((int)(t / ({self.input_frame_timesteps} * dt)), {self.input_frames - 1});
+                    const scalar input = {self.egp_name}[(batch * {flat_shape * self.input_frames}) + (timestep * {flat_shape}) + id];
                     """)
         return nm_copy
 
@@ -142,7 +175,7 @@ class InputBase(Input):
                         ((0, batch_size - input_batch_size), (0, 0)))
 
             # Push variable to device
-            genn_pop.push_var_to_device(self.var_name)
+            genn_pop.vars[self.var_name].push_to_device()
         # Otherwise
         else:
             # Check time dimension matches
@@ -189,5 +222,5 @@ class InputBase(Input):
                                           (0, 0))).flatten()
 
             # Push variable to device
-            genn_pop.push_extra_global_param_to_device(self.egp_name)
+            genn_pop.extra_global_params[self.egp_name].push_to_device()
 

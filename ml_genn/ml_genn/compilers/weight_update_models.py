@@ -1,35 +1,35 @@
 static_pulse_model = {
-    "param_name_types": [("g", "scalar")],
-    "sim_code":
+    "params": [("g", "scalar")],
+    "pre_spike_syn_code":
         """
-        $(addToInSyn, $(g));
+        addToPost(g);
         """}
 
 static_pulse_delay_model = {
-    "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
-    "sim_code":
+    "params": [("g", "scalar"), ("d", "uint8_t")],
+    "pre_spike_syn_code":
         """
-        $(addToInSynDelay, $(g), $(d));
+        addToPostDelay(g, d);
         """}
 
 signed_static_pulse_model = {
-    "param_name_types": [("g", "scalar")],
-    "sim_code":
+    "params": [("g", "scalar")],
+    "pre_spike_syn_code":
         """
-        $(addToInSyn, $(g));
+        addToPost(g);
         """,
-    "event_code":
+    "pre_event_syn_code":
         """
-        $(addToInSyn, -$(g));
+        addToPost(-g);
         """}
 
 signed_static_pulse_delay_model = {
-    "param_name_types": [("g", "scalar"), ("d", "uint8_t")],
-    "sim_code":
+    "params": [("g", "scalar"), ("d", "uint8_t")],
+    "pre_spike_syn_code":
         """
-        $(addToInSynDelay, $(g), $(d));
+        addToPostDelay(g, d);
         """,
-    "event_code":
+    "pre_event_syn_code":
         """
-        $(addToInSynDelay, $(g), -$(d));
+        addToPostDelay(g, -d);
         """}

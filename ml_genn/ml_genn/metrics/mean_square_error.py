@@ -1,13 +1,16 @@
 import numpy as np
 
+from typing import Optional
 from .metric import Metric
 from ..communicators import Communicator
 
 class MeanSquareError(Metric):
+    """Computes the mean squared error between labels and prediction"""
     def __init__(self):
         self.reset()
 
-    def update(self, y_true, y_pred, communicator: Communicator):
+    def update(self, y_true: np.ndarray, y_pred: np.ndarray,
+               communicator: Optional[Communicator]):
         y_true = np.asarray(y_true)
         if y_true.shape != y_pred.shape:
             raise RuntimeError(f"Prediction shape:{y_pred.shape} does "

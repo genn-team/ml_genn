@@ -2,10 +2,10 @@ import logging
 import numpy as np
 
 from typing import Iterator, Sequence
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY,
-                                        VarAccess_REDUCE_BATCH_SUM)
+from pygenn import CustomUpdateVarAccess, SynapseMatrixType, VarAccess
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
@@ -17,16 +17,16 @@ from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
-from ..utils.model import CustomUpdateModel, WeightUpdateModel
+from ..utils.model import (CustomUpdateModel, NeuronModel,
+                           SynapseModel, WeightUpdateModel)
+from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
-from pygenn.genn_model import create_var_ref, create_wu_var_ref
+from pygenn import create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.value import is_value_constant
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_SPARSE_INDIVIDUALG)
 from ml_genn.optimisers import default_optimisers
 from ml_genn.losses import default_losses
 
@@ -121,126 +121,180 @@ class CompileState:
                                       "different time constants")
 
 eprop_lif_model = {
-    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"), 
-                         ("FTarget", "scalar"), ("AlphaFAv", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY),
-                       ("eFiltered", "scalar"), ("DeltaG", "scalar")],
-    "pre_var_name_types": [("ZFilter", "scalar")],
-    "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
+    "params": [("CReg", "scalar"), ("Alpha", "scalar"), 
+               ("FTarget", "scalar"), ("AlphaFAv", "scalar"),
+               ("Vthresh_post", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY),
+             ("eFiltered", "scalar"), ("DeltaG", "scalar")],
+    "pre_vars": [("ZFilter", "scalar")],
+    "post_vars": [("Psi", "scalar"), ("FAvg", "scalar")],
+    "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
+                             ("E_post", "scalar")],
 
     "pre_spike_code": """
-    $(ZFilter) += 1.0;
+    ZFilter += 1.0;
     """,
     "pre_dynamics_code": """
-    $(ZFilter) *= $(Alpha);
+    ZFilter *= Alpha;
     """,
 
     "post_spike_code": """
-    $(FAvg) += (1.0 - $(AlphaFAv));
+    FAvg += (1.0 - AlphaFAv);
     """,
     "post_dynamics_code": """
-    $(FAvg) *= $(AlphaFAv);
-    if ($(RefracTime_post) > 0.0) {
-      $(Psi) = 0.0;
+    FAvg *= AlphaFAv;
+    if (RefracTime_post > 0.0) {
+      Psi = 0.0;
     }
     else {
-      $(Psi) = (1.0 / $(Vthresh_post)) * 0.3 * fmax(0.0, 1.0 - fabs(($(V_post) - $(Vthresh_post)) / $(Vthresh_post)));
+      Psi = (1.0 / Vthresh_post) * 0.3 * fmax(0.0, 1.0 - fabs((V_post - Vthresh_post) / Vthresh_post));
     }
     """,
 
-    "sim_code": """
-    $(addToInSyn, $(g));
+    "pre_spike_syn_code": """
+    addToPost(g);
     """,
     "synapse_dynamics_code": """
-    const scalar e = $(ZFilter) * $(Psi);
-    scalar eFiltered = $(eFiltered);
-    eFiltered = (eFiltered * $(Alpha)) + e;
-    $(DeltaG) += (eFiltered * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
-    $(eFiltered) = eFiltered;
+    const scalar e = ZFilter * Psi;
+    scalar eF = eFiltered;
+    eF = (eF * Alpha) + e;
+    DeltaG += (eF * E_post) + ((FAvg - FTarget) * CReg * e);
+    eFiltered = eF;
     """}
 
 eprop_alif_model = {
-    "param_name_types": [("CReg", "scalar"), ("Alpha", "scalar"),
-                         ("Rho", "scalar"), ("FTarget", "scalar"),
-                         ("AlphaFAv", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
-                       ("eFiltered", "scalar"), ("epsilonA", "scalar"),
-                       ("DeltaG", "scalar")],
-    "pre_var_name_types": [("ZFilter", "scalar")],
-    "post_var_name_types": [("Psi", "scalar"), ("FAvg", "scalar")],
-
+    "params": [("CReg", "scalar"), ("Alpha", "scalar"), ("Rho", "scalar"),
+               ("FTarget", "scalar"),("AlphaFAv", "scalar"),
+               ("Vthresh_post", "scalar"), ("Beta_post", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY),
+             ("eFiltered", "scalar"), ("epsilonA", "scalar"),
+             ("DeltaG", "scalar")],
+    "pre_vars": [("ZFilter", "scalar")],
+    "post_vars": [("Psi", "scalar"), ("FAvg", "scalar")],
+    "post_neuron_var_refs": [("RefracTime_post", "scalar"), ("V_post", "scalar"),
+                             ("A_post", "scalar"), ("E_post", "scalar")],
+ 
     "pre_spike_code": """
-    $(ZFilter) += 1.0;
+    ZFilter += 1.0;
     """,
     "pre_dynamics_code": """
-    $(ZFilter) *= $(Alpha);
+    ZFilter *= Alpha;
     """,
 
     "post_spike_code": """
-    $(FAvg) += (1.0 - $(AlphaFAv));
+    FAvg += (1.0 - AlphaFAv);
     """,
     "post_dynamics_code": """
-    $(FAvg) *= $(AlphaFAv);
-    if ($(RefracTime_post) > 0.0) {
-      $(Psi) = 0.0;
+    FAvg *= AlphaFAv;
+    if (RefracTime_post > 0.0) {
+      Psi = 0.0;
     }
     else {
-      $(Psi) = (1.0 / $(Vthresh_post)) * 0.3 * fmax(0.0, 1.0 - fabs(($(V_post) - ($(Vthresh_post) + ($(Beta_post) * $(A_post)))) / $(Vthresh_post)));
+      Psi = (1.0 / Vthresh_post) * 0.3 * fmax(0.0, 1.0 - fabs((V_post - (Vthresh_post + (Beta_post * A_post))) / Vthresh_post));
     }
     """,
 
-    "sim_code": """
-    $(addToInSyn, $(g));
+    "pre_spike_syn_code": """
+    addToPost(g);
     """,
     "synapse_dynamics_code": """
     // Calculate some common factors in e and epsilon update
-    scalar epsilonA = $(epsilonA);
-    const scalar psiZFilter = $(Psi) * $(ZFilter);
-    const scalar psiBetaEpsilonA = $(Psi) * $(Beta_post) * epsilonA;
+    scalar epsA = epsilonA;
+    const scalar psiZFilter = Psi * ZFilter;
+    const scalar psiBetaEpsilonA = Psi * Beta_post * epsA;
 
     // Calculate e and episilonA
     const scalar e = psiZFilter  - psiBetaEpsilonA;
-    $(epsilonA) = psiZFilter + (($(Rho) * epsilonA) - psiBetaEpsilonA);
+    epsilonA = psiZFilter + ((Rho * epsA) - psiBetaEpsilonA);
 
     // Calculate filtered version of eligibility trace
-    scalar eFiltered = $(eFiltered);
-    eFiltered = (eFiltered * $(Alpha)) + e;
+    scalar eF = eFiltered;
+    eF = (eF * Alpha) + e;
     
     // Apply weight update
-    $(DeltaG) += (eFiltered * $(E_post)) + (($(FAvg) - $(FTarget)) * $(CReg) * e);
-    $(eFiltered) = eFiltered;
+    DeltaG += (eF * E_post) + ((FAvg - FTarget) * CReg * e);
+    eFiltered = eF;
     """}
 
 output_learning_model = {
-    "param_name_types": [("Alpha", "scalar")],
-    "var_name_types": [("g", "scalar", VarAccess_READ_ONLY), 
-                       ("DeltaG", "scalar")],
-    "pre_var_name_types": [("ZFilter", "scalar")],
+    "params": [("Alpha", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("DeltaG", "scalar")],
+    "pre_vars": [("ZFilter", "scalar")],
+    "post_neuron_var_refs": [("E_post", "scalar")],
 
     "pre_spike_code": """
-    $(ZFilter) += 1.0;
+    ZFilter += 1.0;
     """,
     "pre_dynamics_code": """
-    $(ZFilter) *= $(Alpha);
+    ZFilter *= Alpha;
     """,
 
-    "sim_code": """
-    $(addToInSyn, $(g));
+    "pre_spike_syn_code": """
+    addToPost(g);
     """,
     "synapse_dynamics_code": """
-    $(DeltaG) += $(ZFilter) * $(E_post);
-    $(addToPre, $(g) * $(E_post));
+    DeltaG += ZFilter * E_post;
+    addToPre(g * E_post);
     """}
 
 gradient_batch_reduce_model = {
-    "var_name_types": [("ReducedGradient", "scalar", VarAccess_REDUCE_BATCH_SUM)],
+    "vars": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
     "update_code": """
-    $(ReducedGradient) = $(Gradient);
-    $(Gradient) = 0;
+    ReducedGradient = Gradient;
+    Gradient = 0;
     """}
 
 class EPropCompiler(Compiler):
+    """Compiler for training models using e-prop [Bellec2020]_.
+    
+    The e-prop compiler supports :class:`ml_genn.neurons.LeakyIntegrateFire` and
+    :class:`ml_genn.neurons.AdaptiveLeakyIntegrateFire` hidden neuron models; and 
+    :class:`ml_genn.losses.SparseCategoricalCrossentropy` loss functions for classification
+    and :class:`ml_genn.losses.MeanSquareError` for regression.
+    
+    e-prop is derived from Real-Time Recurrent Learning (RTRL) so does not require a
+    backward pass meaning that its memory overhead does not scale with sequence length.
+    However, e-prop requires a per-connection eligibility trace meaning that it is
+    incompatible with connectivity like convolutions with shared weights. Furthermore,
+    because each connection has to be updated every timestep, training performance is not
+    improved by sparse activations.
+    
+    Args:
+        example_timesteps:          How many timesteps each example will be
+                                    presented to the network for
+        losses:                     Either a dictionary mapping loss functions
+                                    to output populations or a single loss
+                                    function to apply to all outputs
+        optimiser:                  Optimiser to use when applying weights
+        tau_reg:                    Time constant with which hidden neuron
+                                    spike trains are filtered to obtain the
+                                    firing rate used for regularisation [ms]
+        c_reg:                      Regularisation strength
+        f_target:                   Target hidden neuron firing rate used for
+                                    regularisation [Hz]
+        train_output_bias:          Should output neuron biases be trained?
+        dt:                         Simulation timestep [ms]
+        batch_size:                 What batch size should be used for
+                                    training? In our experience, e-prop works
+                                    well with very large batch sizes (512)
+        rng_seed:                   What value should GeNN's GPU RNG be seeded
+                                    with? This is used for all GPU randomness
+                                    e.g. weight initialisation and Poisson 
+                                    spike train generation
+        kernel_profiling:           Should GeNN record the time spent in each
+                                    GPU kernel? These values can be extracted
+                                    directly from the GeNN model which can be 
+                                    accessed via the ``genn_model`` property
+                                    of the compiled model.
+        reset_time_between_batches: Should time be reset to zero at the start
+                                    of each example or allowed to run
+                                    continously? 
+        communicator:               Communicator used for inter-process
+                                    communications when training across
+                                    multiple GPUs.
+        
+    """
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
@@ -248,8 +302,8 @@ class EPropCompiler(Compiler):
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
                  communicator: Communicator = None, **genn_kwargs):
-        supported_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                  SynapseMatrixType_DENSE_INDIVIDUALG]
+        supported_matrix_types = [SynapseMatrixType.SPARSE,
+                                  SynapseMatrixType.DENSE]
         super(EPropCompiler, self).__init__(supported_matrix_types, dt,
                                             batch_size, rng_seed,
                                             kernel_profiling,
@@ -265,14 +319,16 @@ class EPropCompiler(Compiler):
         self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
 
-    def pre_compile(self, network, genn_model, **kwargs):
+    def pre_compile(self, network: Network, 
+                    genn_model, **kwargs) -> CompileState:
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
 
         return CompileState(self.losses, readouts)
 
-    def build_neuron_model(self, pop, model, compile_state):
+    def build_neuron_model(self, pop: Population, model: NeuronModel,
+                           compile_state: CompileState) -> NeuronModel:
         # Make copy of model
         model_copy = deepcopy(model)
 
@@ -319,7 +375,7 @@ class EPropCompiler(Compiler):
             # Add sim-code to calculate error
             model_copy.append_sim_code(
                 f"""
-                $(E) = $({model_copy.output_var_name}) - yTrue;
+                E = {model_copy.output_var_name} - yTrue;
                 """)
 
             # If we should train output biases
@@ -333,7 +389,7 @@ class EPropCompiler(Compiler):
                 model_copy.add_var("DeltaBias", "scalar", 0.0)
 
                 # Add sim-code to update DeltaBias
-                model_copy.append_sim_code("$(DeltaBias) += $(E);")
+                model_copy.append_sim_code("DeltaBias += E;")
 
                 # Add population to list of those with biases to optimise
                 compile_state.bias_optimiser_populations.append(pop)
@@ -357,7 +413,7 @@ class EPropCompiler(Compiler):
             model_copy.add_var("E", "scalar", 0.0)
 
             # Add sim code to store incoming feedback in new state variable
-            model_copy.append_sim_code("$(E) = $(ISynFeedback);")
+            model_copy.append_sim_code("E = ISynFeedback;")
 
             # If neuron model is LIF or ALIF
             if isinstance(pop.neuron, (AdaptiveLeakyIntegrateFire,
@@ -383,7 +439,8 @@ class EPropCompiler(Compiler):
         # Build neuron model and return
         return model_copy
 
-    def build_synapse_model(self, conn, model, compile_state):
+    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+                            compile_state: CompileState) -> SynapseModel:
         if not isinstance(conn.synapse, Delta):
             raise NotImplementedError("E-prop compiler only "
                                       "supports Delta synapses")
@@ -391,7 +448,9 @@ class EPropCompiler(Compiler):
         # Return model
         return model
 
-    def build_weight_update_model(self, conn, connect_snippet, compile_state):
+    def build_weight_update_model(self, conn: Connection,
+                                  connect_snippet: ConnectivitySnippet,
+                                  compile_state: CompileState) -> WeightUpdateModel:
         if not is_value_constant(connect_snippet.delay):
             raise NotImplementedError("E-prop compiler only "
                                       "support heterogeneous delays")
@@ -406,11 +465,14 @@ class EPropCompiler(Compiler):
                 model=eprop_lif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha,
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
-                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg),
+                            "Vthresh_post": target_neuron.v_thresh},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
-                post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+                post_var_vals={"Psi": 0.0, "FAvg": 0.0},
+                post_neuron_var_refs={"RefracTime_post": "RefracTime",
+                                      "V_post": "V", "E_post": "E"})
         # Otherise, if it's ALIF, create weight update model with eProp ALIF
         elif isinstance(target_neuron, AdaptiveLeakyIntegrateFire):
             # Calculate adaptation variable persistence
@@ -420,11 +482,16 @@ class EPropCompiler(Compiler):
                 model=eprop_alif_model,
                 param_vals={"CReg": self.c_reg, "Alpha": alpha, "Rho": rho, 
                             "FTarget": (self.f_target * self.dt) / 1000.0, 
-                            "AlphaFAv": np.exp(-self.dt / self.tau_reg)},
+                            "AlphaFAv": np.exp(-self.dt / self.tau_reg),
+                            "Vthresh_post": target_neuron.v_thresh,
+                            "Beta_post": target_neuron.beta},
                 var_vals={"g": connect_snippet.weight, "eFiltered": 0.0,
                           "DeltaG": 0.0, "epsilonA": 0.0},
                 pre_var_vals={"ZFilter": 0.0},
-                post_var_vals={"Psi": 0.0, "FAvg": 0.0})
+                post_var_vals={"Psi": 0.0, "FAvg": 0.0},
+                post_neuron_var_refs={"RefracTime_post": "RefracTime",
+                                      "V_post": "V", "A_post": "A", 
+                                      "E_post": "E"})
         # Otherwise, if target neuron is readout, create 
         # weight update model with simple output learning rule
         elif target_neuron.readout is not None:
@@ -432,7 +499,8 @@ class EPropCompiler(Compiler):
                 model=output_learning_model,
                 param_vals={"Alpha": alpha},
                 var_vals={"g": connect_snippet.weight, "DeltaG": 0.0},
-                pre_var_vals={"ZFilter": 0.0})
+                pre_var_vals={"ZFilter": 0.0},
+                post_neuron_var_refs={"E_post": "E"})
 
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
@@ -446,11 +514,12 @@ class EPropCompiler(Compiler):
         # Return weight update model
         return wum
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict,
+                                compile_state: CompileState) -> CompiledTrainingNetwork:
         # Fuse pre and postsynaptic updates for efficiency
-        genn_model._model.set_fuse_postsynaptic_models(True)
-        genn_model._model.set_fuse_pre_post_weight_update_models(True)
+        genn_model.fuse_postsynaptic_models = True
+        genn_model.fuse_pre_post_weight_update_models = True
 
         # Correctly target feedback
         for c in compile_state.feedback_connections:
@@ -463,7 +532,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model))
+                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True))
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -471,7 +540,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Bias{i}", create_var_ref(genn_pop, "Bias"),
-                    create_var_ref(genn_pop, "DeltaBias"), genn_model))
+                    create_var_ref(genn_pop, "DeltaBias"), genn_model, False))
 
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
@@ -514,7 +583,7 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model):
+                                        gradient_ref, genn_model, wu):
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -526,7 +595,6 @@ class EPropCompiler(Compiler):
             genn_reduction = self.add_custom_update(
                 genn_model, reduction_optimiser_model, 
                 "GradientBatchReduce", "CUBatchReduce" + name_suffix)
-            wu = genn_reduction.custom_wu_update
             reduced_gradient = (create_wu_var_ref(genn_reduction,
                                                   "ReducedGradient") if wu
                                 else create_var_ref(genn_reduction, 

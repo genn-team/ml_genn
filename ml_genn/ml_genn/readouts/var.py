@@ -5,10 +5,11 @@ from ..utils.model import NeuronModel
 
 
 class Var(Readout):
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    """Read out instantaneous value of neuron model's output variable"""
+    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
         self.output_var_name = model.output_var_name
 
-        if "var_name_types" not in model.model:
+        if "vars" not in model.model:
             raise RuntimeError("Var readout can only be used "
                                "with models with state variables")
         if self.output_var_name is None:
@@ -17,7 +18,7 @@ class Var(Readout):
 
         # Find output variable
         try:
-            _ = next(v for v in model.model["var_name_types"]
+            _ = next(v for v in model.model["vars"]
                      if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
@@ -27,7 +28,7 @@ class Var(Readout):
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull variable from genn
-        genn_pop.pull_var_from_device(self.output_var_name)
+        genn_pop.vars[self.output_var_name].pull_from_device()
 
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars[self.output_var_name].view,

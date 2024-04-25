@@ -1,13 +1,13 @@
+from pygenn import SynapseMatrixType
 from .connectivity import Connectivity
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue, ValueDescriptor
 
 from ..utils.value import is_value_array
 
-from pygenn.genn_wrapper import (SynapseMatrixType_SPARSE_INDIVIDUALG,
-                                 SynapseMatrixType_PROCEDURAL_PROCEDURALG)
 
 class SparseBase(Connectivity):
+    """Base class for all sparse connectivity"""
     pre_ind = ValueDescriptor("pre_ind")
     post_ind = ValueDescriptor("post_ind")
     
@@ -28,10 +28,9 @@ class SparseBase(Connectivity):
         # Build list of available matrix types, adding procedural
         # if indices aren't provided and weights aren't arrays
         # **NOTE** same as PROCEDURAL_GLOBALG for constant weights/delays
-        available_matrix_types = [SynapseMatrixType_SPARSE_INDIVIDUALG]
+        available_matrix_types = [SynapseMatrixType.SPARSE]
         if not inds_provided and not array_weight_delay:
-            available_matrix_types.append(
-                SynapseMatrixType_PROCEDURAL_PROCEDURALG)
+            available_matrix_types.append(SynapseMatrixType.PROCEDURAL)
 
         # Get best supported connectivity choice
         best_matrix_type = supported_matrix_type.get_best(
@@ -39,7 +38,7 @@ class SparseBase(Connectivity):
         if best_matrix_type is None:
             raise NotImplementedError("Compiler does not support "
                                       "sparse connectivity")
-        elif best_matrix_type == SynapseMatrixType_SPARSE_INDIVIDUALG:
+        elif best_matrix_type == SynapseMatrixType.SPARSE:
             # If indices are provided
             if inds_provided:
                 # If either of them are set to anything 
@@ -53,7 +52,7 @@ class SparseBase(Connectivity):
                 # Use sparse connectivity
                 return ConnectivitySnippet(
                     snippet=None,
-                    matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                    matrix_type=SynapseMatrixType.SPARSE,
                     weight=self.weight, delay=self.delay,
                     pre_ind=self.pre_ind, post_ind=self.post_ind)
                     
@@ -61,11 +60,11 @@ class SparseBase(Connectivity):
             else:
                 return ConnectivitySnippet(
                     snippet=snippet,
-                    matrix_type=SynapseMatrixType_SPARSE_INDIVIDUALG,
+                    matrix_type=SynapseMatrixType.SPARSE,
                     weight=self.weight, delay=self.delay)
         # Otherwise, we can use PROCEDURAL_PROCEDURALG
         else:
             return ConnectivitySnippet(
                 snippet=snippet,
-                matrix_type=SynapseMatrixType_PROCEDURAL_PROCEDURALG,
+                matrix_type=SynapseMatrixType.PROCEDURAL,
                 weight=self.weight, delay=self.delay)

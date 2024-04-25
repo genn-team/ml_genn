@@ -1,6 +1,11 @@
 ml\_genn\_tf package
 ====================
 
+.. automodule:: ml_genn_tf
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -8,11 +13,3 @@ Subpackages
    :maxdepth: 1
 
    ml_genn_tf.converters
-
-Module contents
----------------
-
-.. automodule:: ml_genn_tf
-   :members:
-   :undoc-members:
-   :show-inheritance:

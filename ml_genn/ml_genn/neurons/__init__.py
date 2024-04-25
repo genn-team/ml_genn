@@ -1,3 +1,6 @@
+"""Neuron models describe the dynamics and spiking behaviour of a :class:`..Population`.
+"""
+
 from .adaptive_leaky_integrate_fire import AdaptiveLeakyIntegrateFire
 from .binary_spike_input import BinarySpikeInput
 from .few_spike_relu import FewSpikeRelu
@@ -16,7 +19,7 @@ from ..utils.module import get_module_classes
 
 default_neurons = get_module_classes(globals(), Neuron)
 
-__all = ["AdaptiveLeakyIntegrateFire", "BinarySpikeInput", "FewSpikeRelu",
-         "FewSpikeReluInput", "Input", "IntegrateFire", "IntegrateFireInput",
-         "LeakyIntegrate", "LeakyIntegrateFire", "LeakyIntegrateFireInput", 
-         "Neuron", "PoissonInput", "SpikeInput", "default_neurons"]
+__all__ = ["AdaptiveLeakyIntegrateFire", "BinarySpikeInput", "FewSpikeRelu",
+           "FewSpikeReluInput", "Input", "IntegrateFire", "IntegrateFireInput",
+           "LeakyIntegrate", "LeakyIntegrateFire", "LeakyIntegrateFireInput", 
+           "Neuron", "PoissonInput", "SpikeInput", "default_neurons"]

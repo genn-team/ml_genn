@@ -3,20 +3,43 @@ import numpy as np
 
 from itertools import chain
 
+from pygenn import VarAccessDim
 from typing import Optional
 from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 from ..utils.network import PopulationType
 
+from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
 
-from pygenn.genn_wrapper.Models import VarAccessDuplication_SHARED_NEURON
 
 logger = logging.getLogger(__name__)
 
 class VarRecorder(Callback):
+    """Callback used for recording state variables during simulation. 
+    Variables can specified either by the name of the mlGeNN 
+    :class:`ml_genn.utils.value.ValueDescriptor` class attribute corresponding to
+    the variable e.g. ``v`` for the membrane voltage of a 
+    :class:`ml_genn.neurons.LeakyIntegrateFire` neuron or by the internal name
+    of a GeNN state variable e.g. ``LambdaV`` which is a state variable
+    added to track gradients by :class:`ml_genn.compilers.EventPropCompiler`.
+    
+    Args:
+        pop:            Population to record from
+        var:            Name of variable to record
+        key:            Key to assign recording data produced by this 
+                        callback in dictionary  returned by 
+                        evaluation/training methods of compiled network
+        example_filter: Filter used to select which examples to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        neuron_filter:  Filter used to select which neurons to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        genn_var:       Internal name of variable to record
+    """
     def __init__(self, pop: PopulationType, var: Optional[str] = None,
                  key=None, example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,
@@ -57,7 +80,7 @@ class VarRecorder(Callback):
             pop = compiled_network.neuron_populations[self._pop]
 
             # Get neuronmodel variables
-            pop_vars = pop.neuron.get_vars()
+            pop_vars = pop.model.get_vars()
 
             # Find variable
             var = next(v for v in pop_vars if v.name == self._var)
@@ -66,7 +89,7 @@ class VarRecorder(Callback):
                                f"{self._var} to record")
 
         # Determine if var is shared
-        self.shared = (var.access & VarAccessDuplication_SHARED_NEURON) != 0
+        self.shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
 
         # If variable is shared and neuron mask was set, give warning
         if self.shared and not np.all(self._neuron_mask):

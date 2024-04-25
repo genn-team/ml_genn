@@ -7,10 +7,11 @@ from copy import deepcopy
 
 
 class SumVar(Readout):
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    """Read out per-neuron sum of neuron model's output variable"""
+    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
         self.output_var_name = model.output_var_name
 
-        if "var_name_types" not in model.model:
+        if "vars" not in model.model:
             raise RuntimeError("SumVar readout can only be used "
                                "with models with state variables")
         if self.output_var_name is None:
@@ -19,7 +20,7 @@ class SumVar(Readout):
 
         # Find output variable
         try:
-            output_var = next(v for v in model.model["var_name_types"]
+            output_var = next(v for v in model.model["vars"]
                               if v[0] == self.output_var_name)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
@@ -34,7 +35,7 @@ class SumVar(Readout):
 
         # Add code to update sum variable
         model_copy.append_sim_code(
-            f"$({sum_var_name}) += $({self.output_var_name});")
+            f"{sum_var_name} += {self.output_var_name};")
 
         # Add sum variable with same type as output
         # variable and initialise to zero
@@ -43,14 +44,13 @@ class SumVar(Readout):
         return model_copy
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
-        sum_var_name = self.output_var_name + "Sum"
+        sum_var = genn_pop.vars[self.output_var_name + "Sum"]
 
         # Pull variable from genn
-        genn_pop.pull_var_from_device(sum_var_name)
+        sum_var.pull_from_device()
 
         # Return contents, reshaped as desired
-        return np.reshape(genn_pop.vars[sum_var_name].view,
-                          (batch_size,) + shape)
+        return np.reshape(sum_var.view, (batch_size,) + shape)
 
     @property
     def reset_vars(self):

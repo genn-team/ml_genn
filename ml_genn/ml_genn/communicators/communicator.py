@@ -5,8 +5,7 @@ from abc import ABC
 from abc import abstractmethod, abstractproperty
 
 class Communicator(ABC):
-    """Base class for all communicators - objects for abstracting away details of parallel communications between ranks
-    """
+    """Base class for all communicators"""
     @abstractmethod
     def barrier(self):
         """Wait for all ranks to reach this point in execution before continuing

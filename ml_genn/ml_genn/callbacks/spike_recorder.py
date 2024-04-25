@@ -9,17 +9,28 @@ from ..utils.network import get_underlying_pop
 
 
 class SpikeRecorder(Callback):
+    """Callback used for recording spikes during simulation. 
+
+    Args:
+        pop:            Population to record from
+        example_filter: Filter used to select which examples to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        neuron_filter:  Filter used to select which neurons to record from
+                        (see :ref:`section-callbacks-recording` 
+                        for more information).
+        record_counts:  Should only the (per-neuron) spike count be recorded 
+                        rather than all the spikes?
+    """
     def __init__(self, pop: PopulationType, key=None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,
-                 record_spike_events: bool = False,
                  record_counts: bool = False):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
 
         # Stash key and whether we're recording spikes or spike-like events
         self.key = key
-        self._record_spike_events = record_spike_events
         self._record_counts = record_counts
 
         # Create example filter
@@ -92,60 +103,35 @@ class SpikeRecorder(Callback):
                 # Get GeNN population
                 genn_pop = cn.neuron_populations[self._pop]
 
-                # Get byte view of data
-                # **NOTE** the following is a version of the PyGeNN
-                # NeuronGroup._get_event_recording_data method,
-                # modified to support filtering
-                data = (genn_pop._spike_event_recording_data
-                        if self._record_spike_events
-                        else genn_pop._spike_recording_data)
-                data = data.view(dtype=np.uint8)
+                # Get spike recording data
+                data = genn_pop.spike_recording_data
+                
+                # Filter out batches we want
+                data = [d for b, d in enumerate(data)
+                        if self._batch_mask[b]]
 
-                # Reshape into a tensor with time, batches and recording bytes
-                event_recording_bytes = genn_pop._event_recording_words * 4
-                data = np.reshape(data, (-1, self._batch_size,
-                                         event_recording_bytes))
-
-                # Unpack data (results in one byte per bit)
-                # **THINK** is there a way to avoid this step?
-                data_unpack = np.unpackbits(data, axis=2,
-                                            count=genn_pop.size,
-                                            bitorder="little")
-
-                # Slice out batches we want
-                data_unpack = data_unpack[:, self._batch_mask, :]
-
+                # If we only care about counts, calculate per-batch 
+                # spike count and apply neuron mask
                 if self._record_counts:
-                    # Loop through these batches
-                    for b in range(data_unpack.shape[1]):
-                        # Calculate number of spikes along time axis
-                        # **TODO** there is a numpy PR that exposes popcount 
-                        # allowing this to be done more efficiently
-                        counts = np.sum(data_unpack[:, b, self._neuron_mask],
-                                        axis=0)
-
-                        # Add to list
-                        self._spikes.append(counts)
+                    self._spikes.extend(
+                        np.bincount(d[1], minlength=num)[self._neuron_mask]
+                        for d in data)
+                # Otherwise, if we are recording events
                 else:
-                     # Calculate start time of recording
-                    dt = cn.genn_model.dT
-                    start_time_ms = (timestep - data.shape[0]) * dt
-                    if start_time_ms < 0.0:
-                        raise Exception("spike_recording_data can only be "
-                                        "accessed once buffer is full.")
+                    # If we're recording from all neurons, add data directly
+                    if np.all(self._neuron_mask):
+                        self._spikes[0].extend(d[0] for d in data)
+                        self._spikes[1].extend(d[1] for d in data)
+                    # Otherwise
+                    else:
+                        # Loop through batches
+                        for d in data:
+                            # Build event mask
+                            mask = self._neuron_mask[d[1]]
 
-                    # Loop through these batches
-                    for b in range(data_unpack.shape[1]):
-                        # Calculate indices where there are events
-                        events = np.where(
-                            data_unpack[:, b, self._neuron_mask] == 1)
-
-                        # Convert event times to ms
-                        event_times = start_time_ms + (events[0] * dt)
-
-                        # Add to lists
-                        self._spikes[0].append(event_times)
-                        self._spikes[1].append(events[1])
+                            # Add masked events to spikes
+                            self._spikes[0].append(d[0][mask])
+                            self._spikes[1].append(d[1][mask])
 
     def get_data(self):
         return self.key, self._spikes

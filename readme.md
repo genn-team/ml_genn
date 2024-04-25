@@ -4,10 +4,10 @@
 A library for deep learning with Spiking Neural Networks (SNN)powered by [GeNN](http://genn-team.github.io/genn/), a GPU enhanced Neuronal Network simulation environment.
 
 ## Installation
- 1. Follow the instructions in https://github.com/genn-team/genn/blob/master/pygenn/README.md to install PyGeNN.
+ 1. Follow the instructions in https://genn-team.github.io/genn/documentation/5/installation.html to install PyGeNN.
  2. Clone this project
- 3. Install mlGeNN with setuptools using ``python setup.py develop`` command in the ``ml_genn`` directory
- 3. To use mlGeNN to convert ANNs trained with Keras to SNNs, install mlGeNN TF with setuptools using ``python setup.py develop`` command in the ``ml_genn_tf`` directory
+ 3. Install mlGeNN with setuptools using ``pip install .`` command in the ``ml_genn`` directory
+ 3. To use mlGeNN to convert ANNs trained with Keras to SNNs, install mlGeNN TF with setuptools using ``pip install .`` command in the ``ml_genn_tf`` directory
 
 ## Usage
 ### Convert ANN to SNN
@@ -49,19 +49,20 @@ from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire
 
+from ml_genn.compilers.eprop_compiler import default_params
+
 # load dataset
 ...
 
-network = SequentialNetwork()
+network = SequentialNetwork(default_params)
 with network:
     # Populations
     input = InputLayer("poisson_input", 768)
     Layer(Dense(Normal(sd=1.0 / np.sqrt(768))),
-                LeakyIntegrateFire(relative_reset=True,
-                                   integrate_during_refrac=True),
+                LeakyIntegrateFire(tau_refrac=5.0),
                 128)
     output = Layer(Dense(Normal(sd=1.0 / np.sqrt(128))),
-                   LeakyIntegrate(softmax=True, readout="sum_var"),
+                   LeakyIntegrate(),
                    10)
 
 compiler = EPropCompiler(example_timesteps=200,

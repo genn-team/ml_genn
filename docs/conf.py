@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.abspath("../ml_genn_tf"))
 # -- Project information -----------------------------------------------------
 
 project = "mlGeNN"
-copyright = "2022, James Turner, Jamie Knight"
-author = "James Turner, Jamie Knight"
+copyright = "2022, Jamie Knight, James Turner"
+author = "Jamie Knight, James Turner"
 
 
 # -- General configuration ---------------------------------------------------
@@ -33,11 +33,12 @@ author = "James Turner, Jamie Knight"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    "sphinx_autodoc_typehints",
-]
+    "sphinx_rtd_theme",
+    "nbsphinx"]
 
 napoleon_use_param = True
 napoleon_use_ivar = True
+napoleon_use_rtype = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -49,6 +50,16 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # Mock imports for readthedocs
 autodoc_mock_imports = ["pygenn", "tensorflow"]
+
+autodoc_typehints = "description"
+
+autodoc_inherit_docstrings = True
+
+# Combine __init__ documentation with class to remove need to duplicate in derived
+autoclass_content = "both"
+
+# Never actually run tutorial notebooks
+nbsphinx_execute = "never"
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -63,3 +74,15 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 primary_domain = "py"
+
+def skip_model_attributes(app, what, name, obj, skip, options):
+    # If member is a value descriptor class attribute, skip it
+    from ml_genn.utils.snippet import ConstantValueDescriptor
+    from ml_genn.utils.value import ValueDescriptor
+    if isinstance(obj, (ConstantValueDescriptor, ValueDescriptor)):
+        return True
+    else:
+        return skip
+
+def setup(app):
+    app.connect("autodoc-skip-member", skip_model_attributes)

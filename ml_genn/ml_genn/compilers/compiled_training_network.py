@@ -1,6 +1,7 @@
 import numpy as np
 
 from typing import Optional
+from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..connectivity.sparse_base import SparseBase
@@ -51,7 +52,25 @@ class CompiledTrainingNetwork(CompiledNetwork):
               callbacks=[BatchProgressBar()], validation_split: float = 0.0,
               validation_x: Optional[dict] = None, 
               validation_y: Optional[dict] = None):
+        """ Train model on an input in numpy format against labels
 
+        Args:
+            x:                  Dictionary of training inputs
+            y:                  Dictionary of training labels 
+                                to compare predictions against
+            num_epochs:         Number of epochs to train for
+            start_epoch:        Epoch to stasrt training from
+            shuffle:            Should training data be shuffled between epochs?
+            metrics:            Metrics to calculate.
+            callbacks:          List of callbacks to run during training.
+            validation_split:   Float between 0 and 1 specifying the fraction
+                                of the training data to use for validation.
+            validation_x:       Dictionary of validation inputs (cannot be
+                                used at same time as ``validation_split``)
+            validation_y:       Dictionary of validation labels (cannot be
+                                used at same time as ``validation_split``)
+        """
+        
         # If validation split is specified
         if validation_split != 0.0:
             # Check validation data isn't also provided
@@ -203,9 +222,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
         
         # Loop through connections and their corresponding synapse groups
         for c, genn_pop in self.connection_populations.items():
-            # If synapse group has ragged connectivity, download  
+            # If synapse group has sparse connectivity, download  
             # connectivity and save pre and postsynaptic indices
-            if genn_pop.is_ragged:
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
                 genn_pop.pull_connectivity_from_device()
                 serialiser.serialise(keys + (c, "pre_ind"),
                                      genn_pop.get_sparse_pre_inds())
@@ -219,22 +238,22 @@ class CompiledTrainingNetwork(CompiledNetwork):
         
         # Loop through synapse groups with variables to be checkpointed
         for genn_pop in self.checkpoint_synapse_groups:
-            # If synapse group has ragged connectivity, download  
+            # If synapse group has sparse connectivity, download  
             # connectivity so variables can be accessed correctly
-            if genn_pop.is_ragged:
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
                 genn_pop.pull_connectivity_from_device()
 
         # Loop through connection variables to checkpoint
         for c, v in self.checkpoint_connection_vars:
-            genn_pop = self.connection_populations[c]
-            genn_pop.pull_var_from_device(v)
-            serialiser.serialise(keys + (c, v), genn_pop.get_var_values(v))
+            genn_var = self.connection_populations[c].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (c, v), genn_var.values)
 
         # Loop through population variables to checkpoint
         for p, v in self.checkpoint_population_vars:
-            genn_pop = self.neuron_populations[p]
-            genn_pop.pull_var_from_device(v)
-            serialiser.serialise(keys + (p, v), genn_pop.vars[v].view)
+            genn_var = self.neuron_populations[p].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (p, v), genn_var.values)
     
     def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
                         callback_list: CallbackList):
@@ -244,7 +263,6 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
-            self.genn_model.t = 0.0
 
         # Apply inputs to model
         self.set_input(x)
@@ -272,7 +290,6 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Reset time to 0 if desired
         if self.reset_time_between_batches:
             self.genn_model.timestep = 0
-            self.genn_model.t = 0.0
 
         # Apply inputs to model
         self.set_input(x)

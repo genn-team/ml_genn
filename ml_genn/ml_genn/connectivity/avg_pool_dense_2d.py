@@ -1,40 +1,43 @@
+from __future__ import annotations
+
 import numpy as np
 from math import ceil
 
+from pygenn import SynapseMatrixType
+from typing import TYPE_CHECKING
 from .connectivity import Connectivity
 from ..initializers import Wrapper
+from ..utils.connectivity import Param2D
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
-from pygenn.genn_model import create_custom_init_var_snippet_class
+if TYPE_CHECKING:
+    from .. import Connection, Population
+    from ..compilers.compiler import SupportedMatrixType
+
+from pygenn import create_var_init_snippet
 from ..utils.connectivity import get_param_2d
 from ..utils.value import is_value_array
 
-from pygenn.genn_wrapper import (SynapseMatrixType_DENSE_INDIVIDUALG,
-                                 SynapseMatrixType_DENSE_PROCEDURALG)
 
-genn_snippet = create_custom_init_var_snippet_class(
+genn_snippet = create_var_init_snippet(
     "avepool2d_dense",
 
-    param_names=[
-        "pool_kh", "pool_kw",
-        "pool_sh", "pool_sw",
-        "pool_ih", "pool_iw", "pool_ic",
-        "dense_ih", "dense_iw", "dense_ic",
-        "dense_units"],
+    params=[
+        ("pool_kh", "int"), ("pool_kw", "int"),
+        ("pool_sh", "int"), ("pool_sw", "int"),
+        ("pool_ih", "int"), ("pool_iw", "int"), ("pool_ic", "int"),
+        ("dense_ih", "int"), ("dense_iw", "int"), ("dense_ic", "int"),
+        ("dense_units", "int")],
 
     extra_global_params=[("weights", "scalar*")],
 
     var_init_code=
         """
-        const int pool_kh = $(pool_kh), pool_kw = $(pool_kw);
-        const int pool_sh = $(pool_sh), pool_sw = $(pool_sw);
-        const int pool_ih = $(pool_ih), pool_iw = $(pool_iw), pool_ic = $(pool_ic);
-
         // Convert presynaptic neuron ID to row, column and channel in pool input
-        const int poolInRow = ($(id_pre) / pool_ic) / pool_iw;
-        const int poolInCol = ($(id_pre) / pool_ic) % pool_iw;
-        const int poolInChan = $(id_pre) % pool_ic;
+        const int poolInRow = (id_pre / pool_ic) / pool_iw;
+        const int poolInCol = (id_pre / pool_ic) % pool_iw;
+        const int poolInChan = id_pre % pool_ic;
 
         // Calculate corresponding pool output
         const int poolOutRow = poolInRow / pool_sh;
@@ -42,24 +45,35 @@ genn_snippet = create_custom_init_var_snippet_class(
         const int poolOutCol = poolInCol / pool_sw;
         const int poolStrideCol = poolOutCol * pool_sw;
 
-        $(value) = 0.0;
+        value = 0.0;
         if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
-            const int dense_ih = $(dense_ih), dense_iw = $(dense_iw), dense_ic = $(dense_ic);
-
             if ((poolOutRow < dense_ih) && (poolOutCol < dense_iw)) {
-                const int dense_units = $(dense_units);
                 const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
-                const int dense_out_unit = $(id_post);
 
-                $(value) = $(weights)[
+                value = weights[
                     dense_in_unit * (dense_units) +
-                    dense_out_unit];
+                    id_post];
             }
         }
         """)
 
 
 class AvgPoolDense2D(Connectivity):
+    """Average pooling connectivity from source populations with 2D shape, 
+    fused with dense layer. These are typically used when converting ANNs
+    where there is no non-linearity between Average Pooling and 
+    dense layers.
+    
+    Args:
+        weight:         Connection weights
+        pool_size:      Factors by which to downscale. If only one integer
+                        is specified, the same factor will be used 
+                        for both dimensions.
+        pool_strides:   Strides values for the pooling. These will default
+                        to ``pool_size``. If only one integer is specified,
+                        the same stride will be used for both dimensions.
+        delay:          Homogeneous connection delays
+    """
     def __init__(self, weight: InitValue, pool_size, pool_strides=None,
                  delay: InitValue = 0):
         super(AvgPoolDense2D, self).__init__(weight, delay)
@@ -74,13 +88,13 @@ class AvgPoolDense2D(Connectivity):
             raise NotImplementedError("pool stride < pool size "
                                       "is not supported")
 
-    def connect(self, source, target):
+    def connect(self, source: Population, target: Population):
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = source.shape
         self.pool_output_shape = (
-            ceil(float(pool_ih - pool_kh + 1) / float(pool_sh)),
-            ceil(float(pool_iw - pool_kw + 1) / float(pool_sw)),
+            ceil((pool_ih - pool_kh + 1) / pool_sh),
+            ceil((pool_iw - pool_kw + 1) / pool_sw),
             pool_ic)
 
         # If weights are specified as 2D array
@@ -103,7 +117,8 @@ class AvgPoolDense2D(Connectivity):
                 raise RuntimeError("pool output size doesn't "
                                    "match weights")
 
-    def get_snippet(self, connection, supported_matrix_type):
+    def get_snippet(self, connection: Connection,
+                    supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape
@@ -116,11 +131,11 @@ class AvgPoolDense2D(Connectivity):
             "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
             "dense_units": int(np.prod(connection.target().shape))},
             {"weights": self.weight.flatten() / (pool_kh * pool_kw)})
-        
+
         # Get best supported matrix type
         best_matrix_type = supported_matrix_type.get_best(
-            [SynapseMatrixType_DENSE_INDIVIDUALG, 
-             SynapseMatrixType_DENSE_PROCEDURALG])
+            [SynapseMatrixType.DENSE,
+             SynapseMatrixType.DENSE_PROCEDURALG])
 
         if best_matrix_type is None:
             raise NotImplementedError("Compiler does not support "

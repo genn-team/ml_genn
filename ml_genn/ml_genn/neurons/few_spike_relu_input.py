@@ -1,64 +1,81 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from .input import InputBase
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.snippet import ConstantValueDescriptor
 
+if TYPE_CHECKING:
+    from .. import Population
+
+
 genn_model = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar")],
-    "var_name_types": [("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar")],
+    "vars": [("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
-        const int kInt = (int)$(K);
+        const int kInt = (int)K;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)(t / dt);
 
-        const scalar hT = $(Scale) * (1 << (kInt - (1 + pipeTimestep)));
+        const scalar hT = Scale * (1 << (kInt - (1 + pipeTimestep)));
         """,
     "threshold_condition_code":
         """
-        $(V) >= hT
+        V >= hT
         """,
     "reset_code":
         """
-        $(V) -= hT;
-        """,
-    "is_auto_refractory_required": False}
+        V -= hT;
+        """}
 
 genn_model_signed = {
-    "param_name_types": [("K", "int"), ("Scale", "scalar")],
-    "var_name_types": [("V", "scalar")],
+    "params": [("K", "int"), ("Scale", "scalar")],
+    "vars": [("V", "scalar")],
     "sim_code":
         """
         // Convert K to integer
-        const int halfK = (int)$(K) / 2;
+        const int halfK = (int)K / 2;
 
         // Get timestep within presentation
-        const int pipeTimestep = (int)($(t) / DT);
+        const int pipeTimestep = (int)(t / dt);
 
         // Split timestep into interleaved positive and negative
         const int halfPipetimestep = pipeTimestep / 2;
         const bool positive = (pipeTimestep % 2) == 0;
-        const scalar hT = $(Scale) * (1 << (halfK - (1 + halfPipetimestep)));
+        const scalar hT = Scale * (1 << (halfK - (1 + halfPipetimestep)));
         """,
     "threshold_condition_code":
         """
-        (positive && $(V) >= hT) || (!positive && $(V) < -hT)
+        (positive && V >= hT) || (!positive && V < -hT)
         """,
     "reset_code":
         """
         if(positive) {
-            $(V) -= hT;
+            V -= hT;
         }
         else {
-            $(V) += hT;
+            V += hT;
         }
-        """,
-    "is_auto_refractory_required": False}
+        """}
 
 
 class FewSpikeReluInput(Neuron, InputBase):
+    """A few-spike neuron to encode inputs using a 
+    ReLU activation as described by [Stockl2021]_.
+    
+    Should typically be created by converting an ANN to an SNN using
+    :class:`ml_genn_tf.converters.FewSpike`.
+    
+    Args:
+        k:              Number of timesteps to encode activation over.
+        alpha:          Scaling factor to apply to activations.
+        signed_input:   Are inputs expected to be both positive and negative?
+    """
+    
     k = ConstantValueDescriptor()
     alpha = ConstantValueDescriptor()
 
@@ -69,7 +86,8 @@ class FewSpikeReluInput(Neuron, InputBase):
         self.alpha = alpha
         self.signed_input = signed_input
 
-    def get_model(self, population, dt, batch_size):
+    def get_model(self, population: Population,
+                  dt: float, batch_size: int) -> NeuronModel:
         # Calculate scale
         if self.signed_input:
             scale = self.alpha * 2**(-self.k // 2)

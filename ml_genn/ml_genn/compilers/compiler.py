@@ -3,11 +3,8 @@ import numpy as np
 import os
 
 from collections import defaultdict, namedtuple
-from pygenn import GeNNModel
-from pygenn.genn_wrapper.Models import (VarAccess_READ_ONLY, 
-                                        VarAccess_REDUCE_NEURON_MAX,
-                                        VarAccess_REDUCE_NEURON_SUM,
-                                        VarAccessMode_READ_ONLY)
+from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
+
 from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
@@ -19,11 +16,9 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import copy, deepcopy
-from pygenn.genn_model import (create_custom_custom_update_class,
-                               create_custom_neuron_class,
-                               create_custom_postsynaptic_class,
-                               create_custom_weight_update_class,
-                               create_var_ref)
+from pygenn import (create_custom_update_model, create_neuron_model,
+                    create_postsynaptic_model, create_weight_update_model,
+                    create_var_ref, init_postsynaptic, init_weight_update)
 from string import digits
 from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
@@ -33,50 +28,55 @@ from ..utils.value import is_value_constant
 
 # First pass of softmax - calculate max
 softmax_1_model = {
-    "var_name_types": [("MaxVal", "scalar", VarAccess_REDUCE_NEURON_MAX)],
-    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY)],
+    "vars": [("MaxVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_MAX)],
+    "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
-    $(MaxVal) = $(Val);
+    MaxVal = Val;
     """}
 
 # Second pass of softmax - calculate scaled sum of exp(value)
 softmax_2_model = {
-    "var_name_types": [("SumExpVal", "scalar", VarAccess_REDUCE_NEURON_SUM)],
-    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
-                 ("MaxVal", "scalar", VarAccessMode_READ_ONLY)],
+    "vars": [("SumExpVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_SUM)],
+    "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
+                 ("MaxVal", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
-    $(SumExpVal) = exp($(Val) - $(MaxVal));
+    SumExpVal = exp(Val - MaxVal);
     """}
 
 # Third pass of softmax - calculate softmax value
 softmax_3_model = {
-    "var_refs": [("Val", "scalar", VarAccessMode_READ_ONLY),
-                 ("MaxVal", "scalar", VarAccessMode_READ_ONLY),
-                 ("SumExpVal", "scalar", VarAccessMode_READ_ONLY),
+    "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
+                 ("MaxVal", "scalar", VarAccessMode.READ_ONLY),
+                 ("SumExpVal", "scalar", VarAccessMode.READ_ONLY),
                  ("SoftmaxVal", "scalar")],
     "update_code": """
-    $(SoftmaxVal) = exp($(Val) - $(MaxVal)) / $(SumExpVal);
+    SoftmaxVal = exp(Val - MaxVal) / SumExpVal;
     """}
+
+def set_dynamic_param(param_names, set_param_dynamic):
+    for p in param_names:
+        set_param_dynamic(p, True)
 
 def set_egp(egp_vals, egp_dict):
     for egp, value in egp_vals.items():
         if isinstance(value, np.ndarray):
-            egp_dict[egp].set_values(value.flatten())
+            egp_dict[egp].set_init_values(value.flatten())
         else:
-            egp_dict[egp].set_values(value)
+            egp_dict[egp].set_init_values(value)
 
 
 def set_var_egps(var_egp_vals, var_dict):
     for var, var_egp in var_egp_vals.items():
         for p, value in var_egp.items():
+            egp = var_dict[var].extra_global_params[p]
             if isinstance(value, np.ndarray):
-                var_dict[var].set_extra_global_init_param(p, value.flatten())
+                egp.set_init_values(value.flatten())
             else:
-                var_dict[var].set_extra_global_init_param(p, value)
+                egp.set_init_values(value)
 
 def create_reset_custom_update(reset_vars, var_ref_creator):
     # Create empty model
-    model = CustomUpdateModel(model={"param_name_types": [],
+    model = CustomUpdateModel(model={"params": [],
                                      "var_refs": [],
                                      "update_code": ""},
                               param_vals={}, var_vals={}, var_refs={})
@@ -94,19 +94,22 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
             if len(existing_reset_var) == 0:
                 # Add read-only variable reference to other variable
                 model.add_var_ref(value, type, var_ref_creator(value))
-                model.set_var_ref_access_mode(value, VarAccessMode_READ_ONLY)
+                model.set_var_ref_access_mode(value, VarAccessMode.READ_ONLY)
 
             # Add code to set var
-            model.append_update_code(f"$({name}) = $({value});")
+            model.append_update_code(f"{name} = {value};")
         # Otherwise
         else:
             # Add reset value parameter
             model.add_param(name + "Reset", type, value)
 
             # Add code to set var
-            model.append_update_code(f"$({name}) = $({name}Reset);")
+            model.append_update_code(f"{name} = {name}Reset;")
 
     return model
+
+def create_local_var_refs(refs, genn_group):
+    return {n: create_var_ref(genn_group, v) for n, v in refs.items()}
 
 class SupportedMatrixType:
     def __init__(self, supported: List[int]):
@@ -130,11 +133,12 @@ class ZeroInSyn(Callback):
         self.genn_syn_pop = genn_syn_pop
 
     def on_batch_begin(self, batch):
-        self.genn_syn_pop.in_syn[:]= 0.0
-        self.genn_syn_pop.push_in_syn_to_device()
+        self.genn_syn_pop.out_post.view[:]= 0.0
+        self.genn_syn_pop.out_post.push_to_device()
 
 
 class Compiler:
+    """Base class for all compilers"""
     def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
@@ -160,13 +164,41 @@ class Compiler:
             self.batch_size = batch_size
 
     def pre_compile(self, network: Network, genn_model, **kwargs):
+        """If any pre-processing is required before building neuron, synapse
+        and weight update models, compilers should implement it here. Any 
+        compiler-specific state that should be persistent across compilation
+        should be encapsulated in an object returned from this method.
+        
+        Args:
+            network:    Network to be compiled
+            genn_model: Empty ``GeNNModel`` created at start of compilation
+        """
         return None
 
     def calculate_delay(self, conn: Connection, delay, compile_state):
+        """Apply any compiler-specific processing to 
+        delay associated with a connection.
+        
+        Args:
+            conn:           Connection synapse model is associated with
+            delay:          Base delay specified by connectivity
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
         return delay
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
-                           compile_state):
+                           compile_state) -> NeuronModel:
+        """Apply compiler-specific processing to the base neuron model
+        returned by :meth:`ml_genn.neurons.Neuron.get_model`.
+        If modifications are made, this should be done to a (deep) copy.
+        
+        Args:
+            pop:            Population neuron model is associated with
+            model:          Base neuron model
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
         model_copy = deepcopy(model)
 
         # Delete negative threshold condition if there is one
@@ -177,13 +209,32 @@ class Compiler:
         return model_copy
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
-                            compile_state):
+                            compile_state) -> SynapseModel:
+        """Apply compiler-specific processing to the base synapse model
+        returned by :meth:`ml_genn.synapses.Synapse.get_model`.
+        If modifications are made, this should be done to a (deep) copy.
+        
+        Args:
+            conn:           Connection synapse model is associated with
+            model:          Base synapse model
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
         # Build model customised for parameters and values
         return model
 
     def build_weight_update_model(self, connection: Connection,
                                   connect_snippet: ConnectivitySnippet,
-                                  compile_state):
+                                  compile_state) -> WeightUpdateModel:
+        """Create compiler-specific weight update model for a connection.
+
+        Args:
+            connection:         Connection weight update 
+                                model willl be used for
+            connect_snippet:    Connectivity associated with connection
+            compile_state:      Compiler-specific state created by
+                                :meth:`.pre_compile`.
+        """
         # Build parameter values
         param_vals = {"g": connect_snippet.weight}
         het_delay = not is_value_constant(connect_snippet.delay)
@@ -200,7 +251,7 @@ class Compiler:
                  else deepcopy(signed_static_pulse_model)), param_vals)
 
             # Insert negative threshold condition code from neuron model
-            wum.model["event_threshold_condition_code"] =\
+            wum.model["pre_event_threshold_condition_code"] =\
                 src_neuron_model.model["negative_threshold_condition_code"]
 
             return wum
@@ -212,20 +263,31 @@ class Compiler:
     def add_custom_update(self, genn_model: GeNNModel,
                           model: CustomUpdateModel,
                           group: str, name: str):
+        """Add a custom update to model.
+        
+        Args:
+            genn_model: ``GeNNModel`` being compiled
+            model:      Custom update model to add
+            group:      Name of custom update group to associate update with
+            name:       Name of custom update
+        """
         # Process model
-        (cu_model, cu_param_vals, cu_var_vals,
-         cu_egp_vals, cu_var_egp_vals, 
+        (cu_model, cu_param_vals, cu_dynamic_param_names,
+         cu_var_vals, cu_egp_vals, cu_var_egp_vals, 
          cu_var_refs, cu_egp_refs) = model.process()
 
         # Create custom update model
-        genn_cum = create_custom_custom_update_class("CustomUpdate",
-                                                     **cu_model)
+        genn_cum = create_custom_update_model("CustomUpdate",
+                                              **cu_model)
 
         # Add custom update
         genn_cu = genn_model.add_custom_update(name, group,
                                                genn_cum, cu_param_vals, 
                                                cu_var_vals, cu_var_refs,
                                                cu_egp_refs)
+
+        # Configure dynamic parameters
+        set_dynamic_param(cu_dynamic_param_names, genn_cu.set_param_dynamic)
 
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
@@ -234,6 +296,27 @@ class Compiler:
     def add_softmax_custom_updates(self, genn_model, genn_pop, 
                                    input_var_name: str, output_var_name: str,
                                    custom_update_group_prefix: str = ""):
+        """Adds a numerically stable softmax to the model:
+        
+        .. math::
+
+            \\text{softmax}(x_i) = \\frac{e^{x_i - \\text{max}(x)}}{\\sum_j e^{x_j - \\text{max}(x)}}
+        
+        This softmax can then be calculated by triggering custom update groups
+        "Softmax1", "Softmax2" and "Softmax3" in sequence (with optional prefix)
+        
+        Args:
+            genn_model:                 ``GeNNModel`` being compiled
+            genn_pop:                   GeNN population input and output 
+                                        variables are associated with
+            input_var_name:             Name of variable to read ``x`` from
+            output_var_name:            Name of variable to write softmax to
+            custom_update_group_prefix: Optional prefix to add to names of 
+                                        custom update groups (enabling softmax
+                                        operations required by different parts
+                                        of the model to be triggered 
+                                        seperately)
+        """
         # Create custom update model to implement 
         # first softmax pass and add to model
         softmax_1 = CustomUpdateModel(
@@ -271,12 +354,42 @@ class Compiler:
             custom_update_group_prefix + "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
 
-    def create_compiled_network(self, genn_model, neuron_populations,
-                                connection_populations, compile_state):
+    def create_compiled_network(self, genn_model, neuron_populations: dict,
+                                connection_populations: dict, compile_state):
+        """Perform any final compiler-specific modifications to compiled 
+        ``GeNNModel`` and return :class:`ml_genn.compilers.CompiledNetwork`
+        derived object.
+        
+        Args:
+            genn_model:             ``GeNNModel`` with all neuron and synapse
+                                    groups added
+            neuron_populations:     dictionary mapping 
+                                    :class:`ml_genn.Population` objects
+                                    to GeNN ``NeuronGroup`` objects they
+                                    have been compiled into
+            connection_populations: dictionary mapping 
+                                    :class:`ml_genn.Connection` objects
+                                    to GeNN ``SynapseGroup`` objects they
+                                    have been compiled into
+            compile_state:          Compiler-specific state created by
+                                    :meth:`.pre_compile`.
+            """
         return CompiledNetwork(genn_model, neuron_populations,
                                connection_populations, self.communicator)
 
     def compile(self, network: Network, name: Optional[str] = None, **kwargs):
+        """Compiles network
+        
+        Args:
+            network:    Network to compile
+            name:       Optional name for model used to determine directory
+                        to generate code to. If not specified, name of module
+                        calling this function will be used.
+            kwargs:     Keyword arguments passed to :meth:`.pre_compile`.
+
+        Returns:
+            Compiled network
+        """
         # If no name is specifie
         if name is None:
             # Get the parent frame from our current frame
@@ -298,13 +411,18 @@ class Compiler:
         # **NOTE** this only works with CUDA backend
         genn_kwargs = copy(self.genn_kwargs)
         if self.communicator is not None:
-            genn_kwargs["enableNCCLReductions"] = True
+            genn_kwargs["enable_nccl_reductions"] = True
+
+            # **HACK** only the first rank should build any code so turn of CUDA block size optimization
+            if self.communicator.rank != 0:
+                from pygenn.cuda_backend import BlockSizeSelect
+                genn_kwargs["block_size_select_method"] = BlockSizeSelect.MANUAL
 
         # Create GeNN model and set basic properties
         genn_model = GeNNModel("float", clean_name, **genn_kwargs)
-        genn_model.dT = self.dt
+        genn_model.dt = self.dt
         genn_model.batch_size = self.batch_size
-        genn_model._model.set_seed(self.rng_seed)
+        genn_model.seed = self.rng_seed
         genn_model.timing_enabled = self.kernel_profiling
 
         # Run any pre-compilation logic
@@ -323,14 +441,15 @@ class Compiler:
             neuron = pop.neuron
             neuron_model = neuron.get_model(pop, self.dt, self.batch_size)
 
-            neuron_model, param_vals, var_vals, egp_vals, var_egp_vals =\
+            (neuron_model, param_vals, dynamic_param_names, 
+             var_vals, egp_vals, var_egp_vals) =\
                 self.build_neuron_model(
                     pop, neuron_model,
                     compile_state).process()
 
             # Create custom neuron model
-            genn_neuron_model = create_custom_neuron_class("NeuronModel",
-                                                           **neuron_model)
+            genn_neuron_model = create_neuron_model("NeuronModel",
+                                                    **neuron_model)
             # Add neuron population
             genn_pop = genn_model.add_neuron_population(
                 pop.name, np.prod(pop.shape),
@@ -339,6 +458,9 @@ class Compiler:
             # Configure spike and spike-like-event recording
             genn_pop.spike_recording_enabled = pop.record_spikes
             genn_pop.spike_event_recording_enabled = pop.record_spike_events
+
+            # Configure dynamic parameters
+            set_dynamic_param(dynamic_param_names, genn_pop.set_param_dynamic)
 
             # Configure EGPs
             set_egp(egp_vals, genn_pop.extra_global_params)
@@ -354,16 +476,16 @@ class Compiler:
         for conn in network.connections:
             # Build postsynaptic model
             syn = conn.synapse
-            (psm, psm_param_vals, psm_var_vals, 
-             psm_egp_vals, psm_var_egp_vals) =\
+            (psm, psm_param_vals, psm_dynamic_param_names, psm_var_vals,
+             psm_egp_vals, psm_var_egp_vals, psm_neuron_var_refs) =\
                 self.build_synapse_model(conn,
                                          syn.get_model(conn, self.dt,
                                                        self.batch_size),
                                          compile_state).process()
-
+            
             # Create custom postsynaptic model
-            genn_psm = create_custom_postsynaptic_class("PostsynapticModel",
-                                                        **psm)
+            genn_psm = create_postsynaptic_model("PostsynapticModel", **psm)
+            
             # Get connectivity init snippet
             connect_snippet =\
                 conn.connectivity.get_snippet(conn,
@@ -374,29 +496,43 @@ class Compiler:
                                          compile_state)
 
             # Build weight update model
-            (wum, wum_param_vals, wum_var_vals,
+            (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
-             wum_pre_var_vals, wum_post_var_vals) =\
+             wum_pre_var_vals, wum_post_var_vals,
+             wum_pre_neuron_var_refs, wum_post_neuron_var_refs) =\
                 self.build_weight_update_model(conn, connect_snippet,
                                                compile_state).process()
 
             # Create custom weight update model
-            genn_wum = create_custom_weight_update_class("WeightUpdateModel",
-                                                         **wum)
+            genn_wum = create_weight_update_model("WeightUpdateModel", **wum)
 
-            # If delays are constant, use as axonal delay otherwise, disable
-            axonal_delay = (delay if is_value_constant(delay)
-                            else 0)
+            # Get pre and postsynaptic GeNN populations
+            pre_genn_group = neuron_populations[conn.source()]
+            post_genn_group = neuron_populations[conn.target()]
 
+            # Use to create local variable references
+            psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
+                                                        post_genn_group)
+            wum_pre_neuron_var_refs = create_local_var_refs(
+                wum_pre_neuron_var_refs, pre_genn_group)
+            wum_post_neuron_var_refs = create_local_var_refs(
+                wum_post_neuron_var_refs, post_genn_group)
+    
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
-                conn.name, connect_snippet.matrix_type, axonal_delay,
-                neuron_populations[conn.source()],
-                neuron_populations[conn.target()],
-                genn_wum, wum_param_vals, wum_var_vals,
-                wum_pre_var_vals, wum_post_var_vals,
-                genn_psm, psm_param_vals, psm_var_vals,
-                connectivity_initialiser=connect_snippet.snippet)
+                conn.name, connect_snippet.matrix_type,
+                pre_genn_group, post_genn_group,
+                init_weight_update(genn_wum, wum_param_vals, wum_var_vals,
+                                   wum_pre_var_vals, wum_post_var_vals,
+                                   wum_pre_neuron_var_refs, 
+                                   wum_post_neuron_var_refs),
+                init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
+                                  psm_neuron_var_refs),
+                connect_snippet.snippet)
+
+            # If delays are constant, use as axonal delay
+            if is_value_constant(delay):
+                genn_pop.axonal_delay_steps = delay
 
             # If connectivity snippet has pre and postsynaptic
             # indices, set them in synapse group
@@ -404,6 +540,12 @@ class Compiler:
                 and connect_snippet.post_ind is not None):
                     genn_pop.set_sparse_connections(connect_snippet.pre_ind,
                                                     connect_snippet.post_ind)
+
+            # Configure dynamic parameters
+            set_dynamic_param(wum_dynamic_param_names,
+                              genn_pop.set_wu_param_dynamic)
+            set_dynamic_param(psm_dynamic_param_names,
+                              genn_pop.set_ps_param_dynamic)
 
             # Configure EGPs
             set_egp(wum_egp_vals, genn_pop.extra_global_params)

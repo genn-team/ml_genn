@@ -1,8 +1,15 @@
 import logging
 
 from argparse import ArgumentParser
-from ml_genn_tf.converters import (ConverterType, DataNorm, FewSpike, 
+from enum import Enum
+from ml_genn_tf.converters import (DataNorm, FewSpike, 
                                    InputType, Simple)
+
+class ConverterType(Enum):
+    SIMPLE = 'simple'
+    DATA_NORM = 'data-norm'
+    SPIKE_NORM = 'spike-norm'
+    FEW_SPIKE = 'few-spike'
 
 def parse_arguments(model_description="ML GeNN model"):
     """

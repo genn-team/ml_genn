@@ -7,7 +7,8 @@ from copy import deepcopy
 
 
 class SpikeCount(Readout):
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    """Read out number of spikes emitted by population"""
+    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
             raise RuntimeError("SpikeCount readout can only "
@@ -17,7 +18,7 @@ class SpikeCount(Readout):
         model_copy = deepcopy(model)
 
         # Add code to increment spike count
-        model_copy.append_reset_code("$(Scount)++;")
+        model_copy.append_reset_code("Scount++;")
 
         # Add integer spike count variable and initialise to zero
         model_copy.add_var("Scount", "unsigned int", 0)
@@ -26,7 +27,7 @@ class SpikeCount(Readout):
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull spike count from genn
-        genn_pop.pull_var_from_device("Scount")
+        genn_pop.vars["Scount"].pull_from_device()
 
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars["Scount"].view,

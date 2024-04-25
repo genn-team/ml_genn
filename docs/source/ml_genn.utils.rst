@@ -1,6 +1,11 @@
 ml\_genn.utils package
 ======================
 
+.. automodule:: ml_genn.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Submodules
 ----------
 
@@ -24,6 +29,14 @@ ml\_genn.utils.data module
 --------------------------
 
 .. automodule:: ml_genn.utils.data
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+ml\_genn.utils.decorators module
+--------------------------------
+
+.. automodule:: ml_genn.utils.decorators
    :members:
    :undoc-members:
    :show-inheritance:
@@ -72,14 +85,6 @@ ml\_genn.utils.value module
 ---------------------------
 
 .. automodule:: ml_genn.utils.value
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: ml_genn.utils
    :members:
    :undoc-members:
    :show-inheritance:
