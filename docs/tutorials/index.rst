@@ -13,7 +13,7 @@ Create a simple three layer network of integrate-and-fire neurons, densely conne
 
 
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/genn_5/docs/tutorials/tutorial_1.ipynb
+   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/master/docs/tutorials/tutorial_1.ipynb
 
 Training from scratch with e-prop
 =================================
@@ -25,7 +25,7 @@ Directly train a simple three layer network of densely connected leaky integrate
     tutorial_2.ipynb
     
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/genn_5/docs/tutorials/tutorial_2.ipynb
+   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/master/docs/tutorials/tutorial_2.ipynb
 
 Training from scratch with EventProp
 ====================================
@@ -37,7 +37,7 @@ Directly train a simple three layer network of densely connected leaky integrate
     tutorial_3.ipynb
     
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/genn_5/docs/tutorials/tutorial_3.ipynb
+   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/master/docs/tutorials/tutorial_3.ipynb
 
 
 Training using TensorFlow and converting to an SNN using FewSpike
@@ -50,4 +50,4 @@ Create and train a simple convolutional neural network in Keras, convert to SNN 
     tutorial_4.ipynb
     
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/genn_5/docs/tutorials/tutorial_4.ipynb
+   :target: https://colab.research.google.com/github/genn-team/ml_genn/blob/master/docs/tutorials/tutorial_4.ipynb
