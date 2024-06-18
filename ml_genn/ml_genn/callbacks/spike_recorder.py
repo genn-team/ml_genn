@@ -57,13 +57,7 @@ class SpikeRecorder(Callback):
         # Check spike recording has been enabled on population
         # **YUCK** it's kinda annoying we have to do this
         genn_pop = self._compiled_network.neuron_populations[self._pop]
-        if self._record_spike_events:
-            if not genn_pop.spike_event_recording_enabled:
-                raise RuntimeError(
-                    "SpikeRecorder callback can only be used to record "
-                    "spike-like events from Populations/Layers with "
-                    "record_spike_events=True")
-        elif not genn_pop.spike_recording_enabled:
+        if not genn_pop.spike_recording_enabled:
             raise RuntimeError(
                 "SpikeRecorder callback can only be used to record "
                 "spikes from Populations/Layers with record_spikes=True")
@@ -113,6 +107,7 @@ class SpikeRecorder(Callback):
                 # If we only care about counts, calculate per-batch 
                 # spike count and apply neuron mask
                 if self._record_counts:
+                    num = genn_pop.num_neurons
                     self._spikes.extend(
                         np.bincount(d[1], minlength=num)[self._neuron_mask]
                         for d in data)
