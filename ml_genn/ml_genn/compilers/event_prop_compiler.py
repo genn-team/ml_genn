@@ -570,7 +570,7 @@ class EventPropCompiler(Compiler):
                                 """)
                             # Add custom update to reset state JAMIE_CHECK
                             compile_state.add_neuron_reset_vars(
-                                pop, reset_vars, False, True)
+                                pop, reset_vars, False, False)
                             # Add code to fill errors into RingBuffer
                             model_copy.append_sim_code(
                                 f"""
@@ -642,7 +642,7 @@ class EventPropCompiler(Compiler):
 
                             model_copy.prepend_sim_code(
                                 f"""
-                                if (Trial > 0 && fabs(backT - VMaxTimeBack) < 1e-3*DT) {{
+                                if (Trial > 0 && fabs(backT - VMaxTimeBack) < 1e-3*dt) {{
                                     const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                     drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
                                 }}
