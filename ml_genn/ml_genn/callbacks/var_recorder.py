@@ -105,7 +105,7 @@ class VarRecorder(Callback):
         if np.any(self._batch_mask):
             # Copy variable from device
             pop = self._compiled_network.neuron_populations[self._pop]
-            pop.pull_var_from_device(self._var)
+            pop.vars[self._var].pull_from_device()
 
             # Get view, sliced by batch mask if simulation is batched
             var_view = pop.vars[self._var].view

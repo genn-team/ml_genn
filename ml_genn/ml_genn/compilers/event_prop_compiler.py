@@ -13,11 +13,11 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
-from ..losses import Loss, SparseCategoricalCrossentropy
+from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
-from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar
+from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar, Var
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -428,6 +428,9 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
+        # for means_square_error regression override choice of per_timestep_loss to True
+        if self.losses == "mean_square_error":
+            self.per_timestep_loss = True
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
@@ -447,7 +450,7 @@ class EventPropCompiler(Compiler):
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
-            sce_loss = isinstance(compile_state.losses[pop], SparseCrossEntropyLoss)
+            sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
             mse_loss = isinstance(compile_state.losses[pop], MeanSquareError)
             # Check loss function is compatible
             # **TODO** categorical crossentropy i.e. one-hot encoded
@@ -475,7 +478,7 @@ class EventPropCompiler(Compiler):
                 # The true label is the desired voltage output over time
                 flat_shape = np.prod(pop.shape)
                 egp_size = (self.example_timesteps * self.batch_size * flat_shape)
-                model.add_egp("YTrue", "scalar*",
+                model_copy.add_egp("YTrue", "scalar*",
                               np.empty(egp_size, dtype=np.float32))
                 
             # If neuron model is a leaky integrator
@@ -555,7 +558,7 @@ class EventPropCompiler(Compiler):
                                 f"{type(pop.neuron.readout).__name__} readouts")
                     if mse_loss:
                         # Readout has to be Var
-                        if isintance(pop.neuron.readout, Var):
+                        if isinstance(pop.neuron.readout, Var):
                             model_copy.prepend_sim_code(
                                 f"""
                                 const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
@@ -563,6 +566,7 @@ class EventPropCompiler(Compiler):
                                     RingReadOffset--;
                                     const scalar error = RingOutputLossTerm[ringOffset + RingReadOffset];
                                     drive = error / (TauM * num_batch * {self.dt * self.example_timesteps});
+                                }}
                                 """)
                             # Add custom update to reset state JAMIE_CHECK
                             compile_state.add_neuron_reset_vars(
@@ -575,7 +579,7 @@ class EventPropCompiler(Compiler):
                                        + (batch * num_neurons) + id;
                                 RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - V;
                                 RingWriteOffset++;
-                                """
+                                """)
                         # Otherwise, unsupported readout type
                         else:
                            raise NotImplementedError(
@@ -677,8 +681,9 @@ class EventPropCompiler(Compiler):
 
                 # Add second reset custom update to reset YTrueBack to YTrue
                 # **NOTE** seperate as these are SHARED_NEURON variables
-                compile_state.add_neuron_reset_vars(
-                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+                if sce_loss:
+                    compile_state.add_neuron_reset_vars(
+                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
             # Otherwise, neuron type is unsupported
             else:
                 raise NotImplementedError(

@@ -25,12 +25,16 @@ class SpikeRecorder(Callback):
     def __init__(self, pop: PopulationType, key=None,
                  example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None,
+                 record_spike_events: bool = False,
                  record_counts: bool = False):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
 
         # Stash key and whether we're recording spikes or spike-like events
         self.key = key
+
+        self._record_spike_events = record_spike_events
+         
         self._record_counts = record_counts
 
         # Create example filter
