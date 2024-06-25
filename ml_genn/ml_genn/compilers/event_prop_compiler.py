@@ -795,10 +795,10 @@ class EventPropCompiler(Compiler):
                         model_copy.add_param("RegNuUpper", "int",
                                              self.reg_nu_upper)
                         model_copy.add_param(
-                            "RegLambdaUpper", "int",
+                            "RegLambdaUpper", "scalar",
                             self.reg_lambda_upper / self.full_batch_size)
                         model_copy.add_param(
-                            "RegLambdaLower", "int",
+                            "RegLambdaLower", "scalar",
                             self.reg_lambda_lower / self.full_batch_size)
 
                         # Add reset variables to copy SpikeCount
