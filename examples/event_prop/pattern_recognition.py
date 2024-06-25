@@ -86,12 +86,12 @@ with network:
                         NUM_OUTPUT)
     
     # Connections
-    Connection(input, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
-    Connection(hidden, hidden, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    Connection(input, hidden, Dense(Normal(sd=0.4 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
+    Connection(hidden, hidden, Dense(Normal(sd=0.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
     Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
-                         optimiser=Adam(LR), reg_lambda_upper=4e-7, reg_lambda_lower=4e-7, 
+                         optimiser=Adam(LR), reg_lambda_upper=1e-12, reg_lambda_lower=1e-12, 
                                  reg_nu_upper=20, max_spikes=1500)
 compiled_net = compiler.compile(network)
 
@@ -118,12 +118,13 @@ with compiled_net:
     callbacks = ["batch_progress_bar", 
                  VarRecorder(output, "v", key="output_v"),
                  VarRecorder(output, genn_var="LambdaV", key="output_lambdav"),
+                 VarRecorder(output, genn_var="LambdaI", key="output_lambdai"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
     metrics, cb_data  = compiled_net.train({input: in_spikes},
                                            {output: y_star},
-                                           num_epochs=NUM_EPOCHS,
+                                           num_epochs=1,
                                            callbacks=callbacks)
     end_time = perf_counter()
     print(f"Time = {end_time - start_time}s")
@@ -131,16 +132,19 @@ with compiled_net:
     fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
     for i in range(NUM_EPOCHS-1):
         error = []
+        fac = 10
         for c in range(NUM_FREQ_COMP):
-            y = cb_data["output_v"][i*100][:,c]
+            y = cb_data["output_v"][i*fac][:,c]
             print(len(cb_data["output_v"]))
-            l = cb_data["output_lambdav"][i*100+1][:,c]
+            l = cb_data["output_lambdav"][i*fac+1][-1:0:-1,c]
+            li = cb_data["output_lambdai"][i*fac+1][-1:0:-1,c]
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
             axes[c,i].plot(y)
-            axes[c,i].plot(l)
-            axes[c,i].plot(y_star[0][:,c], linestyle="--")
+            axes[c,i].plot(l*10000)
+            axes[c,i].plot(li*10000)
+            axes[c,i].plot(y_star[i][:,c], linestyle="--")
         
         axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][i],
                                       cb_data["input_spikes"][1][i], s=1)
