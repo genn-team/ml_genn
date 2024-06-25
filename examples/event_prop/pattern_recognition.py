@@ -26,13 +26,15 @@ IN_GROUP_SIZE = 4
 IN_ACTIVE_ISI = 10
 IN_ACTIVE_INTERVAL = 200
 
-NUM_EPOCHS = 1000
-DISPLAY_EPOCH_INTERVAL = 100
+NUM_TRIALS = 100
+NUM_EPOCHS = 8
 
 TAU_MEM = 20.0
 TAU_SYN = 5.0
 
-LR = 0.01
+LR = 0.00001
+
+TRIAL_STEPS = 1000
 
 # Pick random phases and outputs for the three frequency components 
 # components used to generate patterns for each output neuron
@@ -44,14 +46,13 @@ freq = [2.0, 3.0, 5.0]
 freq_radians = np.multiply(freq, 1.0 * np.pi / 1000.0)
 
 # Calculate sinusoid of each frequency for 
-sinusoids = np.sin(np.outer(np.arange(1000), freq_radians))
+sinusoids = np.sin(np.outer(np.arange(TRIAL_STEPS), freq_radians))
 
 # Calculate Y* target
-y_star = np.zeros((1000, NUM_OUTPUT))
+y_star = np.zeros((TRIAL_STEPS, NUM_OUTPUT))
 for i in range(NUM_OUTPUT):
     for c in range(NUM_FREQ_COMP):
         y_star[:, i] += output_ampl[i, c] * sinusoids[:, c] + output_phase[i, c]
-
 
 # Determine which group each input neuron is in
 in_group = np.arange(NUM_INPUT, dtype=int) // IN_GROUP_SIZE
@@ -70,6 +71,9 @@ in_spike_ids = np.repeat(np.arange(NUM_INPUT), num_spikes_per_neuron)
 # Pre-process spikes
 in_spikes = preprocess_spikes(in_spike_times.flatten(), in_spike_ids, NUM_INPUT)
 
+in_spikes = [in_spikes] * NUM_TRIALS
+y_star = [y_star] * NUM_TRIALS
+
 network = Network(default_params)
 with network:
     # Populations
@@ -87,8 +91,8 @@ with network:
     Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
-                         optimiser=Adam(LR), reg_lambda_upper=4e-4, reg_lambda_lower=4e-4, 
-                                 reg_nu_upper=5, max_spikes=1500)
+                         optimiser=Adam(LR), reg_lambda_upper=4e-7, reg_lambda_lower=4e-7, 
+                                 reg_nu_upper=20, max_spikes=1500)
 compiled_net = compiler.compile(network)
 
 '''
@@ -104,7 +108,7 @@ for (pop,pypop) in compiled_net.neuron_populations.items():
 
 with compiled_net:
     def alpha_schedule(epoch, alpha):
-        if (epoch % 200) == 0 and epoch != 0:
+        if (epoch % 2) == 0 and epoch != 0:
             return alpha * 0.7
         else:
             return alpha
@@ -113,34 +117,35 @@ with compiled_net:
     start_time = perf_counter()
     callbacks = ["batch_progress_bar", 
                  VarRecorder(output, "v", key="output_v"),
-                 #VarRecorder(output, "LambdaV", key="output_v"),
+                 VarRecorder(output, genn_var="LambdaV", key="output_lambdav"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
-    metrics, cb_data  = compiled_net.train({input: [in_spikes]},
-                                           {output: [y_star]},
+    metrics, cb_data  = compiled_net.train({input: in_spikes},
+                                           {output: y_star},
                                            num_epochs=NUM_EPOCHS,
                                            callbacks=callbacks)
     end_time = perf_counter()
     print(f"Time = {end_time - start_time}s")
     
-    num_display_epochs = NUM_EPOCHS // DISPLAY_EPOCH_INTERVAL
-    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, num_display_epochs, sharex="col", sharey="row")
-    for i in range(num_display_epochs):
-        epoch = i * DISPLAY_EPOCH_INTERVAL
+    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
+    for i in range(NUM_EPOCHS-1):
         error = []
         for c in range(NUM_FREQ_COMP):
-            y = cb_data["output_v"][epoch][:,c]
-            error.append(y - y_star[:,c])
+            y = cb_data["output_v"][i*100][:,c]
+            print(len(cb_data["output_v"]))
+            l = cb_data["output_lambdav"][i*100+1][:,c]
+            error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
             axes[c,i].plot(y)
-            axes[c,i].plot(y_star[:,c], linestyle="--")
+            axes[c,i].plot(l)
+            axes[c,i].plot(y_star[0][:,c], linestyle="--")
         
-        axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][epoch],
-                                      cb_data["input_spikes"][1][epoch], s=1)
-        axes[NUM_FREQ_COMP + 1,i].scatter(cb_data["hidden_spikes"][0][epoch],
-                                          cb_data["hidden_spikes"][1][epoch], s=1)
+        axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][i],
+                                      cb_data["input_spikes"][1][i], s=1)
+        axes[NUM_FREQ_COMP + 1,i].scatter(cb_data["hidden_spikes"][0][i],
+                                          cb_data["hidden_spikes"][1][i], s=1)
         
         error = np.hstack(error)
         total_mse = np.sum(error * error) / len(error)
