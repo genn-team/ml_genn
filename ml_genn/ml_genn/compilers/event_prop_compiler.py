@@ -428,9 +428,6 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
-        # for means_square_error regression override choice of per_timestep_loss to True
-        if self.losses == "mean_square_error":
-            self.per_timestep_loss = True
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
 
@@ -513,7 +510,7 @@ class EventPropCompiler(Compiler):
                     """)
 
                 # If we want to calculate per-timestep loss
-                if self.per_timestep_loss:
+                if self.per_timestep_loss or mse_loss:
                     # Get reset vars before we add ring-buffer variables
                     reset_vars = model_copy.reset_vars
 
