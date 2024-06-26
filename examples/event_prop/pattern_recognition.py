@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from ml_genn import Connection, Population, Network
 from ml_genn.callbacks import (OptimiserParamSchedule, SpikeRecorder,
-                               VarRecorder)
+                               VarRecorder, SynVarRecorder)
 from ml_genn.compilers import EventPropCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
@@ -88,7 +88,7 @@ with network:
     # Connections
     Connection(input, hidden, Dense(Normal(sd=0.4 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
     Connection(hidden, hidden, Dense(Normal(sd=0.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
-    Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    h2o=Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
                          optimiser=Adam(LR), reg_lambda_upper=1e-12, reg_lambda_lower=1e-12, 
@@ -119,6 +119,7 @@ with compiled_net:
                  VarRecorder(output, "v", key="output_v"),
                  VarRecorder(output, genn_var="LambdaV", key="output_lambdav"),
                  VarRecorder(output, genn_var="LambdaI", key="output_lambdai"),
+                 SynVarRecorder(h2o, genn_var="dw", key="h2o_dw"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
@@ -130,6 +131,7 @@ with compiled_net:
     print(f"Time = {end_time - start_time}s")
     
     fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
+    fig2, axes2 = plt.subplots(NUM_FREQ_COMP, NUM_EPOCHS, sharex="col", sharey="row")
     for i in range(NUM_EPOCHS-1):
         error = []
         fac = 10
@@ -138,6 +140,7 @@ with compiled_net:
             print(len(cb_data["output_v"]))
             l = cb_data["output_lambdav"][i*fac+1][-1:0:-1,c]
             li = cb_data["output_lambdai"][i*fac+1][-1:0:-1,c]
+            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,c]
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
@@ -145,7 +148,7 @@ with compiled_net:
             axes[c,i].plot(l*10000)
             axes[c,i].plot(li*10000)
             axes[c,i].plot(y_star[i][:,c], linestyle="--")
-        
+            axes2[c,i].plot(dw)
         axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][i],
                                       cb_data["input_spikes"][1][i], s=1)
         axes[NUM_FREQ_COMP + 1,i].scatter(cb_data["hidden_spikes"][0][i],
