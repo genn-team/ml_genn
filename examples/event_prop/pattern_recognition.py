@@ -14,7 +14,7 @@ from ml_genn.optimisers import Adam
 from time import perf_counter
 from ml_genn.utils.data import preprocess_spikes
 
-from ml_genn.compilers.eprop_compiler import default_params
+from ml_genn.compilers.event_prop_compiler import default_params
 
 NUM_INPUT = 20
 NUM_HIDDEN = 256
@@ -80,7 +80,7 @@ with network:
     input = Population(SpikeInput(max_spikes=len(in_spike_ids)),
                                   NUM_INPUT, record_spikes=True)
     hidden = Population(LeakyIntegrateFire(v_thresh=0.61, tau_mem=TAU_MEM,
-                                           tau_refrac=5.0),
+                                           tau_refrac=None),
                         NUM_HIDDEN, record_spikes=True)
     output = Population(LeakyIntegrate(tau_mem=TAU_MEM, readout="var"),
                         NUM_OUTPUT)
