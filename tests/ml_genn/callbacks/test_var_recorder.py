@@ -36,16 +36,27 @@ def test_recording(batch_size, neuron_filter, example_filter, request):
             callbacks=[VarRecorder(input, genn_var="Input", key="in",
                                    neuron_filter=neuron_filter,
                                    example_filter=example_filter),
-                       VarRecorder(output, genn_var="Vthresh", key="out")])
-        
-        # Check threshold is the same at all time steps
-        for i in range(5):
-            assert(np.allclose(cb_data["out"][i],
-                               np.broadcast_to(v_thresh, (2, 10))))
+                       VarRecorder(output, genn_var="Vthresh", key="out",
+                                   neuron_filter=neuron_filter,
+                                   example_filter=example_filter)])
 
-        # Loop through examples
+        # Check callback data contains right number of recordings
         examples = range(5) if example_filter is None else example_filter
+        assert len(cb_data["in"]) == len(examples)
+        assert len(cb_data["out"]) == len(examples)
+        
+        # Loop through examples
         for i, e in enumerate(examples):
+            # Check threshold is the same at all time steps
+            if neuron_filter is None:
+                assert(np.allclose(cb_data["out"][i],
+                                   np.broadcast_to(v_thresh, (2, 10))))
+            else:
+                v_thresh_filt = v_thresh[neuron_filter]
+                assert(np.allclose(cb_data["out"][i],
+                                   np.broadcast_to(v_thresh_filt, 
+                                                   (2, len(v_thresh_filt)))))
+                               
             # Check recorded value in all timesteps matches input
             if neuron_filter is None:
                 assert np.allclose(x[e], cb_data["in"][i])

@@ -77,7 +77,7 @@ class VarRecorder(Callback):
         # Get GeNN population from compiled model
         pop = compiled_network.neuron_populations[self._pop]
 
-        # Get neuronmodel variables
+        # Get neuron model variables
         pop_vars = pop.model.get_vars()
 
         try:
@@ -104,7 +104,7 @@ class VarRecorder(Callback):
 
     def on_timestep_end(self, timestep: int):
         # If anything should be recorded this batch
-        if np.any(self._batch_mask):
+        if self._batch_count > 0:
             # Copy variable from device
             pop = self._compiled_network.neuron_populations[self._pop]
             pop.vars[self._var].pull_from_device()
@@ -126,10 +126,10 @@ class VarRecorder(Callback):
                     data_view = var_view[self._neuron_mask]
 
                 # If SIMULATION is batched but variable isn't,
-                # broadcast batch size copies of variable
+                # broadcast batch count copies of variable
                 if self._batch_size > 1:
                     data_view = np.broadcast_to(
-                        data_view, (self._batch_size,) + data_view.shape)
+                        data_view, (self._batch_count,) + data_view.shape)
 
             # If there isn't already list to hold data, add one
             if len(self._data) == 0:
@@ -139,13 +139,14 @@ class VarRecorder(Callback):
             self._data[-1].append(np.copy(data_view))
 
     def on_batch_begin(self, batch: int):
-        # Get mask for examples in this batch
+        # Get mask for examples in this batch and count
         self._batch_mask = self._example_filter.get_batch_mask(
             batch, self._batch_size)
+        self._batch_count = np.sum(self._batch_mask)
 
         # If there's anything to record in this
         # batch, add list to hold it to data
-        if np.any(self._batch_mask):
+        if self._batch_count > 0:
             self._data.append([])
 
     def get_data(self):
