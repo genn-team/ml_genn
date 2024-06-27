@@ -108,7 +108,7 @@ with compiled_net:
                  VarRecorder(output, "v", key="output_v"),
                  VarRecorder(output, genn_var="LambdaV", key="output_lambdav"),
                  VarRecorder(output, genn_var="LambdaI", key="output_lambdai"),
-                 ConnVarRecorder(h2o, genn_var="Gradient", key="h2o_dw"),
+                 ConnVarRecorder(h2o, "Gradient", key="h2o_dw"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
