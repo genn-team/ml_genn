@@ -122,8 +122,7 @@ with compiled_net:
     #
     fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS-1, sharex="col", sharey="row")
     fig2, axes2 = plt.subplots(NUM_FREQ_COMP, NUM_EPOCHS-1, sharex="col", sharey="row")
-    print(cb_data["h2o_dw"][0].shape)
-    
+
     for i in range(NUM_EPOCHS-1):
         error = []
         fac = 100
@@ -131,7 +130,7 @@ with compiled_net:
             y = cb_data["output_v"][i*fac][:,c]
             l = cb_data["output_lambdav"][i*fac+1][-1:0:-1,c]
             li = cb_data["output_lambdai"][i*fac+1][-1:0:-1,c]
-            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,c*256:(c+1)*256]
+            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,:,c]
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
