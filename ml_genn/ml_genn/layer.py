@@ -12,9 +12,7 @@ class InputLayer:
     Attributes:
         population:             weak reference to underlying
                                 :class:`.Population` object.
-        connection:             weak reference to underlying
-                                :class:`.Connection` object.
-                        
+
     Args:
         neuron:                 Neuron model to use (typically derived from
                                 :class:`.neuron_models.Input`)
