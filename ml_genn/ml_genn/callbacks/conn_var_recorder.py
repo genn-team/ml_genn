@@ -13,12 +13,12 @@ from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 from ..utils.value import get_genn_var_name
-
+from ..connection import Connection
 
 logger = logging.getLogger(__name__)
 
-class VarRecorder(Callback):
-    """Callback used for recording state variables during simulation. 
+class ConnVarRecorder(Callback):
+    """*TODO* UPDATE Callback used for recording connection state variables during simulation. 
     Variables can specified either by the name of the mlGeNN 
     :class:`ml_genn.utils.value.ValueDescriptor` class attribute corresponding to
     the variable e.g. ``v`` for the membrane voltage of a 
@@ -27,7 +27,7 @@ class VarRecorder(Callback):
     added to track gradients by :class:`ml_genn.compilers.EventPropCompiler`.
     
     Args:
-        pop:            Population to record from
+        pop:            Synapse population to record from
         var:            Name of variable to record
         key:            Key to assign recording data produced by this 
                         callback in dictionary  returned by 
@@ -35,26 +35,26 @@ class VarRecorder(Callback):
         example_filter: Filter used to select which examples to record from
                         (see :ref:`section-callbacks-recording` 
                         for more information).
-        neuron_filter:  Filter used to select which neurons to record from
+        *TODO* synapse_filter:  Filter used to select which synapses to record from
                         (see :ref:`section-callbacks-recording` 
                         for more information).
         genn_var:       Internal name of variable to record
     """
-    def __init__(self, pop: PopulationType, var: Optional[str] = None,
+    def __init__(self, pop: Connection, var: Optional[str] = None,
                  key=None, example_filter: ExampleFilterType = None,
-                 neuron_filter: NeuronFilterType = None,
+                 #*TODO* synapse_filter: NeuronFilterType = None,
                  genn_var: Optional[str] = None):
         # Get underlying population
         # **TODO** handle Connection variables as well
-        self._pop = get_underlying_pop(pop)
+        self._pop = pop
 
         # Get the name of the GeNN variable corresponding to var
         if var is not None:
-            self._var = get_genn_var_name(self._pop.neuron, var)
+            self._var = get_genn_var_name(self._pop.synapse, var)
         elif genn_var is not None:
             self._var = genn_var
         else:
-            raise RuntimeError("VarRecorder callback requires a "
+            raise RuntimeError("ConnVarRecorder callback requires a "
                                "variable to be specified, either "
                                "via 'var' or 'genn_var' argument")
 
@@ -64,9 +64,9 @@ class VarRecorder(Callback):
         # Create example filter
         self._example_filter = ExampleFilter(example_filter)
 
-        # Create neuron filter mask
-        self._neuron_mask = get_neuron_filter_mask(neuron_filter,
-                                                   self._pop.shape)
+        # *TODO* Create neuron filter mask
+        #self._neuron_mask = get_neuron_filter_mask(neuron_filter,
+        #                                           self._pop.shape)
 
     def set_params(self, data, compiled_network, **kwargs):
         self._batch_size = compiled_network.genn_model.batch_size
@@ -77,24 +77,27 @@ class VarRecorder(Callback):
 
         try:
             # Get GeNN population from compiled model
-            pop = compiled_network.neuron_populations[self._pop]
+            pop = compiled_network.connection_populations[self._pop]
 
             # Get neuronmodel variables
-            pop_vars = pop.model.get_vars()
+            print(dir(pop))
+            pop_vars = pop.vars
 
             # Find variable
-            var = next(v for v in pop_vars if v.name == self._var)
+            for v in pop_vars:
+                print(v)
+            var = next(v for v in pop_vars if v == self._var)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self._var} to record")
 
-        # Determine if var is shared
-        self.shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
+        # *TODO* Determine if var is shared
+        #self.shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
 
         # If variable is shared and neuron mask was set, give warning
-        if self.shared and not np.all(self._neuron_mask):
-            logger.warn(f"VarRecorder ignoring neuron mask applied "
-                        f"to SHARED_NEURON variable f{self._var}")
+        #if self.shared and not np.all(self._neuron_mask):
+        #    logger.warn(f"VarRecorder ignoring neuron mask applied "
+        #                f"to SHARED_NEURON variable f{self._var}")
 
         # Create empty list to hold recorded data
         data[self.key] = []
@@ -104,21 +107,16 @@ class VarRecorder(Callback):
         # If anything should be recorded this batch
         if np.any(self._batch_mask):
             # Copy variable from device
-            pop = self._compiled_network.neuron_populations[self._pop]
+            pop = self._compiled_network.connection_populations[self._pop]
             pop.vars[self._var].pull_from_device()
 
             # Get view, sliced by batch mask if simulation is batched
             var_view = pop.vars[self._var].view
+            #*TODO* consider shared vars
             if self._batch_size > 1:
-                if self.shared:
-                    data_view = var_view[self._batch_mask][:, :]
-                else:
-                    data_view = var_view[self._batch_mask][:, self._neuron_mask]
+                data_view = var_view[self._batch_mask][:, :]
             else:
-                if self.shared:
-                    data_view = var_view[:]
-                else:
-                    data_view = var_view[self._neuron_mask]
+                data_view = var_view[:]
 
             # If there isn't already list to hold data, add one
             if len(self._data) == 0:

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from ml_genn import Connection, Population, Network
 from ml_genn.callbacks import (OptimiserParamSchedule, SpikeRecorder,
-                               VarRecorder, SynVarRecorder)
+                               VarRecorder, ConnVarRecorder)
 from ml_genn.compilers import EventPropCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
@@ -27,12 +27,12 @@ IN_ACTIVE_ISI = 10
 IN_ACTIVE_INTERVAL = 200
 
 NUM_TRIALS = 100
-NUM_EPOCHS = 8
+NUM_EPOCHS = 20
 
 TAU_MEM = 20.0
 TAU_SYN = 5.0
 
-LR = 0.00001
+LR = 0.004
 
 TRIAL_STEPS = 1000
 
@@ -86,25 +86,14 @@ with network:
                         NUM_OUTPUT)
     
     # Connections
-    Connection(input, hidden, Dense(Normal(sd=0.4 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
-    Connection(hidden, hidden, Dense(Normal(sd=0.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
-    h2o=Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    Connection(input, hidden, Dense(Normal(sd=2.5 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
+    Connection(hidden, hidden, Dense(Normal(sd=1.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    h2o=Connection(hidden, output, Dense(Normal(sd=2.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
-                         optimiser=Adam(LR), reg_lambda_upper=1e-12, reg_lambda_lower=1e-12, 
-                                 reg_nu_upper=20, max_spikes=1500)
+                         optimiser=Adam(LR), reg_lambda_upper=1e-8, reg_lambda_lower=1e-8, 
+                                 reg_nu_upper=10, max_spikes=1500)
 compiled_net = compiler.compile(network)
-
-'''
-for (pop,pypop) in compiled_net.neuron_populations.items():
-    print(pypop.model.get_sim_code())
-    for var in pypop.model.get_vars():
-        print(var.name)
-    for para in pypop.model.get_params():
-        print(para.name)
-    for dp in pypop.model.get_derived_params():
-        print(dp.name)
-'''
 
 with compiled_net:
     def alpha_schedule(epoch, alpha):
@@ -119,28 +108,30 @@ with compiled_net:
                  VarRecorder(output, "v", key="output_v"),
                  VarRecorder(output, genn_var="LambdaV", key="output_lambdav"),
                  VarRecorder(output, genn_var="LambdaI", key="output_lambdai"),
-                 SynVarRecorder(h2o, genn_var="dw", key="h2o_dw"),
+                 ConnVarRecorder(h2o, genn_var="Gradient", key="h2o_dw"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
     metrics, cb_data  = compiled_net.train({input: in_spikes},
                                            {output: y_star},
-                                           num_epochs=1,
+                                           num_epochs=NUM_EPOCHS,
                                            callbacks=callbacks)
     end_time = perf_counter()
     print(f"Time = {end_time - start_time}s")
+
+    #
+    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS-1, sharex="col", sharey="row")
+    fig2, axes2 = plt.subplots(NUM_FREQ_COMP, NUM_EPOCHS-1, sharex="col", sharey="row")
+    print(cb_data["h2o_dw"][0].shape)
     
-    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
-    fig2, axes2 = plt.subplots(NUM_FREQ_COMP, NUM_EPOCHS, sharex="col", sharey="row")
     for i in range(NUM_EPOCHS-1):
         error = []
-        fac = 10
+        fac = 100
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
-            print(len(cb_data["output_v"]))
             l = cb_data["output_lambdav"][i*fac+1][-1:0:-1,c]
             li = cb_data["output_lambdai"][i*fac+1][-1:0:-1,c]
-            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,c]
+            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,c*256:(c+1)*256]
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
@@ -160,4 +151,5 @@ with compiled_net:
     axes[0,0].set_ylabel("Input spikes")
     axes[0,1].set_ylabel("Y")
     axes[0,2].set_ylabel("E")
+    axes2[0,0].set_ylabel("Gradient")
     plt.show()
