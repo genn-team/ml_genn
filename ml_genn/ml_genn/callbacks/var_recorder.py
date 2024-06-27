@@ -45,7 +45,6 @@ class VarRecorder(Callback):
                  neuron_filter: NeuronFilterType = None,
                  genn_var: Optional[str] = None):
         # Get underlying population
-        # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
 
         # Get the name of the GeNN variable corresponding to var
@@ -75,22 +74,25 @@ class VarRecorder(Callback):
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
 
+        # Get GeNN population from compiled model
+        pop = compiled_network.neuron_populations[self._pop]
+
+        # Get neuronmodel variables
+        pop_vars = pop.model.get_vars()
+
         try:
-            # Get GeNN population from compiled model
-            pop = compiled_network.neuron_populations[self._pop]
-
-            # Get neuronmodel variables
-            pop_vars = pop.model.get_vars()
-
             # Find variable
             var = next(v for v in pop_vars if v.name == self._var)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self._var} to record")
 
-        # Determine if var is shared
-        self.shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
-
+        # Determine if var is shared or batched
+        self.shared = not (get_var_access_dim(var.access)
+                           & VarAccessDim.ELEMENT)
+        self.batched = (get_var_access_dim(var.access)
+                        & VarAccessDim.BATCH)
+                           
         # If variable is shared and neuron mask was set, give warning
         if self.shared and not np.all(self._neuron_mask):
             logger.warn(f"VarRecorder ignoring neuron mask applied "
@@ -107,18 +109,27 @@ class VarRecorder(Callback):
             pop = self._compiled_network.neuron_populations[self._pop]
             pop.vars[self._var].pull_from_device()
 
-            # Get view, sliced by batch mask if simulation is batched
+            # If simulation and variable is batched
             var_view = pop.vars[self._var].view
-            if self._batch_size > 1:
+            if self._batch_size > 1 and self.batched:
+                # Apply neuron mask
                 if self.shared:
                     data_view = var_view[self._batch_mask][:, :]
                 else:
                     data_view = var_view[self._batch_mask][:, self._neuron_mask]
+            # Otherwise
             else:
+                # Apply neuron mask
                 if self.shared:
                     data_view = var_view[:]
                 else:
                     data_view = var_view[self._neuron_mask]
+
+                # If SIMULATION is batched but variable isn't,
+                # broadcast batch size copies of variable
+                if self._batch_size > 1:
+                    data_view = np.broadcast_to(
+                        data_view, (self._batch_size,) + data_view.shape)
 
             # If there isn't already list to hold data, add one
             if len(self._data) == 0:
