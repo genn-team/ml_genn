@@ -461,17 +461,17 @@ class EventPropCompiler(Compiler):
                 model_copy, max_time_required=True, dt=self.dt,
                 example_timesteps=self.example_timesteps)
 
-            # Add variable, shared across neurons to hold true label for batch
             # **HACK** we don't want to call add_to_neuron on loss function as
             # it will add unwanted code to end of neuron but we do want this
             if sce_loss:
+                # Add variable, shared across neurons to hold true label for batch
                 model_copy.add_var("YTrue", "uint8_t", 0, 
                                    VarAccess.READ_ONLY_SHARED_NEURON)
 
                 # Add second variable to hold the true label for the backward pass
                 model_copy.add_var("YTrueBack", "uint8_t", 0, 
                                    VarAccess.READ_ONLY_SHARED_NEURON)
-            if mse_loss:
+            elif mse_loss:
                 # The true label is the desired voltage output over time
                 flat_shape = np.prod(pop.shape)
                 egp_size = (self.example_timesteps * self.batch_size * flat_shape)
@@ -509,7 +509,7 @@ class EventPropCompiler(Compiler):
                     LambdaV = drive + ((LambdaV - drive) * Alpha);
                     """)
 
-                # If we want to calculate per-timestep loss
+                # If we want to calculate mean-squared error or per-timestep loss
                 if self.per_timestep_loss or mse_loss:
                     # Get reset vars before we add ring-buffer variables
                     reset_vars = model_copy.reset_vars
@@ -553,7 +553,7 @@ class EventPropCompiler(Compiler):
                             raise NotImplementedError(
                                 f"EventProp compiler with CategoricalCrossEntropy loss doesn't support "
                                 f"{type(pop.neuron.readout).__name__} readouts")
-                    if mse_loss:
+                    elif mse_loss:
                         # Readout has to be Var
                         if isinstance(pop.neuron.readout, Var):
                             model_copy.prepend_sim_code(
@@ -663,7 +663,7 @@ class EventPropCompiler(Compiler):
                             raise NotImplementedError(
                                 f"EventProp compiler doesn't support "
                                 f"{type(pop.neuron.readout).__name__} readouts")
-                    if mse_loss:
+                    elif mse_loss:
                         raise NotImplementedError(
                             f"EventProp compiler doesn't support "
                             f"time averaged loss for regression.")
