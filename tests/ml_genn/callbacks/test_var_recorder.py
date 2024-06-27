@@ -10,7 +10,7 @@ from ml_genn.neurons import BinarySpikeInput, IntegrateFire
 @pytest.mark.parametrize("batch_size", [1, 5])
 @pytest.mark.parametrize("neuron_filter", [None, slice(0, None, 2)])
 @pytest.mark.parametrize("example_filter", [None, range(0, 5, 2)])
-def test_recording(batch_size, neuron_filter, example_filter, request):
+def test_var_recorder(batch_size, neuron_filter, example_filter, request):
     # Create random input for 5 examples and 10 neurons
     x = np.random.random_sample((5, 10))
     y_true = np.zeros((5, 10))
