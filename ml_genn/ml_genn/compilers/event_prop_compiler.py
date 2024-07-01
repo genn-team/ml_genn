@@ -481,9 +481,7 @@ class EventPropCompiler(Compiler):
             elif mmse_loss:
                 # the true label should be the "source label" times the voltage output over time
                 flat_shape = np.prod(pop.shape)
-                egp_size = (self.example_timesteps * self.batch_size * flat_shape)
-                model_copy.add_egp("YSource", "scalar*",
-                              np.empty(egp_size, dtype=np.float32))
+                egp_size = (2 * self.example_timesteps * self.batch_size * flat_shape)
                 model_copy.add_egp("YTrue", "scalar*",
                               np.empty(egp_size, dtype=np.float32))
                 
@@ -591,9 +589,10 @@ class EventPropCompiler(Compiler):
                                 model_copy.append_sim_code(
                                     f"""
                                     const unsigned int timestep = (int)round(t / dt);
-                                    const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
+                                    const unsigned int index_src = (2 * batch * {self.example_timesteps} * num_neurons)
                                                                + (timestep * num_neurons) + id;
-                                    RingOutputLossTerm[ringOffset + RingWriteOffset] = (YTrue[index] - YSource[index] * V) * YSource[index];  // this is -dl_V/dV
+                                    const unsigned int index_trg = index_src + {self.example_timesteps} * num_neurons;
+                                    RingOutputLossTerm[ringOffset + RingWriteOffset] = (YTrue[index_trg] - YTrue[index_src] * V) * YTrue[index_src];  // this is -dl_V/dV
                                     RingWriteOffset++;
                                     """)
                         # Otherwise, unsupported readout type
