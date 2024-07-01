@@ -572,8 +572,8 @@ class EventPropCompiler(Compiler):
                             model_copy.append_sim_code(
                                 f"""
                                 const unsigned int timestep = (int)round(t / dt);
-                                const unsigned int index = (timestep * num_batch * num_neurons)
-                                       + (batch * num_neurons) + id;
+                                const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
+                                       + (timestep * num_neurons) + id;
                                 RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - V;
                                 RingWriteOffset++;
                                 """)
