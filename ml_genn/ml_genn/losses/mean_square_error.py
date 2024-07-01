@@ -18,7 +18,7 @@ class MeanSquareError(Loss):
         model.append_sim_code(
             f"""
             const unsigned int timestep = (int)round(t / dt);
-            const unsigned int index = (batch * {example_stimesteps} * num_neurons)
+            const unsigned int index = (batch * {example_timesteps} * num_neurons)
                                        + (timestep * num_neurons) + id;
             const scalar yTrue = YTrue[index];
             """)
