@@ -130,10 +130,10 @@ with compiled_net:
         fac = 100
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
-            error.append(y_0[:,c] + y - y_star[:,c])
+            error.append(y_0[:,c] * y - y_star[:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
-            axes[c,i].plot(y_0[:,c]+y)
+            axes[c,i].plot(y_0[:,c]*y)
             axes[c,i].plot(y_star[:,c], linestyle="--")
         axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][i],
                                       cb_data["input_spikes"][1][i], s=1)
