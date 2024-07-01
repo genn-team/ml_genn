@@ -27,7 +27,7 @@ IN_ACTIVE_ISI = 10
 IN_ACTIVE_INTERVAL = 200
 
 NUM_TRIALS = 100
-NUM_EPOCHS = 20
+NUM_EPOCHS = 10
 
 TAU_MEM = 20.0
 TAU_SYN = 5.0
@@ -120,26 +120,18 @@ with compiled_net:
     print(f"Time = {end_time - start_time}s")
 
     #
-    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS-1, sharex="col", sharey="row")
-    fig2, axes2 = plt.subplots(NUM_FREQ_COMP, NUM_EPOCHS-1, sharex="col", sharey="row")
-    print(cb_data["h2o_dw"][0].shape)
+    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
     
-    for i in range(NUM_EPOCHS-1):
+    for i in range(NUM_EPOCHS):
         error = []
         fac = 100
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
-            l = cb_data["output_lambdav"][i*fac+1][-1:0:-1,c]
-            li = cb_data["output_lambdai"][i*fac+1][-1:0:-1,c]
-            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,c*256:(c+1)*256]
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
             axes[c,i].plot(y)
-            axes[c,i].plot(l*10000)
-            axes[c,i].plot(li*10000)
             axes[c,i].plot(y_star[i][:,c], linestyle="--")
-            axes2[c,i].plot(dw)
         axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][i],
                                       cb_data["input_spikes"][1][i], s=1)
         axes[NUM_FREQ_COMP + 1,i].scatter(cb_data["hidden_spikes"][0][i],
@@ -151,5 +143,4 @@ with compiled_net:
     axes[0,0].set_ylabel("Input spikes")
     axes[0,1].set_ylabel("Y")
     axes[0,2].set_ylabel("E")
-    axes2[0,0].set_ylabel("Gradient")
     plt.show()
