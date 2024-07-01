@@ -27,20 +27,30 @@ class Connection:
                         for debugging purposes)
     
     Args:
-        source:         Source population to connect
-        target:         Target population to connect
-        connectivity:   Connectivity to connect ``source`` to ``target``.
-        synapse:        What type of synapse dynamics to 
-                        apply to input delivered via this connection
-        name:           Name of connection (only used for debugging purposes)
+        source:             Source population to connect
+        target:             Target population to connect
+        connectivity:       Connectivity to connect ``source`` to ``target``.
+        synapse:            What type of synapse dynamics to 
+                            apply to input delivered via this connection
+        name:               Name of connection (only used for
+                            debugging purposes)
+        max_delay_steps:    Maximum number of delay steps this connection
+                            supports. Only required when learning delays
+                            or using heterogeneous delay initialiser from
+                            which maximum delay cannot be inferred
     """
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta", 
-                 name: Optional[str] = None, add_to_model: bool = True):
+                 name: Optional[str] = None, 
+                 max_delay_steps: Optional[int] = None,
+                 add_to_model: bool = True):
         # Store weak references to source and target in class
         self._source = ref(source)
         self._target = ref(target)
+
+        # Stash max delay steps
+        self.max_delay_steps = max_delay_steps
 
         self.connectivity = get_object(connectivity, Connectivity, 
                                        "Connectivity", default_connectivity)

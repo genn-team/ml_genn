@@ -65,12 +65,17 @@ class Layer:
                                 with this layer.
         name:                   Name of layer (only really used 
                                 for debugging purposes)
+        max_delay_steps:        Maximum number of delay steps this connection
+                                supports. Only required when learning delays
+                                or using heterogeneous delay initialiser from
+                                which maximum delay cannot be inferred
     """
     def __init__(self, connectivity: ConnectivityInitializer,
                  neuron: NeuronInitializer, shape: Shape = None,
                  synapse: SynapseInitializer = "delta",
                  record_spikes: bool = False,
                  record_spike_events: bool = False,
+                 max_delay_steps: Optional[int] = None,
                  name: Optional[str] = None):
         # Create population and store weak reference in class
         population = Population(
@@ -85,7 +90,8 @@ class Layer:
         if prev_layer is not None:
             connection = Connection(prev_layer.population(), population,
                                     connectivity=connectivity,
-                                    synapse=synapse, add_to_model=False)
+                                    synapse=synapse, max_delay_steps,
+                                    add_to_model=False)
             self.connection = ref(connection)
         else:
             connection = None
