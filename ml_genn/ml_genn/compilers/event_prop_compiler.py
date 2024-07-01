@@ -13,7 +13,7 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
-from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
+from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError, ModulationMeanSquareError
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
@@ -449,9 +449,10 @@ class EventPropCompiler(Compiler):
         if pop.neuron.readout is not None:
             sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
             mse_loss = isinstance(compile_state.losses[pop], MeanSquareError)
+            mmse_loss = isinstance(compile_state.losses[pop], ModulationMeanSquareError)
             # Check loss function is compatible
             # **TODO** categorical crossentropy i.e. one-hot encoded
-            if not (sce_loss or mse_loss):
+            if not (sce_loss or mse_loss or mmse_loss):
                 raise NotImplementedError(
                     f"EventProp compiler doesn't support "
                     f"{type(loss).__name__} loss")
@@ -475,6 +476,14 @@ class EventPropCompiler(Compiler):
                 # The true label is the desired voltage output over time
                 flat_shape = np.prod(pop.shape)
                 egp_size = (self.example_timesteps * self.batch_size * flat_shape)
+                model_copy.add_egp("YTrue", "scalar*",
+                              np.empty(egp_size, dtype=np.float32))
+            elif mmse_loss:
+                # the true label should be the "source label" times the voltage output over time
+                flat_shape = np.prod(pop.shape)
+                egp_size = (self.example_timesteps * self.batch_size * flat_shape)
+                model_copy.add_egp("YSource", "scalar*",
+                              np.empty(egp_size, dtype=np.float32))
                 model_copy.add_egp("YTrue", "scalar*",
                               np.empty(egp_size, dtype=np.float32))
                 
@@ -510,7 +519,7 @@ class EventPropCompiler(Compiler):
                     """)
 
                 # If we want to calculate mean-squared error or per-timestep loss
-                if self.per_timestep_loss or mse_loss:
+                if self.per_timestep_loss or mse_loss or mmse_loss:
                     # Get reset vars before we add ring-buffer variables
                     reset_vars = model_copy.reset_vars
 
@@ -553,7 +562,7 @@ class EventPropCompiler(Compiler):
                             raise NotImplementedError(
                                 f"EventProp compiler with CategoricalCrossEntropy loss doesn't support "
                                 f"{type(pop.neuron.readout).__name__} readouts")
-                    elif mse_loss:
+                    elif (mse_loss or mmse_loss):
                         # Readout has to be Var
                         if isinstance(pop.neuron.readout, Var):
                             model_copy.prepend_sim_code(
@@ -569,19 +578,29 @@ class EventPropCompiler(Compiler):
                             compile_state.add_neuron_reset_vars(
                                 pop, reset_vars, False, True)
                             # Add code to fill errors into RingBuffer
-                            model_copy.append_sim_code(
-                                f"""
-                                const unsigned int timestep = (int)round(t / dt);
-                                const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
-                                       + (timestep * num_neurons) + id;
-                                RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - V;
-                                RingWriteOffset++;
-                                """)
+                            if mse_loss:
+                                model_copy.append_sim_code(
+                                    f"""
+                                    const unsigned int timestep = (int)round(t / dt);
+                                    const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
+                                                               + (timestep * num_neurons) + id;
+                                    RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - V;  // this is -dl_V/dV
+                                    RingWriteOffset++;
+                                    """)
+                            elif mmse_loss:
+                                model_copy.append_sim_code(
+                                    f"""
+                                    const unsigned int timestep = (int)round(t / dt);
+                                    const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
+                                                               + (timestep * num_neurons) + id;
+                                    RingOutputLossTerm[ringOffset + RingWriteOffset] = (YTrue[index] - YSource[index] * V) * YSource[index];  // this is -dl_V/dV
+                                    RingWriteOffset++;
+                                    """)
                         # Otherwise, unsupported readout type
                         else:
                            raise NotImplementedError(
                                 f"EventProp compiler with MeanSqareError loss only supports "
-                                f"'Var' readouts") 
+                                f"'Var' readouts")
                 # Otherwise, we want to calculate loss over each trial
                 else:
                     if sce_loss:
@@ -663,18 +682,25 @@ class EventPropCompiler(Compiler):
                             raise NotImplementedError(
                                 f"EventProp compiler doesn't support "
                                 f"{type(pop.neuron.readout).__name__} readouts")
-                    elif mse_loss:
+                    elif mse_loss or mmse_loss:
                         raise NotImplementedError(
                             f"EventProp compiler doesn't support "
                             f"time averaged loss for regression.")
+
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
-                    const float backT = {self.example_timesteps * self.dt} - t - dt;
 
                     // Backward pass
                     scalar drive = 0.0;
                     """)
+
+                # backT needed for sce loss only
+                if sce_loss:
+                    model_copy.prepend_sim_code(
+                        f"""
+                        const float backT = {self.example_timesteps * self.dt} - t - dt;
+                        """)
 
                 # Add second reset custom update to reset YTrueBack to YTrue
                 # **NOTE** seperate as these are SHARED_NEURON variables
