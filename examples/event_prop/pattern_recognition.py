@@ -108,7 +108,7 @@ with compiled_net:
                  VarRecorder(output, "v", key="output_v"),
                  VarRecorder(output, genn_var="LambdaV", key="output_lambdav"),
                  VarRecorder(output, genn_var="LambdaI", key="output_lambdai"),
-                 ConnVarRecorder(h2o, genn_var="Gradient", key="h2o_dw"),
+                 ConnVarRecorder(h2o, "Gradient", key="h2o_dw"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
                  OptimiserParamSchedule("alpha", alpha_schedule)]
@@ -120,13 +120,26 @@ with compiled_net:
     print(f"Time = {end_time - start_time}s")
 
     #
+<<<<<<< HEAD
     fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
     
     for i in range(NUM_EPOCHS):
+=======
+    fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS-1, sharex="col", sharey="row")
+    fig2, axes2 = plt.subplots(NUM_FREQ_COMP, NUM_EPOCHS-1, sharex="col", sharey="row")
+
+    for i in range(NUM_EPOCHS-1):
+>>>>>>> 505aab529cb928370829e430df0611592fdda948
         error = []
         fac = 100
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
+<<<<<<< HEAD
+=======
+            l = cb_data["output_lambdav"][i*fac+1][-1:0:-1,c]
+            li = cb_data["output_lambdai"][i*fac+1][-1:0:-1,c]
+            dw = cb_data["h2o_dw"][i*fac+1][-1:0:-1,:,c]
+>>>>>>> 505aab529cb928370829e430df0611592fdda948
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")

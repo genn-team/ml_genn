@@ -31,7 +31,6 @@ class SpikeRecorder(Callback):
 
         # Stash key and whether we're recording spikes or spike-like events
         self.key = key
-
         self._record_counts = record_counts
 
         # Create example filter
