@@ -17,4 +17,4 @@ __all__ = ["Callback", "Checkpoint", "ConnVarRecorder",
            "CustomUpdateOnBatchBegin", "CustomUpdateOnBatchEnd", 
            "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd", 
            "OptimiserParamSchedule", "BatchProgressBar", "SpikeRecorder",
-           "VarRecorder", "ConnVarRecorder", "default_callbacks"]
+           "VarRecorder", "default_callbacks"]
