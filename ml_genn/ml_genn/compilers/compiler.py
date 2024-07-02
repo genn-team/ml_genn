@@ -24,7 +24,7 @@ from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
                                    signed_static_pulse_model,
                                    signed_static_pulse_delay_model)
-from ..utils.value import is_value_constant
+from ..utils.value import is_value_array, is_value_constant
 
 # First pass of softmax - calculate max
 softmax_1_model = {
@@ -175,17 +175,33 @@ class Compiler:
         """
         return None
 
-    def calculate_delay(self, conn: Connection, delay, compile_state):
-        """Apply any compiler-specific processing to 
-        delay associated with a connection.
+    def apply_delay(self, genn_pop, conn: Connection,
+                    delay, compile_state):
+        """Apply delay to synapse population in compiler-specific manner
         
         Args:
+            genn_pop:       GeNN synapse population to apply delay to
             conn:           Connection synapse model is associated with
             delay:          Base delay specified by connectivity
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        return delay
+        
+        # If delays are constant, use as axonal delay
+        if is_value_constant(delay):
+            genn_pop.axonal_delay_steps = delay
+        # Otherwise, if maximum delay steps is specified
+        elif conn.max_delay_steps is not None:
+            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
+        # Otherwise, if delays are specified as an array, 
+        # calculate maximum delay steps from array 
+        elif is_value_array(delay):
+            max_delay_steps = np.amax(delay) + 1
+            genn_pop.max_dendritic_delay_timesteps = max_delay_steps
+        else:
+            raise RuntimeError(f"Maximum delay associated with Connection "
+                               f"{conn.name} cannot be determined "
+                               f"automatically, please set max_delay_steps")
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state) -> NeuronModel:
@@ -491,10 +507,6 @@ class Compiler:
                 conn.connectivity.get_snippet(conn,
                                               self.supported_matrix_type)
 
-            # Calculate delay
-            delay = self.calculate_delay(conn, connect_snippet.delay,
-                                         compile_state)
-
             # Build weight update model
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
@@ -529,10 +541,10 @@ class Compiler:
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
                                   psm_neuron_var_refs),
                 connect_snippet.snippet)
-
-            # If delays are constant, use as axonal delay
-            if is_value_constant(delay):
-                genn_pop.axonal_delay_steps = delay
+            
+            # Apply delay
+            self.apply_delay(genn_pop, conn, connect_snippet.delay,
+                             compile_state)
 
             # If connectivity snippet has pre and postsynaptic
             # indices, set them in synapse group
