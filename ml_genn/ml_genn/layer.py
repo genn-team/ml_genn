@@ -90,7 +90,8 @@ class Layer:
         if prev_layer is not None:
             connection = Connection(prev_layer.population(), population,
                                     connectivity=connectivity,
-                                    synapse=synapse, max_delay_steps,
+                                    synapse=synapse,
+                                    max_delay_steps=max_delay_steps,
                                     add_to_model=False)
             self.connection = ref(connection)
         else:
