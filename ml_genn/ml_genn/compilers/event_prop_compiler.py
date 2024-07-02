@@ -31,7 +31,7 @@ from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_pop
-from ..utils.value import is_value_constant
+from ..utils.value import is_value_array, is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
 from ..optimisers import default_optimisers
@@ -228,21 +228,22 @@ weight_update_model = {
     Gradient -= (LambdaI_post * TauSyn);
     """}
 
-# EventProp weight update model used on KERNEL weights when atomics required
+# Standard EventProp weight update model with delay
 # **NOTE** feedback is added if required
-# **YUCK** you should NEVER have to use backend-specific code in models
-weight_update_model_atomic_cuda = {
-    "params": [("TauSyn", "scalar")],
+delay_weight_update_model = {
+    "params": [("TauSyn", "scalar"), ("d", "int")],
     "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
-
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
+                             
     "pre_spike_syn_code": """
-    addToPost(g);
+    addToPostDelay(g, d);
     """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """,
     "pre_event_syn_code": """
-    atomicAdd(&Gradient, -(LambdaI_post * TauSyn));
+    Gradient -= (LambdaI_post[d] * TauSyn);
     """}
 
 # Weight update model used on non-trainable connections
@@ -253,6 +254,19 @@ static_weight_update_model = {
     "pre_spike_syn_code":
         """
         addToPost(g);
+        """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """}
+
+# Weight update model used on non-trainable connections with delay
+# **NOTE** feedback is added if required
+static_delay_weight_update_model = {
+    "params": [("g", "scalar"), ("d", "int")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "pre_spike_syn_code":
+        """
+        addToPostDelay(g, d);
         """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
@@ -439,6 +453,23 @@ class EventPropCompiler(Compiler):
 
         return CompileState(self.losses, readouts,
                             genn_model.backend_name)
+    
+    def apply_delay(self, genn_pop, conn: Connection,
+                    delay, compile_state):
+        # If maximum delay steps is specified
+        if conn.max_delay_steps is not None:
+            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
+        elif is_value_constant(delay):
+            genn_pop.max_dendritic_delay_timesteps = 1 + delay
+        # Otherwise, if delays are specified as an array, 
+        # calculate maximum delay steps from array 
+        elif is_value_array(delay):
+            max_delay_steps = np.amax(delay) + 1
+            genn_pop.max_dendritic_delay_timesteps = max_delay_steps
+        else:
+            raise RuntimeError(f"Maximum delay associated with Connection "
+                               f"{conn.name} cannot be determined "
+                               f"automatically, please set max_delay_steps")
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state: CompileState) -> NeuronModel:
@@ -870,10 +901,10 @@ class EventPropCompiler(Compiler):
     def build_weight_update_model(self, conn: Connection,
                                   connect_snippet: ConnectivitySnippet,
                                   compile_state: CompileState) -> WeightUpdateModel:
-        if not is_value_constant(connect_snippet.delay):
-            raise NotImplementedError("EventProp compiler only "
-                                      "support heterogeneous delays")
-
+        # Does this connection have a delay?
+        has_delay = (not is_value_constant(connect_snippet.delay)
+                     or connect_snippet.delay > 0)
+        
         # If this is some form of trainable connectivity
         if connect_snippet.trainable:
             # **NOTE** this is probably not necessary as 
@@ -887,14 +918,12 @@ class EventPropCompiler(Compiler):
             # Determine whether atomic weight updates are required
             # **YUCK** backend-specific code shouldn't be required in models
             # **TODO** something when OpenCL
-            use_atomic = (
-                (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
-                and compile_state.backend_name == "CUDA")
+            use_atomic = (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
             assert not use_atomic
 
             # Create basic weight update model
             wum = WeightUpdateModel(
-                model=deepcopy(weight_update_model_atomic_cuda if use_atomic
+                model=deepcopy(delay_weight_update_model if has_delay 
                                else weight_update_model),
                 param_vals={"TauSyn": tau_syn},
                 var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
@@ -908,9 +937,14 @@ class EventPropCompiler(Compiler):
         # Otherwise, e.g. it's a pooling layer
         else:
             wum = WeightUpdateModel(
-                model=deepcopy(static_weight_update_model),
+                model=deepcopy(static_delay_weight_update_model if has_delay 
+                               else static_weight_update_model),
                 param_vals={"g": connect_snippet.weight},
                 pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+        
+        # Set delay
+        if has_delay:
+            wum.param_vals["d"] = connect_snippet.delay
 
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
@@ -921,7 +955,11 @@ class EventPropCompiler(Compiler):
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
                 wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
-                wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post - LambdaI_post));")
+                
+                if has_delay:
+                    wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[d] - LambdaI_post[d]));")
+                else:
+                    wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post - LambdaI_post));")
 
         # Return weight update model
         return wum
