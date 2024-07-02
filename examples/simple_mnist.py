@@ -24,6 +24,7 @@ compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
 compiled_net = compiler.compile(network)
 
 # Load testing data
+mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 testing_images = np.reshape(mnist.test_images(), (-1, 784))
 testing_labels = mnist.test_labels()
 
