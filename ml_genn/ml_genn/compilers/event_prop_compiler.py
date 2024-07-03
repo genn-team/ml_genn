@@ -437,7 +437,8 @@ class EventPropCompiler(Compiler):
         communicator:               Communicator used for inter-process
                                     communications when training across
                                     multiple GPUs.
-        delay_optimiser:            Optimiser to use when applying delays
+        delay_optimiser:            Optimiser to use when applying delays. If 
+                                    None, ``optimiser`` will be used for delays
         delay_learn_conns:          Connection for which delays should be 
                                     learned as well as weight
         
@@ -451,7 +452,7 @@ class EventPropCompiler(Compiler):
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None,
-                 delay_optimiser="adam",
+                 delay_optimiser=None,
                  delay_learn_conns: Sequence = [],
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
@@ -473,8 +474,9 @@ class EventPropCompiler(Compiler):
         self.per_timestep_loss = per_timestep_loss
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
-        self._delay_optimiser = get_object(delay_optimiser, Optimiser, "Optimiser",
-                                           default_optimisers)
+        self._delay_optimiser = get_object(
+            optimiser if delay_optimiser is None else delay_optimiser, 
+            Optimiser, "Optimiser", default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
 
