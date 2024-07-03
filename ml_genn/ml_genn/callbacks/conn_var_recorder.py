@@ -112,7 +112,7 @@ class ConnVarRecorder(Callback):
             if self._batch_size > 1 and self.batched:
                 # Slice view by batch mask and reshape to num_src * num_trg
                 data_view = np.reshape(var_view[self._batch_mask],
-                                       (self._batch_size, num_src, num_trg))
+                                       (self._batch_count, num_src, num_trg))
                 
                 # Slice view with src and target masks
                 data_view = data_view[:,self._src_neuron_mask,:]
