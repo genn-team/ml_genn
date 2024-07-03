@@ -437,6 +437,7 @@ class EventPropCompiler(Compiler):
         communicator:               Communicator used for inter-process
                                     communications when training across
                                     multiple GPUs.
+        delay_optimiser:            Optimiser to use when applying delays
         delay_learn_conns:          Connection for which delays should be 
                                     learned as well as weight
         
@@ -449,7 +450,8 @@ class EventPropCompiler(Compiler):
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
-                 communicator: Communicator = None, 
+                 communicator: Communicator = None,
+                 delay_optimiser="adam",
                  delay_learn_conns: Sequence = [],
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
@@ -471,6 +473,8 @@ class EventPropCompiler(Compiler):
         self.per_timestep_loss = per_timestep_loss
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
+        self._delay_optimiser = get_object(delay_optimiser, Optimiser, "Optimiser",
+                                           default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
 
@@ -1046,7 +1050,8 @@ class EventPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                    create_wu_var_ref(genn_pop, "Gradient"), genn_model))
+                    create_wu_var_ref(genn_pop, "Gradient"), 
+                    self._optimiser, genn_model))
         
         # Add delay optimisers to connections that require them
         for i, c in enumerate(compile_state.delay_optimiser_connections):
@@ -1055,7 +1060,8 @@ class EventPropCompiler(Compiler):
                 self._create_optimiser_custom_update(
                     f"Delay{i}", create_wu_var_ref(genn_pop, "d"),
                     create_wu_var_ref(genn_pop, "DelayGradient"),
-                    genn_model, (0.0, c.max_delay_steps)))
+                    self._delay_optimiser, genn_model,
+                    (0.0, c.max_delay_steps)))
 
         # Add per-batch softmax custom updates for each population that requires them
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
@@ -1179,8 +1185,8 @@ class EventPropCompiler(Compiler):
             "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
 
-    def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model,
+    def _create_optimiser_custom_update(self, name_suffix, var_ref, 
+                                        gradient_ref, optimiser, genn_model,
                                         clamp_var=None):
         # If batch size is greater than 1
         if self.full_batch_size > 1:
@@ -1198,16 +1204,14 @@ class EventPropCompiler(Compiler):
             # logic, connected to reduced gradient
             reduced_gradient = create_wu_var_ref(genn_reduction,
                                                  "ReducedGradient")
-            optimiser_model = self._optimiser.get_model(reduced_gradient, 
-                                                        var_ref, False,
-                                                        clamp_var)
+            optimiser_model = optimiser.get_model(reduced_gradient, var_ref,
+                                                  False, clamp_var)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
-            optimiser_model = self._optimiser.get_model(gradient_ref,
-                                                        var_ref, True,
-                                                        clamp_var)
+            optimiser_model = optimiser.get_model(gradient_ref, var_ref,
+                                                  True, clamp_var)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
