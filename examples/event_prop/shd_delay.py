@@ -64,12 +64,12 @@ with network:
                         num_output)
 
     # Connections
-    in_hid_delays = rng.integers(0, 50, size=(num_input, NUM_HIDDEN))
-    Connection(input, hidden, Dense(Normal(mean=0.03, sd=0.01), in_hid_delays),
-               Exponential(5.0))
-    hid_out_delays = rng.integers(0, 50, size=(NUM_HIDDEN, num_output))
-    Connection(hidden, output, Dense(Normal(mean=0.0, sd=0.03), hid_out_delays),
-               Exponential(5.0))
+    in_hid_delays = 0#rng.integers(0, 50, size=(num_input, NUM_HIDDEN))
+    in_hid = Connection(input, hidden, Dense(Normal(mean=0.03, sd=0.01), in_hid_delays),
+                        Exponential(5.0), max_delay_steps=50)
+    hid_out_delays = 0#rng.integers(0, 50, size=(NUM_HIDDEN, num_output))
+    hid_out = Connection(hidden, output, Dense(Normal(mean=0.0, sd=0.03), hid_out_delays),
+                         Exponential(5.0), max_delay_steps=50)
 
 max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
@@ -77,7 +77,8 @@ if TRAIN:
                                  losses="sparse_categorical_crossentropy",
                                  reg_lambda_upper=1e-10, reg_lambda_lower=1e-10, 
                                  reg_nu_upper=14, max_spikes=1500, 
-                                 optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
+                                 delay_learn_conns=[in_hid, hid_out],
+                                 optimiser=Adam(0.001), batch_size=BATCH_SIZE,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 

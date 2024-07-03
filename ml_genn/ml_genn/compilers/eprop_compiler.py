@@ -602,13 +602,13 @@ class EPropCompiler(Compiler):
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
             optimiser_model = self._optimiser.get_model(reduced_gradient, 
-                                                        var_ref, False)
+                                                        var_ref, False, None)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
             optimiser_model = self._optimiser.get_model(
-                gradient_ref, var_ref, True)
+                gradient_ref, var_ref, True, None)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
