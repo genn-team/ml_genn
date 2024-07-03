@@ -228,10 +228,10 @@ weight_update_model = {
     Gradient -= (LambdaI_post * TauSyn);
     """}
 
-# Standard EventProp weight update model with delay
+# Standard EventProp weight update model with fixed delay
 # **NOTE** feedback is added if required
 delay_weight_update_model = {
-    "params": [("TauSyn", "scalar"), ("d", "int")],
+    "params": [("TauSyn", "scalar"), ("d", "uint8_t")],
     "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "post_neuron_var_refs": [("LambdaI_post", "scalar")],
@@ -262,7 +262,7 @@ static_weight_update_model = {
 # Weight update model used on non-trainable connections with delay
 # **NOTE** feedback is added if required
 static_delay_weight_update_model = {
-    "params": [("g", "scalar"), ("d", "int")],
+    "params": [("g", "scalar"), ("d", "uint8_t")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "pre_spike_syn_code":
         """
@@ -453,23 +453,28 @@ class EventPropCompiler(Compiler):
 
         return CompileState(self.losses, readouts,
                             genn_model.backend_name)
-    
+
     def apply_delay(self, genn_pop, conn: Connection,
                     delay, compile_state):
         # If maximum delay steps is specified
         if conn.max_delay_steps is not None:
-            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
+            max_delay_steps = conn.max_delay_steps
         elif is_value_constant(delay):
-            genn_pop.max_dendritic_delay_timesteps = 1 + delay
-        # Otherwise, if delays are specified as an array, 
-        # calculate maximum delay steps from array 
+            max_delay_steps = 1 + delay
+        # Otherwise, if delays are specified as an array,
+        # calculate maximum delay steps from array
         elif is_value_array(delay):
             max_delay_steps = np.amax(delay) + 1
-            genn_pop.max_dendritic_delay_timesteps = max_delay_steps
         else:
             raise RuntimeError(f"Maximum delay associated with Connection "
                                f"{conn.name} cannot be determined "
                                f"automatically, please set max_delay_steps")
+        
+        if max_delay_steps > 255:
+            raise NotImplmentedError(f"Maximum of {conn.max_delay_steps} "
+                                     f"delay steps for Connection "
+                                     f"{conn.name} exceeds 255")
+        genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state: CompileState) -> NeuronModel:
