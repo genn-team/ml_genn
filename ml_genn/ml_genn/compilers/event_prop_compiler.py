@@ -1046,24 +1046,24 @@ class EventPropCompiler(Compiler):
             connection_populations[c].pre_target_var = "RevISyn"
 
         # Add weight optimisers to connection weights that require them
-        optimiser_custom_updates = []
+        optimisers = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
-            optimiser_custom_updates.append(
-                self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                    create_wu_var_ref(genn_pop, "Gradient"), 
-                    self._optimiser, genn_model))
+            cu = self._create_optimiser_custom_update(
+                f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
+                create_wu_var_ref(genn_pop, "Gradient"), 
+                self._optimiser, genn_model)
+            optimisers.append((self._optimiser, cu))
         
         # Add delay optimisers to connections that require them
         for i, c in enumerate(compile_state.delay_optimiser_connections):
             genn_pop = connection_populations[c]
-            optimiser_custom_updates.append(
-                self._create_optimiser_custom_update(
-                    f"Delay{i}", create_wu_var_ref(genn_pop, "d"),
-                    create_wu_var_ref(genn_pop, "DelayGradient"),
-                    self._delay_optimiser, genn_model,
-                    (0.0, c.max_delay_steps)))
+            cu = self._create_optimiser_custom_update(
+                f"Delay{i}", create_wu_var_ref(genn_pop, "d"),
+                create_wu_var_ref(genn_pop, "DelayGradient"),
+                self._delay_optimiser, genn_model,
+                (0.0, c.max_delay_steps))
+            optimisers.append((self._delay_optimiser, cu))
 
         # Add per-batch softmax custom updates for each population that requires them
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
@@ -1085,7 +1085,7 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(optimiser_custom_updates) > 0:
+        if len(optimisers) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEnd("GradientBatchReduce"))
@@ -1124,9 +1124,9 @@ class EventPropCompiler(Compiler):
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            self.communicator, compile_state.losses, self._optimiser,
+            self.communicator, compile_state.losses,
             self.example_timesteps, base_train_callbacks,
-            base_validate_callbacks, optimiser_custom_updates,
+            base_validate_callbacks, optimisers,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, True)
 
