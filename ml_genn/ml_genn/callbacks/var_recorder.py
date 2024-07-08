@@ -110,7 +110,7 @@ class VarRecorder(Callback):
             pop.vars[self._var].pull_from_device()
 
             # If simulation and variable is batched
-            var_view = pop.vars[self._var].view
+            var_view = pop.vars[self._var].current_view
             if self._batch_size > 1 and self.batched:
                 # Apply neuron mask
                 if self.shared:
