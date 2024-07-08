@@ -140,7 +140,7 @@ def spike_normalise(net, net_inputs, net_outputs, norm_data,
             
             # Get threshold calculated for this layer across whole dataset
             threshold_cu = compiled_net.pop_threshold_custom_updates[pop]
-            threshold_cu.pull_var_from_device("Vthresh")
+            threshold_cu.vars["Vthresh"].pull_from_device()
             final_thresh = threshold_cu.vars["Vthresh"].view[0][0]
             
             # Set this threshold in this population's EGP

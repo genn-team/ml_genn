@@ -60,7 +60,7 @@ produces a raster plot of all the spikes emitted by all neurons during the fifth
 
 Variables
 ^^^^^^^^^
-You can add :class:`~callbacks.var_recorder.VarRecorder` callbacks to a model to record state variables. 
+You can add :class:`~callbacks.var_recorder.VarRecorder` callbacks to a model to record neuron model state variables. 
 For example, to record a state variable called `v` from a  :class:`~population.Population` object `input`:
 
 ..  code-block:: python
@@ -82,14 +82,18 @@ completed, you could then plot the membrane voltage of all neurons during the fi
     plt.plot(cb_data["v_input"][0])
     plt.show()
 
+You can also use a :class:`~callbacks.conn_var_recorder.ConnVarRecorder` callback to record connection state variables.
+By convention, connection weights are held in a variable called `g` and delays in a variable called `d`.
+Other variables may be available depending on the compiler being used (e.g. if you are training with EventProp, weight gradients are held in a variable called `Gradient` ).
+
 
 Filtering
 ^^^^^^^^^
 When dealing with large models/datasets, recording everything uses a lot of 
 memory and slows the simulation down significantly. You can address this by adding 
-filtering kwargs to :class:`~callbacks.spike_recorder.SpikeRecorder` and 
-:class:`~callbacks.var_recorder.VarRecorder` objects. Example filters let you
-select which examples to record from:
+filtering kwargs to :class:`~callbacks.spike_recorder.SpikeRecorder`, 
+:class:`~callbacks.var_recorder.VarRecorder` and :class:`~callbacks.conn_var_recorder.ConnVarRecorder` objects. 
+Example filters let you select which examples to record from:
 
 ..  code-block:: python
 
@@ -115,6 +119,16 @@ as numpy arrays, for example:
     SpikeRecorder(input, neuron_filter=([16, 20], [16, 20])     # Record neurons(16,16) and (20, 20) in 2D population
     SpikeRecorder(input, neuron_filter=np.index_exp[2:4,2:4])   # Record neurons (2,2), (2,3), (3,2) and (3,3) in 2D population
 
+When using :class:`~callbacks.conn_var_recorder.ConnVarRecorder`, seperate neuron filters can be provided for the connection's source and target population.
+For example:
+
+..  code-block:: python
+
+    ConnVarRecorder(in_to_hid, "g", src_neuron_filter=10, trg_neuron_filter=10)
+    
+only records from synapse connecting neuron 10 in the source population to neuron 10 in the target population.
+
+    
 Custom callbacks
 ----------------
 Beyond the built in callbacks, the callback system is intended to be the easiest way for users to

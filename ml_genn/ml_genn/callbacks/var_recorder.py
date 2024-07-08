@@ -45,7 +45,6 @@ class VarRecorder(Callback):
                  neuron_filter: NeuronFilterType = None,
                  genn_var: Optional[str] = None):
         # Get underlying population
-        # **TODO** handle Connection variables as well
         self._pop = get_underlying_pop(pop)
 
         # Get the name of the GeNN variable corresponding to var
@@ -54,7 +53,7 @@ class VarRecorder(Callback):
         elif genn_var is not None:
             self._var = genn_var
         else:
-            raise RuntimeError("SpikeRecorder callback requires a "
+            raise RuntimeError("VarRecorder callback requires a "
                                "variable to be specified, either "
                                "via 'var' or 'genn_var' argument")
 
@@ -75,22 +74,25 @@ class VarRecorder(Callback):
         # Create default batch mask in case on_batch_begin not called
         self._batch_mask = np.ones(self._batch_size, dtype=bool)
 
+        # Get GeNN population from compiled model
+        pop = compiled_network.neuron_populations[self._pop]
+
+        # Get neuron model variables
+        pop_vars = pop.model.get_vars()
+
         try:
-            # Get GeNN population from compiled model
-            pop = compiled_network.neuron_populations[self._pop]
-
-            # Get neuronmodel variables
-            pop_vars = pop.model.get_vars()
-
             # Find variable
             var = next(v for v in pop_vars if v.name == self._var)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self._var} to record")
 
-        # Determine if var is shared
-        self.shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
-
+        # Determine if var is shared or batched
+        self.shared = not (get_var_access_dim(var.access)
+                           & VarAccessDim.ELEMENT)
+        self.batched = (get_var_access_dim(var.access)
+                        & VarAccessDim.BATCH)
+                           
         # If variable is shared and neuron mask was set, give warning
         if self.shared and not np.all(self._neuron_mask):
             logger.warn(f"VarRecorder ignoring neuron mask applied "
@@ -102,23 +104,32 @@ class VarRecorder(Callback):
 
     def on_timestep_end(self, timestep: int):
         # If anything should be recorded this batch
-        if np.any(self._batch_mask):
+        if self._batch_count > 0:
             # Copy variable from device
             pop = self._compiled_network.neuron_populations[self._pop]
-            pop.pull_var_from_device(self._var)
+            pop.vars[self._var].pull_from_device()
 
-            # Get view, sliced by batch mask if simulation is batched
+            # If simulation and variable is batched
             var_view = pop.vars[self._var].view
-            if self._batch_size > 1:
+            if self._batch_size > 1 and self.batched:
+                # Apply neuron mask
                 if self.shared:
                     data_view = var_view[self._batch_mask][:, :]
                 else:
                     data_view = var_view[self._batch_mask][:, self._neuron_mask]
+            # Otherwise
             else:
+                # Apply neuron mask
                 if self.shared:
                     data_view = var_view[:]
                 else:
                     data_view = var_view[self._neuron_mask]
+
+                # If SIMULATION is batched but variable isn't,
+                # broadcast batch count copies of variable
+                if self._batch_size > 1:
+                    data_view = np.broadcast_to(
+                        data_view, (self._batch_count,) + data_view.shape)
 
             # If there isn't already list to hold data, add one
             if len(self._data) == 0:
@@ -128,13 +139,14 @@ class VarRecorder(Callback):
             self._data[-1].append(np.copy(data_view))
 
     def on_batch_begin(self, batch: int):
-        # Get mask for examples in this batch
+        # Get mask for examples in this batch and count
         self._batch_mask = self._example_filter.get_batch_mask(
             batch, self._batch_size)
+        self._batch_count = np.sum(self._batch_mask)
 
         # If there's anything to record in this
         # batch, add list to hold it to data
-        if np.any(self._batch_mask):
+        if self._batch_count > 0:
             self._data.append([])
 
     def get_data(self):
