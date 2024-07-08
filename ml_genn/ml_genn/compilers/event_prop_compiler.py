@@ -321,8 +321,8 @@ class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
 
     The EventProp compiler supports :class:`ml_genn.neurons.LeakyIntegrateFire`
-    hidden neuron models and the :class:`ml_genn.losses.SparseCategoricalCrossentropy` 
-    loss functions for classification.
+    hidden neuron models; and :class:`ml_genn.losses.SparseCategoricalCrossentropy` loss functions for classification
+    and :class:`ml_genn.losses.MeanSquareError` for regression.
 
     EventProp implements a fully event-driven backward pass meaning that its memory 
     overhead scales with the number of spikes per-trial rather than sequence length. 
