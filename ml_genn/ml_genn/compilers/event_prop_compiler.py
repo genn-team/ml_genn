@@ -228,12 +228,13 @@ weight_update_model = {
     Gradient -= (LambdaI_post * TauSyn);
     """}
 
-# EventProp weight update model used on KERNEL weights when atomics required
+# EventProp weight update model used on KERNEL weights
 # **NOTE** feedback is added if required
-# **YUCK** you should NEVER have to use backend-specific code in models
-weight_update_model_atomic_cuda = {
+weight_update_model_kernel = {
     "params": [("TauSyn", "scalar")],
     "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
 
     "pre_spike_syn_code": """
     addToPost(g);
@@ -242,7 +243,7 @@ weight_update_model_atomic_cuda = {
     BackSpike_pre
     """,
     "pre_event_syn_code": """
-    atomicAdd(&Gradient, -(LambdaI_post * TauSyn));
+    atomic_add_Gradient(-(LambdaI_post * TauSyn));
     """}
 
 # Weight update model used on non-trainable connections
@@ -884,17 +885,13 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError("EventProp compiler only "
                                           "supports Exponential synapses")
 
-            # Determine whether atomic weight updates are required
-            # **YUCK** backend-specific code shouldn't be required in models
-            # **TODO** something when OpenCL
-            use_atomic = (
-                (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
-                and compile_state.backend_name == "CUDA")
-            assert not use_atomic
-
+            # Determine whether kernel updates are required
+            use_kernel = (
+                connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
+            
             # Create basic weight update model
             wum = WeightUpdateModel(
-                model=deepcopy(weight_update_model_atomic_cuda if use_atomic
+                model=deepcopy(weight_update_model_kernel if use_kernel
                                else weight_update_model),
                 param_vals={"TauSyn": tau_syn},
                 var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
