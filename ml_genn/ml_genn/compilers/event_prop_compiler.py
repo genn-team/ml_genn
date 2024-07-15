@@ -112,6 +112,24 @@ weight_update_model = {
     Gradient -= (LambdaI_post * TauSyn);
     """}
 
+# EventProp weight update model used on KERNEL weights
+# **NOTE** feedback is added if required
+weight_update_model_kernel = {
+    "params": [("TauSyn", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
+
+    "pre_spike_syn_code": """
+    addToPost(g);
+    """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """,
+    "pre_event_syn_code": """
+    atomic_add_Gradient(-(LambdaI_post * TauSyn));
+    """}
+
 # Standard EventProp weight update model with learnable delay
 # **NOTE** feedback is added if required
 learnable_delay_weight_update_model = {
@@ -1241,11 +1259,13 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError("EventProp compiler only "
                                           "supports Exponential synapses")
 
-            # Determine whether atomic weight updates are required
-            # **YUCK** backend-specific code shouldn't be required in models
-            # **TODO** something when OpenCL
-            use_atomic = (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
-            assert not use_atomic
+            # Determine whether kernel updates are required
+            use_kernel = (
+                connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
+
+            if use_kernel and has_delay:
+                raise NotImplementedError("EventProp compiler does not "
+                                          "kernel connectivity with delays")
 
             # If this connection has learnable delays
             if has_learnable_delay:
@@ -1270,11 +1290,17 @@ class EventPropCompiler(Compiler):
                 compile_state.add_optimiser_connection(conn, True, True)
             # Otherwise
             else:
+                if has_delay:
+                    base_model = _get_delay_weight_update_model(delay_type)
+                elif use_kernel:
+                    base_model = deepcopy(weight_update_model_kernel)
+                else:
+                    base_model = deepcopy(weight_update_model)
+
                 # Create basic weight update model
                 # **TODO** call getter
                 wum = WeightUpdateModel(
-                    model=(_get_delay_weight_update_model(delay_type) if has_delay 
-                           else deepcopy(weight_update_model)),
+                    model=base_model,
                     param_vals={"TauSyn": tau_syn},
                     var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
                     pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
