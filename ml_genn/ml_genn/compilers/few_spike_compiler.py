@@ -251,13 +251,14 @@ class FewSpikeCompiler(Compiler):
 
         return CompileState(con_delay=con_delay,
                             pop_pipeline_depth=pop_pipeline_depth)
-
-    def calculate_delay(self, conn, delay,
-                        compile_state: CompileState):
+    
+    def apply_delay(self, genn_pop, conn: Connection,
+                    delay, compile_state):
         # Check that no delay is already set
         assert is_value_constant(delay) and delay == 0
-
-        return compile_state.con_delay[conn]
+        
+        # Use pre-calculated delay as axonal
+        genn_pop.axonal_delay_steps = compile_state.con_delay[conn]
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state: CompileState) -> NeuronModel:

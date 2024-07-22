@@ -86,7 +86,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                             dt: Optional[float] = None,
                             histogram_thresh : Optional[int] = None) -> PreprocessedSpikes:
     # Calculate cumulative sum of each neuron's spike count
-    num_neurons = np.product(shape) 
+    num_neurons = np.prod(shape) 
 
     # Check dataset datatype includes time and polarity
     if "t" not in ordering or "p" not in ordering:

@@ -1,5 +1,5 @@
+from typing import Optional, Tuple
 from pygenn import VarAccessMode
-
 from .optimiser import Optimiser
 from ..utils.model import CustomUpdateModel
 from ..utils.snippet import ConstantValueDescriptor
@@ -60,8 +60,8 @@ class Adam(Optimiser):
         genn_cu.set_dynamic_param_value("MomentScale1", moment_scale_1)
         genn_cu.set_dynamic_param_value("MomentScale2", moment_scale_2)
 
-    def get_model(self, gradient_ref, var_ref, 
-                  zero_gradient: bool) -> CustomUpdateModel:
+    def get_model(self, gradient_ref, var_ref, zero_gradient: bool,
+                  clamp_var: Optional[Tuple[float, float]] = None) -> CustomUpdateModel:
         model = CustomUpdateModel(
             deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,
@@ -77,6 +77,7 @@ class Adam(Optimiser):
 
         # If a optimiser than automatically zeros
         # gradients should be provided
+        # **THINK** this is generic across all optimisers like readout-adding
         if zero_gradient:
             # Change variable access model of gradient to read-write
             model.set_var_ref_access_mode("Gradient",
@@ -88,6 +89,19 @@ class Adam(Optimiser):
                 // Zero gradient
                 Gradient = 0.0;
                 """)
-
+        
+        # If variable should be clamped
+        # **THINK** this is generic across all optimisers like readout-adding
+        if clamp_var is not None:
+            # Add minimum and maximum parameters
+            model.add_param("VariableMin", "scalar", clamp_var[0])
+            model.add_param("VariableMax", "scalar", clamp_var[1])
+            
+            # Add update code to clamp variable
+            model.append_update_code(
+                """
+                // Clamp variable
+                Variable = fmax(VariableMin, fmin(VariableMax, Variable));
+                """)
         # Return model
         return model

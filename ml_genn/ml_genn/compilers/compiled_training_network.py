@@ -1,6 +1,6 @@
 import numpy as np
 
-from typing import Optional
+from typing import List, Optional, Tuple
 from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -21,9 +21,9 @@ from ..serialisers import default_serialisers
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
-                 losses, optimiser, example_timesteps: int,
+                 losses, example_timesteps: int,
                  base_train_callbacks: list, base_validate_callbacks: list,
-                 optimiser_custom_updates: list,
+                 optimisers: List[Tuple],
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
@@ -32,11 +32,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
             communicator, example_timesteps)
 
         self.losses = losses
-        self.optimiser = optimiser
         self.example_timesteps = example_timesteps
         self.base_train_callbacks = base_train_callbacks
         self.base_validate_callbacks = base_validate_callbacks
-        self.optimiser_custom_updates = optimiser_custom_updates
+        self.optimisers = optimisers
         self.checkpoint_connection_vars = checkpoint_connection_vars
         self.checkpoint_population_vars = checkpoint_population_vars
         self.reset_time_between_batches = reset_time_between_batches
@@ -316,8 +315,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
                               self.communicator)
 
         # Loop through optimiser custom updates and set step
-        for c in self.optimiser_custom_updates:
-            self.optimiser.set_step(c, step)
+        for o, c in self.optimisers:
+            o.set_step(c, step)
 
         # End batch
         callback_list.on_batch_end(batch, metrics)
