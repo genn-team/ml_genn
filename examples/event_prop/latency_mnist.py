@@ -27,6 +27,7 @@ SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
 
+mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 spikes = linear_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
