@@ -16,8 +16,8 @@ from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
 from ..metrics import MetricsType
-from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
-                       LeakyIntegrateFireInput)
+from ..neurons import (AdaptiveLeakyIntegrateFire, Input, LeakyIntegrate,
+                       LeakyIntegrateFire, LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
                         MaxVar, SumVar, Var)
@@ -1244,8 +1244,10 @@ class EventPropCompiler(Compiler):
             # Add additional input variable to receive feedback
             model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
 
-            # If neuron model is LIF
-            if isinstance(pop.neuron, LeakyIntegrateFire):
+            # If neuron model is LIF or ALIF
+            is_lif = isinstance(pop.neuron, LeakyIntegrateFire)
+            is_alif = isinstance(pop.neuron, AdaptiveLeakyIntegrateFire)
+            if is_lif or is_alif:
                 # Check EventProp constraints
                 if pop.neuron.integrate_during_refrac:
                     logger.warning("EventProp learning works best with "
@@ -1266,6 +1268,8 @@ class EventPropCompiler(Compiler):
                 # Add adjoint state variables
                 model_copy.add_var("LambdaV", "scalar", 0.0)
                 model_copy.add_var("LambdaI", "scalar", 0.0)
+                if is_alif:
+                    model_copy.add_var("LambdaA", "scalar", 0.0)
 
                 # Add EGP for IMinusV ring variables
                 model_copy.add_egp("RingIMinusV", "scalar*", 
@@ -1277,14 +1281,24 @@ class EventPropCompiler(Compiler):
                                      tau_mem / (tau_syn - tau_mem))
 
                 # On backward pass transition, update LambdaV
-                transition_code = """
-                    LambdaV += (1.0 / RingIMinusV[ringOffset + RingReadOffset]) * ((Vthresh * LambdaV) + RevISyn);
-                    """
+                if lif:
+                    transition_code = """
+                        LambdaV += (1.0 / RingIMinusV[ringOffset + RingReadOffset]) * ((Vthresh * LambdaV) + RevISyn);
+                        """
+                else:
+                    transition_code = f"""
+                        const scalar lambdaScale = ((Vthresh * LambdaV) - (Beta * LambdaB) + RevISyn);
+                        const scalar iMinusV = RingIMinusV[ringOffset + RingReadOffset];
+                        LambdaV += (1.0 / ({tau_mem} * iMinusV)) * lambdaScale;
+                        LambdaB += (1.0 / ({tau_mem} * iMinusV)) * lambdaScale;
+                        """                    
 
                 # List of variables aside from those in base 
                 # model we want to reset every batch
                 additional_reset_vars = [("LambdaV", "scalar", 0.0),
                                          ("LambdaI", "scalar", 0.0)]
+                if is_alif:
+                    additional_reset_vars.append(("LambdaA", "scalar", 0.0))
 
                 # If regularisation is enabled
                 if self.regulariser_enabled:
@@ -1331,14 +1345,20 @@ class EventPropCompiler(Compiler):
 
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
+                back_dynamics = """
+                    LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
+                    LambdaV *= Alpha;
+                    """
+                if alif:
+                    back_dynamics.append(
+                        """
+                        LambdaA *= Rho;
+                        """)
                 model_copy.prepend_sim_code(
                     neuron_backward_pass.substitute(
                         max_spikes=self.max_spikes,
                         example_time=(self.example_timesteps * self.dt),
-                        dynamics="""
-                        LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
-                        LambdaV *= Alpha;
-                        """,
+                        dynamics=back_dynamics,
                         transition=transition_code))
 
                 # Prepend (as it accesses the pre-reset value of V) 
