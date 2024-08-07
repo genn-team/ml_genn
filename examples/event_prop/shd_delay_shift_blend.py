@@ -40,11 +40,10 @@ class EaseInSchedule(Callback):
     def on_batch_begin(self, batch):
         # Set parameter to return value of function
         for optimiser in self._optimisers:
-            current_lr = getattr(optimiser, "alpha") * 1.05
-            if 0.001 > current_lr:
-                setattr(optimiser, "alpha", current_lr)
+            if optimiser.alpha < 0.001 :
+                optimiser.alpha = (0.001 / 1000.0) * (1.05 ** batch)
             else:
-                setattr(optimiser, "alpha", 0.001)
+                optimiser.alpha = 0.001
 
 
 class Shift:
@@ -80,8 +79,6 @@ class Blend:
         return dataset
 
     def blend(self, X1, X2):
-        new_x= []
-        new_t= []
         X1 = copy.deepcopy(X1)
         X2 = copy.deepcopy(X2)
         mx1 = np.mean(X1["x"])
@@ -160,7 +157,9 @@ for i in idx[7644:]:
     events = np.delete(events, np.where(events["t"] >= 1000000))
 
     spikes_val.append(preprocess_tonic_spikes(delay(events), dataset.ordering,
-                                              (dataset.sensor_size[0]*N_DELAY, dataset.sensor_size[1], dataset.sensor_size[2])))
+                                              (dataset.sensor_size[0]*N_DELAY,
+                                              dataset.sensor_size[1],
+                                              dataset.sensor_size[2])))
     labels_val.append(label)
 
 max_spikes = max(max_spikes, calc_max_spikes(spikes_val))
@@ -174,7 +173,9 @@ for i in range(len(dataset)):
     events, label = dataset[i]
     events = np.delete(events, np.where(events["t"] >= 1000000))
     spikes_test.append(preprocess_tonic_spikes(delay(events), dataset.ordering,
-                                            (dataset.sensor_size[0]*N_DELAY, dataset.sensor_size[1], dataset.sensor_size[2])))
+                                            (dataset.sensor_size[0]*N_DELAY,
+                                            dataset.sensor_size[1],
+                                            dataset.sensor_size[2])))
     labels_test.append(label)
 
 max_spikes = max(max_spikes, calc_max_spikes(spikes_test))
@@ -222,10 +223,11 @@ with compiled_net:
         # Apply augmentation to events and preprocess
         spikes_train = []
         labels_train = []
-        blended_dataset = blend(copy.deepcopy(raw_dataset), classes)
+        blended_dataset = blend(raw_dataset, classes)
         for events, label in blended_dataset:
             spikes_train.append(preprocess_tonic_spikes(delay(shift(events)), dataset.ordering,
-                                                    (dataset.sensor_size[0]*N_DELAY, dataset.sensor_size[1], dataset.sensor_size[2])))
+                                                    (dataset.sensor_size[0]*N_DELAY,
+                                                    dataset.sensor_size[1],dataset.sensor_size[2])))
             labels_train.append(label)
         
         # Train epoch
@@ -258,8 +260,8 @@ with compiled_net:
 network.load((best_e,), serialiser)
 
 compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
-                                reset_in_syn_between_batches=True,
-                                batch_size=BATCH_SIZE)
+                            reset_in_syn_between_batches=True,
+                            batch_size=BATCH_SIZE)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
