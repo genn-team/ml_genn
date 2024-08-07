@@ -211,7 +211,7 @@ compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                 losses="sparse_categorical_crossentropy",
                                 reg_lambda_upper=5e-11, reg_lambda_lower=5e-11, 
                                 reg_nu_upper=14, max_spikes=1500, 
-                                optimiser=Adam(0.001 * 0.01 / 1.05), batch_size=BATCH_SIZE)
+                                optimiser=Adam(0.001 * 0.01), batch_size=BATCH_SIZE)
 compiled_net = compiler.compile(network)
 best_acc, best_e = 0, 0
 with compiled_net:
