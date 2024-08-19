@@ -48,28 +48,32 @@ class CompiledTrainingNetwork(CompiledNetwork):
     def train(self, x: dict, y: dict, num_epochs: int, 
               start_epoch: int = 0, shuffle: bool = True,
               metrics: MetricsType = "sparse_categorical_accuracy",
-              callbacks=[BatchProgressBar()], validation_split: float = 0.0,
+              callbacks=[BatchProgressBar()],
+              validation_callbacks=[BatchProgressBar()],
+              validation_split: float = 0.0,
               validation_x: Optional[dict] = None, 
               validation_y: Optional[dict] = None):
         """ Train model on an input in numpy format against labels
 
         Args:
-            x:                  Dictionary of training inputs
-            y:                  Dictionary of training labels 
-                                to compare predictions against
-            num_epochs:         Number of epochs to train for
-            start_epoch:        Epoch to stasrt training from
-            shuffle:            Should training data be shuffled between epochs?
-            metrics:            Metrics to calculate.
-            callbacks:          List of callbacks to run during training.
-            validation_split:   Float between 0 and 1 specifying the fraction
-                                of the training data to use for validation.
-            validation_x:       Dictionary of validation inputs (cannot be
-                                used at same time as ``validation_split``)
-            validation_y:       Dictionary of validation labels (cannot be
-                                used at same time as ``validation_split``)
-        """
-        
+            x:                      Dictionary of training inputs
+            y:                      Dictionary of training labels 
+                                    to compare predictions against
+            num_epochs:             Number of epochs to train for
+            start_epoch:            Epoch to stasrt training from
+            shuffle:                Should training data be shuffled
+                                    between epochs?
+            metrics:                Metrics to calculate.
+            callbacks:              List of callbacks to run during training.
+            validation_callbacks:   List of callbacks to run during validation
+            validation_split:       Float between 0 and 1 specifying the
+                                    fraction of the training data to use
+                                    for validation.
+            validation_x:           Dictionary of validation inputs (cannot be
+                                    used at same time as ``validation_split``)
+            validation_y:           Dictionary of validation labels (cannot be
+                                    used at same time as ``validation_split``)
+        """        
         # If validation split is specified
         if validation_split != 0.0:
             # Check validation data isn't also provided
@@ -140,7 +144,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             # Create seperate callback list and begin testing
             num_validate_batches = (x_validate_size + batch_size - 1) // batch_size
             validate_callback_list = CallbackList(
-                self.base_validate_callbacks + callbacks,
+                self.base_validate_callbacks + validation_callbacks,
                 compiled_network=self,
                 num_batches=num_validate_batches, 
                 num_epochs=num_epochs)
