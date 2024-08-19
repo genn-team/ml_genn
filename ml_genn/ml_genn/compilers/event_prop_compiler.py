@@ -10,7 +10,8 @@ from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
+                         CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
@@ -114,8 +115,7 @@ class CompileState:
         self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
         self.backend_name = backend_name
-        self.weight_optimiser_connections = []
-        self.delay_optimiser_connections = []
+        self._optimiser_connections = []
         self._neuron_reset_vars = []
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
@@ -123,6 +123,9 @@ class CompileState:
         self.timestep_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
+
+    def add_optimiser_connection(self, conn, weight, delay):
+        self._optimiser_connections.append((conn, weight, delay))
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -185,6 +188,10 @@ class CompileState:
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetNeuron{i}")
+    
+    @property
+    def optimiser_connections(self):
+        return self._optimiser_connections
 
     @property
     def is_reset_custom_update_required(self):
@@ -211,6 +218,20 @@ class ZeroInSynLastTimestep(Callback):
             self.genn_syn_pop.out_post.view[:]= 0.0
             self.genn_syn_pop.out_post.push_to_device()
 
+class CustomUpdateOnBatchEndNotFirst(Callback):
+    """Callback that triggers a GeNN custom update 
+    at the end of every batch after the first."""
+    def __init__(self, name: str):
+        self.name = name
+
+    def set_params(self, compiled_network, **kwargs):
+        # Extract compiled network
+        self._compiled_network = compiled_network
+        
+    def on_batch_end(self, batch, metrics):
+        if batch > 0:
+            self._compiled_network.genn_model.custom_update(self.name)
+        
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
 weight_update_model = {
@@ -986,8 +1007,8 @@ class EventPropCompiler(Compiler):
                 # Add delays to list of checkpoint vars
                 compile_state.checkpoint_connection_vars.append((conn, "d"))
 
-                # Add connection to list with delays to optimise
-                compile_state.delay_optimiser_connections.append(conn)
+                # Mark connection as requiring delay and weight optimisation
+                compile_state.add_optimiser_connection(conn, True, True)
             # Otherwise
             else:
                 # Create basic weight update model
@@ -999,11 +1020,12 @@ class EventPropCompiler(Compiler):
                     pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
                     post_neuron_var_refs={"LambdaI_post": "LambdaI"})
 
+                # Mark connection as requiring weight optimisation
+                compile_state.add_optimiser_connection(conn, True, False)
+
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "g"))
 
-            # Add connection to list with weights to optimise
-            compile_state.weight_optimiser_connections.append(conn)
         # Otherwise, e.g. it's a pooling layer
         else:
             wum = WeightUpdateModel(
@@ -1045,25 +1067,50 @@ class EventPropCompiler(Compiler):
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"
 
-        # Add weight optimisers to connection weights that require them
+        # Loop through connections that require optimisers
         optimisers = []
-        for i, c in enumerate(compile_state.weight_optimiser_connections):
+        for i, (c, w, d) in enumerate(compile_state.optimiser_connections):
             genn_pop = connection_populations[c]
-            cu = self._create_optimiser_custom_update(
-                f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                create_wu_var_ref(genn_pop, "Gradient"), 
-                self._optimiser, genn_model)
-            optimisers.append((self._optimiser, cu))
-        
-        # Add delay optimisers to connections that require them
-        for i, c in enumerate(compile_state.delay_optimiser_connections):
-            genn_pop = connection_populations[c]
-            cu = self._create_optimiser_custom_update(
-                f"Delay{i}", create_wu_var_ref(genn_pop, "d"),
-                create_wu_var_ref(genn_pop, "DelayGradient"),
-                self._delay_optimiser, genn_model,
-                (0.0, c.max_delay_steps))
-            optimisers.append((self._delay_optimiser, cu))
+            
+            # If weight optimisation is required
+            gradient_vars = []
+            if w:
+                # Create weight optimiser custom update
+                cu_weight = self._create_optimiser_custom_update(
+                    f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
+                    create_wu_var_ref(genn_pop, "Gradient"), 
+                    self._optimiser, genn_model)
+                
+                # Add custom update to list of optimisers
+                optimisers.append((self._optimiser, cu_weight))
+
+                # Add gradient to list of gradient vars to zero
+                gradient_vars.append(("Gradient", "scalar", 0.0))
+            
+            # If delay optimiser is required
+            if d:
+                # Create delay optimiser custom update
+                cu_delay = self._create_optimiser_custom_update(
+                    f"Delay{i}", create_wu_var_ref(genn_pop, "d"),
+                    create_wu_var_ref(genn_pop, "DelayGradient"),
+                    self._delay_optimiser, genn_model,
+                    (0.0, c.max_delay_steps))
+
+                # Add custom update to list of optimisers
+                optimisers.append((self._delay_optimiser, cu_delay))
+                
+                # Add gradient to list of gradient vars to zero
+                gradient_vars.append(("DelayGradient", "scalar", 0.0))
+
+            # Create reset model for gradient variables
+            assert len(gradient_vars) > 0
+            zero_grad_model = create_reset_custom_update(
+                gradient_vars,
+                lambda name: create_wu_var_ref(genn_pop, name))
+            
+            # Add custom update
+            self.add_custom_update(genn_model, zero_grad_model, 
+                                    "ZeroGradient", f"CUZeroConnGradient{i}")
 
         # Add per-batch softmax custom updates for each population that requires them
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
@@ -1088,9 +1135,12 @@ class EventPropCompiler(Compiler):
         if len(optimisers) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
-                    CustomUpdateOnBatchEnd("GradientBatchReduce"))
+                    CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
             base_train_callbacks.append(
-                CustomUpdateOnBatchEnd("GradientLearn"))
+                CustomUpdateOnBatchEndNotFirst("GradientLearn"))
+            base_validate_callbacks.append(
+                CustomUpdateOnEpochEnd("ZeroGradient"))
+            
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
