@@ -16,7 +16,8 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import copy, deepcopy
-from pygenn import (create_custom_update_model, create_neuron_model,
+from pygenn import (create_custom_update_model, create_den_delay_var_ref,
+                    create_neuron_model, create_out_post_var_ref,
                     create_postsynaptic_model, create_weight_update_model,
                     create_var_ref, init_postsynaptic, init_weight_update)
 from string import digits
@@ -135,14 +136,6 @@ class SupportedMatrixType:
         # the highest priority from possible
         else:
             return min(possible, key=lambda p: self._supported[p])
-
-class ZeroInSyn(Callback):
-    def __init__(self, genn_syn_pop):
-        self.genn_syn_pop = genn_syn_pop
-
-    def on_batch_begin(self, batch):
-        self.genn_syn_pop.out_post.view[:]= 0.0
-        self.genn_syn_pop.out_post.push_to_device()
 
 
 class Compiler:
@@ -327,6 +320,26 @@ class Compiler:
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
         return genn_cu
+    
+    def add_out_post_zero_custom_update(self, genn_model, genn_syn_pop,
+                                        group: str, name: str):
+        # Build list of variables to reset
+        has_delay = (genn_syn_pop.max_dendritic_delay_timesteps > 1)
+        out_post_vars = [("OutPost", "scalar", 0.0)]
+        if has_delay:
+            out_post_vars.append(("DenDelay", "scalar", 0.0))
+
+        # Create reset model
+        zero_out_post_model = create_reset_custom_update(
+            out_post_vars,
+            lambda name: (create_out_post_var_ref(genn_syn_pop) 
+                          if name == "OutPost"
+                          else create_den_delay_var_ref(genn_syn_pop)))
+        
+        # Add GeNN custom update to model
+        self.add_custom_update(
+            genn_model, zero_out_post_model, 
+            group, name)
 
     def add_softmax_custom_updates(self, genn_model, genn_pop, 
                                    input_var_name: str, output_var_name: str,

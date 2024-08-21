@@ -206,17 +206,22 @@ class UpdateTrial(Callback):
         # Set dynamic parameter to batch ID
         self.genn_pop.set_dynamic_param_value("Trial", batch)
 
-# Callback which clamps in_syn to 0 one timestep before  
-# trial end to avoid bleeding spikes into the next trial
-class ZeroInSynLastTimestep(Callback):
-    def __init__(self, genn_syn_pop, example_timesteps: int):
-        self.genn_syn_pop = genn_syn_pop
+
+class CustomUpdateOnLastTimestep(Callback):
+    """Callback that triggers a GeNN custom update 
+    at the start of the last timestep in each example"""
+    def __init__(self, name: str, example_timesteps: int):
+        self.name = name
         self.example_timesteps = example_timesteps
+    
+    def set_params(self, compiled_network, **kwargs):
+        # Extract compiled network
+        self._compiled_network = compiled_network
 
     def on_timestep_begin(self, timestep: int):
         if timestep == (self.example_timesteps - 1):
-            self.genn_syn_pop.out_post.view[:]= 0.0
-            self.genn_syn_pop.out_post.push_to_device()
+            self._compiled_network.genn_model.custom_update(self.name)
+
 
 class CustomUpdateOnBatchEndNotFirst(Callback):
     """Callback that triggers a GeNN custom update 
@@ -1107,7 +1112,7 @@ class EventPropCompiler(Compiler):
             zero_grad_model = create_reset_custom_update(
                 gradient_vars,
                 lambda name: create_wu_var_ref(genn_pop, name))
-            
+
             # Add custom update
             self.add_custom_update(genn_model, zero_grad_model, 
                                     "ZeroGradient", f"CUZeroConnGradient{i}")
@@ -1125,6 +1130,12 @@ class EventPropCompiler(Compiler):
             genn_pop = neuron_populations[p]
             self._add_softmax_buffer_custom_updates(genn_model, genn_pop, i)
 
+        # Loop through connections and add custom updates to zero out post
+        for i, genn_syn_pop in enumerate(connection_populations.values()):
+            self.add_out_post_zero_custom_update(genn_model, genn_syn_pop,
+                                                 "ZeroOutPost",
+                                                 f"CUZeroOutPost{i}")
+
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
@@ -1140,20 +1151,17 @@ class EventPropCompiler(Compiler):
                 CustomUpdateOnBatchEndNotFirst("GradientLearn"))
             base_validate_callbacks.append(
                 CustomUpdateOnEpochEnd("ZeroGradient"))
-            
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
         for p in compile_state.update_trial_pops:
             base_train_callbacks.append(UpdateTrial(neuron_populations[p]))
 
-        # Add callbacks to zero insyn on all connections
-        # **NOTE** it would be great to be able to do this on device
-        for genn_syn_pop in connection_populations.values():
-            base_train_callbacks.append(
-                ZeroInSynLastTimestep(genn_syn_pop, self.example_timesteps))
-            base_validate_callbacks.append(
-                ZeroInSynLastTimestep(genn_syn_pop, self.example_timesteps))
+        # Add callbacks to zero out post on all connections
+        base_train_callbacks.append(
+            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+        base_validate_callbacks.append(
+            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
 
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
