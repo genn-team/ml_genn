@@ -82,6 +82,7 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
                               param_vals={}, var_vals={}, var_refs={})
 
     # Loop through reset vars
+    broadcast_vars = set(r[0] for r in reset_vars)
     for name, type, value in reset_vars:
         # Add variable reference
         model.add_var_ref(name, type, var_ref_creator(name))
@@ -95,6 +96,9 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
                 # Add read-only variable reference to other variable
                 model.add_var_ref(value, type, var_ref_creator(value))
                 model.set_var_ref_access_mode(value, VarAccessMode.READ_ONLY)
+            # Otherwise, remove it from set to broadcast
+            else:
+                broadcast_vars.remove(value)
 
             # Add code to set var
             model.append_update_code(f"{name} = {value};")
@@ -105,6 +109,10 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
             # Add code to set var
             model.append_update_code(f"{name} = {name}Reset;")
+
+    # Set broadcast access modes on variables for which this is possible
+    for b in broadcast_vars:
+        model.set_var_ref_access_mode(b, VarAccessMode.BROADCAST)
 
     return model
 
