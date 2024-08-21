@@ -15,13 +15,13 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
+from ..metrics import MetricsType
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
 from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar, Var
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
-from ..utils.data import MetricsType
 from ..utils.model import (CustomUpdateModel, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
 from ..utils.network import PopulationType
@@ -803,7 +803,7 @@ class EventPropCompiler(Compiler):
                 or self.reg_lambda_upper != 0.0)
     
     def _build_output_neuron_model(self, pop: Population, model: NeuronModel,
-                                   compile_state: CompileState) -> NeuronModel
+                                   compile_state: CompileState) -> NeuronModel:
         # Make copy of model
         model_copy = deepcopy(model)
 
@@ -1050,7 +1050,7 @@ class EventPropCompiler(Compiler):
         return model_copy
     
     def _build_in_hid_neuron_model(self, pop: Population, model: NeuronModel,
-                                   compile_state: CompileState) -> NeuronModel
+                                   compile_state: CompileState) -> NeuronModel:
         # Make copy of model
         model_copy = deepcopy(model)
 

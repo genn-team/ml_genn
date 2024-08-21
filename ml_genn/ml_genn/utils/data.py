@@ -9,8 +9,6 @@ from copy import deepcopy
 
 from .module import get_object
 
-MetricType = Union[Metric, str]
-MetricsType = Union[dict, MetricType]
 DataDictType = Mapping[Any, Union[Sequence, np.ndarray]]
 
 PreprocessedSpikes = namedtuple("PreprocessedSpikes", ["end_spikes", "spike_times"])
@@ -135,6 +133,56 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
 
         # Preprocess
         return preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
+
+def generate_yin_yang_dataset(size, scale, r_small=0.1, r_big=0.5):
+    def dist_to_right_dot(x, y):
+        return np.sqrt((x - 1.5 * r_big)**2 + (y - r_big)**2)
+
+    def dist_to_left_dot(x, y):
+        return np.sqrt((x - 0.5 * r_big)**2 + (y - r_big)**2)
+
+    def which_class(x, y):
+        # equations inspired by
+        # https://link.springer.com/content/pdf/10.1007/11564126_19.pdf
+        d_right = dist_to_right_dot(x, y)
+        d_left = dist_to_left_dot(x, y)
+        criterion1 = d_right <= r_small
+        criterion2 = d_left > r_small and d_left <= 0.5 * r_big
+        criterion3 = y > r_big and d_right > 0.5 * r_big
+        is_yin = criterion1 or criterion2 or criterion3
+        is_circles = d_right < r_small or d_left < r_small
+        if is_circles:
+            return 2
+        return int(is_yin)
+
+    def get_sample(goal):
+        # sample until goal is satisfied
+        while True:
+            # sample x,y coordinates
+            x, y = np.random.random_sample(2) * 2. * r_big
+            # check if within yin-yang circle
+            if np.sqrt((x - r_big)**2 + (y - r_big)**2) > r_big:
+                continue
+            # check if they have the same class as the goal for this sample
+            if which_class(x, y) == goal:
+                return x, y
+
+    spikes = []
+    labels = []
+    ids = np.arange(4)
+    for i in range(size):
+        # keep num of class instances balanced by using rejection sampling
+        # choose class for this sample
+        goal_class = np.random.randint(3)
+        x, y = get_sample(goal_class)
+        
+        # Preprocess and add to list 
+        spikes.append(
+            preprocess_spikes(np.asarray([x, y, 1.0 - x, 1.0 - y]) * scale,
+                              ids, 4))
+        labels.append(goal_class)
+
+    return spikes, labels
 
 def linear_latency_encode_data(data: np.ndarray, max_time: float,
                                min_time: float = 0.0,
