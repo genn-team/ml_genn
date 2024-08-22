@@ -50,6 +50,7 @@ if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
                                  optimiser=Adam(1e-2), batch_size=BATCH_SIZE,
+                                 softmax_temperature=0.5, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
