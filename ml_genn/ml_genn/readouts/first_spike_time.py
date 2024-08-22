@@ -7,7 +7,8 @@ from copy import deepcopy
 
 
 class FirstSpikeTime(Readout):
-    """Read out time of first spike emitted by population"""
+    """Read out time of first spike emitted by population.
+    Spike times are negated so standard metrics and loss functions can be employed."""
     def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
@@ -20,14 +21,14 @@ class FirstSpikeTime(Readout):
         # Add code to record time of first spike
         model_copy.append_reset_code(
         """
-        if(t < TFirstSpike) {
-            TFirstSpike = t;
-        }
+        TFirstSpike = fmax(-t, TFirstSpike);
         """)
 
-        # Add integer spike count variable and initialise to uint32 max
-        model_copy.add_var("TFirstSpike", "unsigned int",
-                           np.iinfo(np.uint32).max)
+        # Add time of first spike variable and initialise to float min
+        # **YUCK** REALLY should be timepoint but then you can't softmax
+        # **YUCK** Correct minimum for scalar
+        model_copy.add_var("TFirstSpike", "scalar",
+                           np.finfo(np.float32).min)
 
         return model_copy
 
@@ -41,4 +42,6 @@ class FirstSpikeTime(Readout):
 
     @property
     def reset_vars(self):
-        return [("TFirstSpike", "unsigned int", np.iinfo(np.uint32).max)]
+        # **YUCK** REALLY should be timepoint but then you can't softmax
+        # **YUCK** Correct minimum for scalar
+        return [("TFirstSpike", "scalar", np.finfo(np.float32).min)]
