@@ -19,7 +19,8 @@ from ..metrics import MetricsType
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
-from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar, Var
+from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
+                        MaxVar, SumVar, Var)
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
 from ..utils.model import (CustomUpdateModel, NeuronModel, 
@@ -445,6 +446,8 @@ class EventPropCompiler(Compiler):
         per_timestep_loss:          Should we use the per-timestep or
                                     per-trial loss functions described above?
         dt:                         Simulation timestep [ms]
+        ttfs_alpha                  TODO
+        softmax_temperature         TODO
         batch_size:                 What batch size should be used for
                                     training? In our experience, EventProp works
                                     best with modest batch sizes (32-128)
@@ -475,6 +478,7 @@ class EventPropCompiler(Compiler):
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
+                 ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None,
@@ -498,6 +502,8 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
+        self.ttfs_alpha = ttfs_alpha
+        self.softmax_temperature = softmax_temperature
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
         self._delay_optimiser = get_object(
@@ -716,7 +722,8 @@ class EventPropCompiler(Compiler):
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
             genn_pop = neuron_populations[p]
             self.add_softmax_custom_updates(genn_model, genn_pop,
-                                            i, o, "Batch")
+                                            i, o, "Batch",
+                                            self.softmax_temperature)
 
         # Add per-timestep softmax custom updates for each population that requires them
         for i, (p, i) in enumerate(compile_state.timestep_softmax_populations):
@@ -800,10 +807,10 @@ class EventPropCompiler(Compiler):
         # Make copy of model
         model_copy = deepcopy(model)
 
-        sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
-        mse_loss = isinstance(compile_state.losses[pop], MeanSquareError)
         # Check loss function is compatible
         # **TODO** categorical crossentropy i.e. one-hot encoded
+        sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
+        mse_loss = isinstance(compile_state.losses[pop], MeanSquareError)
         if not (sce_loss or mse_loss):
             raise NotImplementedError(
                 f"EventProp compiler doesn't support "
@@ -829,32 +836,32 @@ class EventPropCompiler(Compiler):
             flat_shape = np.prod(pop.shape)
             egp_size = (self.example_timesteps * self.batch_size * flat_shape)
             model_copy.add_egp("YTrue", "scalar*",
-                          np.empty(egp_size, dtype=np.float32))
-            
+                               np.empty(egp_size, dtype=np.float32))
+
+        # Get tau_syn from population's incoming connections
+        tau_syn = _get_tau_syn(pop)
+
+        # Add adjoint state variables
+        model_copy.add_var("LambdaV", "scalar", 0.0)
+        model_copy.add_var("LambdaI", "scalar", 0.0)
+
+        # Add parameter with synaptic decay constant
+        model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn))
+
+        # Add parameter for scaling factor
+        tau_mem = pop.neuron.tau_mem
+        model_copy.add_param("TauM", "scalar", tau_mem)
+        model_copy.add_param("A", "scalar", 
+                                tau_mem / (tau_mem - tau_syn))
+
+        # Add dynamic parameter to contain trial index and add 
+        # population to list of those which require it updating
+        model_copy.add_param("Trial", "unsigned int", 0)
+        model_copy.set_param_dynamic("Trial")
+        compile_state.update_trial_pops.append(pop)
+
         # If neuron model is a leaky integrator
         if isinstance(pop.neuron, LeakyIntegrate):
-            # Get tau_syn from population's incoming connections
-            tau_syn = _get_tau_syn(pop)
-
-            # Add adjoint state variables
-            model_copy.add_var("LambdaV", "scalar", 0.0)
-            model_copy.add_var("LambdaI", "scalar", 0.0)
-
-            # Add parameter with synaptic decay constant
-            model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn))
-
-            # Add parameter for scaling factor
-            tau_mem = pop.neuron.tau_mem
-            model_copy.add_param("TauM", "scalar", tau_mem)
-            model_copy.add_param("A", "scalar", 
-                                 tau_mem / (tau_mem - tau_syn))
-
-            # Add dynamic parameter to contain trial index and add 
-            # population to list of those which require it updating
-            model_copy.add_param("Trial", "unsigned int", 0)
-            model_copy.set_param_dynamic("Trial")
-            compile_state.update_trial_pops.append(pop)
-
             # Prepend standard code to update LambdaV and LambdaI
             model_copy.prepend_sim_code(
                 f"""
@@ -1034,11 +1041,143 @@ class EventPropCompiler(Compiler):
             if sce_loss:
                 compile_state.add_neuron_reset_vars(
                     pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+        # Otherwise, if neuron is LIF
+        elif isinstance(pop.neuron, LeakyIntegrateFire):
+            # Check EventProp constraints
+            if pop.neuron.integrate_during_refrac:
+                logger.warning("EventProp learning works best with "
+                                "LIF neurons which do not continue to "
+                                "integrate in their refractory period")
+            if pop.neuron.relative_reset:
+                logger.warning("EventProp learning works best "
+                                "with LIF neurons with an "
+                                "absolute reset mechanism")
+
+            # Get reset vars before we add ring-buffer variables
+            reset_vars = model_copy.reset_vars
+                
+            # Add variables to hold offsets for 
+            # reading and writing ring variables
+            model_copy.add_var("RingWriteOffset", "int", 0)
+            model_copy.add_var("RingReadOffset", "int", self.max_spikes - 1)
+
+            # Add variables to hold offsets where this neuron
+            # started writing to ring during the forward
+            # pass and where data to read during backward pass ends
+            model_copy.add_var("RingWriteStartOffset", "int",
+                                self.max_spikes - 1)
+            model_copy.add_var("RingReadEndOffset", "int", 
+                                self.max_spikes - 1)
+            
+            # Add variable to hold backspike flag
+            model_copy.add_var("BackSpike", "uint8_t", False)
+            
+            # Add variable to hold phantom backspike flag
+            model_copy.add_var("BackPhantomSpike", "uint8_t", False)
+
+            # Add EGP for spike time ring variables
+            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            model_copy.add_egp("RingSpikeTime", "scalar*", 
+                                np.empty(ring_size, dtype=np.float32))
+            
+            # Add EGP for IMinusV ring variables
+            model_copy.add_egp("RingIMinusV", "scalar*", 
+                                np.empty(ring_size, dtype=np.float32))
+
+            # Readout has to be FirstSpikeTime
+            if isinstance(pop.neuron.readout, FirstSpikeTime):
+                if not sce_loss:
+                    raise NotImplementedError(
+                        f"EventProp compiler only supports calculating "
+                        f"cross-entropy loss with 'FirstSpikeTime' readouts.")
+                
+                # **THOMAS** where does this madness come from?
+                example_time = self.dt * self.example_timesteps
+                phantom_scale = self.ttfs_alpha / (0.0001 * example_time * example_time)
+                
+                # Add state variable to hold softmax of output
+                model_copy.add_var("Softmax", "scalar", 0.0,
+                                    VarAccess.READ_ONLY_DUPLICATE)
+                
+                # Add state variable to hold TFirstSpike from previous trial
+                # **YUCK** REALLY should be timepoint but then you can't softmax
+                model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
+                                    VarAccess.READ_ONLY_DUPLICATE)
+                dynamics_code = f"""
+                    LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
+                    LambdaV *= Alpha;
+                        
+                    if (BackPhantomSpike) {{
+                        LambdaV += {phantom_scale / self.batch_size};
+                        BackPhantomSpike = false;
+                    }}
+                    // YUCK - need to trigger a pretend back_spike if no spike occurred to keep in operating regime
+                    if (Trial > 0 && t == backT && TFirstSpikeBack < -backT && id == YTrueBack){{
+                        BackPhantomSpike = true;
+                    }}
+                    """
+
+                # On backward pass transition, update LambdaV
+                # **THOMAS** why are we checking TFirstSpikeBack here? This only happens when BackSpike
+                # **THOMAS** why are we dividing by what looks like softmax temperature?
+                transition_code = f"""
+                    const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
+                    LambdaV += iMinusVRecip * (Vthresh * LambdaV);
+                    if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                        if (id == YTrueBack) {{
+                            const scalar fst = {example_time} - TFirstSpikeBack;
+                            LambdaV += iMinusVRecip * (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (({1.01 * example_time} - fst) * ({1.01 * example_time} - fst))) / {self.batch_size});
+                        }}
+                        else {{
+                            LambdaV -= iMinusVRecip * Softmax / ({self.softmax_temperature * self.batch_size});
+                        }}
+                    }}
+                    
+                    """
+
+                # Add reset logic to reset adjoint state variables 
+                # as well as any state variables from the original model
+                compile_state.add_neuron_reset_vars(
+                    pop, [("TFirstSpikeBack", "scalar", "TFirstSpike")] + reset_vars,
+                    True, False)
+                
+                # Add second reset custom update to reset YTrueBack to YTrue
+                # **NOTE** seperate as these are SHARED_NEURON variables
+                compile_state.add_neuron_reset_vars(
+                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+        
+                # Add code to start of sim code to run backwards pass 
+                # and handle back spikes with correct LIF dynamics
+                model_copy.prepend_sim_code(
+                    neuron_backward_pass.substitute(
+                        max_spikes=self.max_spikes,
+                        example_time=(self.example_timesteps * self.dt),
+                        dynamics=dynamics_code,
+                        transition=transition_code))
+
+                # Prepend (as it accesses the pre-reset value of V) 
+                # code to reset to write spike time and I-V to ring buffer
+                model_copy.prepend_reset_code(
+                    neuron_reset.substitute(
+                        max_spikes=self.max_spikes,
+                        write="RingIMinusV[ringOffset + RingWriteOffset] = Isyn - V;",
+                        strict_check=(neuron_reset_strict_check 
+                                      if self.strict_buffer_checking
+                                      else "")))
+                
+                # Add custom updates to calculate softmax from TFirstSpike
+                compile_state.batch_softmax_populations.append(
+                    (pop, "TFirstSpike", "Softmax"))
+            # Otherwise, unsupported readout type
+            else:
+                raise NotImplementedError(
+                    f"EventProp compiler with LeakyIntegrateFire output "
+                    f"neurons only supports 'FirstSpikeTime' readouts") 
         # Otherwise, neuron type is unsupported
         else:
             raise NotImplementedError(
                 f"EventProp compiler doesn't support "
-                f"{type(pop.neuron).__name__} neurons")
+                f"{type(pop.neuron).__name__} output neurons")
         
         return model_copy
     
@@ -1211,8 +1350,9 @@ class EventPropCompiler(Compiler):
 
         return model_copy
 
-    def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
-                                           input_var_name: str):
+    def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop,
+                                           input_var_name: str,
+                                           temperature: float):
         # Create custom update model to implement 
         # first softmax pass and add to model
         softmax_1 = CustomUpdateModel(
@@ -1227,7 +1367,7 @@ class EventPropCompiler(Compiler):
         # Create custom update model to implement 
         # second softmax pass and add to model
         softmax_2 = CustomUpdateModel(
-            softmax_2_model, {}, {"SumExpVal": 0.0},
+            softmax_2_model, {"Temp": temperature}, {"SumExpVal": 0.0},
             {"Val": create_var_ref(genn_pop, input_var_name),
              "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
 
@@ -1240,6 +1380,7 @@ class EventPropCompiler(Compiler):
         # third softmax pass and add to model
         softmax_3 = CustomUpdateModel(
             {
+                "params": ["Temp"],
                 "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
                              ("MaxVal", "scalar", VarAccessMode.READ_ONLY),
                              ("SumExpVal", "scalar", VarAccessMode.READ_ONLY),
@@ -1250,7 +1391,7 @@ class EventPropCompiler(Compiler):
                 RingOutputLossTerm[ringOffset + RingWriteOffset]= exp(Val - MaxVal) / SumExpVal;
                 RingWriteOffset++;
                 """}, 
-            {}, {},
+            {"Temp": temperature}, {},
             {"Val": create_var_ref(genn_pop, input_var_name),
              "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
              "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
