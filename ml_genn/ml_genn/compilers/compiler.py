@@ -37,21 +37,23 @@ softmax_1_model = {
 
 # Second pass of softmax - calculate scaled sum of exp(value)
 softmax_2_model = {
+    "params": [("Temp", "scalar")],
     "vars": [("SumExpVal", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_SUM)],
     "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
                  ("MaxVal", "scalar", VarAccessMode.READ_ONLY)],
     "update_code": """
-    SumExpVal = exp(Val - MaxVal);
+    SumExpVal = exp((Val - MaxVal) / Temp);
     """}
 
 # Third pass of softmax - calculate softmax value
 softmax_3_model = {
+    "params": [("Temp", "scalar")],
     "var_refs": [("Val", "scalar", VarAccessMode.READ_ONLY),
                  ("MaxVal", "scalar", VarAccessMode.READ_ONLY),
                  ("SumExpVal", "scalar", VarAccessMode.READ_ONLY),
                  ("SoftmaxVal", "scalar")],
     "update_code": """
-    SoftmaxVal = exp(Val - MaxVal) / SumExpVal;
+    SoftmaxVal = exp((Val - MaxVal) / Temp) / SumExpVal;
     """}
 
 def set_dynamic_param(param_names, set_param_dynamic):
@@ -343,7 +345,8 @@ class Compiler:
 
     def add_softmax_custom_updates(self, genn_model, genn_pop, 
                                    input_var_name: str, output_var_name: str,
-                                   custom_update_group_prefix: str = ""):
+                                   custom_update_group_prefix: str = "",
+                                   temperature: float = 1.0):
         """Adds a numerically stable softmax to the model:
         
         .. math::
@@ -379,7 +382,7 @@ class Compiler:
         # Create custom update model to implement 
         # second softmax pass and add to model
         softmax_2 = CustomUpdateModel(
-            softmax_2_model, {}, {"SumExpVal": 0.0},
+            softmax_2_model, {"Temp": temperature}, {"SumExpVal": 0.0},
             {"Val": create_var_ref(genn_pop, input_var_name),
              "MaxVal": create_var_ref(genn_softmax_1, "MaxVal")})
 
@@ -391,7 +394,7 @@ class Compiler:
         # Create custom update model to implement 
         # third softmax pass and add to model
         softmax_3 = CustomUpdateModel(
-            softmax_3_model, {}, {},
+            softmax_3_model, {"Temp": temperature}, {},
             {"Val": create_var_ref(genn_pop, input_var_name),
              "MaxVal": create_var_ref(genn_softmax_1, "MaxVal"),
              "SumExpVal": create_var_ref(genn_softmax_2, "SumExpVal"),
