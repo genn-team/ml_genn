@@ -1,7 +1,7 @@
 import numpy as np
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
-from ml_genn.callbacks import Checkpoint
+from ml_genn.callbacks import Checkpoint, OptimiserParamSchedule
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
@@ -35,11 +35,11 @@ with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
                                   NUM_INPUT)
-    hidden = Layer(Dense(Normal(mean=0.078, sd=0.045)), 
+    hidden = Layer(Dense(Normal(mean=1.5, sd=0.78)), 
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
                                       tau_refrac=None),
                    NUM_HIDDEN, Exponential(5.0))
-    output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
+    output = Layer(Dense(Normal(mean=0.93, sd=0.1)),
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
                                       tau_refrac=None,
                                       readout="first_spike_time"),
@@ -49,15 +49,19 @@ max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 optimiser=Adam(1e-2), batch_size=BATCH_SIZE,
-                                 softmax_temperature=0.5, dt=DT,
+                                 optimiser=Adam(0.003, 0.9, 0.99), batch_size=BATCH_SIZE,
+                                 softmax_temperature=0.5, ttfs_alpha=0.1, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
     with compiled_net:
-        # Evaluate model on numpy dataset
+        def alpha_schedule(epoch, alpha):
+            return 0.003 * (0.998 ** epoch)
+
+        # Evaluate model on dataset
         start_time = perf_counter()
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
+        callbacks = ["batch_progress_bar", Checkpoint(serialiser), 
+                     OptimiserParamSchedule("alpha", alpha_schedule)]
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
