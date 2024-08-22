@@ -1115,28 +1115,36 @@ class EventPropCompiler(Compiler):
                     LambdaV *= Alpha;
                         
                     if (BackPhantomSpike) {{
+                        const float oldLambdaV = LambdaV;
                         LambdaV += {phantom_scale / self.batch_size};
                         BackPhantomSpike = false;
+                        if(batch % 10 == 0 && batch < 100) {{
+                            printf("Phantom spike trial %u, batch %u, id %u, backT: %f (%f)\\n", Trial, batch, id, backT, LambdaV - oldLambdaV);
+                        }}
                     }}
                     // YUCK - need to trigger a pretend back_spike if no spike occurred to keep in operating regime
-                    if (Trial > 0 && t == backT && TFirstSpikeBack < -backT && id == YTrueBack){{
+                    if (Trial > 0 && backT == {example_time - self.dt} && TFirstSpikeBack < -{example_time} && id == YTrueBack){{
                         BackPhantomSpike = true;
                     }}
                     """
 
-                # On backward pass transition, update LambdaV
-                # **THOMAS** why are we checking TFirstSpikeBack here? This only happens when BackSpike
+                # On backward pass transition, update LambdaV and, if this spike is first spike, apply drive
                 # **THOMAS** why are we dividing by what looks like softmax temperature?
                 transition_code = f"""
                     const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
                     LambdaV += iMinusVRecip * (Vthresh * LambdaV);
                     if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                        const float oldLambdaV = LambdaV;
                         if (id == YTrueBack) {{
                             const scalar fst = {example_time} - TFirstSpikeBack;
                             LambdaV += iMinusVRecip * (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (({1.01 * example_time} - fst) * ({1.01 * example_time} - fst))) / {self.batch_size});
                         }}
                         else {{
                             LambdaV -= iMinusVRecip * Softmax / ({self.softmax_temperature * self.batch_size});
+                        }}
+                        
+                        if(batch % 10 == 0 && batch < 100) {{
+                            printf("Back spike trial %u, batch %u, id %u, backT: %f TFirstSpikeBack: %f (%f)\\n", Trial, batch, id, backT, TFirstSpikeBack, LambdaV - oldLambdaV);
                         }}
                     }}
                     
