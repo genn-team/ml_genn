@@ -93,7 +93,7 @@ if TRAIN:
             
             #for i in NUM_OUTPUT:
             for j in range(NUM_OUTPUT):
-                axes[3,i].plot(timesteps, (j * 0.2) + cb_data["OutputLambdaV"][BATCH_SIZE + (i * 10)][::-1,j],
+                axes[3,i].plot(timesteps, (j * 0.002) + cb_data["OutputLambdaV"][BATCH_SIZE + (i * 10)][::-1,j],
                                linestyle=("-" if labels[i * 10] == j else "--"))
                 #axes[3,i].plot(j + cb_data["OutputLambdaI"][BATCH_SIZE + (i * 10)][::-1,j])
             axes[3,i].set_xlabel("Time [ms]")
