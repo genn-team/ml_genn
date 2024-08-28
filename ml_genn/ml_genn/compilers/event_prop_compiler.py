@@ -292,7 +292,7 @@ learnable_delay_weight_update_model = {
     "pre_event_syn_code": """
     const int delay = max(0, min(MaxDelay, (int)round(d)));
     Gradient -= (LambdaI_post[delay] * TauSyn);
-    DelayGradient += g * (LambdaI_post[delay] - LambdaV_post[delay]);
+    DelayGradient -= g * (LambdaI_post[delay] - LambdaV_post[delay]);
     """}
 
 # Weight update model used on non-trainable connections
