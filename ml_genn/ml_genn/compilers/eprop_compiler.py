@@ -526,13 +526,13 @@ class EPropCompiler(Compiler):
             connection_populations[c].pre_target_var = "ISynFeedback"
 
         # Add optimisers to connection weights that require them
-        optimisers = []
+        optimiser_cus = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
             cu = self._create_optimiser_custom_update(
                 f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                 create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True)
-            optimisers.append((self._optimiser, cu))
+            optimiser_cus.append(cu)
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -540,7 +540,7 @@ class EPropCompiler(Compiler):
             cu = self._create_optimiser_custom_update(
                 f"Bias{i}", create_var_ref(genn_pop, "Bias"),
                 create_var_ref(genn_pop, "DeltaBias"), genn_model, False)
-            optimisers.append((self._optimiser, cu))
+            optimiser_cus.append(cu)
 
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
@@ -556,7 +556,7 @@ class EPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(optimisers) > 0:
+        if len(optimiser_cus) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
@@ -573,6 +573,11 @@ class EPropCompiler(Compiler):
             base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
             base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
+        
+        # Build list of optimisers and their custom updates
+        optimisers = []
+        if len(optimiser_cus) > 0:
+            optimisers.append((self._optimiser, optimiser_cus))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,

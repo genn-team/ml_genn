@@ -1073,7 +1073,8 @@ class EventPropCompiler(Compiler):
             connection_populations[c].pre_target_var = "RevISyn"
 
         # Loop through connections that require optimisers
-        optimisers = []
+        weight_optimiser_cus = []
+        delay_optimiser_cus = []
         for i, (c, w, d) in enumerate(compile_state.optimiser_connections):
             genn_pop = connection_populations[c]
             
@@ -1087,7 +1088,7 @@ class EventPropCompiler(Compiler):
                     self._optimiser, genn_model)
                 
                 # Add custom update to list of optimisers
-                optimisers.append((self._optimiser, cu_weight))
+                weight_optimiser_cus.append(cu_weight)
 
                 # Add gradient to list of gradient vars to zero
                 gradient_vars.append(("Gradient", "scalar", 0.0))
@@ -1102,7 +1103,7 @@ class EventPropCompiler(Compiler):
                     (0.0, c.max_delay_steps))
 
                 # Add custom update to list of optimisers
-                optimisers.append((self._delay_optimiser, cu_delay))
+                delay_optimiser_cus.append(cu_delay)
                 
                 # Add gradient to list of gradient vars to zero
                 gradient_vars.append(("DelayGradient", "scalar", 0.0))
@@ -1143,7 +1144,7 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(optimisers) > 0:
+        if len(weight_optimiser_cus) > 0 or len(delay_optimiser_cus) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
@@ -1179,6 +1180,13 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+        
+        # Build list of optimisers and their custom updates
+        optimisers = []
+        if len(weight_optimiser_cus) > 0:
+            optimisers.append((self._optimiser, weight_optimiser_cus))
+        if len(delay_optimiser_cus) > 0:
+            optimisers.append((self._delay_optimiser, delay_optimiser_cus))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
