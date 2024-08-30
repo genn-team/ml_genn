@@ -2,7 +2,7 @@ import numpy as np
 
 from typing import Iterator, Sequence, Union
 from pygenn import SynapseMatrixType
-from .compiler import Compiler, ZeroInSyn
+from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
@@ -379,14 +379,15 @@ class InferenceCompiler(Compiler):
                                                   neuron_populations,
                                                   connection_populations)
 
-        base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
-
         # If insyn should be reset between batches
         if self.reset_in_syn_between_batches:
-            # Add callbacks to zero insyn on all connections requiring them
-            # **NOTE** it would be great to be able to do this on device
-            for c in compile_state.in_syn_zero_conns:
-                base_callbacks.append(ZeroInSyn(connection_populations[c]))
+            # Create custom updates in "Reset" group to zero out-post
+            for i, c in enumerate(compile_state.in_syn_zero_conns):
+                self.add_out_post_zero_custom_update(
+                    genn_model, connection_populations[c],
+                    "Reset", f"CUZeroOutPost{i}")
+    
+        base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
 
         return CompiledInferenceNetwork(genn_model, neuron_populations,
                                         connection_populations,

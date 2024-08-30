@@ -1,6 +1,6 @@
 import numpy as np
 
-from typing import Optional
+from typing import List, Optional, Tuple
 from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -21,9 +21,9 @@ from ..serialisers import default_serialisers
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
-                 losses, optimiser, example_timesteps: int,
+                 losses, example_timesteps: int,
                  base_train_callbacks: list, base_validate_callbacks: list,
-                 optimiser_custom_updates: list,
+                 optimisers: List[Tuple],
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
@@ -32,11 +32,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
             communicator, example_timesteps)
 
         self.losses = losses
-        self.optimiser = optimiser
         self.example_timesteps = example_timesteps
         self.base_train_callbacks = base_train_callbacks
         self.base_validate_callbacks = base_validate_callbacks
-        self.optimiser_custom_updates = optimiser_custom_updates
+        self.optimisers = optimisers
         self.checkpoint_connection_vars = checkpoint_connection_vars
         self.checkpoint_population_vars = checkpoint_population_vars
         self.reset_time_between_batches = reset_time_between_batches
@@ -49,28 +48,32 @@ class CompiledTrainingNetwork(CompiledNetwork):
     def train(self, x: dict, y: dict, num_epochs: int, 
               start_epoch: int = 0, shuffle: bool = True,
               metrics: MetricsType = "sparse_categorical_accuracy",
-              callbacks=[BatchProgressBar()], validation_split: float = 0.0,
+              callbacks=[BatchProgressBar()],
+              validation_callbacks=[BatchProgressBar()],
+              validation_split: float = 0.0,
               validation_x: Optional[dict] = None, 
               validation_y: Optional[dict] = None):
         """ Train model on an input in numpy format against labels
 
         Args:
-            x:                  Dictionary of training inputs
-            y:                  Dictionary of training labels 
-                                to compare predictions against
-            num_epochs:         Number of epochs to train for
-            start_epoch:        Epoch to stasrt training from
-            shuffle:            Should training data be shuffled between epochs?
-            metrics:            Metrics to calculate.
-            callbacks:          List of callbacks to run during training.
-            validation_split:   Float between 0 and 1 specifying the fraction
-                                of the training data to use for validation.
-            validation_x:       Dictionary of validation inputs (cannot be
-                                used at same time as ``validation_split``)
-            validation_y:       Dictionary of validation labels (cannot be
-                                used at same time as ``validation_split``)
-        """
-        
+            x:                      Dictionary of training inputs
+            y:                      Dictionary of training labels 
+                                    to compare predictions against
+            num_epochs:             Number of epochs to train for
+            start_epoch:            Epoch to stasrt training from
+            shuffle:                Should training data be shuffled
+                                    between epochs?
+            metrics:                Metrics to calculate.
+            callbacks:              List of callbacks to run during training.
+            validation_callbacks:   List of callbacks to run during validation
+            validation_split:       Float between 0 and 1 specifying the
+                                    fraction of the training data to use
+                                    for validation.
+            validation_x:           Dictionary of validation inputs (cannot be
+                                    used at same time as ``validation_split``)
+            validation_y:           Dictionary of validation labels (cannot be
+                                    used at same time as ``validation_split``)
+        """        
         # If validation split is specified
         if validation_split != 0.0:
             # Check validation data isn't also provided
@@ -141,7 +144,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             # Create seperate callback list and begin testing
             num_validate_batches = (x_validate_size + batch_size - 1) // batch_size
             validate_callback_list = CallbackList(
-                self.base_validate_callbacks + callbacks,
+                self.base_validate_callbacks + validation_callbacks,
                 compiled_network=self,
                 num_batches=num_validate_batches, 
                 num_epochs=num_epochs)
@@ -315,9 +318,11 @@ class CompiledTrainingNetwork(CompiledNetwork):
             metrics[o].update(y_true, out_y_pred[:len(y_true)],
                               self.communicator)
 
-        # Loop through optimiser custom updates and set step
-        for c in self.optimiser_custom_updates:
-            self.optimiser.set_step(c, step)
+        # Loop through optimisers
+        for o, custom_updates in self.optimisers:
+            # Set step on all custom updates
+            for c in custom_updates:
+                o.set_step(c, step)
 
         # End batch
         callback_list.on_batch_end(batch, metrics)

@@ -3,6 +3,7 @@ from .callback import Callback
 from .checkpoint import Checkpoint
 from .conn_var_recorder import ConnVarRecorder
 from .custom_update import (CustomUpdateOnBatchBegin, CustomUpdateOnBatchEnd,
+                            CustomUpdateOnEpochBegin, CustomUpdateOnEpochEnd,
                             CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd)
 from .optimiser_param_schedule import OptimiserParamSchedule
 from .progress_bar import BatchProgressBar

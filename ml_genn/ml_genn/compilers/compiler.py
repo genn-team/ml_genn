@@ -16,7 +16,8 @@ from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import copy, deepcopy
-from pygenn import (create_custom_update_model, create_neuron_model,
+from pygenn import (create_custom_update_model, create_den_delay_var_ref,
+                    create_neuron_model, create_out_post_var_ref,
                     create_postsynaptic_model, create_weight_update_model,
                     create_var_ref, init_postsynaptic, init_weight_update)
 from string import digits
@@ -24,7 +25,7 @@ from .weight_update_models import (static_pulse_model,
                                    static_pulse_delay_model,
                                    signed_static_pulse_model,
                                    signed_static_pulse_delay_model)
-from ..utils.value import is_value_constant
+from ..utils.value import is_value_array, is_value_constant
 
 # First pass of softmax - calculate max
 softmax_1_model = {
@@ -82,6 +83,7 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
                               param_vals={}, var_vals={}, var_refs={})
 
     # Loop through reset vars
+    broadcast_vars = set(r[0] for r in reset_vars)
     for name, type, value in reset_vars:
         # Add variable reference
         model.add_var_ref(name, type, var_ref_creator(name))
@@ -95,6 +97,9 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
                 # Add read-only variable reference to other variable
                 model.add_var_ref(value, type, var_ref_creator(value))
                 model.set_var_ref_access_mode(value, VarAccessMode.READ_ONLY)
+            # Otherwise, remove it from set to broadcast
+            else:
+                broadcast_vars.remove(value)
 
             # Add code to set var
             model.append_update_code(f"{name} = {value};")
@@ -105,6 +110,10 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
             # Add code to set var
             model.append_update_code(f"{name} = {name}Reset;")
+
+    # Set broadcast access modes on variables for which this is possible
+    for b in broadcast_vars:
+        model.set_var_ref_access_mode(b, VarAccessMode.BROADCAST)
 
     return model
 
@@ -127,14 +136,6 @@ class SupportedMatrixType:
         # the highest priority from possible
         else:
             return min(possible, key=lambda p: self._supported[p])
-
-class ZeroInSyn(Callback):
-    def __init__(self, genn_syn_pop):
-        self.genn_syn_pop = genn_syn_pop
-
-    def on_batch_begin(self, batch):
-        self.genn_syn_pop.out_post.view[:]= 0.0
-        self.genn_syn_pop.out_post.push_to_device()
 
 
 class Compiler:
@@ -175,17 +176,44 @@ class Compiler:
         """
         return None
 
-    def calculate_delay(self, conn: Connection, delay, compile_state):
-        """Apply any compiler-specific processing to 
-        delay associated with a connection.
+    def apply_delay(self, genn_pop, conn: Connection,
+                    delay, compile_state):
+        """Apply delay to synapse population in compiler-specific manner
         
         Args:
+            genn_pop:       GeNN synapse population to apply delay to
             conn:           Connection synapse model is associated with
             delay:          Base delay specified by connectivity
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        return delay
+        
+        # If delays are constant, use as axonal delay
+        if is_value_constant(delay):
+            genn_pop.axonal_delay_steps = delay
+        # Otherwise, if maximum delay steps is specified
+        elif conn.max_delay_steps is not None:
+            # Check delay fits in 8-bit limit
+            if conn.max_delay_steps > 255:
+                raise NotImplmentedError(f"Maximum of {conn.max_delay_steps} "
+                                         f"delay steps for Connection "
+                                         f"{conn.name} exceeds 255")
+            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
+        # Otherwise, if delays are specified as an array, 
+        # calculate maximum delay steps from array 
+        elif is_value_array(delay):
+            # Check max delay fits in 8-bit limit
+            max_delay_steps = np.amax(delay) + 1
+            if max_delay_steps > 255:
+                raise NotImplmentedError(f"Maximum delay of {max_delay_steps}"
+                                         f"for Connection {conn.name} "
+                                         f"exceeds 255")
+            
+            genn_pop.max_dendritic_delay_timesteps = max_delay_steps
+        else:
+            raise RuntimeError(f"Maximum delay associated with Connection "
+                               f"{conn.name} cannot be determined "
+                               f"automatically, please set max_delay_steps")
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state) -> NeuronModel:
@@ -292,6 +320,26 @@ class Compiler:
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
         return genn_cu
+    
+    def add_out_post_zero_custom_update(self, genn_model, genn_syn_pop,
+                                        group: str, name: str):
+        # Build list of variables to reset
+        has_delay = (genn_syn_pop.max_dendritic_delay_timesteps > 1)
+        out_post_vars = [("OutPost", "scalar", 0.0)]
+        if has_delay:
+            out_post_vars.append(("DenDelay", "scalar", 0.0))
+
+        # Create reset model
+        zero_out_post_model = create_reset_custom_update(
+            out_post_vars,
+            lambda name: (create_out_post_var_ref(genn_syn_pop) 
+                          if name == "OutPost"
+                          else create_den_delay_var_ref(genn_syn_pop)))
+        
+        # Add GeNN custom update to model
+        self.add_custom_update(
+            genn_model, zero_out_post_model, 
+            group, name)
 
     def add_softmax_custom_updates(self, genn_model, genn_pop, 
                                    input_var_name: str, output_var_name: str,
@@ -491,10 +539,6 @@ class Compiler:
                 conn.connectivity.get_snippet(conn,
                                               self.supported_matrix_type)
 
-            # Calculate delay
-            delay = self.calculate_delay(conn, connect_snippet.delay,
-                                         compile_state)
-
             # Build weight update model
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
@@ -529,10 +573,10 @@ class Compiler:
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
                                   psm_neuron_var_refs),
                 connect_snippet.snippet)
-
-            # If delays are constant, use as axonal delay
-            if is_value_constant(delay):
-                genn_pop.axonal_delay_steps = delay
+            
+            # Apply delay
+            self.apply_delay(genn_pop, conn, connect_snippet.delay,
+                             compile_state)
 
             # If connectivity snippet has pre and postsynaptic
             # indices, set them in synapse group

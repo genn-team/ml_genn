@@ -526,21 +526,21 @@ class EPropCompiler(Compiler):
             connection_populations[c].pre_target_var = "ISynFeedback"
 
         # Add optimisers to connection weights that require them
-        optimiser_custom_updates = []
+        optimiser_cus = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
-            optimiser_custom_updates.append(
-                self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                    create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True))
+            cu = self._create_optimiser_custom_update(
+                f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
+                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True)
+            optimiser_cus.append(cu)
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
             genn_pop = neuron_populations[p]
-            optimiser_custom_updates.append(
-                self._create_optimiser_custom_update(
-                    f"Bias{i}", create_var_ref(genn_pop, "Bias"),
-                    create_var_ref(genn_pop, "DeltaBias"), genn_model, False))
+            cu = self._create_optimiser_custom_update(
+                f"Bias{i}", create_var_ref(genn_pop, "Bias"),
+                create_var_ref(genn_pop, "DeltaBias"), genn_model, False)
+            optimiser_cus.append(cu)
 
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
@@ -556,7 +556,7 @@ class EPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(optimiser_custom_updates) > 0:
+        if len(optimiser_cus) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
@@ -573,12 +573,17 @@ class EPropCompiler(Compiler):
             base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
             base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_validate_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
+        
+        # Build list of optimisers and their custom updates
+        optimisers = []
+        if len(optimiser_cus) > 0:
+            optimisers.append((self._optimiser, optimiser_cus))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            self.communicator, compile_state.losses, self._optimiser,
+            self.communicator, compile_state.losses,
             self.example_timesteps, base_train_callbacks,
-            base_validate_callbacks, optimiser_custom_updates,
+            base_validate_callbacks, optimisers,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
@@ -602,13 +607,13 @@ class EPropCompiler(Compiler):
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
             optimiser_model = self._optimiser.get_model(reduced_gradient, 
-                                                        var_ref, False)
+                                                        var_ref, False, None)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
             optimiser_model = self._optimiser.get_model(
-                gradient_ref, var_ref, True)
+                gradient_ref, var_ref, True, None)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
