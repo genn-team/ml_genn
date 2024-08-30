@@ -9,7 +9,6 @@ from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
-from tonic import DiskCachedDataset
 from tonic.datasets import SHD
 
 from time import perf_counter
@@ -31,11 +30,8 @@ DT = 1.0
 
 
 class EaseInSchedule(Callback):
-    def __init__(self):
-        pass
-
     def set_params(self, compiled_network, **kwargs):
-        self._optimisers = [optimiser[0] for optimiser in compiled_network.optimisers[:3]]
+        self._optimisers = [o for o, _ in compiled_network.optimisers]
 
     def on_batch_begin(self, batch):
         # Set parameter to return value of function
@@ -55,7 +51,7 @@ class Shift:
         # Shift events
         events_copy = copy.deepcopy(events)
         events_copy["x"] = events_copy["x"] + np.random.randint(-self.f_shift, self.f_shift)
-        
+
         # Delete out of bound events
         events_copy = np.delete(
             events_copy,
@@ -69,13 +65,12 @@ class Blend:
         self.n_blend = 7644
         self.sensor_size = sensor_size
     def __call__(self, dataset: list, classes: list) -> list:
-        
         for i in range(self.n_blend):
             idx = np.random.randint(0,len(dataset))
             idx2 = np.random.randint(0,len(classes[dataset[idx][1]]))
             assert dataset[idx][1] == dataset[classes[dataset[idx][1]][idx2]][1]
             dataset.append((self.blend(dataset[idx][0], dataset[classes[dataset[idx][1]][idx2]][0]), dataset[idx][1]))
-            
+
         return dataset
 
     def blend(self, X1, X2):
@@ -111,7 +106,7 @@ class Delay:
         self.num_input = num_input
     def __call__(self, events: np.ndarray) -> np.ndarray:
         delayed_events = [events]
-        
+
         for n in range(1, self.n_delay):
             curr_event = copy.deepcopy(events)
             curr_event["x"] = curr_event["x"] + (n * self.num_input)
@@ -148,12 +143,12 @@ for i,j  in enumerate(idx[:7644]):
     # Calculate max spikes and max times
     max_spikes = max(max_spikes, len(events))
     latest_spike_time = max(latest_spike_time, np.amax(events["t"]) / 1000.0)
-    
+
 spikes_val = []
 labels_val = []
 for i in idx[7644:]:
     events, label = dataset[i]
-    
+
     events = np.delete(events, np.where(events["t"] >= 1000000))
 
     spikes_val.append(preprocess_tonic_spikes(delay(events), dataset.ordering,
@@ -209,8 +204,8 @@ max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 
 compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                 losses="sparse_categorical_crossentropy",
-                                reg_lambda_upper=5e-11, reg_lambda_lower=5e-11, 
-                                reg_nu_upper=14, max_spikes=1500, 
+                                reg_lambda_upper=5e-11, reg_lambda_lower=5e-11,
+                                reg_nu_upper=14, max_spikes=1500,
                                 optimiser=Adam(0.001 * 0.01), batch_size=BATCH_SIZE)
 compiled_net = compiler.compile(network)
 best_acc, best_e = 0, 0
@@ -218,7 +213,7 @@ with compiled_net:
     # Loop through epochs
     start_time = perf_counter()
     callbacks = [Checkpoint(serialiser), SpikeRecorder(hidden, key="hidden_spikes", record_counts=True), EaseInSchedule()]
-    
+
     for e in range(NUM_EPOCHS):
         # Apply augmentation to events and preprocess
         spikes_train = []
@@ -229,12 +224,13 @@ with compiled_net:
                                                     (dataset.sensor_size[0]*N_DELAY,
                                                     dataset.sensor_size[1],dataset.sensor_size[2])))
             labels_train.append(label)
-        
+
         # Train epoch
-        train_metrics, valid_metrics, train_cb, valid_cb  = compiled_net.train({input: spikes_train},
-                                            {output: labels_train},
-                                            start_epoch=e, num_epochs=1, 
-                                            shuffle=True, callbacks=callbacks, validation_x={input: spikes_val}, validation_y={output: labels_val})
+        train_metrics, valid_metrics, train_cb, valid_cb  = compiled_net.train(
+            {input: spikes_train}, {output: labels_train},
+            start_epoch=e, num_epochs=1, shuffle=True,
+            callbacks=callbacks, validation_callbacks=[],
+            validation_x={input: spikes_val}, validation_y={output: labels_val})
 
         hidden_spikes = np.zeros(NUM_HIDDEN)
         for cb_d in train_cb['hidden_spikes']:
@@ -248,10 +244,10 @@ with compiled_net:
         if valid_metrics[output].result > best_acc:
             best_acc = valid_metrics[output].result
             best_e = e
-        
+
     end_time = perf_counter()
-    
-    
+
+
     print(f"Training accuracy = {100 * train_metrics[output].result}%")
     print(f"Validation accuracy = {100 * valid_metrics[output].result}%")
 
