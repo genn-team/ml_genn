@@ -203,6 +203,8 @@ class UpdateTrial(Callback):
         self.genn_pop = genn_pop
 
     def on_batch_begin(self, batch: int):
+        logger.debug(f"Updating trial at start of batch {batch}")
+
         # Set dynamic parameter to batch ID
         self.genn_pop.set_dynamic_param_value("Trial", batch)
 
@@ -220,6 +222,8 @@ class CustomUpdateOnLastTimestep(Callback):
 
     def on_timestep_begin(self, timestep: int):
         if timestep == (self.example_timesteps - 1):
+            logger.debug(f"Running custom update {self.name} "
+                         f"at start of timestep {timestep}")
             self._compiled_network.genn_model.custom_update(self.name)
 
 
@@ -235,6 +239,8 @@ class CustomUpdateOnBatchEndNotFirst(Callback):
         
     def on_batch_end(self, batch, metrics):
         if batch > 0:
+            logger.debug(f"Running custom update {self.name} "
+                         f"at end of batch {batch}")
             self._compiled_network.genn_model.custom_update(self.name)
         
 # Standard EventProp weight update model
