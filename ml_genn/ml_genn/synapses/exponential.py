@@ -27,7 +27,7 @@ class Exponential(Synapse):
     Args:
         tau:    Time constant of input current [ms]
     """
-    tau = ValueDescriptor("ExpDecay", lambda val, dt: np.exp(-dt / val))
+    tau = ValueDescriptor(("ExpDecay", lambda val, dt: np.exp(-dt / val)))
 
     def __init__(self, tau: InitValue = 5.0):
         super(Exponential, self).__init__()

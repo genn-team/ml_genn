@@ -36,7 +36,7 @@ class LeakyIntegrateFire(Neuron):
     v_thresh = ValueDescriptor("Vthresh")
     v_reset = ValueDescriptor("Vreset")
     v = ValueDescriptor("V")
-    tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
+    tau_mem = ValueDescriptor(("Alpha", lambda val, dt: np.exp(-dt / val)))
     tau_refrac = ValueDescriptor("TauRefrac")
 
     @network_default_params
