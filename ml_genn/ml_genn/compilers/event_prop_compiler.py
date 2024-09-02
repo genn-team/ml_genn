@@ -86,7 +86,8 @@ default_params = {
                          "scale_i": True},
     LeakyIntegrateFireInput: {"relative_reset": False, 
                               "integrate_during_refrac": False,
-                              "scale_i": True}}
+                              "scale_i": True},
+    Exponential: {"scale_i": True}}
 
 def _get_tau_syn(pop):
     # Loop through incoming connections
