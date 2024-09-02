@@ -80,9 +80,19 @@ def get_genn_var_name(inst, name):
     # Get attribute from instance type
     d = getattr(type(inst), name)
 
-    # If attribute is a value descriptor, return GeNN name
+    # If attribute is a value descriptor
     if isinstance(d, ValueDescriptor):
-        return d.genn_name
+        # Find all untransformed GeNN variables it is responsible for
+        t = [g[0] for g in d.genn_transforms
+             if g[1] is None]
+        
+        # If there aren't any, give error
+        if len(t) == 0:
+            raise RuntimeError(f"There are no GenN variables which "
+                               f"directly map to varaible'{name}'")
+        # Otherwise, return first
+        else:
+            return t[0]
     else:
         raise RuntimeError(f"'{name}' is not a ValueDescriptor")
 
