@@ -92,15 +92,17 @@ def get_values(inst, name_types, dt, vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
+    # Build set of names we care about
     names = set(n[0] for n in name_types)
 
     # Loop through descriptors
     for n, d in descriptors:
-        # If this is a value descriptor
+        # If this is a value descriptor, update values with
+        # transformed values for variables we care about
         if isinstance(d, ValueDescriptor):
             vals.update({g: v for g, v in d.get_transformed(inst, dt).items()
                          if g in names})
-    
+
     return vals
 
 
@@ -109,14 +111,17 @@ def set_values(inst, vals):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
-    # Build dictionary mapping GeNN names to var descriptors
-    descriptors = {d.genn_name: d for n, d in descriptors
-                   if (isinstance(d, ValueDescriptor)
-                       and d.genn_name is not None)}
+    # Loop through descriptors
+    genn_descriptors = {}
+    for n, d in descriptors:
+        # If this is a value descriptor, build mapping from
+        # GeNN names it is responsible for to descriptor
+        if isinstance(d, ValueDescriptor):
+            genn_descriptors.update({g[0]: d for g in d.genn_transforms})
 
     # Loop through values
     for n, v in vals.items():
         # If there is a descriptor matching
         # this name, use it to set variable
-        if n in descriptors:
-            descriptors[n].__set__(inst, v)
+        if n in genn_descriptors:
+            genn_descriptors[n].__set__(inst, v)
