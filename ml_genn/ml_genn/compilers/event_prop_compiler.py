@@ -862,9 +862,11 @@ class EventPropCompiler(Compiler):
                     # Get tau_syn from population's incoming connections
                     tau_syn = _get_tau_syn(pop)
 
-                    # Add parameter with synaptic decay constant
-                    model_copy.add_param("Beta", "scalar",
-                                         np.exp(-self.dt / tau_syn))
+                    # Add parameters with synaptic decay and scale constants
+                    beta = np.exp(-self.dt / tau_syn)
+                    model_copy.add_param("Beta", "scalar", beta)
+                    model_copy.add_param("IsynScale", "scalar",
+                        self.dt / (tau_syn  * (1.0 - beta)))
 
                     # Add adjoint state variables
                     model_copy.add_var("LambdaV", "scalar", 0.0)
@@ -950,7 +952,7 @@ class EventPropCompiler(Compiler):
                     model_copy.prepend_reset_code(
                         neuron_reset.substitute(
                             max_spikes=self.max_spikes,
-                            write="RingIMinusV[ringOffset + RingWriteOffset] = Isyn - V;",
+                            write="RingIMinusV[ringOffset + RingWriteOffset] = (Isyn * IsynScale) - V;",
                             strict_check=(neuron_reset_strict_check 
                                           if self.strict_buffer_checking
                                           else "")))
