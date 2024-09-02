@@ -243,7 +243,23 @@ class CustomUpdateOnBatchEndNotFirst(Callback):
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
             self._compiled_network.genn_model.custom_update(self.name)
+
+class CustomUpdateOnFirstBatchEnd(Callback):
+    """Callback that triggers a GeNN custom update 
+    at the end of first batch."""
+    def __init__(self, name: str):
+        self.name = name
+
+    def set_params(self, compiled_network, **kwargs):
+        # Extract compiled network
+        self._compiled_network = compiled_network
         
+    def on_batch_end(self, batch, metrics):
+        if batch == 0:
+            logger.debug(f"Running custom update {self.name} "
+                         f"at end of batch {batch}")
+            self._compiled_network.genn_model.custom_update(self.name)
+
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
 weight_update_model = {
@@ -1125,7 +1141,7 @@ class EventPropCompiler(Compiler):
 
             # Add custom update
             self.add_custom_update(genn_model, zero_grad_model, 
-                                    "ZeroGradient", f"CUZeroConnGradient{i}")
+                                   "ZeroGradient", f"CUZeroConnGradient{i}")
 
         # Add per-batch softmax custom updates for each population that requires them
         for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
@@ -1159,8 +1175,8 @@ class EventPropCompiler(Compiler):
                     CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
             base_train_callbacks.append(
                 CustomUpdateOnBatchEndNotFirst("GradientLearn"))
-            base_validate_callbacks.append(
-                CustomUpdateOnEpochEnd("ZeroGradient"))
+            base_train_callbacks.append(
+                CustomUpdateOnFirstBatchEnd("ZeroGradient"))
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
