@@ -16,7 +16,7 @@ def plot_grads(ml_genn_filename, thomas_filename):
         
         for j in range(num_viz):
             ml_genn_actor = axes[j,i].plot(grad[i,:,synapse_inds[j]], alpha=0.5)[0]
-            thomas_actor = axes[j,i].plot(grad[i,:,synapse_inds[j]], alpha=0.5)[0]
+            thomas_actor = axes[j,i].plot(thomas_grad[i,:,synapse_inds[j]], alpha=0.5)[0]
 
     fig.legend([ml_genn_actor, thomas_actor], ["mlGeNN", "Thomas"],
                ncol=2, loc="lower center")
