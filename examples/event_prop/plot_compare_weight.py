@@ -1,5 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+
+def load_compare(filename):
+    prefix = "COMPARE_NO_LEARN_NO_REG"
+    path = "/its/home/jk421/genn_eventprop"
+    
+    return np.load(os.path.join(path, prefix + filename)
 
 def plot_weights(ml_genn_filename, thomas_filename):
     in_hid_weight = np.load(ml_genn_filename)

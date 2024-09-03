@@ -1,29 +1,38 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
+def load_compare(title):
+    prefix = "COMPARE_NO_LEARN_REG_"
+    path = "/its/home/jk421/genn_eventprop"
+    
+    return np.load(os.path.join(path, prefix + title + ".npy"))
+    
 in_spike_ids = np.load("in_spike_ids_hack.npz")
 in_spike_times = np.load("in_spike_times_hack.npz")
 hidden_spike_times = np.load("hidden_spike_times_hack.npz")
 hidden_spike_ids = np.load("hidden_spike_ids_hack.npz")
 hidden_lambda_i = np.load("hidden_lambda_i_hack.npy")
 hidden_lambda_v = np.load("hidden_lambda_v_hack.npy")
-hidden_rev_isyn = np.load("hidden_rev_isyn_copy_hack.npy")
+hidden_spike_time = np.load("hidden_spike_count_hack.npy")
+hidden_spike_time_back = np.load("hidden_spike_count_back_hack.npy")
 out_v = np.load("out_v_hack.npy")
 hidden_v = np.load("hidden_v_hack.npy")
 out_lambda_i = np.load("out_lambda_i_hack.npy")
 out_lambda_v = np.load("out_lambda_v_hack.npy")
 
-thomas_in_spike_ids = np.load("COMPARE_HACK_FABS_input_spike_ID.npy")
-thomas_in_spike_times = np.load("COMPARE_HACK_FABS_input_spike_t.npy") + 1.0
-thomas_hidden0_spike_ids = np.load("COMPARE_HACK_FABS_hidden0_spike_ID.npy")
-thomas_hidden0_spike_times = np.load("COMPARE_HACK_FABS_hidden0_spike_t.npy") + 1.0
-thomas_hidden_lambda_v = np.load("COMPARE_HACK_FABS_lambda_Vhidden0.npy")
-thomas_hidden_lambda_i = np.load("COMPARE_HACK_FABS_lambda_Ihidden0.npy")
-thomas_hidden_rev_isyn = np.load("COMPARE_HACK_FABS_revISynCopyhidden0.npy")
-thomas_out_v = np.load("COMPARE_HACK_FABS_Voutput.npy")
-thomas_hidden_v = np.load("COMPARE_HACK_FABS_Vhidden0.npy")
-thomas_out_lambda_v = np.load("COMPARE_HACK_FABS_lambda_Voutput.npy")
-thomas_out_lambda_i = np.load("COMPARE_HACK_FABS_lambda_Ioutput.npy")
+thomas_in_spike_ids = load_compare("input_spike_ID")
+thomas_in_spike_times = load_compare("input_spike_t") + 1.0
+thomas_hidden0_spike_ids = load_compare("hidden0_spike_ID")
+thomas_hidden0_spike_times = load_compare("hidden0_spike_t") + 1.0
+thomas_hidden_lambda_v = load_compare("lambda_Vhidden0")
+thomas_hidden_lambda_i = load_compare("lambda_Ihidden0")
+thomas_hidden_spike_time = load_compare("new_sNSumhidden0")
+thomas_hidden_spike_time_back = load_compare("sNSumhidden0")
+thomas_out_v = load_compare("Voutput")
+thomas_hidden_v = load_compare("Vhidden0")
+thomas_out_lambda_v = load_compare("lambda_Voutput")
+thomas_out_lambda_i = load_compare("lambda_Ioutput")
 
 num_trials = len(in_spike_ids)
 assert len(in_spike_times) == num_trials
@@ -47,12 +56,12 @@ spikes_fig.suptitle("Spikes")
 hid_fig, hid_axes = plt.subplots(10, num_trials, sharex="col", sharey="row")
 hid_fig.suptitle("Hidden layer lambda")
 
-hid_rev_fig, hid_rev_axes = plt.subplots(10, num_trials, sharex="col", sharey="row")
-hid_rev_fig.suptitle("Hidden layer reverse Isyn")
-
-
 hid_v_fig, hid_v_axes = plt.subplots(10, num_trials, sharex="col", sharey="row")
 hid_v_fig.suptitle("Hidden layer voltages")
+
+hid_spike_count_fig, hid_spike_count_axes = plt.subplots(10, num_trials, sharex="col", sharey="row")
+hid_spike_count_fig.suptitle("Hidden layer spike counts")
+
 
 out_fig, out_axes = plt.subplots(10, num_trials, sharex="col", sharey="row")
 out_fig.suptitle("Output layer lambda")
@@ -78,11 +87,18 @@ for i in range(num_trials):
     
     # Loop over hidden neurons
     for j in range(10):
+        assert np.all(np.isclose(hidden_spike_time_back[i,0,j], hidden_spike_time_back[i,:,j]))
+        assert np.all(np.isclose(thomas_hidden_spike_time_back[thomas_start_idx,0, j], thomas_hidden_spike_time_back[thomas_start_idx:thomas_end_idx,0, j]))
+
         # Plot mlGeNN values
         ml_genn_hid_v_actor = hid_v_axes[j, i].plot(hidden_v[i,:,j], alpha=0.5)[0]
         hid_lambda_v_actor = hid_axes[j,i].plot(hidden_lambda_v[i,:,j], alpha=0.5)[0]
         hid_lambda_i_actor = hid_axes[j,i].plot(hidden_lambda_i[i,:,j], alpha=0.5)[0]
-        ml_genn_hid_rev_isyn = hid_rev_axes[j,i].plot(hidden_rev_isyn[i,:,j], alpha=0.5)[0]
+        
+        hid_spike_count_axes[j,i].plot(hidden_spike_time[i,:,j], alpha=0.5)
+        
+        spike_count_axis = hid_axes[j,i].twinx()
+        hid_spike_count_actor = spike_count_axis.axhline(hidden_spike_time_back[i,0,j], alpha=0.5)
         
         # Plot Thomas
         thomas_hid_v_actor = hid_v_axes[j, i].plot(thomas_hidden_v[thomas_start_idx:thomas_end_idx,0, j],alpha=0.5)[0]
@@ -90,9 +106,12 @@ for i in range(num_trials):
                            linestyle="--", alpha=0.5, color=hid_lambda_v_actor.get_color())
         hid_axes[j,i].plot(thomas_hidden_lambda_i[thomas_start_idx:thomas_end_idx,0, j],
                            linestyle="--", alpha=0.5, color=hid_lambda_i_actor.get_color())
-        thomas_hid_rev_isyn = hid_rev_axes[j,i].plot(thomas_hidden_rev_isyn[thomas_start_idx:thomas_end_idx,0, j],
-                                                     alpha=0.5)[0]
-
+        
+        hid_spike_count_axes[j,i].plot(thomas_hidden_spike_time[thomas_start_idx:thomas_end_idx,0, j])
+        
+        spike_count_axis.axhline(thomas_hidden_spike_time_back[thomas_start_idx,0, j],
+                                 alpha=0.5, color=hid_spike_count_actor.get_color(), linestyle="--")
+        
     for j in range(10):
         # Plot mlGeNN values
         ml_genn_out_v_actor = out_v_axes[j, i].plot(out_v[i,:,j])[0]
@@ -122,20 +141,20 @@ spikes_axes[1,0].set_ylabel("Hidden spike ID")
 
 spikes_fig.legend([ml_genn_spike_actor, thomas_spike_actor],
                   ["mlGeNN", "Thomas"], loc="lower center", ncol=2)
-hid_fig.legend([hid_lambda_v_actor, hid_lambda_i_actor,],
-               ["LambdaV", "LambdaI"], loc="lower center", ncol=2)
+hid_fig.legend([hid_lambda_v_actor, hid_lambda_i_actor, hid_spike_count_actor],
+               ["LambdaV", "LambdaI", "Spike count"], loc="lower center", ncol=3)
 hid_v_fig.legend([ml_genn_hid_v_actor, thomas_hid_v_actor],
                  ["mlGeNN", "Thomas"], loc="lower center", ncol=2)
 out_fig.legend([out_lambda_v_actor, out_lambda_i_actor],
                ["LambdaV", "LambdaI"], loc="lower center", ncol=2)
 out_v_fig.legend([ml_genn_out_v_actor, thomas_out_v_actor],
                  ["mlGeNN", "Thomas"], loc="lower center", ncol=2)
-hid_rev_fig.legend([ml_genn_hid_rev_isyn, thomas_hid_rev_isyn],
-                   ["mlGeNN", "Thomas"], loc="lower center", ncol=2)
+
+hid_spike_count_fig.tight_layout(pad=0)
 spikes_fig.tight_layout(pad=0)
 hid_fig.tight_layout(pad=0)
 out_fig.tight_layout(pad=0)
 out_v_fig.tight_layout(pad=0)
 hid_v_fig.tight_layout(pad=0)
-hid_rev_fig.tight_layout(pad=0)
+
 plt.show()
