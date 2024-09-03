@@ -120,6 +120,7 @@ class CompileState:
         self._neuron_reset_vars = []
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
+        self.spike_count_populations = []
         self.batch_softmax_populations = []
         self.timestep_softmax_populations = []
         self.feedback_connections = []
@@ -350,6 +351,14 @@ gradient_batch_reduce_model = {
     "update_code": """
     ReducedGradient = Gradient;
     Gradient = 0;
+    """}
+
+spike_count_batch_reduce_model = {
+    "var_refs": [("SpikeCount", "int"),
+                 ("SpikeCountBatch", "int", VarAccessMode.REDUCE_SUM)],
+    "update_code": """
+    SpikeCountBatch = SpikeCount;
+    SpikeCount = 0;
     """}
 
 # Template used to generate backward passes for neurons
@@ -910,37 +919,54 @@ class EventPropCompiler(Compiler):
                     # If regularisation is enabled
                     # **THINK** is this LIF-specific?
                     if self.regulariser_enabled:
-                        # Add state variables to hold spike count 
-                        # during forward and backward pass
+                        # Add state variables to hold spike count
+                        # during forward and backward pass. 
+                        # **NOTE** SpikeCountBackSum is shared across
+                        # batches as it is the result of a reduction
                         model_copy.add_var("SpikeCount", "int", 0)
-                        model_copy.add_var("SpikeCountBack", "int", 0,
-                                           VarAccess.READ_ONLY_DUPLICATE)
+                        model_copy.add_var("SpikeCountBackBatch", "int", 0,
+                                           VarAccess.READ_ONLY)
 
                         # Add parameters for regulariser
-                        model_copy.add_param("RegNuUpper", "int",
-                                             self.reg_nu_upper)
+                        # **NOTE** this is multiplied by batch_size so it
+                        # can be compared directly to SpikeCountBackBatch
+                        model_copy.add_param("RegNuUpperBatch", "int",
+                                             self.reg_nu_upper * self.full_batch_size)
+                        
+                        # **NOTE** these are divided by batch size once to
+                        # make these batch-size-agnostic and again to take 
+                        # into account that we're operating on batch sums of spike counts
                         model_copy.add_param(
                             "RegLambdaUpper", "scalar",
-                            self.reg_lambda_upper / self.full_batch_size)
+                            self.reg_lambda_upper / (self.full_batch_size
+                                                     * self.full_batch_size))
                         model_copy.add_param(
                             "RegLambdaLower", "scalar",
-                            self.reg_lambda_lower / self.full_batch_size)
+                            self.reg_lambda_lower / (self.full_batch_size
+                                                     * self.full_batch_size))
 
-                        # Add reset variables to copy SpikeCount
-                        # into SpikeCountBack and zero SpikeCount
-                        additional_reset_vars.extend(
-                            [("SpikeCountBack", "int", "SpikeCount"),
-                             ("SpikeCount", "int", 0)])
+                        # If batch size is 1, add reset variables to copy SpikeCount
+                        # into SpikeCountBackBatch and zero SpikeCount
+                        # **NOTE** if batch size > 1, SpikeCountBackBatch is
+                        # calculated with a reduction which zeroes SpikeCount
+                        if self.full_batch_size == 1:
+                            additional_reset_vars.extend(
+                                [("SpikeCountBackBatch", "int", "SpikeCount"),
+                                ("SpikeCount", "int", 0)])
 
                         # Add additional transition code to apply regularisation
                         transition_code += """
-                        if (SpikeCountBack > RegNuUpper) {
-                            LambdaV -= RegLambdaUpper * (SpikeCountBack - RegNuUpper);
+                        if (SpikeCountBackSum > RegNuUpperBatch) {
+                            LambdaV -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
                         }
                         else {
-                            LambdaV -= RegLambdaLower * (SpikeCountBack - RegNuUpper);
+                            LambdaV -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
                         }
                         """
+                        
+                        # Add population to list of those that 
+                        # require a spike count reduction
+                        compile_state.spike_count_populations.append(pop)
 
                         # Add code to update SpikeCount in forward reset code
                         model_copy.append_reset_code("SpikeCount++;")
@@ -1144,13 +1170,13 @@ class EventPropCompiler(Compiler):
                                    "ZeroGradient", f"CUZeroConnGradient{i}")
 
         # Add per-batch softmax custom updates for each population that requires them
-        for i, (p, i, o) in enumerate(compile_state.batch_softmax_populations):
+        for p, i, o in compile_state.batch_softmax_populations:
             genn_pop = neuron_populations[p]
             self.add_softmax_custom_updates(genn_model, genn_pop,
                                             i, o, "Batch")
 
         # Add per-timestep softmax custom updates for each population that requires them
-        for i, (p, i) in enumerate(compile_state.timestep_softmax_populations):
+        for p, i in enumerate(compile_state.timestep_softmax_populations):
             # Create custom update model to implement 
             # first softmax pass and add to model
             genn_pop = neuron_populations[p]
@@ -1161,7 +1187,14 @@ class EventPropCompiler(Compiler):
             self.add_out_post_zero_custom_update(genn_model, genn_syn_pop,
                                                  "ZeroOutPost",
                                                  f"CUZeroOutPost{i}")
-
+        
+        # Loop through populations which require spike 
+        # count reductions add custom update
+        for i, p in enumerate(compile_state.spike_count_populations):
+            genn_pop = neuron_populations[p]
+            self._create_spike_count_reduce_custom_update(
+                genn_model, genn_pop, f"CUReduceSpikeCount{i}")
+            
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
@@ -1200,6 +1233,10 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
+        
+        # If spike count reduction is required at end of batch, add callback
+        if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
 
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
@@ -1278,6 +1315,7 @@ class EventPropCompiler(Compiler):
             "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
 
+    
     def _create_optimiser_custom_update(self, name_suffix, var_ref, 
                                         gradient_ref, optimiser, genn_model,
                                         clamp_var=None):
@@ -1310,3 +1348,19 @@ class EventPropCompiler(Compiler):
         return self.add_custom_update(genn_model, optimiser_model,
                                       "GradientLearn",
                                       "CUGradientLearn" + name_suffix)
+    
+    def _create_spike_count_reduce_custom_update(self, genn_model,
+                                                 genn_pop, name: str):
+        # If batch size is greater than 1
+        if self.full_batch_size > 1:
+            # Create custom update model to reduce spike count into a variable 
+            reduction_optimiser_model = CustomUpdateModel(
+                spike_count_batch_reduce_model, {}, {},
+                {"SpikeCount": create_var_ref(genn_pop, "SpikeCount"),
+                 "SpikeCountBatch": neuron_group(genn_pop, 
+                                                 "SpikeCountBackBatch")})
+
+            # Add GeNN custom update to model
+            self.add_custom_update(
+                genn_model, reduction_optimiser_model, 
+                "SpikeCountReduce", name)
