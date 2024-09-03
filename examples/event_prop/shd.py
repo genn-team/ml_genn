@@ -21,8 +21,7 @@ from ml_genn.compilers.event_prop_compiler import default_params
 
 NUM_HIDDEN = 256
 BATCH_SIZE = 32
-NUM_EPOCHS = 300
-EXAMPLE_TIME = 20.0
+NUM_EPOCHS = 100
 DT = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
