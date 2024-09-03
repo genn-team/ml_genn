@@ -956,7 +956,7 @@ class EventPropCompiler(Compiler):
 
                         # Add additional transition code to apply regularisation
                         transition_code += """
-                        if (SpikeCountBackSum > RegNuUpperBatch) {
+                        if (SpikeCountBackBatch > RegNuUpperBatch) {
                             LambdaV -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
                         }
                         else {
@@ -1357,8 +1357,8 @@ class EventPropCompiler(Compiler):
             reduction_optimiser_model = CustomUpdateModel(
                 spike_count_batch_reduce_model, {}, {},
                 {"SpikeCount": create_var_ref(genn_pop, "SpikeCount"),
-                 "SpikeCountBatch": neuron_group(genn_pop, 
-                                                 "SpikeCountBackBatch")})
+                 "SpikeCountBatch": create_var_ref(genn_pop, 
+                                                  "SpikeCountBackBatch")})
 
             # Add GeNN custom update to model
             self.add_custom_update(
