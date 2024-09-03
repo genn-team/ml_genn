@@ -89,7 +89,7 @@ if TRAIN:
                      VarRecorder(hidden, genn_var="LambdaV", key="hidden_lambda_v", example_filter=[0,32,64]),
                      VarRecorder(hidden, genn_var="LambdaI", key="hidden_lambda_i", example_filter=[0,32,64]),
                      VarRecorder(hidden, genn_var="SpikeCount", key="hidden_spike_count", example_filter=[0,32,64]),
-                     VarRecorder(hidden, genn_var="SpikeCountBack", key="hidden_spike_count_back", example_filter=[0,32,64]),
+                     VarRecorder(hidden, genn_var="SpikeCountBackBatch", key="hidden_spike_count_back", example_filter=[0,32,64]),
                      VarRecorder(output, genn_var="LambdaV", key="out_lambda_v", example_filter=[0,32,64]),
                      VarRecorder(output, genn_var="LambdaI", key="out_lambda_i", example_filter=[0,32,64]),
                      ConnVarRecorder(in_hid, "g", key="in_hid_g", example_filter=[0,32,64]),
