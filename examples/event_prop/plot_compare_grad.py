@@ -1,11 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
-def plot_grads(ml_genn_filename, thomas_filename):
+def load_compare(title):
+    prefix = "COMPARE_NO_LEARN_REG_"
+    path = "/its/home/jk421/genn_eventprop"
+    
+    return np.load(os.path.join(path, prefix + title + ".npy"))
+
+def plot_grads(ml_genn_filename, thomas_title):
     grad = np.load(ml_genn_filename)
     grad = np.reshape(grad, grad.shape[:2] + (-1,))
 
-    thomas_grad = np.load(thomas_filename)
+    thomas_grad = load_compare(thomas_title)
     thomas_grad = np.reshape(thomas_grad, grad.shape)
     
     num_viz = 20
@@ -24,9 +31,9 @@ def plot_grads(ml_genn_filename, thomas_filename):
    
     return fig, axes
 
-in_hid_fig, in_hid_axes = plot_grads("in_hid_grad_hack.npy", "COMPARE_HACK_FABS_dwin_to_hid.npy")
+in_hid_fig, in_hid_axes = plot_grads("in_hid_grad_hack.npy", "dwin_to_hid")
 in_hid_fig.suptitle("Input to hidden gradients")
 
-hid_out_fig, hid_out_axes = plot_grads("hid_out_grad_hack.npy", "COMPARE_HACK_FABS_dwhid_to_out.npy")
+hid_out_fig, hid_out_axes = plot_grads("hid_out_grad_hack.npy", "dwhid_to_out")
 hid_out_fig.suptitle("Hidden to output gradients")
 plt.show()
