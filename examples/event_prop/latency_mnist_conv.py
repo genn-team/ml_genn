@@ -43,8 +43,8 @@ with network:
     initial_hidden1_weight = Normal(mean=0.078, sd=0.045)
     hidden1 = Layer(Conv2D(initial_hidden1_weight, 16, 3, True),
                     LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                       tau_refrac=Nonee),
-                  synapse=Exponential(5.0), name="hidden1")
+                                       tau_refrac=None),
+                    synapse=Exponential(5.0), name="hidden1")
     initial_hidden2_weight = Normal(mean=0.078, sd=0.045)
     connectivity2 = (Dense(initial_hidden2_weight) if SPARSITY == 1.0 
                      else FixedProbability(SPARSITY, initial_hidden2_weight))
