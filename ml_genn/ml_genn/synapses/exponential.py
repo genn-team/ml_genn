@@ -12,13 +12,7 @@ if TYPE_CHECKING:
 
 from ..utils.value import is_value_initializer
 
-genn_model = {
-    "params": [("ExpDecay", "scalar")],
-    "sim_code":
-        """
-        injectCurrent(inSyn);
-        inSyn *= ExpDecay;
-        """}
+from ..utils.decorators import network_default_params
 
 class Exponential(Synapse):
     """Synapse model where inputs produce 
@@ -27,12 +21,15 @@ class Exponential(Synapse):
     Args:
         tau:    Time constant of input current [ms]
     """
-    tau = ValueDescriptor("ExpDecay", lambda val, dt: np.exp(-dt / val))
+    tau = ValueDescriptor(("ExpDecay", lambda val, dt: np.exp(-dt / val)),
+                          ("IScale", lambda val, dt: (val / dt) * (1.0 - np.exp(-dt / val))))
 
-    def __init__(self, tau: InitValue = 5.0):
+    @network_default_params
+    def __init__(self, tau: InitValue = 5.0, scale_i : bool = False):
         super(Exponential, self).__init__()
 
         self.tau = tau
+        self.scale_i = scale_i
 
         if is_value_initializer(self.tau):
             raise NotImplementedError("Exponential synapse model does not "
@@ -41,4 +38,21 @@ class Exponential(Synapse):
 
     def get_model(self, connection: Connection,
                   dt: float, batch_size: int) -> SynapseModel:
+        # Add exponential decay parameter
+        genn_model = {"params": [("ExpDecay", "scalar")]}
+        
+        # If we should scale I, add additional parameter
+        # and create sim code to inject scaled current
+        if self.scale_i:
+            genn_model["params"].append(("IScale", "scalar"))
+            genn_model["sim_code"] = "injectCurrent(inSyn * IScale);"
+        # Otherwise, create sim code to inject unscaled current
+        else:
+            genn_model["sim_code"] = "injectCurrent(inSyn);"
+        
+        # Add standard sim code
+        genn_model["sim_code"] += """
+        inSyn *= ExpDecay;
+        """
+
         return SynapseModel.from_val_descriptors(genn_model, self, dt)

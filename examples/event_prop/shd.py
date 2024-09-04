@@ -21,8 +21,7 @@ from ml_genn.compilers.event_prop_compiler import default_params
 
 NUM_HIDDEN = 256
 BATCH_SIZE = 32
-NUM_EPOCHS = 300
-EXAMPLE_TIME = 20.0
+NUM_EPOCHS = 100
 DT = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
@@ -73,7 +72,7 @@ max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 reg_lambda_upper=4e-09, reg_lambda_lower=4e-09, 
+                                 reg_lambda_upper=2.5e-10, reg_lambda_lower=2.5e-10, 
                                  reg_nu_upper=14, max_spikes=1500, 
                                  optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
                                  kernel_profiling=KERNEL_PROFILING)

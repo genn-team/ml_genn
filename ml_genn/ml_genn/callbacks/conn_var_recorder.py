@@ -12,7 +12,6 @@ from ..utils.network import ConnectionType
 from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_conn
-from ..utils.value import get_genn_var_name
 from ..connection import Connection
 
 logger = logging.getLogger(__name__)

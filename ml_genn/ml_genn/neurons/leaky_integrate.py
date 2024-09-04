@@ -25,7 +25,7 @@ class LeakyIntegrate(Neuron):
     
     v = ValueDescriptor("V")
     bias = ValueDescriptor("Bias")
-    tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
+    tau_mem = ValueDescriptor(("Alpha", lambda val, dt: np.exp(-dt / val)))
 
     @network_default_params
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,

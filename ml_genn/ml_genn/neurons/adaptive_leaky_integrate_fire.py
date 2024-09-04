@@ -42,9 +42,9 @@ class AdaptiveLeakyIntegrateFire(Neuron):
     v = ValueDescriptor("V")
     a = ValueDescriptor("A")
     beta = ValueDescriptor("Beta")
-    tau_mem = ValueDescriptor("Alpha", lambda val, dt: np.exp(-dt / val))
+    tau_mem = ValueDescriptor(("Alpha", lambda val, dt: np.exp(-dt / val)))
     tau_refrac = ValueDescriptor("TauRefrac")
-    tau_adapt = ValueDescriptor("Rho", lambda val, dt: np.exp(-dt / val))
+    tau_adapt = ValueDescriptor(("Rho", lambda val, dt: np.exp(-dt / val)))
     
     @network_default_params
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,

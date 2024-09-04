@@ -6,7 +6,7 @@ from ml_genn.utils.value import get_genn_var_name, get_values
 class Model:
     x = ValueDescriptor("X")
     y = ValueDescriptor("Y")
-    z = ValueDescriptor("Z", lambda val, dt: val * dt)
+    z = ValueDescriptor(("Z", lambda val, dt: val * dt))
 
     def __init__(self, x, y, z):
         self.x = x
