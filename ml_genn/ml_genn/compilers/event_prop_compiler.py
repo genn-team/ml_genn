@@ -1303,7 +1303,8 @@ class EventPropCompiler(Compiler):
                     excitatory = (c in self.deep_r_exc_conns)
                     deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
                                               self.deep_r_l1_strength, 
-                                              delta_g_var_ref, weight_var_ref,
+                                              gradient_var_ref, 
+                                              weight_var_ref,
                                               excitatory)
                     
                     # If we should record rewirings from
