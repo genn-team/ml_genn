@@ -98,24 +98,6 @@ deep_r_2_model = {
             NumFailedRewirings[0]++;
         }
     }
-    // Loop through all rows but last
-    //size_t numTotalPaddingSynapses = (row_stride * num_pre) - numSynapses;
-    //for(unsigned int i = 0; i < (num_pre - 1); i++) {
-    //    const unsigned int numRowPaddingSynapses = row_stride - row_length[i];
-    //    if(numRowPaddingSynapses > 0 && numTotalPaddingSynapses > 0) {
-    //        const scalar prob = (scalar)numRowPaddingSynapses / numTotalPaddingSynapses;
-    //        
-    //        const unsigned int numRowActivations = min(numRowPaddingSynapses,
-    //                                                   gennrand_binomial(numRemainingDormant, prob));
-    //        NumActivations[i] = numRowActivations;
-    //        
-    //        numRemainingDormant -= numRowActivations;
-    //        numTotalPaddingSynapses -= numRowPaddingSynapses;
-    //    }
-    //}
-    
-    // Put remaining dormant synapses in last row
-    //NumActivations[num_pre - 1] = numRemainingDormant;
     
     pushNumActivationsToDevice();
     """,
