@@ -606,9 +606,8 @@ class EPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
-        # If Deep-R is required on any connections, 
-        # trigger Deep-R callbacks at end of batch
-        if len(self.deep_r_exc_conns) > 0 or len(self.deep_r_inh_conns) > 0:
+        # If Deep-R is required, trigger Deep-R callbacks at end of batch
+        if deep_r_required:
             base_train_callbacks.append(CustomUpdateOnTrainBegin("DeepRInit"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
