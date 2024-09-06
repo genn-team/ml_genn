@@ -12,6 +12,7 @@ from .deep_r import RewiringRecord
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
+                         CustomUpdateOnTimestepBegin,
                          CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
@@ -1387,16 +1388,20 @@ class EventPropCompiler(Compiler):
 
         # If Deep-R and L1 regularisation are required, add callback
         if deep_r_required and self.deep_r_l1_strength > 0.0:
-            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepRL1"))
+            base_train_callbacks.append(
+                CustomUpdateOnBatchEnd("DeepRL1", lambda batch: batch > 0))
 
         if len(weight_optimiser_cus) > 0 or len(delay_optimiser_cus) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
-                    CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
+                    CustomUpdateOnBatchEnd("GradientBatchReduce",
+                                           lambda batch: batch > 0))
             base_train_callbacks.append(
-                CustomUpdateOnBatchEndNotFirst("GradientLearn"))
+                CustomUpdateOnBatchEnd("GradientLearn",
+                                       lambda batch: batch > 0))
             base_train_callbacks.append(
-                CustomUpdateOnFirstBatchEnd("ZeroGradient"))
+                CustomUpdateOnBatchEnd("ZeroGradient",
+                                       lambda batch: batch == 0))
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
@@ -1404,10 +1409,13 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(UpdateTrial(neuron_populations[p]))
 
         # Add callbacks to zero out post on all connections
+        last_timestep = self.example_timesteps - 1
         base_train_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+            CustomUpdateOnTimestepBegin("ZeroOutPost",
+                                        lambda t: t == last_timestep))
         base_validate_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+            CustomUpdateOnTimestepBegin("ZeroOutPost",
+                                        lambda t: t == last_timestep))
 
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
@@ -1432,7 +1440,8 @@ class EventPropCompiler(Compiler):
 
         # If Deep-R is required, trigger Deep-R callbacks at end of batch
         if deep_r_required:
-            base_train_callbacks.append(CustomUpdateOnTrainBegin("DeepRInit"))
+            base_train_callbacks.append(CustomUpdateOnEpochBegin("DeepRInit",
+                                                                 lambda e: e == 0))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
     
