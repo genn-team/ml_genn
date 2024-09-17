@@ -11,9 +11,8 @@ from .compiled_training_network import CompiledTrainingNetwork
 from .deep_r import RewiringRecord
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
-                         CustomUpdateOnTimestepBegin,
-                         CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochBegin,
+                         CustomUpdateOnTimestepBegin, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
