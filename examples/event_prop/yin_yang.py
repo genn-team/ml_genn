@@ -21,9 +21,9 @@ NUM_INPUT = 4
 NUM_HIDDEN = 100
 NUM_OUTPUT = 3
 BATCH_SIZE = 512
-NUM_EPOCHS = 1
-NUM_TRAIN = BATCH_SIZE  * 2
-NUM_TEST = BATCH_SIZE  * 2
+NUM_EPOCHS = 10
+NUM_TRAIN = BATCH_SIZE * 10 * NUM_OUTPUT
+NUM_TEST = BATCH_SIZE  * 2 * NUM_OUTPUT
 EXAMPLE_TIME = 30.0
 DT = 0.01
 TRAIN = True
@@ -67,42 +67,44 @@ if TRAIN:
 
         # Evaluate model on dataset
         start_time = perf_counter()
+        examples = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+        examples_back = [512, 522, 532, 542, 552, 562, 572, 582, 592, 602]
         callbacks = ["batch_progress_bar", Checkpoint(serialiser), 
                      OptimiserParamSchedule("alpha", alpha_schedule),
-                     SpikeRecorder(input, key="InputSpikes"),
-                     SpikeRecorder(hidden, key="HiddenSpikes"),
-                     SpikeRecorder(output, key="OutputSpikes"),
-                     VarRecorder(output, key="OutputTTFS", genn_var="TFirstSpike"),
-                     VarRecorder(output, key="OutputLambdaI", genn_var="LambdaI"),
-                     VarRecorder(output, key="OutputLambdaV", genn_var="LambdaV")]
+                     SpikeRecorder(input, key="InputSpikes", example_filter=examples),
+                     SpikeRecorder(hidden, key="HiddenSpikes", example_filter=examples),
+                     SpikeRecorder(output, key="OutputSpikes", example_filter=examples),
+                     VarRecorder(output, key="OutputTTFS", genn_var="TFirstSpike", example_filter=examples),
+                     VarRecorder(output, key="OutputLambdaV", genn_var="LambdaV", example_filter=examples_back)]
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=False,
                                                callbacks=callbacks)
+        for e in range(NUM_EPOCHS):
+            fig, axes = plt.subplots(4, 10, sharex="col", sharey="row")
+            timesteps = np.arange(0.0, EXAMPLE_TIME, DT)
+            for i in range(10):
+                #in_spikes = [
+                axes[0,i].set_title(f"Example {(e * 10) + i}")
+                axes[0,i].scatter(cb_data["InputSpikes"][0][(e * 10) + i], cb_data["InputSpikes"][1][(e * 10) + i], s=1)
+                axes[1,i].scatter(cb_data["HiddenSpikes"][0][(e * 10) + i], cb_data["HiddenSpikes"][1][(e * 10) + i], s=1)
+                axes[2,i].scatter(cb_data["OutputSpikes"][0][(e * 10) + i], cb_data["OutputSpikes"][1][(e * 10) + i], s=1)
+                
+                axes[2,i].scatter(-cb_data["OutputTTFS"][(e * 10) + i][-1,:], np.arange(3), marker="X", alpha=0.5)
+                
+                #for i in NUM_OUTPUT:
+                for j in range(NUM_OUTPUT):
+                    axes[3,i].plot(timesteps, (j * 0.002) + cb_data["OutputLambdaV"][((e * 10) + i)][::-1,j],
+                                linestyle=("-" if labels[examples[i]] == j else "--"))
+                    #axes[3,i].plot(j + cb_data["OutputLambdaI"][BATCH_SIZE + (i * 10)][::-1,j])
+                axes[3,i].set_xlabel("Time [ms]")
+                axes[3,i].set_xlim((0, EXAMPLE_TIME))
         
-        fig, axes = plt.subplots(4, 10, sharex="col", sharey="row")
-        timesteps = np.arange(0.0, EXAMPLE_TIME, DT)
-        for i in range(10):
-            #in_spikes = [
-            axes[0,i].set_title(f"Example {i * 10}")
-            axes[0,i].scatter(cb_data["InputSpikes"][0][i * 10], cb_data["InputSpikes"][1][i * 10], s=1)
-            axes[1,i].scatter(cb_data["HiddenSpikes"][0][i * 10], cb_data["HiddenSpikes"][1][i * 10], s=1)
-            axes[2,i].scatter(cb_data["OutputSpikes"][0][i * 10], cb_data["OutputSpikes"][1][i * 10], s=1)
-            
-            axes[2,i].scatter(-cb_data["OutputTTFS"][i * 10][-1,:], np.arange(3), marker="X", alpha=0.5)
-            
-            #for i in NUM_OUTPUT:
-            for j in range(NUM_OUTPUT):
-                axes[3,i].plot(timesteps, (j * 0.2) + cb_data["OutputLambdaV"][BATCH_SIZE + (i * 10)][::-1,j],
-                               linestyle=("-" if labels[i * 10] == j else "--"))
-                #axes[3,i].plot(j + cb_data["OutputLambdaI"][BATCH_SIZE + (i * 10)][::-1,j])
-            axes[3,i].set_xlabel("Time [ms]")
-            axes[3,i].set_xlim((0, EXAMPLE_TIME))
-    
-        axes[0,0].set_ylabel("Input neuron ID")
-        axes[1,0].set_ylabel("Hidden neuron ID")
-        axes[2,0].set_ylabel("Output neuron ID")
+            axes[0,0].set_ylabel("Input neuron ID")
+            axes[1,0].set_ylabel("Hidden neuron ID")
+            axes[2,0].set_ylabel("Output neuron ID")
         plt.show()
+
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
