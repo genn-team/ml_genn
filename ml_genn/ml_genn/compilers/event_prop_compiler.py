@@ -850,9 +850,6 @@ class EventPropCompiler(Compiler):
                 
                 # Add variable to hold backspike flag
                 model_copy.add_var("BackSpike", "uint8_t", False)
-                
-                # Add variable to hold phantom backspike flag
-                model_copy.add_var("BackPhantomSpike", "uint8_t", False)
 
                 # Add EGP for spike time ring variables
                 ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
@@ -886,22 +883,21 @@ class EventPropCompiler(Compiler):
                     # **YUCK** REALLY should be timepoint but then you can't softmax
                     model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
                                         VarAccess.READ_ONLY_DUPLICATE)
+                    
+                    # In backward pass, update lambdas and apply phantom spike if:
+                    # 1) This is first timestep of backward pass
+                    # 2) No spike occurred in preceding forward pass
+                    # 4) This is correct output neuron 
                     dynamics_code = f"""
                         LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
                         LambdaV *= Alpha;
                             
-                        if (BackPhantomSpike) {{
+                        if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
                             LambdaV += {phantom_scale / self.batch_size};
-                            BackPhantomSpike = false;
-                        }}
-                        // YUCK - need to trigger a pretend back_spike if no spike occurred to keep in operating regime
-                        if (Trial > 0 && t == backT && TFirstSpikeBack < -backT && id == YTrueBack){{
-                            BackPhantomSpike = true;
                         }}
                         """
 
-                    # On backward pass transition, update LambdaV
-                    # **THOMAS** why are we checking TFirstSpikeBack here? This only happens when BackSpike
+                    # On backward pass transition, update LambdaV if this is the first spike
                     # **THOMAS** why are we dividing by what looks like softmax temperature?
                     transition_code = f"""
                         const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
