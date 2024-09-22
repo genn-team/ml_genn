@@ -889,7 +889,7 @@ class EventPropCompiler(Compiler):
                     # 2) No spike occurred in preceding forward pass
                     # 4) This is correct output neuron 
                     dynamics_code = f"""
-                        LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
+                        LambdaI = (A * LambdaV * (Alpha - Beta)) + (LambdaI * Beta);
                         LambdaV *= Alpha;
                             
                         if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
