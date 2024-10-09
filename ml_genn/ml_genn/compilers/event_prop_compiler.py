@@ -904,8 +904,8 @@ class EventPropCompiler(Compiler):
                         LambdaV += iMinusVRecip * (Vthresh * LambdaV);
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             if (id == YTrueBack) {{
-                                const scalar fst = {example_time} - TFirstSpikeBack;
-                                LambdaV += iMinusVRecip * (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (({1.01 * example_time} - fst) * ({1.01 * example_time} - fst)))) / {self.batch_size};
+                                const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
+                                LambdaV += iMinusVRecip * (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
                             }}
                             else {{
                                 LambdaV -= iMinusVRecip * Softmax / ({self.softmax_temperature * self.batch_size});
