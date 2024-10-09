@@ -5,10 +5,9 @@ from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from ..connectivity.sparse_base import SparseBase
-from ..metrics import Metric
+from ..metrics import Metric, MetricsType
 from ..serialisers import Serialiser
 from ..utils.callback_list import CallbackList
-from ..utils.data import MetricsType
 
 from ..utils.data import (batch_dataset, get_dataset_size,
                           permute_dataset, split_dataset)

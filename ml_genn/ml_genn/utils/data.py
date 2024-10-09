@@ -9,8 +9,6 @@ from copy import deepcopy
 
 from .module import get_object
 
-MetricType = Union[Metric, str]
-MetricsType = Union[dict, MetricType]
 DataDictType = Mapping[Any, Union[Sequence, np.ndarray]]
 
 PreprocessedSpikes = namedtuple("PreprocessedSpikes", ["end_spikes", "spike_times"])
@@ -85,6 +83,18 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                             shape: Tuple, time_scale=1.0 / 1000.0,
                             dt: Optional[float] = None,
                             histogram_thresh : Optional[int] = None) -> PreprocessedSpikes:
+    """Preprocess a Tonic format spike train into PreprocessedSpikes format
+
+    Args:
+        events:             Structured array containing events
+        ordering:           Names of fields in events array
+        shape:              Shape of sensor events came from
+        time_scale:         Scale to apply to event times, typically to 
+                            convert from microseconds to milliseconds
+        dt:                 Timestep to discretise events to
+        histogram_thresh:   Minimum number of source events required to
+                            trigger spike in downsampled dt
+    """
     # Calculate cumulative sum of each neuron's spike count
     num_neurons = np.prod(shape) 
 
@@ -136,9 +146,89 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
         # Preprocess
         return preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
 
+def generate_yin_yang_dataset(size: int, scale: float, offset: float=0.0,
+                              bias: bool = True, r_small: float = 0.1,
+                              r_big: float = 0.5):
+    """Generate Yin-Yang dataset [Kriener2021]_ in PreprocessedSpikes format.
+    Code copied from https://github.com/lkriener/yin_yang_data_set
+
+    Args:
+        size:       Number of Yin-Yang stimuli to generate
+        scale:      Scale factor to apply to spike times
+        offset:     Minimum spike time in ms
+        bias:       Should an additional fixed bias spike at offset 
+                    time be added to each example
+        r_small:    Radius of small (eye) circles
+        r_big:      Radius of large circles
+    """
+    def dist_to_right_dot(x, y):
+        return np.sqrt((x - 1.5 * r_big)**2 + (y - r_big)**2)
+
+    def dist_to_left_dot(x, y):
+        return np.sqrt((x - 0.5 * r_big)**2 + (y - r_big)**2)
+
+    def which_class(x, y):
+        # equations inspired by
+        # https://link.springer.com/content/pdf/10.1007/11564126_19.pdf
+        d_right = dist_to_right_dot(x, y)
+        d_left = dist_to_left_dot(x, y)
+        criterion1 = d_right <= r_small
+        criterion2 = d_left > r_small and d_left <= 0.5 * r_big
+        criterion3 = y > r_big and d_right > 0.5 * r_big
+        is_yin = criterion1 or criterion2 or criterion3
+        is_circles = d_right < r_small or d_left < r_small
+        if is_circles:
+            return 2
+        return int(is_yin)
+
+    def get_sample(goal):
+        # sample until goal is satisfied
+        while True:
+            # sample x,y coordinates
+            x, y = np.random.random_sample(2) * 2. * r_big
+            # check if within yin-yang circle
+            if np.sqrt((x - r_big)**2 + (y - r_big)**2) > r_big:
+                continue
+            # check if they have the same class as the goal for this sample
+            if which_class(x, y) == goal:
+                return x, y
+
+    # Loop through number of stimuli to generate
+    spikes = []
+    labels = []
+    num_channels = 5 if bias else 4
+    ids = np.arange(num_channels)
+    for i in range(size):
+        # keep num of class instances balanced by using rejection sampling
+        # choose class for this sample
+        goal_class = np.random.randint(3)
+        x, y = get_sample(goal_class)
+        
+        
+        # Generate vector of 4 values and add bias if desired
+        times = [x, y, 1.0 - x, 1.0 - y]
+        if bias:
+            times.insert(0, 0.0)
+    
+        spikes.append(
+            preprocess_spikes(offset + (np.asarray(times) * scale),
+                              ids, num_channels))
+        labels.append(goal_class)
+
+    return spikes, labels
+
 def linear_latency_encode_data(data: np.ndarray, max_time: float,
                                min_time: float = 0.0,
                                thresh: int = 1) -> List[PreprocessedSpikes]:
+    """Generate PreprocessedSpikes format stimuli by linearly
+    latency encoding static data
+
+    Args:
+        data:       Data in uint8 format
+        max_time:   Spike time for inputs with a value of 0
+        min_time:   Spike time for inputs with a value of 255
+        thresh:     Threshold values must reach for any spike to be emitted
+    """
     # **TODO** handle floating point data
     # Loop through examples
     time_range = max_time - min_time
@@ -163,6 +253,21 @@ def linear_latency_encode_data(data: np.ndarray, max_time: float,
 
 def log_latency_encode_data(data: np.ndarray, tau_eff: float,
                             thresh: float) -> List[PreprocessedSpikes]:
+    """Generate PreprocessedSpikes format stimuli by log-latency
+    encoding static data
+
+    .. math::
+
+        T(x)= \\begin{cases}
+                  \\tau_\\text{eff} log\\left(\\frac{x}{x - \\nu}\\right) & x > \\nu \\\\
+                  \\infty & otherwise
+              \\end{cases}
+
+    Args:
+        data:       Data in uint8 format
+        tau_eff:    Scaling factor
+        thresh:     Threshold values must reach for any spike to be emitted
+    """
     # Loop through examples
     spikes = []
     for i in range(len(data)):
@@ -237,7 +342,17 @@ def calc_start_spikes(end_spikes: np.ndarray) -> np.ndarray:
     return start_spikes
 
 def calc_max_spikes(spikes: PreprocessedSpikes) -> int:
+    """Calculate maximum number of spikes emitted by any neuron
+
+    Args:
+        spikes: Spike train
+    """
     return max(len(p.spike_times) for p in spikes)
 
 def calc_latest_spike_time(spikes: PreprocessedSpikes) -> float:
+    """Calculate time of the last spike emitted by any neuron
+
+    Args:
+        spikes: Spike train
+    """
     return max(max(p.spike_times) for p in spikes)
