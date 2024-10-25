@@ -2,7 +2,7 @@ import logging
 import numpy as np
 
 from string import Template
-from typing import Iterator, Sequence
+from typing import Iterator, Sequence, Dict, Tuple
 from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
                     SynapseMatrixType, SynapseMatrixWeight)
 
@@ -126,8 +126,8 @@ class CompileState:
         self.feedback_connections = []
         self.update_trial_pops = []
 
-    def add_optimiser_connection(self, conn, weight, delay):
-        self._optimiser_connections.append((conn, weight, delay))
+    def add_optimiser_connection(self, conn, weight, delay, clamp_w):
+        self._optimiser_connections.append((conn, weight, delay, clamp_w))
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -498,7 +498,9 @@ class EventPropCompiler(Compiler):
         delay_optimiser:            Optimiser to use when applying delays. If 
                                     None, ``optimiser`` will be used for delays
         delay_learn_conns:          Connection for which delays should be 
-                                    learned as well as weight
+                                    learned as well as weight      
+        clamp_weight_conns:         Connection for which weights should be clamped, 
+                                    specified by a min and max weight
         
     """
 
@@ -512,6 +514,7 @@ class EventPropCompiler(Compiler):
                  communicator: Communicator = None,
                  delay_optimiser=None,
                  delay_learn_conns: Sequence = [],
+                 clamp_weight_conns: Dict[object, Tuple[float,float]] = {},
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
@@ -537,6 +540,9 @@ class EventPropCompiler(Compiler):
             Optimiser, "Optimiser", default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
+        self.clamp_weight_conns = {}
+        for c, minmax in clamp_weight_conns.items():
+            self.clamp_weight_conns[get_underlying_conn(c)] = minmax
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -1027,7 +1033,13 @@ class EventPropCompiler(Compiler):
         
         # Does this connection have learnable delays
         has_learnable_delay = conn in self.delay_learn_conns
-    
+
+        # Does this connection have weight clamping
+        if conn in self.clamp_weight_conns:
+            clamp_w = self.clamp_weight_conns[conn]
+        else:
+            clamp_w = None
+            
         # If this is some form of trainable connectivity
         if connect_snippet.trainable:
             # **NOTE** this is probably not necessary as 
@@ -1064,7 +1076,7 @@ class EventPropCompiler(Compiler):
                 compile_state.checkpoint_connection_vars.append((conn, "d"))
 
                 # Mark connection as requiring delay and weight optimisation
-                compile_state.add_optimiser_connection(conn, True, True)
+                compile_state.add_optimiser_connection(conn, True, True, clamp_w)
             # Otherwise
             else:
                 # Create basic weight update model
@@ -1077,7 +1089,7 @@ class EventPropCompiler(Compiler):
                     post_neuron_var_refs={"LambdaI_post": "LambdaI"})
 
                 # Mark connection as requiring weight optimisation
-                compile_state.add_optimiser_connection(conn, True, False)
+                compile_state.add_optimiser_connection(conn, True, False, clamp_w)
 
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "g"))
@@ -1126,7 +1138,7 @@ class EventPropCompiler(Compiler):
         # Loop through connections that require optimisers
         weight_optimiser_cus = []
         delay_optimiser_cus = []
-        for i, (c, w, d) in enumerate(compile_state.optimiser_connections):
+        for i, (c, w, d, clamp_w) in enumerate(compile_state.optimiser_connections):
             genn_pop = connection_populations[c]
             
             # If weight optimisation is required
@@ -1136,7 +1148,7 @@ class EventPropCompiler(Compiler):
                 cu_weight = self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "Gradient"), 
-                    self._optimiser, genn_model)
+                    self._optimiser, genn_model, clamp_var=clamp_w)
                 
                 # Add custom update to list of optimisers
                 weight_optimiser_cus.append(cu_weight)

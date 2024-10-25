@@ -102,7 +102,7 @@ with network:
     # Connections
     Connection(input, hidden, Dense(Normal(mean=0.03, sd=0.01)),
                Exponential(5.0))
-    Connection(hidden, hidden, Dense(Normal(mean=0.0, sd=0.02)),
+    hid_to_hid = Connection(hidden, hidden, Dense(Normal(mean=0.0, sd=0.02)),
                Exponential(5.0))
     Connection(hidden, output, Dense(Normal(mean=0.0, sd=0.03)),
                Exponential(5.0))
@@ -114,7 +114,9 @@ if TRAIN:
                                  reg_lambda_upper=4e-09, reg_lambda_lower=4e-09, 
                                  reg_nu_upper=14, max_spikes=1500, 
                                  optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
-                                 kernel_profiling=KERNEL_PROFILING)
+                                 kernel_profiling=KERNEL_PROFILING,
+                                 clamp_weight_conns= {hid_to_hid: (-0.2,0.2)},
+    )
     compiled_net = compiler.compile(network)
 
     with compiled_net:
