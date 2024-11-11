@@ -412,6 +412,14 @@ neuron_reset_strict_check = """
     }
     """
 
+def _get_pop_param(param: Union[dict, Number], pop: Population, default: Optional[Number] = None):
+    if isinstance(param, Number):
+        return param
+    elif pop in param:
+        return param[pop]
+    else:
+        return default
+
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
 
@@ -918,7 +926,7 @@ class EventPropCompiler(Compiler):
 
                     # If regularisation is enabled
                     # **THINK** is this LIF-specific?
-                    if self.regulariser_enabled:
+                    if self.regulariser_enabled(pop):
                         # Add state variables to hold spike count
                         # during forward and backward pass. 
                         # **NOTE** SpikeCountBackSum is shared across
@@ -1259,9 +1267,9 @@ class EventPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, True)
 
     @property
-    def regulariser_enabled(self):
-        return (self.reg_lambda_lower != 0.0 
-                or self.reg_lambda_upper != 0.0)
+    def regulariser_enabled(self, pop: Population):
+        return (_get_pop_param(self.reg_lambda_upper, pop, 0.0) != 0.0
+                 or _get_pop_param(self.reg_lambda_lower, pop, 0.0) != 0.0)
 
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
