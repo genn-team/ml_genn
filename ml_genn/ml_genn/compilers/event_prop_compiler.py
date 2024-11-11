@@ -946,11 +946,11 @@ class EventPropCompiler(Compiler):
                         # into account that we're operating on batch sums of spike counts
                         model_copy.add_param(
                             "RegLambdaUpper", "scalar",
-                            self.reg_lambda_upper / (self.full_batch_size
+                            _get_pop_param(self.reg_lambda_upper, pop, 0.0)  / (self.full_batch_size
                                                      * self.full_batch_size))
                         model_copy.add_param(
                             "RegLambdaLower", "scalar",
-                            self.reg_lambda_lower / (self.full_batch_size
+                            _get_pop_param(self.reg_lambda_lower, pop, 0.0) / (self.full_batch_size
                                                      * self.full_batch_size))
 
                         # If batch size is 1, add reset variables to copy SpikeCount
