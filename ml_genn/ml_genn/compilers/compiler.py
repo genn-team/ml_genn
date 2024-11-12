@@ -193,21 +193,21 @@ class Compiler:
             genn_pop.axonal_delay_steps = delay
         # Otherwise, if maximum delay steps is specified
         elif conn.max_delay_steps is not None:
-            # Check delay fits in 8-bit limit
-            if conn.max_delay_steps > 255:
+            # Check delay fits in 16-bit limit
+            if conn.max_delay_steps > 65535:
                 raise NotImplmentedError(f"Maximum of {conn.max_delay_steps} "
                                          f"delay steps for Connection "
-                                         f"{conn.name} exceeds 255")
+                                         f"{conn.name} exceeds 65535")
             genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
         # Otherwise, if delays are specified as an array, 
         # calculate maximum delay steps from array 
         elif is_value_array(delay):
-            # Check max delay fits in 8-bit limit
+            # Check max delay fits in 16-bit limit
             max_delay_steps = np.amax(delay) + 1
-            if max_delay_steps > 255:
+            if max_delay_steps > 65535:
                 raise NotImplmentedError(f"Maximum delay of {max_delay_steps}"
                                          f"for Connection {conn.name} "
-                                         f"exceeds 255")
+                                         f"exceeds 65535")
             
             genn_pop.max_dendritic_delay_timesteps = max_delay_steps
         else:
