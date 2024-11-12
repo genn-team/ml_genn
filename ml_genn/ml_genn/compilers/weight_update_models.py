@@ -6,7 +6,7 @@ static_pulse_model = {
         """}
 
 static_pulse_delay_model = {
-    "params": [("g", "scalar"), ("d", "uint8_t")],
+    "params": [("g", "scalar"), ("d", "uint16_t")],
     "pre_spike_syn_code":
         """
         addToPostDelay(g, d);
@@ -24,7 +24,7 @@ signed_static_pulse_model = {
         """}
 
 signed_static_pulse_delay_model = {
-    "params": [("g", "scalar"), ("d", "uint8_t")],
+    "params": [("g", "scalar"), ("d", "uint16_t")],
     "pre_spike_syn_code":
         """
         addToPostDelay(g, d);
