@@ -160,11 +160,12 @@ class CompileState:
                                                  "RingReadEndOffset"))
 
                 # Add additional update code to update ring buffer offsets
+                max_spikes = compiler.pop_max_spikes.get(pop, compiler.max_spikes)
                 model.append_update_code(
                     f"""
                     RingReadOffset = RingWriteOffset - 1;
                     if (RingReadOffset < 0) {{
-                        RingReadOffset = {compiler.max_spikes - 1};
+                        RingReadOffset = {max_spikes - 1};
                     }}
                     RingReadEndOffset = RingWriteStartOffset;
                     RingWriteStartOffset = RingReadOffset;
@@ -279,6 +280,24 @@ weight_update_model = {
     Gradient -= (LambdaI_post * TauSyn);
     """}
 
+# EventProp weight update model used on KERNEL weights
+# **NOTE** feedback is added if required
+weight_update_model_kernel = {
+    "params": [("TauSyn", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
+
+    "pre_spike_syn_code": """
+    addToPost(g);
+    """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """,
+    "pre_event_syn_code": """
+    atomic_add_Gradient(-(LambdaI_post * TauSyn));
+    """}
+
 # Standard EventProp weight update model with fixed delay
 # **NOTE** feedback is added if required
 delay_weight_update_model = {
@@ -286,7 +305,7 @@ delay_weight_update_model = {
     "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "post_neuron_var_refs": [("LambdaI_post", "scalar")],
-                             
+
     "pre_spike_syn_code": """
     addToPostDelay(g, d);
     """,
@@ -505,6 +524,7 @@ class EventPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
+                 pop_max_spikes: dict = {},
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
@@ -537,6 +557,8 @@ class EventPropCompiler(Compiler):
             Optimiser, "Optimiser", default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
+        self.pop_max_spikes = {get_underlying_pop(p): m
+                               for p, m in pop_max_spikes.items()}
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -576,6 +598,9 @@ class EventPropCompiler(Compiler):
                            compile_state: CompileState) -> NeuronModel:
         # Make copy of model
         model_copy = deepcopy(model)
+        
+        # Get maximum spikes for this population
+        max_spikes = self.pop_max_spikes.get(pop, self.max_spikes)
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -825,21 +850,21 @@ class EventPropCompiler(Compiler):
             # Add variables to hold offsets for 
             # reading and writing ring variables
             model_copy.add_var("RingWriteOffset", "int", 0)
-            model_copy.add_var("RingReadOffset", "int", self.max_spikes - 1)
+            model_copy.add_var("RingReadOffset", "int", max_spikes - 1)
 
             # Add variables to hold offsets where this neuron
             # started writing to ring during the forward
             # pass and where data to read during backward pass ends
             model_copy.add_var("RingWriteStartOffset", "int",
-                               self.max_spikes - 1)
+                               max_spikes - 1)
             model_copy.add_var("RingReadEndOffset", "int", 
-                               self.max_spikes - 1)
+                               max_spikes - 1)
 
             # Add variable to hold backspike flag
             model_copy.add_var("BackSpike", "uint8_t", False)
 
             # Add EGP for spike time ring variables
-            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            ring_size = self.batch_size * np.prod(pop.shape) * max_spikes
             model_copy.add_egp("RingSpikeTime", "scalar*", 
                                np.empty(ring_size, dtype=np.float32))
 
@@ -854,7 +879,7 @@ class EventPropCompiler(Compiler):
                 # backwards pass and handle back spikes
                 model_copy.prepend_sim_code(
                     neuron_backward_pass.substitute(
-                        max_spikes=self.max_spikes,
+                        max_spikes=max_spikes,
                         example_time=(self.example_timesteps * self.dt),
                         dynamics="",
                         transition=""))
@@ -862,7 +887,7 @@ class EventPropCompiler(Compiler):
                 # Prepend code to reset to write spike time to ring buffer
                 model_copy.prepend_reset_code(
                     neuron_reset.substitute(
-                        max_spikes=self.max_spikes,
+                        max_spikes=max_spikes,
                         write="",
                         strict_check=(neuron_reset_strict_check
                                       if self.strict_buffer_checking
@@ -981,7 +1006,7 @@ class EventPropCompiler(Compiler):
                     # and handle back spikes with correct LIF dynamics
                     model_copy.prepend_sim_code(
                         neuron_backward_pass.substitute(
-                            max_spikes=self.max_spikes,
+                            max_spikes=max_spikes,
                             example_time=(self.example_timesteps * self.dt),
                             dynamics="""
                             LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
@@ -1038,12 +1063,14 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError("EventProp compiler only "
                                           "supports Exponential synapses")
 
-            # Determine whether atomic weight updates are required
-            # **YUCK** backend-specific code shouldn't be required in models
-            # **TODO** something when OpenCL
-            use_atomic = (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
-            assert not use_atomic
-            
+            # Determine whether kernel updates are required
+            use_kernel = (
+                connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
+
+            if use_kernel and has_delay:
+                raise NotImplementedError("EventProp compiler does not "
+                                          "kernel connectivity with delays")
+
             # If this connection has learnable delays
             if has_learnable_delay:
                 # Check maximum delay steps is set
@@ -1067,10 +1094,16 @@ class EventPropCompiler(Compiler):
                 compile_state.add_optimiser_connection(conn, True, True)
             # Otherwise
             else:
+                if has_delay:
+                    base_model = delay_weight_update_model
+                elif use_kernel:
+                    base_model = weight_update_model_kernel
+                else:
+                    base_model = weight_update_model
+
                 # Create basic weight update model
                 wum = WeightUpdateModel(
-                    model=deepcopy(delay_weight_update_model if has_delay 
-                                else weight_update_model),
+                    model=deepcopy(base_model),
                     param_vals={"TauSyn": tau_syn},
                     var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
                     pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
@@ -1107,7 +1140,9 @@ class EventPropCompiler(Compiler):
                     wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[delay] - LambdaI_post[delay]));")
                 else:
                     wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
-                    
+                    if not connect_snippet.trainable:
+                        wum.add_post_neuron_var_ref("LambdaI_post", "scalar", "LambdaI")
+
                     if has_delay:
                         wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[d] - LambdaI_post[d]));")
                     else:
