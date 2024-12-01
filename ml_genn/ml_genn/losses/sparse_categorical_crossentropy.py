@@ -31,7 +31,10 @@ class SparseCategoricalCrossentropy(Loss):
                                f"be < {batch_size}")
 
         # Copy flattened y_true into view
-        genn_pop.vars["YTrue"].view[:len(y_true), 0] = y_true
+        if batch_size == 1:
+            genn_pop.vars["YTrue"].view[:len(y_true)] = y_true
+        else:
+            genn_pop.vars["YTrue"].view[:len(y_true), 0] = y_true
 
         # Push YTrue to device
         genn_pop.vars["YTrue"].push_to_device()
