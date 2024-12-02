@@ -7,10 +7,9 @@ from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..communicators import Communicator
-from ..metrics import Metric
+from ..metrics import Metric, MetricsType
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
-from ..utils.data import MetricsType
 from ..utils.model import CustomUpdateModel, NeuronModel, SynapseModel
 from ..utils.network import PopulationType
 

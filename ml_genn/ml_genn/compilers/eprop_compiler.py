@@ -10,13 +10,13 @@ from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..losses import Loss, SparseCategoricalCrossentropy
+from ..metrics import MetricsType
 from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
                        LeakyIntegrate, LeakyIntegrateFire, 
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
-from ..utils.data import MetricsType
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
