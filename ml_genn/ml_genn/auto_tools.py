@@ -14,9 +14,11 @@ THis function turns ODEs expressed as two lists for sympy variables and matching
 into C code to update the variables with timestep "dt"
 """
 
-def linear_euler(vars,exprs):
+def linear_euler(varnamse, sym, exprs):
+    vars= [ sym[var] for var in varnames ]
+    the_exprs= [ expr for var, expr in exprs.items() ]
     code = []
-    for var,expr in zip(vars,exprs):
+    for var,expr in zip(vars,the_exprs):
         code.append(sympy.ccode(var+expr*dt, assign_to= f"const scalar {str(var)}_tmp"))
     for var in vars:
         name = str(var)
@@ -69,10 +71,12 @@ def get_conditionally_linear_system(vars, exprs):
     return coefficients
 
 
-def exponential_euler(vars,exprs):
+def exponential_euler(varnames, sym, exprs):
+    vars= [ sym[var] for var in varnames ]
+    the_exprs= [ expr for var, expr in exprs.items() ]
     # Try whether the equations are conditionally linear
     try:
-        system = get_conditionally_linear_system(vars,exprs)
+        system = get_conditionally_linear_system(vars,the_exprs)
     except ValueError:
         raise NotImplementedError(
             "Can only solve conditionally linear systems with this state updater."
@@ -108,22 +112,22 @@ End of Brian 2 modified code
 """
 
 # the values that need to be saved in the forward pass
-def saved_vars(x, adj_ode, adj_jump, add_to_pre):
+def saved_vars(varnames, sym, adj_ode, adj_jump, add_to_pre):
     saved = set()
     all = adj_ode + adj_jump + add_to_pre
     for expr in all:
-        for var in x:
-            if expr.has(var):
+        for var in varnames:
+            if expr.has(sym(var)):
                 saved.add(var)
 
     return saved
 
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting teh equation
-def simplify_using_threshold(x, g, adj_jump, add_to_pre):
+def simplify_using_threshold(varnames, sym, g, adj_jump, add_to_pre):
     the_var = None
-    for var in x:
-        if g.has(var):
-            the_var = var
+    for var in varnames:
+        if g.has(sym[var]):
+            the_var = sym[var]
             break
 
     if the_var is None:
@@ -134,10 +138,10 @@ def simplify_using_threshold(x, g, adj_jump, add_to_pre):
     if len(sln) != 1:
         return adj_jump, add_to_pre
     
-    new_adj_jump = []
-    for expr in adj_jump:
-        new_adj_jump.append(expr.subs(the_var,sln[0]))
-    new_add_to_pre = []
-    for expr in add_to_pre:
-        new_add_to_pre.append(expr.subs(the_var,sln[0]))
+    new_adj_jump = {}
+    for var, expr in adj_jump.items():
+        new_adj_jump[var] = expr.subs(the_var,sln[0])
+    new_add_to_pre = {}
+    for var, expr in add_to_pre.items():
+        new_add_to_pre[var] = expr.subs(the_var,sln[0])
     return  new_adj_jump, new_add_to_pre
