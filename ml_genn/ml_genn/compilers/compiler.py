@@ -126,7 +126,7 @@ def create_local_var_refs(refs, genn_group):
 def get_delay_type(max_delay):
     if max_delay < 256:
        return "uint8_t"
-    elif max_delay_steps > 65535:
+    elif max_delay > 65535:
         raise NotImplementedError(f"Maximum delay steps exceeds 65535")
     else:
         return "uint16_t"
