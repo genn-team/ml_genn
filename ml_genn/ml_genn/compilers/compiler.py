@@ -21,11 +21,12 @@ from pygenn import (create_custom_update_model, create_den_delay_var_ref,
                     create_postsynaptic_model, create_weight_update_model,
                     create_var_ref, init_postsynaptic, init_weight_update)
 from string import digits
-from .weight_update_models import (static_pulse_model,
-                                   static_pulse_delay_model,
-                                   signed_static_pulse_model,
-                                   signed_static_pulse_delay_model)
+from .weight_update_models import (get_static_pulse_delay_model, 
+                                   get_signed_static_pulse_delay_model)
 from ..utils.value import is_value_array, is_value_constant
+
+from .weight_update_models import (static_pulse_model,
+                                   signed_static_pulse_model)
 
 # First pass of softmax - calculate max
 softmax_1_model = {
@@ -122,6 +123,27 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 def create_local_var_refs(refs, genn_group):
     return {n: create_var_ref(genn_group, v) for n, v in refs.items()}
 
+def get_delay_type(max_delay):
+    if max_delay < 256:
+       return "uint8_t"
+    elif max_delay_steps > 65535:
+        raise NotImplementedError(f"Maximum delay steps exceeds 65535")
+    else:
+        return "uint16_t"
+
+def _get_conn_max_delay(conn, delay):
+    # if maximum delay steps is specified
+    if conn.max_delay_steps is not None:
+        return conn.max_delay_steps
+    # Otherwise, if delays are specified as an array, 
+    # calculate maximum delay steps from array 
+    elif is_value_array(delay):
+        return np.amax(delay) + 1
+    else:
+        raise RuntimeError(f"Maximum delay associated with Connection "
+                           f"{conn.name} cannot be determined "
+                           f"automatically, please set max_delay_steps")
+
 class SupportedMatrixType:
     def __init__(self, supported: List[int]):
         # Build dictionary of supported connectivity types and order
@@ -193,29 +215,17 @@ class Compiler:
         # If delays are constant, use as axonal delay
         if is_value_constant(delay):
             genn_pop.axonal_delay_steps = delay
-        # Otherwise, if maximum delay steps is specified
-        elif conn.max_delay_steps is not None:
-            # Check delay fits in 16-bit limit
-            if conn.max_delay_steps > 65535:
-                raise NotImplmentedError(f"Maximum of {conn.max_delay_steps} "
-                                         f"delay steps for Connection "
-                                         f"{conn.name} exceeds 65535")
-            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
-        # Otherwise, if delays are specified as an array, 
-        # calculate maximum delay steps from array 
-        elif is_value_array(delay):
-            # Check max delay fits in 16-bit limit
-            max_delay_steps = np.amax(delay) + 1
-            if max_delay_steps > 65535:
-                raise NotImplmentedError(f"Maximum delay of {max_delay_steps}"
-                                         f"for Connection {conn.name} "
-                                         f"exceeds 65535")
-            
-            genn_pop.max_dendritic_delay_timesteps = max_delay_steps
+        # Otherwise
         else:
-            raise RuntimeError(f"Maximum delay associated with Connection "
-                               f"{conn.name} cannot be determined "
-                               f"automatically, please set max_delay_steps")
+            # Get maximum delay
+            max_delay_steps = _get_conn_max_delay(conn, delay)
+
+            # Check delay fits in 16-bit limit
+            if max_delay_steps > 65535:
+                raise NotImplementedError(f"Maximum of {conn.max_delay_steps}"
+                                          f" delay steps for Connection "
+                                          f"{conn.name} exceeds 65535")
+            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state) -> NeuronModel:
@@ -269,6 +279,9 @@ class Compiler:
         param_vals = {"g": connect_snippet.weight}
         het_delay = not is_value_constant(connect_snippet.delay)
         if het_delay:
+            # Get delay type to use for this connection
+            delay_type = get_delay_type(
+                _get_conn_max_delay(conn, connect_snippet.delay))
             param_vals["d"] = connect_snippet.delay
 
         # If source neuron model defines a negative threshold condition
@@ -277,8 +290,9 @@ class Compiler:
                                                     self.batch_size)
         if "negative_threshold_condition_code" in src_neuron_model.model:
             wum = WeightUpdateModel(
-                (deepcopy(signed_static_pulse_delay_model) if het_delay
-                 else deepcopy(signed_static_pulse_model)), param_vals)
+                (_get_signed_static_pulse_delay_model(delay_type) if het_delay
+                 else deepcopy(signed_static_pulse_model)),
+                param_vals)
 
             # Insert negative threshold condition code from neuron model
             wum.model["pre_event_threshold_condition_code"] =\
@@ -287,8 +301,9 @@ class Compiler:
             return wum
         else:
             return WeightUpdateModel(
-                (deepcopy(static_pulse_delay_model) if het_delay
-                 else deepcopy(static_pulse_model)), param_vals)
+                (_get_static_pulse_delay_model(delay_type) if het_delay
+                 else deepcopy(static_pulse_model)),
+                param_vals)
 
     def add_custom_update(self, genn_model: GeNNModel,
                           model: CustomUpdateModel,
