@@ -14,8 +14,8 @@ THis function turns ODEs expressed as two lists for sympy variables and matching
 into C code to update the variables with timestep "dt"
 """
 
-def linear_euler(varnamse, sym, exprs):
-    vars= [ sym[var] for var in varnames ]
+def linear_euler(varname, sym, exprs, dt):
+    vars= [ sym[var] for var in varname ]
     the_exprs= [ expr for var, expr in exprs.items() ]
     code = []
     for var,expr in zip(vars,the_exprs):
@@ -71,8 +71,8 @@ def get_conditionally_linear_system(vars, exprs):
     return coefficients
 
 
-def exponential_euler(varnames, sym, exprs):
-    vars= [ sym[var] for var in varnames ]
+def exponential_euler(varname, sym, exprs, dt):
+    vars= [ sym[var] for var in varname ]
     the_exprs= [ expr for var, expr in exprs.items() ]
     # Try whether the equations are conditionally linear
     try:
@@ -112,20 +112,21 @@ End of Brian 2 modified code
 """
 
 # the values that need to be saved in the forward pass
-def saved_vars(varnames, sym, adj_ode, adj_jump, add_to_pre):
+def saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
     saved = set()
-    all = adj_ode + adj_jump + add_to_pre
-    for expr in all:
-        for var in varnames:
-            if expr.has(sym(var)):
-                saved.add(var)
+    all = [ adj_ode, adj_jump, add_to_pre ]
+    for expr_list in all:
+        for var in varname:
+            for v2, expr in expr_list.items():
+                if expr.has(sym[var]):
+                    saved.add(var)
 
     return saved
 
-# one could reduce saved vars by solving the threshold equation for one of the vars and substituting teh equation
-def simplify_using_threshold(varnames, sym, g, adj_jump, add_to_pre):
+# one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
+def simplify_using_threshold(varname, sym, g, adj_jump, add_to_pre):
     the_var = None
-    for var in varnames:
+    for var in varname:
         if g.has(sym[var]):
             the_var = sym[var]
             break

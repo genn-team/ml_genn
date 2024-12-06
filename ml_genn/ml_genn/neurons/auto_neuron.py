@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from .. import Population
     
 
-class Auto(Neuron):
+class AutoNeuron(Neuron):
     """A neuron with auto-generated equations
     
     Args:
@@ -23,7 +23,7 @@ class Auto(Neuron):
     """
 
     def __init__(self, vars: list, params: list,
-                 ode: list, threshold: str, reset: list, readout=None, **kwargs):
+                 ode: dict, threshold: str, reset: dict, readout=None, **kwargs):
         #super(Auto, self).__init__(readout, **kwargs)
 
         self.vars = vars
@@ -39,7 +39,7 @@ class Auto(Neuron):
             genn_vars.append((var, "scalar"))
         self.genn_model["vars"] = genn_vars
 
-        # add params to genn_model. Assume are scalars fro now
+        # add params to genn_model. Assume are scalars for now
         genn_params = []
         for p in self.params:
             genn_params.append((p, "scalar"))
