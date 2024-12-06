@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from .synapse import Synapse
 from ..utils.model import SynapseModel
 from ..utils.value import InitValue, ValueDescriptor
+from ..auto_tools import *
 
 if TYPE_CHECKING:
     from .. import Connection
@@ -24,12 +25,13 @@ class AutoSyn(Synapse):
     """
 
     @network_default_params
-    def __init__(self, vars: list, params: list, ode:dict):
+    def __init__(self, vars: list, params: list, ode: dict, solver="exponential_euler"):
         super(AutoSyn, self).__init__()
 
         self.vars = vars
         self.params = params
         self.ode = ode
+        self.lbd_ode = {}
         self.genn_model = {}
         # add vars to genn_model. Assume all are scalars for now
         genn_vars = []
@@ -42,7 +44,12 @@ class AutoSyn(Synapse):
         for p in self.params:
             genn_params.append((p, "scalar"))
         self.genn_model["params"] = genn_params
-        # sim_code will be added in the compiler        
+        sym = get_symbols(self.vars, self.params)
+        dt = sympy.Symbol("dt")
+        self.dx_dt, clines = solve_ode(self.vars, sym, self.ode, dt, solver)
+        self.genn_model["sim_code"] = "\n".join(clines)
+        print(self.genn_model)
+        
        
     def get_model(self, connection: Connection,
                   dt: float, batch_size: int) -> SynapseModel:
