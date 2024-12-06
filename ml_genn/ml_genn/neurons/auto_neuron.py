@@ -4,6 +4,7 @@ from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
+from ..auto_tools import *
 
 if TYPE_CHECKING:
     from .. import Population
@@ -23,7 +24,7 @@ class AutoNeuron(Neuron):
     """
 
     def __init__(self, vars: list, params: list,
-                 ode: dict, threshold: str, reset: dict, readout=None, **kwargs):
+                 ode: dict, threshold: str, reset: dict, readout=None, solver="exponential_euler", **kwargs):
         #super(Auto, self).__init__(readout, **kwargs)
 
         self.vars = vars
@@ -31,6 +32,7 @@ class AutoNeuron(Neuron):
         self.ode = ode
         self.threshold = threshold
         self.reset = reset
+        self.solver = solver
         
         self.genn_model = {}
         # add vars to genn_model. Assume all are scalars for now
@@ -53,7 +55,13 @@ class AutoNeuron(Neuron):
                 resets.append(f"{var} = {reset[var]};")
             self.genn_model["reset_code"] = "\n".join(resets)
 
-        # forward pass update will be assembled in the compiler as it might involve I dynamics
+        # updates for forward pass
+        sym = get_symbols(self.vars, self.params)
+        sym["I"] = sympy.Symbol("I")
+        dt = sympy.Symbol("dt")
+        self.dx_dt, clines = solve_ode(self.vars, sym, self.ode, dt, self.solver)
+        self.genn_model["sim_code"] = "\n".join(clines)
+        print(self.genn_model)
         
     def get_model(self, population: Population,
                   dt: float, batch_size: int) -> NeuronModel:
