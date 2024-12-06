@@ -9,6 +9,14 @@ def add(o, expr):
         return o+expr
 
 
+def get_symbols(vars, params):
+    sym = {}
+    for var in vars:
+        sym[var] = sympy.Symbol(var)
+    for p in params:
+        sym[p] = sympy.Symbol(p)
+    return sym
+    
 """
 THis function turns ODEs expressed as two lists for sympy variables and matching rhs expressions 
 into C code to update the variables with timestep "dt"
@@ -110,6 +118,26 @@ def exponential_euler(varname, sym, exprs, dt):
 """
 End of Brian 2 modified code
 """
+
+# solde a set of ODEs. They can be passed as a dict of strings
+# or dict of sympy expressions
+def solve_ode(vars, sym, ode, dt, solver):
+    dx_dt = {}
+    for var, expr in ode:
+        if isinstance(expr, str):
+            dx_dt[var] = parse_expr(expr,local_dict= sym)
+        else:
+            dx_dt[var] = expr
+    if solver == "exponential_euler":
+        clines = exponential_euler(vars, sym, dx_dt, dt)
+    elif solver == "linear_euler":
+        clines = linear_euler(vars, sym, dx_dt, dt)
+    else:
+        raise NotImplementedError(
+            f"EventProp compiler doesn't support "
+            f"{solver} solver")
+    return dx_dt, clines
+
 
 # the values that need to be saved in the forward pass
 def saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
