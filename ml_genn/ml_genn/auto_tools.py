@@ -8,13 +8,16 @@ def add(o, expr):
     else:
         return o+expr
 
-
-def get_symbols(vars, params):
+def get_symbols(vars, params, w_name=None):
     sym = {}
     for var in vars:
         sym[var] = sympy.Symbol(var)
-    for p in params:
-        sym[p] = sympy.Symbol(p)
+    for pname in params:
+        sym[pname] = sympy.Symbol(pname)
+    if w_name is not None:
+        sym[w_name] = sympy.Symbol(w_name)
+    for var in vars:
+        sym[f"Lambda{var}"] = sympy.Symbol(f"Lambda{var}")
     return sym
     
 """
@@ -23,14 +26,11 @@ into C code to update the variables with timestep "dt"
 """
 
 def linear_euler(varname, sym, exprs, dt):
-    vars= [ sym[var] for var in varname ]
-    the_exprs= [ expr for var, expr in exprs.items() ]
     code = []
-    for var,expr in zip(vars,the_exprs):
-        code.append(sympy.ccode(var+expr*dt, assign_to= f"const scalar {str(var)}_tmp"))
-    for var in vars:
-        name = str(var)
-        code.append(f"{name} = {name}_tmp")
+    for var, expr in exprs.items():
+        code.append(sympy.ccode(sym[var]+expr*dt, assign_to= f"const scalar {str(var)}_tmp"))
+    for var in exprs:
+        code.append(f"{var} = {var}_tmp")
     return code
 
     
@@ -123,7 +123,7 @@ End of Brian 2 modified code
 # or dict of sympy expressions
 def solve_ode(vars, sym, ode, dt, solver):
     dx_dt = {}
-    for var, expr in ode:
+    for var, expr in ode.items():
         if isinstance(expr, str):
             dx_dt[var] = parse_expr(expr,local_dict= sym)
         else:
