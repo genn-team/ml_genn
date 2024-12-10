@@ -29,6 +29,7 @@ class AutoSyn(Synapse):
         super(AutoSyn, self).__init__()
 
         self.vars = vars
+        self.varnames = [ var[0] for var in vars]
         self.params = params
         self.ode = ode
         self.lbd_ode = {}
@@ -36,7 +37,7 @@ class AutoSyn(Synapse):
         # add vars to genn_model. Assume all are scalars for now
         genn_vars = []
         for var in self.vars:
-            genn_vars.append((var, "scalar"))
+            genn_vars.append((var[0], var[1]))
         self.genn_model["vars"] = genn_vars
 
         # add params to genn_model. Assume are scalars for now
@@ -44,10 +45,11 @@ class AutoSyn(Synapse):
         for p in self.params:
             genn_params.append((p, "scalar"))
         self.genn_model["params"] = genn_params
-        sym = get_symbols(self.vars, self.params)
+        sym = get_symbols(self.varnames, self.params)
         dt = sympy.Symbol("dt")
-        self.dx_dt, clines = solve_ode(self.vars, sym, self.ode, dt, solver)
+        self.dx_dt, clines = solve_ode(self.varnames, sym, self.ode, dt, solver)
         self.genn_model["sim_code"] = "\n".join(clines)
+        self.dl_dt = {}
         print(self.genn_model)
         
        
