@@ -308,6 +308,9 @@ class SynapseModel(Model):
     def process(self):
         return (super(SynapseModel, self).process() 
                 + (self.neuron_var_refs,))
+    
+    def append_sim_code(self, code):
+        self._append_code("sim_code", code)
 
     @staticmethod
     def from_val_descriptors(model, inst, dt, 

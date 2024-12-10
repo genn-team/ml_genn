@@ -246,10 +246,10 @@ class CustomUpdateOnFirstBatchEnd(Callback):
 
 # Preprocessing of auto-adjoint equations
 
-def process_odes(vars, params, eqns, w_name):
+def process_odes(vars, params, eqns):
     sym = get_symbols(vars, params)
     dx_dt = {}
-    for var in varname:
+    for var in vars:
         if var in eqns:
             dx_dt[var] = parse_expr(eqns[var],local_dict= sym)
     return sym, dx_dt
@@ -612,7 +612,8 @@ class EventPropCompiler(Compiler):
                 f"EventProp compiler only supports "
                 f"user-defined neurons (AutoNeuron)")
         if isinstance(pop.neuron, AutoNeuron):
-            sym = get_symbols(pop.neuron.varnames, pop.neuron.params)
+            sym, dx_dt = process_odes(pop.neuron.varnames, pop.neuron.pnames, pop.neuron.ode)
+            get_symbols(pop.neuron.varnames, pop.neuron.pnames)
             sym["I"] = sympy.Symbol("I")
             # Add adjoint state variables - only for vars that have an ode
             for var in pop.neuron.ode:
@@ -693,8 +694,9 @@ class EventPropCompiler(Compiler):
             # We assume that the neuron model contains a variable "V" that will
             # receive dl_V/dV
             drive = sympy.Symbol("drive")
-            ode["V"] = ode["V"]+drive
-            _, clines = solve_ode(pop.neuron.varnames, sym, ode, dt, pop.neuron.solver)
+            dl_dt["V"] = dl_dt["V"]+drive
+            dt = sympy.Symbol("dt")
+            _, clines = solve_ode(pop.neuron.varnames, sym, dl_dt, dt, pop.neuron.solver)
             ccode = "\n".join(clines)
             model_copy.prepend_sim_code(ccode)
 
@@ -1007,7 +1009,8 @@ class EventPropCompiler(Compiler):
 
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
-                _, clines = solve_ode(pop.neuron.varnames, sym, ode, dt, pop.neuron.solver)
+                dt= sympy.Symbol("dt")
+                _, clines = solve_ode(pop.neuron.varnames, sym, pop.neuron.ode, dt, pop.neuron.solver)
                 ccode = "\n".join(clines)
                 model_copy.prepend_sim_code(
                     neuron_backward_pass.substitute(
@@ -1040,7 +1043,7 @@ class EventPropCompiler(Compiler):
 
         # Make copy of model
         model_copy = deepcopy(model)
-        sym = get_symbols(conn.synapse.varnames,conn_synapse.params)
+        sym = get_symbols(conn.synapse.varnames,conn.synapse.pnames)
         for var in conn.synapse.ode:
             model_copy.add_var(f"Lambda{var}", "scalar", 0.0)
         # generate adjoint ODE
@@ -1056,9 +1059,10 @@ class EventPropCompiler(Compiler):
                 conn.synapse.dl_dt[var] = o
 
         # inject lambda update code into sim_code
-        _, clines = solve_ode(conn.synapse.varnames, sym, ode, dt, pop.neuron.solver)
+        dt = sympy.Symbol("dt")
+        _, clines = solve_ode(conn.synapse.varnames, sym, conn.synapse.dl_dt, dt, conn.synapse.solver)
         ccode = "\n".join(clines)
-        model_copy.prepend_sim_code(ccode)
+        model_copy.append_sim_code(ccode)
         additional_reset_vars = [(f"Lambda{var}", "scalar", 0.0) for var in conn.synapse.ode]
         # Add reset logic to reset adjoint state variables 
         # as well as any state variables from the original model
