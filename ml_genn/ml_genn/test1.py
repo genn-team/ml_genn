@@ -179,7 +179,13 @@ eeuler_adj = exponential_euler(adj, sym, ode, dt)
 lineuler = linear_euler(varname, sym, dx_dt, dt)
 lineuler_adj = linear_euler(adj, sym, ode, dt)
 
-jumps, add_to_pre= simplify_using_threshold(varname, sym, g, jumps, add_to_pre)
+jumps, add_to_pre = simplify_using_threshold(varname, sym, g, jumps, add_to_pre)
+
+grad_update = None
+for var in varname:
+        grad_update = add(grad_update, -sym[adj_name[var]]*sympy.diff(h[var],sym[w_name]))
+
+print(grad_update)
 
 jump_c = []
 updated = []
@@ -196,7 +202,9 @@ for var in varname:
     if var in add_to_pre and add_to_pre[var] != 0:
         code = sympy.ccode(add_to_pre[var])
         add_to_pre_c.append(f"addToPre({adj_name[var]},{code});")
-    
+
+grad_update_c = sympy.ccode(grad_update)
+
 print("Exponential Euler:")
 print("\n".join(eeuler))
 print("\n".join(eeuler_adj))
@@ -217,3 +225,5 @@ print("Add to pre:")
 for code in add_to_pre_c:
     print(code)
 
+print("Gradient update:")
+print(grad_update_c)

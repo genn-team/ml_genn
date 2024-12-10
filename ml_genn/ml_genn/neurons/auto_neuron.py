@@ -25,9 +25,10 @@ class AutoNeuron(Neuron):
 
     def __init__(self, vars: list, params: list,
                  ode: dict, threshold: str, reset: dict, readout=None, solver="exponential_euler", **kwargs):
-        #super(Auto, self).__init__(readout, **kwargs)
+        super(AutoNeuron, self).__init__(readout, **kwargs)
 
         self.vars = vars
+        self.varnames = [ var[0] for var in vars ]
         self.params = params
         self.ode = ode
         self.threshold = threshold
@@ -38,7 +39,7 @@ class AutoNeuron(Neuron):
         # add vars to genn_model. Assume all are scalars for now
         genn_vars = []
         for var in self.vars:
-            genn_vars.append((var, "scalar"))
+            genn_vars.append((var[0], var[1]))
         self.genn_model["vars"] = genn_vars
 
         # add params to genn_model. Assume are scalars for now
@@ -50,21 +51,21 @@ class AutoNeuron(Neuron):
         self.genn_model["threshold_condition_code"] = f"{self.threshold} == 0"
 
         resets = []
-        for var in self.vars:
+        for var in self.varnames:
             if var in self.reset and var != self.reset[var]:
                 resets.append(f"{var} = {reset[var]};")
             self.genn_model["reset_code"] = "\n".join(resets)
 
         # updates for forward pass
-        sym = get_symbols(self.vars, self.params)
+        sym = get_symbols(self.varnames, self.params)
         sym["I"] = sympy.Symbol("I")
         dt = sympy.Symbol("dt")
-        self.dx_dt, clines = solve_ode(self.vars, sym, self.ode, dt, self.solver)
+        self.dx_dt, clines = solve_ode(self.varnames, sym, self.ode, dt, self.solver)
         self.genn_model["sim_code"] = "\n".join(clines)
         print(self.genn_model)
         
     def get_model(self, population: Population,
                   dt: float, batch_size: int) -> NeuronModel:
-        return NeuronModel.from_val_descriptors(self.genn_model, self.vars, self, dt)
+        return NeuronModel.from_val_descriptors(self.genn_model, "V", self, dt)
 
 

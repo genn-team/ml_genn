@@ -16,12 +16,11 @@ from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
 from ..metrics import MetricsType
-from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
-                       LeakyIntegrateFireInput)
+from ..neurons import AutoNeuron, Input
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
                         MaxVar, SumVar, Var)
-from ..synapses import Exponential
+from ..synapses import AutoSyn
 from ..utils.callback_list import CallbackList
 from ..utils.model import (CustomUpdateModel, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
@@ -38,6 +37,7 @@ from ..utils.value import is_value_array, is_value_constant
 from .compiler import softmax_1_model, softmax_2_model
 from ..optimisers import default_optimisers
 from ..losses import default_losses
+from ..auto_tools import *
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,8 @@ logger = logging.getLogger(__name__)
 # read and write offsets check for wraparound, this can continue forever
 # **NOTE** due to the inprecision of ASCII diagramming there are out-by-one errors in the above
 
+default_params = {}
+"""
 default_params = {
     LeakyIntegrate: {"scale_i": True}, 
     LeakyIntegrateFire: {"relative_reset": False, 
@@ -89,6 +91,7 @@ default_params = {
                               "integrate_during_refrac": False,
                               "scale_i": True},
     Exponential: {"scale_i": True}}
+"""
 
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
@@ -431,10 +434,66 @@ class CustomUpdateOnFirstBatchEnd(Callback):
                          f"at end of batch {batch}")
             self._compiled_network.genn_model.custom_update(self.name)
 
+
+# Preprocessing of auto-adjoint equations
+
+def process_odes(vars, params, eqns, w_name):
+    sym = get_symbols(vars, params)
+    dx_dt = {}
+    for var in varname:
+        if var in eqns:
+            dx_dt[var] = parse_expr(eqns[var],local_dict= sym)
+    return sym, dx_dt
+
+def process_jumps(vars, params, jumps, w_name):
+    sym = get_symbols(vars, params, w_name)
+    h = {}
+    count = 0
+    for var in vars:
+        if var in jumps:
+            tmp = parse_expr(jumps[var],local_dict= sym)-sym[var]
+            if sympy.diff(tmp, sym[var]) == 0:
+                h[var] = tmp
+                if h[var] != 0:
+                    count += 1
+            else:
+                raise NotImplementedError(
+                    "EventProp compiler only supports "
+                    "synapses which (only) add input to a target variable.")
+        if count != 1:
+            raise NotImplementedError(
+                    "EventProp compiler only supports "
+                    "synapses which jump exactly one target variable.")
+    return sym, h
+
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
 def weight_update_model(user_model):
     model = {}
+
+def weight_update_model(params: list, w_name: str, jumps: dict()):
+    model= {}
+    model["params"] = [ (p, "scalar") for p in params ]
+    model["vars"] = [(w_name, "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
+    model["pre_neuron_var_refs"] = [("BackSpike_pre", "uint8_t")]
+    
+    sym, h = process_jumps(vars, params, jumps)
+    model["post_neuron_var_refs"] = []
+    for var in vars:
+        if var in h and h[var] != 0:
+            model["post_neuron_var_refs"] = (f"Lambda{var}_post", "scalar")
+            target_var = var
+            
+    model["pre_spike_syn_code"] = f"""
+    addToPost({w_name});
+    """
+    model["pre_event_threshold_condition_code"] = """
+    BackSpike_pre
+    """
+    grad_update = None
+    grad_update = -sym[f"Lambda{var}"]*sympy.diff(h[var],sym[w_name])
+    model["pre_event_syn_code"] = sympy.ccode(grad_update, assign_to= "Gradient")
+    return model
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
@@ -595,47 +654,47 @@ class EventPropCompiler(Compiler):
 
         # neuron dynamical equations
         # Neuron should be AutoNeuron
-        if not isinstance(pop.neuron, AutoNeuron):
+        if not (isinstance(pop.neuron, AutoNeuron) or isinstance(pop.neuron, Input)):
             raise NotImplementedError(
                 f"EventProp compiler only supports "
                 f"user-defined neurons (AutoNeuron)")
-        sym = get_symbols(pop.neuron.vars, pop.neuron.params)
-        sym["I"] = sympy.Symbol("I")
-        # Add adjoint state variables - only for vars that have an ode
-        for var in pop.neuron.ode:
-            adj_name[var] = f"lambda_{var}"
-            sym[adj_name[var]] = sympy.Symbol(adj_name[var])
-            model_copy.add_var(adj_name[var], "scalar", 0.0)
-        # generate adjoint ODE
-        # assume that neuron variables do not appear in rhs of post-synapse ODEs
-        # therefore, we can do these independent of synapse equations
-        ode = {}
-        for var in pop.neuron.ode:
-            o = None
-            for v2, expr in pop.neuron.dx_dt.items():
-                o = add(o, sympy.diff(expr, sym[var])*sym[adj_name[v2]])    
-            ode[var] = o
+        if isinstance(pop.neuron, AutoNeuron):
+            sym = get_symbols(pop.neuron.varnames, pop.neuron.params)
+            sym["I"] = sympy.Symbol("I")
+            # Add adjoint state variables - only for vars that have an ode
+            for var in pop.neuron.ode:
+                print(f"Lambda{var}")
+                model_copy.add_var(f"Lambda{var}", "scalar", 0.0)
+            # generate adjoint ODE
+            # assume that neuron variables do not appear in rhs of post-synapse ODEs
+            # therefore, we can do these independent of synapse equations
+            dl_dt = {}
+            for var in pop.neuron.ode:
+                o = None
+                for v2, expr in pop.neuron.dx_dt.items():
+                    o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
+                dl_dt[var] = o
             
-        # post-synapses can do their own adjoint equations except they get an additional
-        # term from where I enters the neuron equations
-        # As we assume that I enters as the direct sum of all Isyn of all synapse
-        # populations, the partial derivative with respect to I is the same as with
-        # respect to each Isyn
-        # in principle, I could enter several equations
-        lbd_I_extra = None
-        for var, expr in pop.neuron.dx_dt:
-            lbd_I_extra = add(lbd_I_extra, sympy.diff(expr, sym["I"])*sym[adj_name[var]])
+            # post-synapses can do their own adjoint equations except they get an additional
+            # term from where I enters the neuron equations
+            # As we assume that I enters as the direct sum of all Isyn of all synapse
+            # populations, the partial derivative with respect to I is the same as with
+            # respect to each Isyn
+            # in principle, I could enter several equations
+            lbd_I_extra = None
+            for var, expr in pop.neuron.dx_dt.items():
+                lbd_I_extra = add(lbd_I_extra, sympy.diff(expr, sym["I"])*sym[f"Lambda{var}"])
 
-        # TODO: is setting a property of syn like this working or would it be a copy!?!
-        # TODO: also, can the post_synapse access presyn neurons vars without decorations?
-        if lbd_I_extra != 0:
-            for conn in pop.incoming_connections:
-                syn= conn().synapse
-                if not isinstance(syn, AutoSyn):
-                    raise NotImplementedError(
-                        "EventProp compiler only supports "
-                        "user-defined synapses (AutoSyn)")
-                syn.lbd_ode[adj_name["I"]] = lbd_I_extra
+                # TODO: is setting a property of syn like this working or would it be a copy!?!
+                # TODO: also, can the post_synapse access presyn neurons vars without decorations?
+                if lbd_I_extra != 0:
+                    for conn in pop.incoming_connections:
+                        syn= conn().synapse
+                        if not isinstance(syn, AutoSyn):
+                            raise NotImplementedError(
+                                "EventProp compiler only supports "
+                                "user-defined synapses (AutoSyn)")
+                        syn.dl_dt["LambdaI"] = lbd_I_extra
                 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -681,7 +740,7 @@ class EventPropCompiler(Compiler):
             # receive dl_V/dV
             drive = sympy.Symbol("drive")
             ode["V"] = ode["V"]+drive
-            _, clines = solve_ode(pop.neuron.vars, sym, ode, dt, pop.neuron.solver)
+            _, clines = solve_ode(pop.neuron.varnames, sym, ode, dt, pop.neuron.solver)
             ccode = "\n".join(clines)
             model_copy.prepend_sim_code(ccode)
 
@@ -911,8 +970,11 @@ class EventPropCompiler(Compiler):
                 # Add additional input variable to receive feedback
                 model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
 
+                
+                
                 # Add EGP for IMinusV ring variables
                 # TODO: make ring buffers for stored vars
+                
                 model_copy.add_egp("RingIMinusV", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
 
@@ -925,7 +987,7 @@ class EventPropCompiler(Compiler):
                 # List of variables aside from those in base 
                 # model we want to reset every batch
                 # TODO: where is Lambda_I reset???
-                additional_reset_vars = [(adj, "scalar", 0.0) for adj in adj_name]
+                additional_reset_vars = [(f"Lambda{var}", "scalar", 0.0) for var in pop.neuron.varnames]
 
                 # If regularisation is enabled
                 # **THINK** is this LIF-specific?
@@ -984,13 +1046,14 @@ class EventPropCompiler(Compiler):
 
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
+                print(type(model))
                 compile_state.add_neuron_reset_vars(
                     pop, model.reset_vars + additional_reset_vars,
                     True, False)
 
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
-                _, clines = solve_ode(pop.neuron.vars, sym, ode, dt, pop.neuron.solver)
+                _, clines = solve_ode(pop.neuron.varnames, sym, ode, dt, pop.neuron.solver)
                 ccode = "\n".join(clines)
                 model_copy.prepend_sim_code(
                     neuron_backward_pass.substitute(
@@ -1023,29 +1086,26 @@ class EventPropCompiler(Compiler):
 
         # Make copy of model
         model_copy = deepcopy(model)
-        sym = {}
-        adj_name = {}
+        sym = get_symbols(conn.synapse.varnames,conn_synapse.params)
         for var in conn.synapse.ode:
-            adj_name[var] = f"lambda_{var}"
-            sym[adj_name[var]] = sympy.Symbol(adj_name[var])
-            model_copy.add_var(adj_name[var], "scalar", 0.0)
+            model_copy.add_var(f"Lambda{var}", "scalar", 0.0)
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
         # therefore, we can do these independent of synapse equations
         for var in conn.synapse.ode:
             o = None
             for v2, expr in conn.synapse.dx_dt.items():
-                o = add(o, sympy.diff(expr, sym[var])*sym[adj_name[v2]])    
-            if var in conn.synapse.lbd_ode:  # it's the adjoint to I and already has terms
-                conn.synapse.lbd_ode[var] += o
-            else 
-                conn.synapse.lbd_ode[var] = o
+                o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
+            if var in conn.synapse.dl_dt:  # it's the adjoint to I and already has terms
+                conn.synapse.dl_dt[var] += o
+            else:
+                conn.synapse.dl_dt[var] = o
 
         # inject lambda update code into sim_code
-        _, clines = solve_ode(conn.synapse.vars, sym, ode, dt, pop.neuron.solver)
+        _, clines = solve_ode(conn.synapse.varnames, sym, ode, dt, pop.neuron.solver)
         ccode = "\n".join(clines)
         model_copy.prepend_sim_code(ccode)
-        additional_reset_vars = [(adj, "scalar", 0.0) for adj in adj_name]
+        additional_reset_vars = [(f"Lambda{var}", "scalar", 0.0) for var in conn.synapse.ode]
         # Add reset logic to reset adjoint state variables 
         # as well as any state variables from the original model
         compile_state.add_synapse_reset_vars(
