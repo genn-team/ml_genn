@@ -4,24 +4,21 @@ from auto_tools import *
 
 DEBUG = False
 
-varname= [ "V", "I", "a" ]
+varname= [ "V", "I" ]
 parname = [ "taum", "taus", "theta" ]
 w_name = "w"
 
 eqns = {
     "V": "(-V+I)/taum",   # the ODE for V
     "I": "-1/taus*I",       # the ODE for I
-    "a": "-a/taus"
 }
 threshold = "V-theta" # threshold function (condition == 0)
 reset = {"V": "0",         # V value after reset
          "I": "I",         # I value after reset
-         "a": "a"
 }
 jumps = {
     "V": "V+0",          # V value after synaptic jump
-    "I": "I+a*w",           # I value after synaptic jump
-    "a": "a+w"
+    "I": "I+w",           # I value after synaptic jump
 }
 
 sym = {}
@@ -73,7 +70,7 @@ for var, expr in dx_dt.items():
     plus = expr
     for v2, f2 in f.items():
         plus = plus.subs(sym[v2],f2)
-        dx_dtplusn[var] = plus
+    dx_dtplusn[var] = plus
 
 dx_dtplusm = {}
 for var, expr in dx_dt.items():

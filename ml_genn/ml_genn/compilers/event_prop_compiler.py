@@ -41,6 +41,8 @@ from ..auto_tools import *
 
 logger = logging.getLogger(__name__)
 
+DEBUG = True
+
 # EventProp uses a fixed size ring-buffer structure with a read pointer to
 # read data for the backward pass and a write pointer to write data from the
 # forward pass. These start positioned like this:
@@ -659,44 +661,150 @@ class EventPropCompiler(Compiler):
                 f"EventProp compiler only supports "
                 f"user-defined neurons (AutoNeuron)")
         if isinstance(pop.neuron, AutoNeuron):
-            sym, dx_dt = process_odes(pop.neuron.varnames, pop.neuron.pnames, pop.neuron.ode)
-            get_symbols(pop.neuron.varnames, pop.neuron.pnames)
-            sym["I"] = sympy.Symbol("I")
+            vars = pop.neuron.vars
+            varnames = pop.neuron.varnames
+            var_vals = pop.neuron.var_vals
+            params = pop.neuron.params
+            pnames = pop.neuron.pnames
+            param_vals = pop.neuron.param_vals
+            n_varnames= varnames.copy()
+            vn = varnames.copy()
+            vn.append("I")
+            sym, dx_dt = process_odes(vn, pnames, pop.neuron.ode)
+            i = 0
+            Isum = None
+            for conn in pop.incoming_connections:
+                syn= conn().synapse
+                if not isinstance(syn, AutoSyn):
+                    raise NotImplementedError(
+                        "EventProp compiler only supports "
+                        "user-defined synapses (AutoSyn)")
+                if "I" not in syn.varnames:
+                    raise NotImplementedError(
+                        "EventProp compiler only supports "
+                        "synapses that define the variable I as their output")
+                s_sym, s_dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
+                for vn in syn.varnames:
+                    vn2 = f"{vn}{i}"
+                    sym[vn2] = sympy.Symbol(vn2)
+                    varnames.append(vn2)
+                    var_vals[vn2] = syn.var_vals[vn]
+                Isum = add(Isum, sym[f"I{i}"])
+                
+                for vn, expr in s_dx_dt.items():
+                    e = expr
+                    for vn2 in syn.varnames:
+                        e = e.subs(s_sym[vn2],sym[f"{vn2}{i}"])
+                    dx_dt[f"{vn}{i}"] = e
+                    
+                for pn in syn.pnames:
+                    pn2 = f"{pn}{i}"
+                    pnames.append(pn2)
+                    param_vals[pn2] = syn.param_vals[pn]
+
+            for vn in dx_dt:
+                sI = sympy.Symbol("I")
+                dx_dt[vn]= dx_dt[vn].subs(sI,Isum)
+                
+            if DEBUG:
+                print(varnames)
+                print(var_vals)
+                print(pnames)
+                print(param_vals)
+                print(dx_dt)
+
             # Add adjoint state variables - only for vars that have an ode
-            for var in pop.neuron.ode:
-                print(f"Lambda{var}")
-                model_copy.add_var(f"Lambda{var}", "scalar", 0.0)
+            for var in dx_dt:
+                adj_var = f"Lambda{var}"
+                sym[adj_var] = sympy.Symbol(adj_var)
+                model_copy.add_var(adj_var, "scalar", 0.0)
             # generate adjoint ODE
             # assume that neuron variables do not appear in rhs of post-synapse ODEs
             # therefore, we can do these independent of synapse equations
             dl_dt = {}
-            for var in pop.neuron.ode:
+            for var in dx_dt:
                 o = None
-                for v2, expr in pop.neuron.dx_dt.items():
+                for v2, expr in dx_dt.items():
                     o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
                 dl_dt[var] = o
-            
-            # post-synapses can do their own adjoint equations except they get an additional
-            # term from where I enters the neuron equations
-            # As we assume that I enters as the direct sum of all Isyn of all synapse
-            # populations, the partial derivative with respect to I is the same as with
-            # respect to each Isyn
-            # in principle, I could enter several equations
-            lbd_I_extra = None
-            for var, expr in pop.neuron.dx_dt.items():
-                lbd_I_extra = add(lbd_I_extra, sympy.diff(expr, sym["I"])*sym[f"Lambda{var}"])
 
-                # TODO: is setting a property of syn like this working or would it be a copy!?!
-                # TODO: also, can the post_synapse access presyn neurons vars without decorations?
-                if lbd_I_extra != 0:
-                    for conn in pop.incoming_connections:
-                        syn= conn().synapse
-                        if not isinstance(syn, AutoSyn):
+            print(dl_dt)
+            # threshold condition
+            g = parse_expr(pop.neuron.threshold)
+            # reset function
+            f = {}
+            for var in pop.neuron.reset:
+                f[var] = parse_expr(pop.neuron.reset[var],local_dict= sym)
+            print(f"f: {f}")      
+            # after jump dynamics equation "\dot{x}^+"
+            dx_dtplusn = {}
+            for var, expr in dx_dt.items():
+                plus = expr
+                for v2, f2 in f.items():
+                    plus = plus.subs(sym[v2],f2)
+                dx_dtplusn[var] = plus
+            print(f"dx_dtplusn: {dx_dtplusn}")
+            A = {}
+            B = {}
+            C = {}
+            for var in varnames:
+                ex= None
+                for v2,f2 in f.items():
+                    ex = add(ex, sympy.diff(f2,sym[var])*sym[f"Lambda{v2}"])
+                A[var] = ex
+                print(A)
+                ex= None
+                for v2 in varnames:
+                    ex = add(ex, sympy.diff(g,sym[v2])*dx_dt[v2])
+                ex = sympy.simplify(ex)
+                if ex != 0:
+                    ex = sympy.diff(g,sym[var])/ex
+                    if ex != 0:
+                        B[var] = ex
+                if var in B:
+                    ex= None
+                    for v2,f2 in f.items():
+                        ex2= None
+                        for v3 in varnames:
+                            ex2 = add(ex2, sympy.diff(f2,sym[v3])*dx_dt[v3])
+                        ex2 = add(ex2,-dx_dtplusn[v2])
+                        ex = add(ex,-sym[f"Lambda{v2}"]*ex2)
+                    C[var] = ex
+
+            # assemble the lambda^n+ parts
+            jumps = {}
+            for var in n_varnames:
+                ex = None
+                ex = add(ex, A[var])
+                if var in B and var in C:
+                    ex = add(ex, B[var] * C[var])
+                jumps[var] = ex
+
+            print(jumps)
+            exit(1)
+
+
+            # synaptic jumps (STILL TODO)
+            for conn in pop.incoming_connections:
+                syn= conn().synapse
+                h = {}
+                for var in varnames:
+                    if var in syn.jumps:
+                        tmp = parse_expr(syn.jumps[var],local_dict= sym)-sym[var]
+                        if sympy.diff(tmp, sym[var]) == 0:
+                            h[var] = tmp
+                        else:
                             raise NotImplementedError(
                                 "EventProp compiler only supports "
-                                "user-defined synapses (AutoSyn)")
-                        syn.dl_dt["LambdaI"] = lbd_I_extra
-                
+                                "synapses which (only) add input to a target variable.")
+
+                dx_dtplusm = {}
+                for var, expr in dx_dt.items():
+                    plus = expr
+                    for v2, h2 in h.items():
+                        plus = plus.subs(sym[v2],sym[v2]+h2)
+                    dx_dtplusm[var] = plus
+     
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
