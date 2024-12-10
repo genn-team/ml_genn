@@ -29,7 +29,10 @@ class AutoNeuron(Neuron):
 
         self.vars = vars
         self.varnames = [ var[0] for var in vars ]
+        self.var_vals = { var[0]: var[2] for var in vars }
         self.params = params
+        self.pnames = [ p[0] for p in params ]
+        self.param_vals = {p[0]: p[2] for p in params }
         self.ode = ode
         self.threshold = threshold
         self.reset = reset
@@ -45,7 +48,7 @@ class AutoNeuron(Neuron):
         # add params to genn_model. Assume are scalars for now
         genn_params = []
         for p in self.params:
-            genn_params.append((p, "scalar"))
+            genn_params.append((p[0], p[1]))
         self.genn_model["params"] = genn_params
 
         self.genn_model["threshold_condition_code"] = f"{self.threshold} == 0"
@@ -57,7 +60,7 @@ class AutoNeuron(Neuron):
             self.genn_model["reset_code"] = "\n".join(resets)
 
         # updates for forward pass
-        sym = get_symbols(self.varnames, self.params)
+        sym = get_symbols(self.varnames, self.pnames)
         sym["I"] = sympy.Symbol("I")
         dt = sympy.Symbol("dt")
         self.dx_dt, clines = solve_ode(self.varnames, sym, self.ode, dt, self.solver)
@@ -66,6 +69,6 @@ class AutoNeuron(Neuron):
         
     def get_model(self, population: Population,
                   dt: float, batch_size: int) -> NeuronModel:
-        return NeuronModel.from_val_descriptors(self.genn_model, "V", self, dt)
+        return NeuronModel(self.genn_model, "V", param_vals=self.param_vals,var_vals=self.var_vals)
 
 

@@ -30,8 +30,12 @@ class AutoSyn(Synapse):
 
         self.vars = vars
         self.varnames = [ var[0] for var in vars]
+        self.var_vals = { var[0]: var[2] for var in vars }
         self.params = params
+        self.pnames = [ p[0] for p in params ]
+        self.param_vals = {p[0]: p[2] for p in params }
         self.ode = ode
+        self.solver = solver
         self.lbd_ode = {}
         self.genn_model = {}
         # add vars to genn_model. Assume all are scalars for now
@@ -43,9 +47,9 @@ class AutoSyn(Synapse):
         # add params to genn_model. Assume are scalars for now
         genn_params = []
         for p in self.params:
-            genn_params.append((p, "scalar"))
+            genn_params.append((p[0], p[1]))
         self.genn_model["params"] = genn_params
-        sym = get_symbols(self.varnames, self.params)
+        sym = get_symbols(self.varnames, self.pnames)
         dt = sympy.Symbol("dt")
         self.dx_dt, clines = solve_ode(self.varnames, sym, self.ode, dt, solver)
         self.genn_model["sim_code"] = "\n".join(clines)
@@ -55,4 +59,4 @@ class AutoSyn(Synapse):
        
     def get_model(self, connection: Connection,
                   dt: float, batch_size: int) -> SynapseModel:
-        return SynapseModel.from_val_descriptors(self.genn_model, self, dt)
+        return SynapseModel(self.genn_model, param_vals=self.param_vals,var_vals=self.var_vals)

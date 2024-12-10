@@ -4,21 +4,24 @@ from auto_tools import *
 
 DEBUG = False
 
-varname= [ "V", "I" ]
+varname= [ "V", "I", "a" ]
 parname = [ "taum", "taus", "theta" ]
 w_name = "w"
 
 eqns = {
     "V": "(-V+I)/taum",   # the ODE for V
     "I": "-1/taus*I",       # the ODE for I
+    "a": "-a/taus"
 }
 threshold = "V-theta" # threshold function (condition == 0)
 reset = {"V": "0",         # V value after reset
          "I": "I",         # I value after reset
+         "a": "a"
 }
 jumps = {
     "V": "V+0",          # V value after synaptic jump
-    "I": "I+w"           # I value after synaptic jump
+    "I": "I+a*w",           # I value after synaptic jump
+    "a": "a+w"
 }
 
 sym = {}
