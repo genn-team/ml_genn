@@ -25,7 +25,7 @@ class AutoSyn(Synapse):
     """
 
     @network_default_params
-    def __init__(self, vars: list, params: list, ode: dict, solver="exponential_euler"):
+    def __init__(self, vars: list, params: list, ode: dict, jumps: dict, w_name: str, solver="exponential_euler"):
         super(AutoSyn, self).__init__()
 
         self.vars = vars
@@ -35,6 +35,8 @@ class AutoSyn(Synapse):
         self.pnames = [ p[0] for p in params ]
         self.param_vals = {p[0]: p[2] for p in params }
         self.ode = ode
+        self.jumps = jumps
+        self.w_name = w_name
         self.solver = solver
         self.lbd_ode = {}
         self.genn_model = {}
@@ -49,11 +51,11 @@ class AutoSyn(Synapse):
         for p in self.params:
             genn_params.append((p[0], p[1]))
         self.genn_model["params"] = genn_params
-        sym = get_symbols(self.varnames, self.pnames)
-        dt = sympy.Symbol("dt")
-        self.dx_dt, clines = solve_ode(self.varnames, sym, self.ode, dt, solver)
-        self.genn_model["sim_code"] = "\n".join(clines)
+        self.genn_model["sim_code"] = ""
         self.dl_dt = {}
+        self.gradient_update_code = ""
+        self.add_to_pre = {}
+        self.post_var_refs = {}
         print(self.genn_model)
         
        
