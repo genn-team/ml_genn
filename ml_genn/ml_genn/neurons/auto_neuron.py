@@ -60,11 +60,6 @@ class AutoNeuron(Neuron):
             self.genn_model["reset_code"] = "\n".join(resets)
 
         # updates for forward pass
-        sym = get_symbols(self.varnames, self.pnames)
-        sym["I"] = sympy.Symbol("I")
-        dt = sympy.Symbol("dt")
-        self.dx_dt, clines = solve_ode(self.varnames, sym, self.ode, dt, self.solver)
-        self.genn_model["sim_code"] = "\n".join(clines)
         print(self.genn_model)
         
     def get_model(self, population: Population,

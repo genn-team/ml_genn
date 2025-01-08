@@ -17,7 +17,7 @@ reset = {"V": "0",         # V value after reset
          "I": "I",         # I value after reset
 }
 jumps = {
-    "V": "V+0",          # V value after synaptic jump
+    #"V": "V+0",          # V value after synaptic jump
     "I": "I+w",           # I value after synaptic jump
 }
 
@@ -147,11 +147,10 @@ for var in varname:
 for var in varname:
     ex = None
     for v2, expr2 in dx_dt.items():
-        ex2 = None
-        ex2 = add(ex2, dx_dtplusm[v2] - expr2)
+        ex2 = dx_dtplusm[v2] - expr2
         if v2 in h:
             for v3, expr3 in dx_dt.items():
-                ex2 = add(ex2, sympy.diff(h[v2],sym[v3])*expr3)
+                ex2 = add(ex2, -sympy.diff(h[v2],sym[v3])*expr3)
         ex = add(ex, sym[adj_name[v2]]*ex2)
     expr[4][var] = sympy.simplify(ex)
 
@@ -179,12 +178,12 @@ eeuler_adj = exponential_euler(adj, sym, ode, dt)
 lineuler = linear_euler(varname, sym, dx_dt, dt)
 lineuler_adj = linear_euler(adj, sym, ode, dt)
 
-jumps, add_to_pre = simplify_using_threshold(varname, sym, g, jumps, add_to_pre)
+jumps = simplify_using_threshold(varname, sym, g, jumps)
+add_to_pre = simplify_using_threshold(varname, sym, g, add_to_pre)
 
 grad_update = None
-for var in varname:
+for var in h:
         grad_update = add(grad_update, -sym[adj_name[var]]*sympy.diff(h[var],sym[w_name]))
-
 print(grad_update)
 
 jump_c = []
