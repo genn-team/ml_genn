@@ -1248,10 +1248,10 @@ class EventPropCompiler(Compiler):
                         strict_check=(neuron_reset_strict_check 
                                       if self.strict_buffer_checking
                                       else "")))
-            for key,val in model_copy.model.items():
-                print(key)
-                print(val)
-            print("-------------------------------------------")
+        for key,val in model_copy.model.items():
+            print(key)
+            print(val)
+        print("-------------------------------------------")
         return model_copy
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
