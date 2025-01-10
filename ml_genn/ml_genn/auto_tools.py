@@ -30,7 +30,7 @@ def linear_euler(varname, sym, exprs, dt):
     for var, expr in exprs.items():
         code.append(sympy.ccode(sym[var]+expr*dt, assign_to= f"const scalar {str(var)}_tmp"))
     for var in exprs:
-        code.append(f"{var} = {var}_tmp")
+        code.append(f"{var} = {var}_tmp;")
     return code
 
     
