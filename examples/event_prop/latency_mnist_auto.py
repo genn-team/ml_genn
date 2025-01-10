@@ -46,7 +46,7 @@ with network:
     hidden = Layer(connectivity, AutoNeuron([("V","scalar",0.0)], [("taum","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/taum"}, "V-theta", {"V": "0"}, solver="linear_euler"),
                    NUM_HIDDEN, AutoSyn([("I","scalar",0.0)],[("taus","scalar",5.0)],{"I": "-I/taus"},{"I": "I+w"},"w",solver="linear_euler"))
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   AutoNeuron([("V","scalar",0.0)], [("taum","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/taum"}, "V-theta", {"V": "0"}, solver="linear_euler", readout="avg_var"),
+                   AutoNeuron([("V","scalar",0.0)], [("TauM","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/TauM"}, "V-theta", {"V": "0"}, solver="linear_euler", readout="avg_var"),
                    NUM_OUTPUT, AutoSyn([("I","scalar",0.0)],[("taus","scalar",5.0)],{"I": "-I/taus"},{"I": "I+w"},"w",solver="linear_euler"))
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))

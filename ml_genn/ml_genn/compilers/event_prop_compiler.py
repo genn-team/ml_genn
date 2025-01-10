@@ -473,32 +473,35 @@ def process_jumps(vars, params, jumps, w_name):
 def weight_update_model(user_model):
     model = {}
 
-def weight_update_model(vars, params: list, w_name: str, jumps: dict()):
+def weight_update_model(syn):
     model= {}
-    model["params"] = [ (p[0], p[1]) for p in params ]
-    model["vars"] = [ (v[0], v[1]) for v in vars ]
-    model["vars"].append((w_name, "scalar", VarAccess.READ_ONLY))
-    model["vars"].append(("Gradient", "scalar"))
+    model["params"] = [ (p[0], p[1]) for p in syn.params ]
+    model["vars"] = []
+    model["vars"].append(("Gradient","scalar"))
+    model["vars"].append((syn.w_name, "scalar", VarAccess.READ_ONLY))
     model["pre_neuron_var_refs"] = [("BackSpike_pre", "uint8_t")]
 
-    varnames = [ v[0] for v in vars ]
-    pnames = [ p[0] for p in params ]
-    sym, h = process_jumps(varnames, pnames, jumps, w_name)
+    varnames = [ v[0] for v in syn.vars ]
+    pnames = [ p[0] for p in syn.params ]
+    sym, h = process_jumps(syn.varnames, syn.pnames, syn.jumps, syn.w_name)
     model["post_neuron_var_refs"] = []
-    for var in varnames:
-        if var in h and h[var] != 0:
-            model["post_neuron_var_refs"] = (f"Lambda{var}_post", "scalar")
-            target_var = var
+    grad_update = None
+    for var in h:
+        if h[var] != 0:
+            grad_update = add(grad_update,-sym[f"Lambda{var}"]*sympy.diff(h[var],sym[syn.w_name]))
+            model["post_neuron_var_refs"].append((f"Lambda{var}", "scalar"))
             
     model["pre_spike_syn_code"] = f"""
-    addToPost({w_name});
+    addToPost({syn.w_name});
     """
     model["pre_event_threshold_condition_code"] = """
     BackSpike_pre
     """
-    grad_update = None
-    grad_update = -sym[f"Lambda{var}"]*sympy.diff(h[var],sym[w_name])
-    model["pre_event_syn_code"] = sympy.ccode(grad_update, assign_to= "Gradient")
+    model["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
+    print(f"wum")
+    for key,val in model.items():
+        print(key)
+        print(val)
     return model
 
 class EventPropCompiler(Compiler):
@@ -694,17 +697,25 @@ class EventPropCompiler(Compiler):
                 # add synapse variables, indexed by synapse population, to
                 # post-synaptic (the currently processed) neuron's sym, varnames, var_vals 
                 for vn in syn.varnames:
-                    vn2 = f"{vn}{i}"
-                    sym[vn2] = sympy.Symbol(vn2)
-                    varnames.append(vn2)
-                    var_vals[vn2] = syn.var_vals[vn]
+                    sym[f"{vn}{i}"] = sympy.Symbol(f"{vn}{i}")
+                    varnames.append(f"{vn}{i}")
+                    model_copy.add_var(f"{vn}{i}", "scalar", syn.var_vals[vn])
+                    var_vals[f"{vn}{i}"] = syn.var_vals[vn]
                 Isum = add(Isum, sym[f"I{i}"])
+                for pn in syn.pnames:
+                    pn2 = f"{pn}{i}"
+                    sym[ f"{pn}{i}"] = sympy.Symbol(f"{pn}{i}")
+                    pnames.append(f"{pn}{i}")
+                    model_copy.add_param(f"{pn}{i}", "scalar", syn.param_vals[pn])
+                    param_vals[f"{pn}{i}"] = syn.param_vals[pn]
                 
                 # add the synaptic ODEs to neuron's dx_dt
                 for vn, expr in s_dx_dt.items():
                     e = expr
                     for vn2 in syn.varnames:
                         e = e.subs(s_sym[vn2],sym[f"{vn2}{i}"])
+                    for pn2 in syn.pnames:
+                        e = e.subs(s_sym[pn2],sym[f"{pn2}{i}"])
                     dx_dt[f"{vn}{i}"] = e
 
                 # add the synaptic pnames and param_vals to the neuron pnames and param_vals 
@@ -751,7 +762,8 @@ class EventPropCompiler(Compiler):
             f = {}
             for var in pop.neuron.reset:
                 f[var] = parse_expr(pop.neuron.reset[var],local_dict= sym)
-            print(f"f: {f}")      
+            if DEBUG:
+                print(f"f: {f}")      
             # after jump dynamics equation "\dot{x}^+"
             dx_dtplusn = {}
             for var, expr in dx_dt.items():
@@ -759,7 +771,8 @@ class EventPropCompiler(Compiler):
                 for v2, f2 in f.items():
                     plus = plus.subs(sym[v2],f2)
                 dx_dtplusn[var] = plus
-            print(f"dx_dtplusn: {dx_dtplusn}")
+            if DEBUG:
+                print(f"dx_dtplusn: {dx_dtplusn}")
             A = {}
             B = {}
             C = {}
@@ -791,25 +804,6 @@ class EventPropCompiler(Compiler):
                 print(f"A: {A}")
                 print(f"B: {B}")
                 print(f"C: {C}")
-            # assemble the lambda^n+ parts
-            b_jumps = {}
-            for var in varnames:
-                ex = None
-                ex = add(ex, A[var])
-                if var in B and var in C:
-                    ex = add(ex, B[var] * C[var])
-                b_jumps[f"Lambda{var}"] = ex
-                    
-            b_jumps =  simplify_using_threshold(varnames, sym, g, b_jumps)
-            # collect variables they might need to go into a ring buffer:
-            for advar, jmp in b_jumps.items():
-                for v2 in varnames:
-                    if jmp.has(sym[v2]):
-                        saved_vars.add(v2)
-
-            
-            if DEBUG:
-                print(f"b_jumps: {b_jumps}")
 
             # synaptic jumps (STILL TODO: We need to figure out which vars are post-synaptic ("m") or pre-synaptic ("n") ... and decorate with _post and make var ref)
             for i,conn in enumerate(pop.incoming_connections):
@@ -832,7 +826,9 @@ class EventPropCompiler(Compiler):
                 #print(dir(syn))
                 # assemble dx_dt_plusm; note that this is done for each incoming synapse
                 # population separately on I is treated as if it was from that population
-                # only; this is ok, as the "outer derivative" of \sum_i I_i wrt I_i is 1 
+                # only; this is ok, as the "outer derivative" of \sum_i I_i wrt I_i is 1
+                # ***NOTE: we here have to work with the POST-SYNAPTIC NEURONS AND THEIR
+                # EQUATIONS!
                 dx_dt_tmp = dx_dt_orig.copy()
                 # add the synapse ODEs to the neuron ODEs (without indexing)
                 s_sym, s_dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
@@ -864,11 +860,7 @@ class EventPropCompiler(Compiler):
                     if v2 in h:
                         for v3, expr3 in dx_dt_tmp.items():
                             ex2 = add(ex2, -sympy.diff(h[v2],sym[v3])*expr3)
-                    if v2 == "I":
-                        lbdv2= f"LambdaI{i}"
-                    else:
-                        lbdv2= f"Lambda{v2}"
-                    ex = add(ex, sym[lbdv2]*ex2)
+                    ex = add(ex, sym[f"Lambda{v2}"]*ex2)
                 E = sympy.simplify(ex)
                 if DEBUG:
                     print(f"E: {E}")
@@ -892,17 +884,6 @@ class EventPropCompiler(Compiler):
                 if DEBUG:
                     print(f"syn.add_to_pre: {syn.add_to_pre}")
                     print(f"saved_vars: {saved_vars}")
-                grad_update = None
-                for var in h:
-                    
-                    sym[f"Lambda{var}{i}_post"] = sympy.Symbol(f"Lambda{var}{i}_post")
-                    sym[syn.w_name] = sympy.Symbol(syn.w_name)
-                    grad_update = add(grad_update, -sym[f"Lambda{var}{i}_post"]*sympy.diff(h[var],sym[syn.w_name]))
-                
-                syn.gradient_update_code = grad_update
-                for var in h:
-                    if grad_update.has(sym[f"Lambda{var}{i}"]):
-                        syn.post_var_refs[f"Lambda{var}{i}"] = f"Lambda{var}{i}"
 
                 # TODO: var_refs for add_to_pre! - ok like this? What if ring buffers
                 # need to be accessed?!?
@@ -911,7 +892,48 @@ class EventPropCompiler(Compiler):
                         if (add_to_pre.has(var)):
                             syn.post_var_refs[var] = var
                
-                        
+                          # Add additional input variable to receive add_to_pre feedback
+                model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
+                
+                # Add EGP for stored vars ring variables
+                ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+                for var in saved_vars:
+                    model_copy.add_egp(f"Ring{var}", "scalar*", 
+                                   np.empty(ring_size, dtype=np.float32))
+
+                # On backward pass transition, update b_jumps and add_to_pre input
+
+            # assemble the different lambda jump parts
+            trans_code= []
+            for var in varnames:
+                ex = A[var]
+                if var in B and var in C:
+                    ex2 = C[var]
+                else:
+                    ex2 = 0
+                if var in B:
+                    if len(pop.outgoing_connections) > 0:
+                        jump = ex + B[var]*(ex2+sympy.Symbol("RevISyn"))
+                    else:
+                        jump = ex + B[var]*ex2
+                else:
+                    jump = ex
+                jump =  simplify_using_threshold(varnames, sym, g, {"j": jump})["j"]
+                for v2 in varnames:
+                    if jump.has(sym[v2]):
+                        saved_vars.add(v2)
+                ccode= sympy.ccode(jump)
+                for v2 in saved_vars:
+                    ccode= ccode.replace(v2, f"Ring{v2}[ringOffset + RingReadOffset]")
+                
+                if DEBUG:
+                    print(f"jump: {ccode}")
+
+                if jump != 0:
+                    trans_code.append(f"Lambda{var} += {ccode};")
+            transition_code = "\n".join(trans_code)
+            print(f"transition_code: {transition_code}")
+            
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
@@ -1118,8 +1140,6 @@ class EventPropCompiler(Compiler):
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
-                    const float backT = {self.example_timesteps * self.dt} - t - dt;
-
                     // Backward pass
                     scalar drive = 0.0;
                     """)
@@ -1180,29 +1200,6 @@ class EventPropCompiler(Compiler):
                                       else "")))
             # Otherwise i.e. it's hidden
             else:
-                # Add additional input variable to receive add_to_pre feedback
-                model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
-                
-                # Add EGP for stored vars ring variables
-                for var in saved_vars:
-                    model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                   np.empty(ring_size, dtype=np.float32))
-
-                # On backward pass transition, update b_jumps and add_to_pre input
-                trans_code= []
-                for advar,expr in b_jumps.items():
-                    if expr != 0:
-                        ccode= sympy.ccode(expr)
-                        for var in saved_vars:
-                            ccode= ccode.replace(var, f"Ring{var}[ringOffset + RingReadOffset]")
-                        trans_code.append(f"{advar} += {ccode} + RevIsyn")
-                transition_code = "\n".join(trans_code)
-
-                # List of variables aside from those in base 
-                # model we want to reset every batch
-                # TODO: where is Lambda_I reset???
-                additional_reset_vars = [(f"Lambda{var}", "scalar", 0.0) for var in varnames]
-
                 # If regularisation is enabled
                 # **THINK** is this LIF-specific?
                 if self.regulariser_enabled:
@@ -1258,46 +1255,54 @@ class EventPropCompiler(Compiler):
                     # Add code to update SpikeCount in forward reset code
                     model_copy.append_reset_code("SpikeCount++;")
 
-                # Add reset logic to reset adjoint state variables 
-                # as well as any state variables from the original model
-                print(type(model))
-                compile_state.add_neuron_reset_vars(
-                    pop, model.reset_vars + additional_reset_vars,
-                    True, False)
+        if not isinstance(pop.neuron, Input) and pop.neuron.readout is None:
+            # List of variables aside from those in base 
+            # model we want to reset every batch
+            additional_reset_vars = [(f"Lambda{var}", "scalar", 0.0) for var in varnames]
+            # Add reset logic to reset adjoint state variables 
+            # as well as any state variables from the original model
+            print(type(pop.neuron))
+            compile_state.add_neuron_reset_vars(
+                pop, model.reset_vars + additional_reset_vars,
+                True, False)
+            print(f"model.reset_vars: {model.reset_vars}")
 
-                # Add the neuron simcode including all the inherited I ODE equations
-                dt = sympy.Symbol("dt")
-                _, clines = solve_ode(varnames, sym, dx_dt, dt, pop.neuron.solver)
-                ccode = "\n".join(clines)
-                model_copy.prepend_sim_code(ccode)
-                # Add code to start of sim code to run backwards pass 
-                # and handle back spikes with correct LIF dynamics
-                _, clines = solve_ode(pop.neuron.varnames, sym, dl_dt, dt, pop.neuron.solver)
-                ccode = "\n".join(clines)
-                model_copy.prepend_sim_code(
-                    neuron_backward_pass.substitute(
-                        max_spikes=self.max_spikes,
-                        example_time=(self.example_timesteps * self.dt),
-                        dynamics=ccode,
-                        transition=transition_code))
+        if not isinstance(pop.neuron, Input):
+            # Add the neuron simcode including all the inherited I ODE equations
+            dt = sympy.Symbol("dt")
+            _, clines = solve_ode(varnames, sym, dx_dt, dt, pop.neuron.solver)
+            ccode = "\n".join(clines)
+            model_copy.append_sim_code(ccode)
 
-                # Prepend (as it accesses the pre-reset value of V) 
-                # code to reset to write spike time and I-V to ring buffer
-                # TODO: we need the saved vars here to go into the buffer
-                write = []
-                for var in saved_vars:
-                    write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {var};")
-                model_copy.prepend_reset_code(
-                    neuron_reset.substitute(
-                        max_spikes=self.max_spikes,
-                        write= "\n".join(write),
-                        strict_check=(neuron_reset_strict_check 
-                                      if self.strict_buffer_checking
-                                      else "")))
-        for key,val in model_copy.model.items():
-            print(key)
-            print(val)
-        print("-------------------------------------------")
+            # TODO*** this stuff should take into account whether a neuron is psiking or not
+            # non-spiking neurons don't need the backspike stuff and output neurons
+            # don't actually get updates on backspike even if they are spiking ...
+            # !!!!!!!!
+            # Add code to start of sim code to run backwards pass 
+            # and handle back spikes with correct LIF dynamics
+            _, clines = solve_ode(pop.neuron.varnames, sym, dl_dt, dt, pop.neuron.solver)
+            ccode = "\n".join(clines)
+            model_copy.append_sim_code(
+                neuron_backward_pass.substitute(
+                    max_spikes=self.max_spikes,
+                    example_time=(self.example_timesteps * self.dt),
+                    dynamics=ccode,
+                    transition=transition_code))
+        
+            # Prepend (as it accesses the pre-reset value of V) 
+            # code to reset to write spike time and I-V to ring buffer
+            # TODO: we need the saved vars here to go into the buffer
+            write = []
+            for var in saved_vars:
+                write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {var};")
+            model_copy.prepend_reset_code(
+                neuron_reset.substitute(
+                    max_spikes=self.max_spikes,
+                    write= "\n".join(write),
+                    strict_check=(neuron_reset_strict_check 
+                                  if self.strict_buffer_checking
+                                  else "")))
+        print(model_copy.model)
         return model_copy
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
@@ -1416,19 +1421,64 @@ class EventPropCompiler(Compiler):
 
         # Return weight update model
         """
+
+        pop = conn.target()
+        print(pop.incoming_connections)
+        
+        for index,c in enumerate(pop.incoming_connections):
+            if c() == conn: break
         syn = conn.synapse
-        syn.var_vals["Gradient"] = 0.0    
+        syn.var_vals["Gradient"] = 0.0
+        print(f"syn.vars: {syn.vars}")
+        print(f"syn.post_var_refs: {syn.post_var_refs}")
+        weight_update= weight_update_model(syn)
+        post_var_refs= {}
+        for n in weight_update["post_neuron_var_refs"]:
+            if n[0] == "I" or n[0] == "LambdaI":
+                post_var_refs[n[0]] = n[0]+str(index)
+            else:
+                post_var_refs[n[0]] = n[0]
+
+        assert(len(syn.add_to_pre) == 1)
+        param_vals = syn.param_vals
+        for add in syn.add_to_pre.values():
+            add_to_pre_ccode = sympy.ccode(add)
+            print(pop.neuron.pnames)
+            for p,value in pop.neuron.param_vals.items():
+                sym = sympy.Symbol(p)
+                if add.has(sym):
+                    param_vals[p]= value
+                    weight_update["params"].append((p,"scalar"))
+            for var,tpe,_ in pop.neuron.vars:
+                print(var)
+                print(add)
+                sym = sympy.Symbol(var)
+                if add.has(sym):
+                    weight_update["post_neuron_var_refs"].append((var,tpe))
+                    post_var_refs[var] = var
+                sym = sympy.Symbol(f"Lambda{var}")
+                if add.has(sym):
+                    weight_update["post_neuron_var_refs"].append((f"Lambda{var}",tpe))
+                    post_var_refs[f"Lambda{var}"] = f"Lambda{var}"
+            for var,tpe,_ in syn.vars:
+                print(var)
+                print(add)
+                sym = sympy.Symbol(var+str(index))
+                if add.has(sym):
+                    weight_update["post_neuron_var_refs"].append((var+str(index),tpe))
+                    post_var_refs[var+str(index)] = var+str(index)
+                
+        print(post_var_refs)       
+
         wum = WeightUpdateModel(
-            model= weight_update_model(syn.vars, syn.params, syn.w_name, syn.jumps),
-            param_vals= syn.param_vals,
-            var_vals= syn.var_vals,
+            model= weight_update,
+            param_vals= param_vals,
+            var_vals= {syn.w_name: connect_snippet.weight, "Gradient": 0.0},
             pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
-            post_neuron_var_refs=syn.post_var_refs
+            post_neuron_var_refs=post_var_refs
         )
-        gradient_update_ccode = sympy.ccode(syn.gradient_update_code)
-        wum.append_pre_event_syn_code(f"Gradient += {gradient_update_ccode}")
-        add_to_pre_ccode = sympy.ccode(syn.add_to_pre)
         wum.append_pre_event_syn_code(f"addToPre({add_to_pre_ccode});")
+        print(wum.model)
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
