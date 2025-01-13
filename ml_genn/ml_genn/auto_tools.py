@@ -153,6 +153,9 @@ def saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
 
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
 def simplify_using_threshold(varname, sym, g, expr):
+    if g is None:
+        return expr
+
     the_var = None
     for var in varname:
         if g.has(sym[var]):
@@ -166,8 +169,12 @@ def simplify_using_threshold(varname, sym, g, expr):
 
     if len(sln) != 1:
         return expr
-    
-    new_expr = {}
-    for var, ex in expr.items():
-        new_expr[var] = ex.subs(the_var,sln[0])
-    return new_expr
+
+    if isinstance(expr, dict):
+        new_expr = {}
+        for var, ex in expr.items():
+            new_expr[var] = ex.subs(the_var,sln[0])
+        return new_expr
+    else:
+        expr= expr.subs(the_var,sln[0])
+        return expr
