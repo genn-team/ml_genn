@@ -25,7 +25,7 @@ class AutoSyn(Synapse):
     """
 
     @network_default_params
-    def __init__(self, vars: list, params: list, ode: dict, jumps: dict, w_name: str, solver="exponential_euler"):
+    def __init__(self, vars: list, params: list, ode: dict, jumps: dict, w_name: str, inject_current: str, solver="exponential_euler"):
         super(AutoSyn, self).__init__()
 
         self.vars = vars
@@ -37,6 +37,7 @@ class AutoSyn(Synapse):
         self.ode = ode
         self.jumps = jumps
         self.w_name = w_name
+        self.inject_current = inject_current
         self.solver = solver
         self.lbd_ode = {}
         self.genn_model = {}
