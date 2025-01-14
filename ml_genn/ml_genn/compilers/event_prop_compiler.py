@@ -448,32 +448,22 @@ def process_odes(vars, params, eqns):
             dx_dt[var] = parse_expr(eqns[var],local_dict= sym)
     return sym, dx_dt
 
-def process_jumps(vars, params, jumps, w_name):
-    sym = get_symbols(vars, params, w_name)
+def process_jumps(sym, jumps):
     h = {}
-    count = 0
-    for var in vars:
-        if var in jumps:
-            tmp = parse_expr(jumps[var],local_dict= sym)-sym[var]
-            if sympy.diff(tmp, sym[var]) == 0:
+    for var in jumps:
+        tmp = parse_expr(jumps[var],local_dict= sym)-sym[var]
+        if sympy.diff(tmp, sym[var]) == 0:
+            if tmp != 0:
                 h[var] = tmp
-                if h[var] != 0:
-                    count += 1
-            else:
-                raise NotImplementedError(
-                    "EventProp compiler only supports "
-                    "synapses which (only) add input to a target variable.")
-        if count != 1:
+        else:
             raise NotImplementedError(
-                    "EventProp compiler only supports "
-                    "synapses which jump exactly one target variable.")
-    return sym, h
+                "EventProp compiler only supports "
+                "synapses which (only) add input to target variables.")
+    return h
 
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
-def weight_update_model(user_model):
-    model = {}
-
+    
 def weight_update_model(syn):
     model= {}
     model["params"] = [ (p[0], p[1]) for p in syn.params ]
@@ -481,28 +471,12 @@ def weight_update_model(syn):
     model["vars"].append(("Gradient","scalar"))
     model["vars"].append((syn.w_name, "scalar", VarAccess.READ_ONLY))
     model["pre_neuron_var_refs"] = [("BackSpike_pre", "uint8_t")]
-
-    varnames = [ v[0] for v in syn.vars ]
-    pnames = [ p[0] for p in syn.params ]
-    sym, h = process_jumps(syn.varnames, syn.pnames, syn.jumps, syn.w_name)
-    model["post_neuron_var_refs"] = []
-    grad_update = None
-    for var in h:
-        if h[var] != 0:
-            grad_update = add(grad_update,-sym[f"Lambda{var}"]*sympy.diff(h[var],sym[syn.w_name]))
-            model["post_neuron_var_refs"].append((f"Lambda{var}", "scalar"))
-            
     model["pre_spike_syn_code"] = f"""
     addToPost({syn.w_name});
     """
     model["pre_event_threshold_condition_code"] = """
     BackSpike_pre
     """
-    model["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
-    print(f"wum")
-    for key,val in model.items():
-        print(key)
-        print(val)
     return model
 
 class EventPropCompiler(Compiler):
@@ -679,56 +653,7 @@ class EventPropCompiler(Compiler):
             vn = varnames.copy()
             vn.append("I")
             sym, dx_dt = process_odes(vn, pnames, pop.neuron.ode)
-            sym_orig = sym.copy()
-            dx_dt_orig = dx_dt.copy() 
-            i = 0
-            Isum = None
             saved_vars = set()
-            for conn in pop.incoming_connections:
-                syn= conn().synapse
-                if not isinstance(syn, AutoSyn):
-                    raise NotImplementedError(
-                        "EventProp compiler only supports "
-                        "user-defined synapses (AutoSyn)")
-                if "I" not in syn.varnames:
-                    raise NotImplementedError(
-                        "EventProp compiler only supports "
-                        "synapses that define the variable I as their output")
-                s_sym, s_dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
-                # add synapse variables, indexed by synapse population, to
-                # post-synaptic (the currently processed) neuron's sym, varnames, var_vals 
-                for vn in syn.varnames:
-                    sym[f"{vn}{i}"] = sympy.Symbol(f"{vn}{i}")
-                    varnames.append(f"{vn}{i}")
-                    model_copy.add_var(f"{vn}{i}", "scalar", syn.var_vals[vn])
-                    var_vals[f"{vn}{i}"] = syn.var_vals[vn]
-                Isum = add(Isum, sym[f"I{i}"])
-                for pn in syn.pnames:
-                    pn2 = f"{pn}{i}"
-                    sym[ f"{pn}{i}"] = sympy.Symbol(f"{pn}{i}")
-                    pnames.append(f"{pn}{i}")
-                    model_copy.add_param(f"{pn}{i}", "scalar", syn.param_vals[pn])
-                    param_vals[f"{pn}{i}"] = syn.param_vals[pn]
-                
-                # add the synaptic ODEs to neuron's dx_dt
-                for vn, expr in s_dx_dt.items():
-                    e = expr
-                    for vn2 in syn.varnames:
-                        e = e.subs(s_sym[vn2],sym[f"{vn2}{i}"])
-                    for pn2 in syn.pnames:
-                        e = e.subs(s_sym[pn2],sym[f"{pn2}{i}"])
-                    dx_dt[f"{vn}{i}"] = e
-
-                # add the synaptic pnames and param_vals to the neuron pnames and param_vals 
-                for pn in syn.pnames:
-                    pn2 = f"{pn}{i}"
-                    pnames.append(pn2)
-                    param_vals[pn2] = syn.param_vals[pn]
-            # replace the symbol "I" in neuron ODEs with the sum of incoming "I" variables
-            for vn in dx_dt:
-                sI = sympy.Symbol("I")
-                dx_dt[vn]= dx_dt[vn].subs(sI,Isum)
-                
             if DEBUG:
                 print(f"varnames: {varnames}")
                 print(f"var_vals: {var_vals}")
@@ -819,69 +744,6 @@ class EventPropCompiler(Compiler):
                 print(f"B: {B}")
                 print(f"C: {C}")
 
-            # synaptic jumps 
-            for i,conn in enumerate(pop.incoming_connections):
-                syn= conn().synapse
-                h = {}
-                for var in syn.jumps:
-                    if var != "I":
-                        raise NotImplementedError(
-                            "EventProp compiler currently only supports "
-                            "synapses which add input to the \"I\" variable.")
-                    tmp = parse_expr(syn.jumps[var],local_dict= sym)-sym[var]
-                    if sympy.diff(tmp, sym[var]) == 0:
-                        h[var] = tmp
-                    else:
-                        raise NotImplementedError(
-                            "EventProp compiler only supports "
-                            "synapses which only *add* input to the target variable.")
-                if DEBUG:
-                    print(f"h: {h}")
-                #print(dir(syn))
-                # assemble dx_dt_plusm; note that this is done for each incoming synapse
-                # population separately on I is treated as if it was from that population
-                # only; this is ok, as the "outer derivative" of \sum_i I_i wrt I_i is 1
-                # ***NOTE: we here have to work with the POST-SYNAPTIC NEURONS AND THEIR
-                # EQUATIONS!
-                dx_dt_tmp = dx_dt_orig.copy()
-                # add the synapse ODEs to the neuron ODEs (without indexing)
-                s_sym, s_dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
-                for var in h:
-                    dx_dt_tmp[var] = s_dx_dt[var]
-                sym_tmp = sym_orig | s_sym
-                dx_dtplusm = {}
-                for var, expr in dx_dt_tmp.items():
-                    plus = expr
-                    for v2, h2 in h.items():
-                        plus = plus.subs(sym_tmp[v2],sym_tmp[v2]+h2)
-                    dx_dtplusm[var] = plus
-                if DEBUG:
-                    print(f"dx_dtplusm: {dx_dtplusm}")
-                # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
-                # variables!
-                # add_to_pre is based on the difference of dx_dt and dx_dtplusm and 
-                ex = None
-                for var, expr in dx_dt_tmp.items():
-                    ex2 =dx_dtplusm[var] - expr
-                    ex = add(ex, sym[f"Lambda{var}"]*ex2)
-                if ex is not None:
-                    syn.add_to_pre = sympy.simplify(ex)
-                    syn.add_to_pre= simplify_using_threshold(varnames, sym_tmp, g, syn.add_to_pre)
-                    # collect variables they might need to go into a ring buffer:
-                    for var in varnames:
-                        if syn.add_to_pre.has(sym[var]):
-                            saved_vars.add(var)
-                    # put var_refs to post-synaptic vars as needed
-                    # TODO: What if ring buffers need to be accessed?!?
-                    for var in sym:
-                        if (syn.add_to_pre.has(var)):
-                            syn.post_var_refs[var] = var
-                else:
-                    syn.add_to_pre = None
-
-                if DEBUG:
-                    print(f"syn.add_to_pre: {syn.add_to_pre}")
-                    print(f"saved_vars: {saved_vars}")
                
                 # Add additional input variable to receive add_to_pre feedback
                 model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
@@ -1312,7 +1174,73 @@ class EventPropCompiler(Compiler):
 
         # Make copy of model
         model_copy = deepcopy(model)
+        syn= conn.synapse
+        if not isinstance(syn, AutoSyn):
+            raise NotImplementedError(
+                "EventProp compiler only supports "
+                "user-defined synapses (AutoSyn)")
+
+        # assemble forward and backward pass equations for synaptic ODE
+        sym, dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
+         
+        # synaptic jumps 
+        h = process_jumps(sym, syn.jumps)
+        if DEBUG:
+            print(f"h: {h}")
+                
+        # generate forward jumps
+        clines = []
+        for var, expr in h.items():
+            clines.append(f"{var} += {sympy.ccode(expr.subs(sympy.Symbol(syn.w_name),sympy.Symbol('inSyn')))};")
+        clines.append("inSyn = 0;")
+        jump_ccode = "\n".join(clines)
+        # generate adjoint ODE
+        pop = conn.target()
+        vn = pop.neuron.varnames.copy()
+        vn.append("I")
+        n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
+        dl_dt = {}
+        for var in dx_dt:
+            o = None
+            for v2, expr in dx_dt.items():
+                o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
+            for v2, expr in n_dx_dt.items():
+                o = add(o, sympy.diff(expr, sym[var])*n_sym[f"Lambda{v2}"])  
+            dl_dt[f"Lambda{var}"] = o
+            err = False
+            for v2 in syn.varnames:
+                if o.has(sym[v2]):
+                    err = True
+            for v2 in pop.neuron.varnames:
+                if o.has(n_sym[v2]):
+                    err = True
+            if err:
+                raise NotImplementedError(
+                    f"Equations necessitate saving forward pass variables in a currently not supported setting.")
+            for v2 in n_sym:
+                if (o.has(v2)):
+                    syn.post_var_refs[v2] = v2
+                    
+                    
+        dt = sympy.Symbol("dt")
+        _, clines = solve_ode(syn.varnames, sym, dx_dt, dt, syn.solver)
+        fwd_ccode = "\n".join(clines)
+        lbd_names = [ f"Lambda{var}" for var in syn.varnames ]
+        _, clines = solve_ode(lbd_names, sym, dl_dt, dt, syn.solver)
+        bwd_ccode = "\n".join(clines)
+        model_copy.model["sim_code"] = f"""
+            // Backward pass
+            {bwd_ccode}
+            injectCurrent({syn.inject_current});
+            // Forward pass
+            {jump_ccode}
+            {fwd_ccode}
+        """
         # Return model
+        print("Synapse model")
+        for key,val in model_copy.model.items():
+            print(f"\n {key}")
+            print(val)
         return model_copy
 
     def build_weight_update_model(self, conn: Connection,
@@ -1424,46 +1352,106 @@ class EventPropCompiler(Compiler):
             compile_state.feedback_connections.append(conn)
 
         pop = conn.target()
-        
-        for index,c in enumerate(pop.incoming_connections):
-            if c() == conn: break
         syn = conn.synapse
         syn.var_vals["Gradient"] = 0.0
-        print(f"syn.vars: {syn.vars}")
-        print(f"syn.post_var_refs: {syn.post_var_refs}")
         weight_update= weight_update_model(syn)
+
         post_var_refs= {}
-        for n in weight_update["post_neuron_var_refs"]:
-            if n[0] == "I" or n[0] == "LambdaI":
-                post_var_refs[n[0]] = n[0]+str(index)
-            else:
-                post_var_refs[n[0]] = n[0]
-
         param_vals = syn.param_vals
-        add_to_pre_ccode = sympy.ccode(syn.add_to_pre)
-        print(pop.neuron.pnames)
-        for p,value in pop.neuron.param_vals.items():
-            sym = sympy.Symbol(p)
-            if syn.add_to_pre.has(sym):
-                param_vals[p]= value
-                weight_update["params"].append((p,"scalar"))
-        for var,tpe,_ in pop.neuron.vars:
-            sym = sympy.Symbol(var)
-            if syn.add_to_pre.has(sym):
-                weight_update["post_neuron_var_refs"].append((var,tpe))
-                post_var_refs[var] = var
-            sym = sympy.Symbol(f"Lambda{var}")
-            if syn.add_to_pre.has(sym):
-                weight_update["post_neuron_var_refs"].append((f"Lambda{var}",tpe))
-                post_var_refs[f"Lambda{var}"] = f"Lambda{var}"
-        for var,tpe,_ in syn.vars:
-            sym = sympy.Symbol(var+str(index))
-            if syn.add_to_pre.has(sym):
-                weight_update["post_neuron_var_refs"].append((var+str(index),tpe))
-                post_var_refs[var+str(index)] = var+str(index)
-                
-        print(post_var_refs)       
 
+        pop = conn.target()
+        # forward ODE
+        sym, dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
+        # synaptic jumps 
+        h = process_jumps(sym, syn.jumps)        
+        if DEBUG:
+            print(f"h: {h}")
+                
+        # assemble gradient update
+        grad_update = None
+        for var in h:
+            if h[var] != 0:
+                grad_update = add(grad_update,-sym[f"Lambda{var}"]*sympy.diff(h[var],sympy.Symbol(syn.w_name)))
+                if var in pop.neuron.vars:
+                    post_var_refs["Lambda{var}"]= "Lambda{var}"
+
+        weight_update["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
+        print(f"POSTVAR: {post_var_refs}")
+
+        # assemble dx_dt_plusm; 
+        # ***NOTE: we here have to work with the POST-SYNAPTIC neurons and their equations
+        # this currently only works if the inject_current jumps only depend on w and
+        # inject_current only enters linearly into rhs of any ODEs
+        # Do dx_dt_plusm
+        # synaptic ODEs first
+        dx_dtplusm = {}
+        for var, expr in dx_dt.items():
+            for v2, ex2 in h.items():
+                expr = expr.subs(sym[v2],sym[v2]+ex2)
+            dx_dtplusm[var] = expr
+       
+        vn = pop.neuron.varnames.copy()
+        vn.append("I")
+        n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
+        inject = sympy.parse_expr(syn.inject_current, local_dict=sym)
+        inject_plusm = inject
+        for var, expr in h.items():
+                inject_plusm = inject_plusm.subs(sym[var],sym[var]+expr)
+        n_dx_dtplusm = {}
+        print(f"n_dx_dt: {n_dx_dt}")
+        for var, expr in n_dx_dt.items():
+            ex2 = expr.subs(n_sym["I"],inject)
+            n_dx_dt[var] = ex2
+            ex2 = expr.subs(n_sym["I"],inject_plusm)
+            n_dx_dtplusm[var] = ex2
+        if DEBUG:
+            print(f"dx_dt: {dx_dt}")
+            print(f"n_dx_dt: {n_dx_dt}")
+            print(f"dx_dtplusm: {dx_dtplusm}")
+            print(f"n_dx_dtplusm: {n_dx_dtplusm}")
+        # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
+        # variables!
+        # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
+        ex = None
+        # synapse equations first:
+        for var, expr in dx_dt.items():
+            ex2 = dx_dtplusm[var] - expr
+            ex = add(ex, sym[f"Lambda{var}"]*ex2)
+        # then neuron equations:
+        for var, expr in n_dx_dt.items():
+            ex2 = n_dx_dtplusm[var] - expr
+            ex = add(ex, sympy.Symbol(f"Lambda{var}")*ex2)
+        if ex is not None:
+            add_to_pre = sympy.simplify(ex)
+            # check whether any vars might be involved from teh forward pass
+            err = False
+            for var in syn.varnames:
+                if add_to_pre.has(sym[var]):
+                    err = True
+            for var in pop.neuron.varnames:
+                if add_to_pre.has(n_sym[var]):
+                    err = True
+            if err:
+                raise NotImplementedError(
+                    f"Equations necessitate saving forward pass variables in a currently not supported setting.")
+            # put var_refs to post-synaptic vars as needed
+            add_to_pre_ccode = sympy.ccode(add_to_pre)
+            for p,value in pop.neuron.param_vals.items():
+                sym_p = sympy.Symbol(p)
+                if add_to_pre.has(sym_p):
+                    param_vals[p]= value
+                    weight_update["params"].append((p,"scalar"))
+            weight_update["post_neuron_var_refs"] = []
+            for var,tpe,_ in pop.neuron.vars:
+                sym_v = sympy.Symbol(var)
+                if add_to_pre.has(sym_v):
+                    weight_update["post_neuron_var_refs"].append((var,tpe))
+                    post_var_refs[var] = var
+                sym_l = sympy.Symbol(f"Lambda{var}")
+                if add_to_pre.has(sym_l):
+                    weight_update["post_neuron_var_refs"].append((f"Lambda{var}",tpe))
+                    post_var_refs[f"Lambda{var}"] = f"Lambda{var}"
+                
         wum = WeightUpdateModel(
             model= weight_update,
             param_vals= param_vals,
