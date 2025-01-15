@@ -1154,10 +1154,11 @@ class EventPropCompiler(Compiler):
         n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
         dl_dt = {}
         post_var_refs = set()
+        params = set()
         for var in dx_dt:
             # add adjoint variable to post-synapse model
             model_copy.model["vars"].append((f"Lambda{var}","scalar"))
-            
+            model_copy.var_vals[f"Lambda{var}"] = 0.0
             o = None
             for v2, expr in dx_dt.items():
                 o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
@@ -1174,16 +1175,22 @@ class EventPropCompiler(Compiler):
             if err:
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
-            for v2 in n_sym:
+            for v2 in pop.neuron.varnames:
                 print(v2)
                 print(o)
                 if (o.has(n_sym[v2])):
                     post_var_refs.add((v2, "scalar"))
-        model_copy.model["post_neuron_var_refs"]= []
+            for p in pop.neuron.params:
+                if (o.has(n_sym[p[0]])):
+                    params.add(p)
+            print(syn)
+            print(syn.param_vals)
         for ref in post_var_refs:
             print(ref)
-            model_copy.model["post_neuron_var_refs"].append(ref) 
-                    
+            model_copy.model["neuron_var_refs"].append(ref) 
+        for p in params:
+            model_copy.model["params"].append((p[0],p[1]))
+            model_copy.param_vals[p[0]] = p[2] 
                     
         dt = sympy.Symbol("dt")
         _, clines = solve_ode(syn.varnames, sym, dx_dt, dt, syn.solver)
@@ -1204,6 +1211,7 @@ class EventPropCompiler(Compiler):
         for key,val in model_copy.model.items():
             print(f"\n {key}")
             print(val)
+        print(dir(model_copy))
         return model_copy
 
     def build_weight_update_model(self, conn: Connection,
@@ -1420,6 +1428,7 @@ class EventPropCompiler(Compiler):
         for key,val in wum.model.items():
             print(f"\n {key}")
             print(val)
+        print(wum.post_neuron_var_refs)
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
