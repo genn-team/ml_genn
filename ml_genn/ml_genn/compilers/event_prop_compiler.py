@@ -1182,7 +1182,7 @@ class EventPropCompiler(Compiler):
 
         # assemble forward and backward pass equations for synaptic ODE
         sym, dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
-         
+
         # synaptic jumps 
         h = process_jumps(sym, syn.jumps)
         if DEBUG:
@@ -1200,7 +1200,11 @@ class EventPropCompiler(Compiler):
         vn.append("I")
         n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
         dl_dt = {}
+        post_var_refs = set()
         for var in dx_dt:
+            # add adjoint variable to post-synapse model
+            model_copy.model["vars"].append((f"Lambda{var}","scalar"))
+            
             o = None
             for v2, expr in dx_dt.items():
                 o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
@@ -1218,8 +1222,14 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
             for v2 in n_sym:
-                if (o.has(v2)):
-                    syn.post_var_refs[v2] = v2
+                print(v2)
+                print(o)
+                if (o.has(n_sym[v2])):
+                    post_var_refs.add((v2, "scalar"))
+        model_copy.model["post_neuron_var_refs"]= []
+        for ref in post_var_refs:
+            print(ref)
+            model_copy.model["post_neuron_var_refs"].append(ref) 
                     
                     
         dt = sympy.Symbol("dt")
@@ -1372,8 +1382,8 @@ class EventPropCompiler(Compiler):
         for var in h:
             if h[var] != 0:
                 grad_update = add(grad_update,-sym[f"Lambda{var}"]*sympy.diff(h[var],sympy.Symbol(syn.w_name)))
-                if var in pop.neuron.vars:
-                    post_var_refs["Lambda{var}"]= "Lambda{var}"
+                post_var_refs[f"Lambda{var}"]= f"Lambda{var}"
+                
 
         weight_update["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
         print(f"POSTVAR: {post_var_refs}")
@@ -1442,7 +1452,7 @@ class EventPropCompiler(Compiler):
                     param_vals[p]= value
                     weight_update["params"].append((p,"scalar"))
             weight_update["post_neuron_var_refs"] = []
-            for var,tpe,_ in pop.neuron.vars:
+            for var,tpe,_ in pop.neuron.vars+syn.vars:
                 sym_v = sympy.Symbol(var)
                 if add_to_pre.has(sym_v):
                     weight_update["post_neuron_var_refs"].append((var,tpe))
