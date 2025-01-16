@@ -326,7 +326,7 @@ class SynapseModel(Model):
 class WeightUpdateModel(Model):
     def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
                  post_var_vals={}, egp_vals={}, pre_neuron_var_refs={},
-                 post_neuron_var_refs={},):
+                 post_neuron_var_refs={},psm_var_refs={}):
         super(WeightUpdateModel, self).__init__(model, param_vals, 
                                                 var_vals, egp_vals)
 
@@ -334,6 +334,7 @@ class WeightUpdateModel(Model):
         self.post_var_vals = post_var_vals
         self.pre_neuron_var_refs = pre_neuron_var_refs
         self.post_neuron_var_refs = post_neuron_var_refs
+        self.psm_var_refs = psm_var_refs
     
     def add_pre_neuron_var_ref(self, name, type, target):
         self._add_to_list("pre_neuron_var_refs", (name, type))
@@ -342,6 +343,10 @@ class WeightUpdateModel(Model):
     def add_post_neuron_var_ref(self, name, type, target):
         self._add_to_list("post_neuron_var_refs", (name, type))
         self.post_neuron_var_refs[name] = target
+
+    def add_psm_var_ref(self, name, type, target):
+        self._add_to_list("psm_var_refs", (name, type))
+        self.psm_var_refs[name] = target
         
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
@@ -355,7 +360,7 @@ class WeightUpdateModel(Model):
     def process(self):
         return (super(WeightUpdateModel, self).process() 
                 + (self.pre_var_vals, self.post_var_vals,
-                   self.pre_neuron_var_refs, self.post_neuron_var_refs))
+                   self.pre_neuron_var_refs, self.post_neuron_var_refs, self.psm_var_refs))
 
     @property
     def reset_pre_vars(self):

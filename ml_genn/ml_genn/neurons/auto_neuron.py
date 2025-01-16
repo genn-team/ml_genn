@@ -54,7 +54,7 @@ class AutoNeuron(Neuron):
         if self.threshold == "":
             self.genn_model["threshold_condition_code"] = "0"
         else:
-            self.genn_model["threshold_condition_code"] = f"{self.threshold} == 0"
+            self.genn_model["threshold_condition_code"] = f"{self.threshold} >= 0"
 
         resets = []
         for var in self.varnames:
