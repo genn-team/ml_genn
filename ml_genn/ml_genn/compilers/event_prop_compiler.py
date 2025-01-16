@@ -28,7 +28,8 @@ from ..utils.network import PopulationType
 from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
-from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
+from pygenn import (create_egp_ref, create_psm_var_ref,
+                    create_var_ref, create_wu_var_ref)
 from .compiler import create_reset_custom_update, get_delay_type
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
@@ -294,6 +295,7 @@ class CompileState:
         self.backend_name = backend_name
         self._optimiser_connections = []
         self._neuron_reset_vars = []
+        self._synapse_reset_vars = []
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
         self.spike_count_populations = []
@@ -309,9 +311,12 @@ class CompileState:
                               reset_event_ring, reset_v_ring):
         self._neuron_reset_vars.append((pop, reset_vars, 
                                         reset_event_ring, reset_v_ring))
-
+    
+    def add_synapse_reset_vars(self, conn, reset_vars):
+        self._synapse_reset_vars.append((conn, reset_vars))
+        
     def create_reset_custom_updates(self, compiler, genn_model,
-                                    neuron_pops):
+                                    neuron_pops, conn_pops):
         # Loop through neuron variables to reset
         for i, (pop, vars, r_ev, r_v) in enumerate(self._neuron_reset_vars):
             # Create reset model
@@ -366,6 +371,17 @@ class CompileState:
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetNeuron{i}")
+
+        # Loop through synapse variables to reset
+        for i, (conn, vars) in enumerate(self._synapse_reset_vars):
+            # Create reset model
+            model = create_reset_custom_update(
+                vars,
+                lambda name: create_psm_var_ref(conn_pops[conn], name))
+
+            # Add custom update
+            compiler.add_custom_update(genn_model, model, 
+                                       "Reset", f"CUResetSynapse{i}")
     
     @property
     def optimiser_connections(self):
@@ -373,7 +389,8 @@ class CompileState:
 
     @property
     def is_reset_custom_update_required(self):
-        return len(self._neuron_reset_vars) > 0
+        return (len(self._neuron_reset_vars) > 0
+                and len(self._synapse_reset_vars) > 0)
 
 
 class UpdateTrial(Callback):
@@ -737,16 +754,16 @@ class EventPropCompiler(Compiler):
                 print(f"C: {C}")
 
                
-                # Add additional input variable to receive add_to_pre feedback
-                model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
-                
-                # Add EGP for stored vars ring variables
-                ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-                for var in saved_vars:
-                    model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                   np.empty(ring_size, dtype=np.float32))
+            # Add additional input variable to receive add_to_pre feedback
+            model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
+            
+            # Add EGP for stored vars ring variables
+            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            for var in saved_vars:
+                model_copy.add_egp(f"Ring{var}", "scalar*", 
+                                np.empty(ring_size, dtype=np.float32))
 
-                # On backward pass transition, update b_jumps and add_to_pre input
+            # On backward pass transition, update b_jumps and add_to_pre input
 
             # assemble the different lambda jump parts
             trans_code= []
@@ -1253,6 +1270,16 @@ class EventPropCompiler(Compiler):
         """
         model_copy.model["neuron_var_refs"] = list(post_var_ref_set)
         model_copy.neuron_var_refs = post_var_refs
+        
+        # Reset lambda variables to zero
+        additional_reset_vars = [(l, "scalar", 0.0) for l in lbd_names]
+        
+        # Add reset logic to reset adjoint state variables 
+        # as well as any state variables from the original model
+        print(type(pop.neuron))
+        compile_state.add_synapse_reset_vars(
+            conn, model.reset_vars + additional_reset_vars)
+        
         # Return model
         print("Synapse model")
         for key,val in model_copy.model.items():
@@ -1589,7 +1616,8 @@ class EventPropCompiler(Compiler):
             
         # Create custom updates to implement variable reset
         compile_state.create_reset_custom_updates(self, genn_model,
-                                                  neuron_populations)
+                                                  neuron_populations,
+                                                  connection_populations)
 
         # Build list of base callbacks
         base_train_callbacks = []
