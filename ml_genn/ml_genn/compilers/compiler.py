@@ -543,7 +543,7 @@ class Compiler:
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals,
-             wum_pre_neuron_var_refs, wum_post_neuron_var_refs) =\
+             wum_pre_neuron_var_refs, wum_post_neuron_var_refs, wum_psm_var_refs) =\
                 self.build_weight_update_model(conn, connect_snippet,
                                                compile_state).process()
 
@@ -569,7 +569,8 @@ class Compiler:
                 init_weight_update(genn_wum, wum_param_vals, wum_var_vals,
                                    wum_pre_var_vals, wum_post_var_vals,
                                    wum_pre_neuron_var_refs, 
-                                   wum_post_neuron_var_refs),
+                                   wum_post_neuron_var_refs,
+                                   wum_psm_var_refs),
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
                                   psm_neuron_var_refs),
                 connect_snippet.snippet)

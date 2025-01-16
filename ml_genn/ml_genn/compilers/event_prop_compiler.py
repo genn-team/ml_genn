@@ -272,20 +272,12 @@ def process_jumps(sym, jumps):
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
     
-def weight_update_model(syn):
-    model= {}
-    model["params"] = [ (p[0], p[1]) for p in syn.params ]
-    model["vars"] = []
-    model["vars"].append(("Gradient","scalar"))
-    model["vars"].append((syn.w_name, "scalar", VarAccess.READ_ONLY))
-    model["pre_neuron_var_refs"] = [("BackSpike_pre", "uint8_t")]
-    model["pre_spike_syn_code"] = f"""
-    addToPost({syn.w_name});
-    """
-    model["pre_event_threshold_condition_code"] = """
+weight_update_model = {
+    "vars": [("Gradient","scalar")], 
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "pre_event_threshold_condition_code": """
     BackSpike_pre
-    """
-    return model
+    """}
 
 # TODO: make versions for delayed synapses ...
 
@@ -724,12 +716,13 @@ class EventPropCompiler(Compiler):
                 else:
                     jump = ex
                 jump =  simplify_using_threshold(varnames, sym, g, {"j": jump})["j"]
-                for v2 in varnames:
+                for v2 in varnames+["I"]:
                     if jump.has(sym[v2]):
                         saved_vars.add(v2)
+                        jump = jump.subs(sym[v2],sympy.Symbol(f"__v2__"))
                 ccode= sympy.ccode(jump)
                 for v2 in saved_vars:
-                    ccode= ccode.replace(v2, f"Ring{v2}[ringOffset + RingReadOffset]")
+                    ccode= ccode.replace(f"__v2__", f"Ring{v2}[ringOffset + RingReadOffset]")
                 
                 if DEBUG:
                     print(f"jump: {ccode}")
@@ -1077,7 +1070,10 @@ class EventPropCompiler(Compiler):
             # TODO: we need the saved vars here to go into the buffer
             write = []
             for var in saved_vars:
-                write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {var};")
+                model_copy.add_egp(f"Ring{var}", "scalar*", 
+                                   np.empty(ring_size, dtype=np.float32))
+                the_var = var if var != "I" else "Isyn"
+                write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
             model_copy.prepend_reset_code(
                 neuron_reset.substitute(
                     max_spikes=self.max_spikes,
@@ -1107,7 +1103,10 @@ class EventPropCompiler(Compiler):
                 // Forward pass
                 """)
             # Add the neuron simcode including all the inherited I ODE equations
-            _, clines = solve_ode(varnames, sym, dx_dt, dt, pop.neuron.solver)
+            dx_dt_tmp = {}
+            for var in dx_dt:
+                dx_dt_tmp[var] = dx_dt[var].subs(sym["I"],sympy.Symbol("Isyn"))
+            _, clines = solve_ode(varnames, sym, dx_dt_tmp, dt, pop.neuron.solver)
             ccode = "\n".join(clines)
             model_copy.append_sim_code(ccode)
 
@@ -1153,7 +1152,8 @@ class EventPropCompiler(Compiler):
         vn.append("I")
         n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
         dl_dt = {}
-        post_var_refs = set()
+        post_var_ref_set = set()
+        post_var_refs = {}
         params = set()
         for var in dx_dt:
             # add adjoint variable to post-synapse model
@@ -1178,16 +1178,14 @@ class EventPropCompiler(Compiler):
             for v2 in pop.neuron.varnames:
                 print(v2)
                 print(o)
-                if (o.has(n_sym[v2])):
-                    post_var_refs.add((v2, "scalar"))
+                if (o.has(n_sym[f"Lambda{v2}"])):
+                    post_var_ref_set.add((f"Lambda{v2}", "scalar"))
+                    post_var_refs[f"Lambda{v2}"] = f"Lambda{v2}"
             for p in pop.neuron.params:
                 if (o.has(n_sym[p[0]])):
                     params.add(p)
             print(syn)
             print(syn.param_vals)
-        for ref in post_var_refs:
-            print(ref)
-            model_copy.model["neuron_var_refs"].append(ref) 
         for p in params:
             model_copy.model["params"].append((p[0],p[1]))
             model_copy.param_vals[p[0]] = p[2] 
@@ -1206,12 +1204,15 @@ class EventPropCompiler(Compiler):
             {jump_ccode}
             {fwd_ccode}
         """
+        model_copy.model["neuron_var_refs"] = list(post_var_ref_set)
+        model_copy.neuron_var_refs = post_var_refs
         # Return model
         print("Synapse model")
         for key,val in model_copy.model.items():
             print(f"\n {key}")
             print(val)
         print(dir(model_copy))
+        print(model_copy.neuron_var_refs)
         return model_copy
 
     def build_weight_update_model(self, conn: Connection,
@@ -1319,9 +1320,15 @@ class EventPropCompiler(Compiler):
         pop = conn.target()
         syn = conn.synapse
         syn.var_vals["Gradient"] = 0.0
-        weight_update= weight_update_model(syn)
-
-        post_var_refs= {}
+        model_copy = deepcopy(weight_update_model)
+        print(f"model_copy['vars']: {model_copy['vars']}")
+        model_copy["params"] = [ (p[0], p[1]) for p in syn.params ]
+        model_copy["vars"].append((syn.w_name, "scalar", VarAccess.READ_ONLY))
+        model_copy["pre_spike_syn_code"] = f"addToPost({syn.w_name});"
+        print(f"model_copy['vars']: {model_copy['vars']}")
+        psm_var_ref_set = set()
+        psm_var_refs = {}
+        model_copy["psm_var_refs"] = []
         param_vals = syn.param_vals
 
         pop = conn.target()
@@ -1337,11 +1344,10 @@ class EventPropCompiler(Compiler):
         for var in h:
             if h[var] != 0:
                 grad_update = add(grad_update,-sym[f"Lambda{var}"]*sympy.diff(h[var],sympy.Symbol(syn.w_name)))
-                post_var_refs[f"Lambda{var}"]= f"Lambda{var}"
-                
+                psm_var_ref_set.add((f"Lambda{var}","scalar")) 
+                psm_var_refs[f"Lambda{var}"]= f"Lambda{var}"
 
-        weight_update["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
-        print(f"POSTVAR: {post_var_refs}")
+        model_copy["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
 
         # assemble dx_dt_plusm; 
         # ***NOTE: we here have to work with the POST-SYNAPTIC neurons and their equations
@@ -1405,30 +1411,48 @@ class EventPropCompiler(Compiler):
                 sym_p = sympy.Symbol(p)
                 if add_to_pre.has(sym_p):
                     param_vals[p]= value
-                    weight_update["params"].append((p,"scalar"))
-            weight_update["post_neuron_var_refs"] = []
-            for var,tpe,_ in pop.neuron.vars+syn.vars:
+                    model_copy["params"].append((p,"scalar"))
+            model_copy["post_neuron_var_refs"] = []
+            post_var_refs = {}
+            for var,tpe,_ in pop.neuron.vars:
                 sym_v = sympy.Symbol(var)
                 if add_to_pre.has(sym_v):
-                    weight_update["post_neuron_var_refs"].append((var,tpe))
+                    model_copy["post_neuron_var_refs"].append((var,tpe))
                     post_var_refs[var] = var
                 sym_l = sympy.Symbol(f"Lambda{var}")
                 if add_to_pre.has(sym_l):
-                    weight_update["post_neuron_var_refs"].append((f"Lambda{var}",tpe))
+                    model_copy["post_neuron_var_refs"].append((f"Lambda{var}",tpe))
                     post_var_refs[f"Lambda{var}"] = f"Lambda{var}"
-                
+            for var,tpe,_ in syn.vars:
+                sym_v = sympy.Symbol(var)
+                if add_to_pre.has(sym_v):
+                    psm_var_ref_set.add((var,tpe))
+                    psm_var_refs[var] = var
+                sym_l = sympy.Symbol(f"Lambda{var}")
+                if add_to_pre.has(sym_l):
+                    psm_var_ref_set.add((f"Lambda{var}",tpe))
+                    psm_var_refs[f"Lambda{var}"] = f"Lambda{var}"
+
+        model_copy["psm_var_refs"] = list(psm_var_ref_set)
         wum = WeightUpdateModel(
-            model= weight_update,
+            model= model_copy,
             param_vals= param_vals,
             var_vals= {syn.w_name: connect_snippet.weight, "Gradient": 0.0},
             pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
-            post_neuron_var_refs=post_var_refs
+            post_neuron_var_refs=post_var_refs,
+            psm_var_refs=psm_var_refs
         )
         wum.append_pre_event_syn_code(f"addToPre({add_to_pre_ccode});")
+        # Mark connection as requiring weight optimisation
+        compile_state.add_optimiser_connection(conn, syn.w_name, None)
+
+        # Add weights to list of checkpoint vars
+        compile_state.checkpoint_connection_vars.append((conn, syn.w_name))
         for key,val in wum.model.items():
             print(f"\n {key}")
             print(val)
         print(wum.post_neuron_var_refs)
+        print(wum.psm_var_refs)
         return wum
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
@@ -1446,10 +1470,10 @@ class EventPropCompiler(Compiler):
             
             # If weight optimisation is required
             gradient_vars = []
-            if w:
+            if w is not None:
                 # Create weight optimiser custom update
                 cu_weight = self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
+                    f"Weight{i}", create_wu_var_ref(genn_pop, w),
                     create_wu_var_ref(genn_pop, "Gradient"), 
                     self._optimiser, genn_model)
                 
@@ -1460,10 +1484,10 @@ class EventPropCompiler(Compiler):
                 gradient_vars.append(("Gradient", "scalar", 0.0))
             
             # If delay optimiser is required
-            if d:
+            if d is not None:
                 # Create delay optimiser custom update
                 cu_delay = self._create_optimiser_custom_update(
-                    f"Delay{i}", create_wu_var_ref(genn_pop, "d"),
+                    f"Delay{i}", create_wu_var_ref(genn_pop, d),
                     create_wu_var_ref(genn_pop, "DelayGradient"),
                     self._delay_optimiser, genn_model,
                     (0.0, c.max_delay_steps))
