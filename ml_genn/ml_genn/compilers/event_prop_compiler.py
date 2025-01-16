@@ -1103,7 +1103,8 @@ class EventPropCompiler(Compiler):
             # Add code to start of sim code to run backwards pass 
             # and handle back spikes with correct dynamics
             dt = sympy.Symbol("dt")
-            _, clines = solve_ode(pop.neuron.varnames, sym, dl_dt, dt, pop.neuron.solver)
+            lbd_names = [ f"Lambda{var}" for var in varnames ]
+            _, clines = solve_ode(lbd_names, sym, dl_dt, dt, pop.neuron.solver)
             ccode = "\n".join(clines)
             if pop.neuron.readout is None:
                 model_copy.append_sim_code(
