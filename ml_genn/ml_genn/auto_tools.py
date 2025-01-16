@@ -130,6 +130,7 @@ def solve_ode(vars, sym, ode, dt, solver):
             dx_dt[var] = expr
     if solver == "exponential_euler":
         clines = exponential_euler(vars, sym, dx_dt, dt)
+        print(clines)
     elif solver == "linear_euler":
         clines = linear_euler(vars, sym, dx_dt, dt)
     else:
