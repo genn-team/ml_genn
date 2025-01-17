@@ -1443,7 +1443,11 @@ class EventPropCompiler(Compiler):
                                                                  lambda e: e == 0))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
-    
+        
+        # Add callbacks to record number of rewirings
+        for c, k in deep_r_record_rewirings_ccus:
+            base_train_callbacks.append(RewiringRecord(c, k))
+
         # Build list of optimisers and their custom updates
         optimisers = []
         if len(weight_optimiser_cus) > 0:
