@@ -89,7 +89,7 @@ class Adam(Optimiser):
                 // Zero gradient
                 Gradient = 0.0;
                 """)
-        
+
         # If variable should be clamped
         # **THINK** this is generic across all optimisers like readout-adding
         if clamp_var is not None:
@@ -103,5 +103,6 @@ class Adam(Optimiser):
                 // Clamp variable
                 Variable = fmax(VariableMin, fmin(VariableMax, Variable));
                 """)
+
         # Return model
         return model
