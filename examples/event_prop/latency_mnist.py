@@ -53,7 +53,7 @@ max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 optimiser=Adam(1e-2), batch_size=BATCH_SIZE,
+                                 optimiser=Adam(1e-2), batch_size=BATCH_SIZE, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -86,7 +86,7 @@ else:
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,
-                                 batch_size=BATCH_SIZE)
+                                 batch_size=BATCH_SIZE, dt=DT)
     compiled_net = compiler.compile(network)
 
     with compiled_net:
