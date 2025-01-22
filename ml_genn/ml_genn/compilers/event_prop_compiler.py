@@ -872,7 +872,7 @@ class EventPropCompiler(Compiler):
                             RingReadOffset--;
                             const scalar softmax = RingOutputLossTerm[ringOffset + RingReadOffset];
                             const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
-                            drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
+                            drive = g / (num_batch * {self.dt * self.example_timesteps});
                             }}
                             
                             // Forward pass
@@ -900,7 +900,7 @@ class EventPropCompiler(Compiler):
                             if (Trial > 0) {{
                             RingReadOffset--;
                             const scalar error = RingOutputLossTerm[ringOffset + RingReadOffset];
-                            drive = error / (TauM * num_batch * {self.dt * self.example_timesteps});
+                            drive = error / (num_batch * {self.dt * self.example_timesteps});
                             }}
                             """)
                         # Add custom update to reset state JAMIE_CHECK
@@ -933,7 +933,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             if (Trial > 0) {{
                             const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
+                            drive = g / (num_batch * {self.dt * self.example_timesteps});
                             }}
                             
                             // Forward pass
@@ -956,7 +956,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             if (Trial > 0) {{
                             const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (TauM * num_batch * {self.dt * self.example_timesteps});
+                            drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
                             }}
                             
                             // Forward pass
@@ -979,7 +979,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             if (Trial > 0 && fabs(backT - VMaxTimeBack) < 1e-3*dt) {{
                             const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = g / (TauM * num_batch * {self.dt * self.example_timesteps});
+                            drive = g / (num_batch * {self.dt * self.example_timesteps});
                             }}
                             
                             // Forward pass
