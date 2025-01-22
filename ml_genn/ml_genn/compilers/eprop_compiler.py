@@ -9,6 +9,7 @@ from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
+from ..connection import Polarity
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..metrics import MetricsType
 from ..neurons import (AdaptiveLeakyIntegrateFire, Input,
@@ -525,13 +526,23 @@ class EPropCompiler(Compiler):
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "ISynFeedback"
 
-        # Add optimisers to connection weights that require them
+        # Loop through connections whose weights require optimising
         optimiser_cus = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
+            
+            # Build clamp tuple if connection has polarity
+            clamp_var = None
+            if c.polarity == Polarity.EXCITATORY:
+                clamp_var = (0.0, np.finfo(np.float32).max)
+            elif c.polarity == Polarity.INHIBITORY:
+                clamp_var = (np.finfo(np.float32).min, 0.0)
+            
+            # Add optimiser
             cu = self._create_optimiser_custom_update(
                 f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True)
+                create_wu_var_ref(genn_pop, "DeltaG"), genn_model,
+                True, clamp_var)
             optimiser_cus.append(cu)
 
         # Add optimisers to population biases that require them
@@ -588,7 +599,8 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model, wu):
+                                        gradient_ref, genn_model, wu,
+                                        clamp_var=None):
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -607,13 +619,14 @@ class EPropCompiler(Compiler):
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
             optimiser_model = self._optimiser.get_model(reduced_gradient, 
-                                                        var_ref, False, None)
+                                                        var_ref, False,
+                                                        clamp_var)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
             optimiser_model = self._optimiser.get_model(
-                gradient_ref, var_ref, True, None)
+                gradient_ref, var_ref, True, clamp_var)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,

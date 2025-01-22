@@ -13,7 +13,7 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
                          CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
-from ..connection import Connection
+from ..connection import Connection, Polarity
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
 from ..metrics import MetricsType
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
@@ -1284,11 +1284,18 @@ class EventPropCompiler(Compiler):
             # If weight optimisation is required
             gradient_vars = []
             if w:
+                # Build clamp tuple if connection has polarity
+                clamp_var = None
+                if c.polarity == Polarity.EXCITATORY:
+                    clamp_var = (0.0, np.finfo(np.float32).max)
+                elif c.polarity == Polarity.INHIBITORY:
+                    clamp_var = (np.finfo(np.float32).min, 0.0)
+    
                 # Create weight optimiser custom update
                 cu_weight = self._create_optimiser_custom_update(
                     f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
                     create_wu_var_ref(genn_pop, "Gradient"), 
-                    self._optimiser, genn_model)
+                    self._optimiser, genn_model, clamp_var)
                 
                 # Add custom update to list of optimisers
                 weight_optimiser_cus.append(cu_weight)

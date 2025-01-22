@@ -1,4 +1,5 @@
 import inspect
+import logging
 import numpy as np
 import os
 
@@ -10,6 +11,7 @@ from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
 from ..communicators import Communicator
+from ..connection import Polarity
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
@@ -23,10 +25,13 @@ from pygenn import (create_custom_update_model, create_den_delay_var_ref,
 from string import digits
 from .weight_update_models import (get_static_pulse_delay_model, 
                                    get_signed_static_pulse_delay_model)
-from ..utils.value import is_value_array, is_value_constant
+from ..utils.value import (is_value_array, is_value_constant,
+                           is_value_initializer)
 
 from .weight_update_models import (static_pulse_model,
                                    signed_static_pulse_model)
+
+logger = logging.getLogger(__name__)
 
 # First pass of softmax - calculate max
 softmax_1_model = {
@@ -556,6 +561,19 @@ class Compiler:
             connect_snippet =\
                 conn.connectivity.get_snippet(conn,
                                               self.supported_matrix_type)
+
+            # If connection has polarity and weights are initialised on host
+            weight = connect_snippet.weight
+            polarity = conn.polarity
+            if polarity != Polarity.NONE and not is_value_initializer(weight):
+                # Determine which sign weights SHOULDN'T have
+                bad_sign = -1 if polarity == Polarity.EXCITATORY else 1
+
+                # If any weights have this sign, give warning
+                if np.any(np.sign(weight) == bad_sign):
+                    logger.warning(f"{polarity} connection '{conn.name}' "
+                                   f"initialised with weights of "
+                                   f"incorrect sign")
 
             # Build weight update model
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
