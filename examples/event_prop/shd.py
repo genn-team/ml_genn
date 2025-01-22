@@ -6,7 +6,7 @@ from ml_genn import Connection, Network, Population
 from ml_genn.callbacks import Checkpoint, SpikeRecorder, VarRecorder
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense,FixedProbability
-from ml_genn.initializers import Normal
+from ml_genn.initializers import FluctuationDrivenCentredNormal, Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
@@ -61,9 +61,9 @@ with network:
                         num_output)
 
     # Connections
-    Connection(input, hidden, Dense(Normal(mean=0.03, sd=0.01)),
+    Connection(input, hidden, Dense(FluctuationDrivenCentredNormal(num_input, 14.0, 0.9)),
                Exponential(5.0))
-    Connection(hidden, hidden, Dense(Normal(mean=0.0, sd=0.02)),
+    Connection(hidden, hidden, Dense(FluctuationDrivenCentredNormal(NUM_HIDDEN, 14.0, 0.1)),
                Exponential(5.0))
     Connection(hidden, output, Dense(Normal(mean=0.0, sd=0.03)),
                Exponential(5.0))

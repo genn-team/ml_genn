@@ -8,3 +8,4 @@ Bibliography
 .. [Nowotny2024] Nowotny, T., Turner, J. P., & Knight, J. C. (2022). Loss shaping enhances exact gradient learning with EventProp in Spiking Neural Networks (arXiv:2212.01232). arXiv. http://arxiv.org/abs/2212.01232
 .. [Stockl2021] Stöckl, C., & Maass, W. (2021). Optimized spiking neurons can classify images with high accuracy through temporal coding with two spikes. Nature Machine Intelligence, 3(3), 230–238. https://doi.org/10.1038/s42256-021-00311-4
 .. [Wunderlich2021] Wunderlich, T. C., & Pehle, C. (2021). Event-based backpropagation can compute exact gradients for spiking neural networks. Scientific Reports, 11(1), 12829. https://doi.org/10.1038/s41598-021-91786-z
+.. [Rossbroich2022] Rossbroich, J., Gygax, J., & Zenke, F. (2022). Fluctuation-driven initialization for spiking neural network training. Neuromorphic Computing and Engineering, 2(4), 044016.

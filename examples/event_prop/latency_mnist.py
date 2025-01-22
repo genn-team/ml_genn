@@ -5,7 +5,7 @@ from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
-from ml_genn.initializers import Normal
+from ml_genn.initializers import FluctuationDrivenCentredNormal, Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
@@ -39,7 +39,8 @@ with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
                                   NUM_INPUT)
-    initial_hidden_weight = Normal(mean=0.078, sd=0.045)
+    #initial_hidden_weight = Normal(mean=0.078, sd=0.045)
+    initial_hidden_weight = FluctuationDrivenCentredNormal(NUM_INPUT * SPARSITY, 1.0)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
     hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
