@@ -680,9 +680,9 @@ class EventPropCompiler(Compiler):
             # therefore, we can do these independent of synapse equations
             dl_dt = {}
             for var in dx_dt:
-                o = None
+                o = 0
                 for v2, expr in dx_dt.items():
-                    o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
+                    o += sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"]  
                 dl_dt[f"Lambda{var}"] = o
                 # collect variables they might need to go into a ring buffer:
                 for v2 in dx_dt:
@@ -715,17 +715,17 @@ class EventPropCompiler(Compiler):
             B = {}
             C = {}
             for var in varnames:
-                ex= None
+                ex= 0
                 for v2,f2 in f.items():
-                    ex = add(ex, sympy.diff(f2,sym[var])*sym[f"Lambda{v2}"])
+                    ex += sympy.diff(f2,sym[var])*sym[f"Lambda{v2}"]
                 A[var] = ex
                 for v2 in varnames:
                     if A[var].has(sym[v2]):
                         saved_vars.add(v2)
-                ex= None
+                ex= 0
                 if g is not None:
                     for v2 in varnames:
-                        ex = add(ex, sympy.diff(g,sym[v2])*dx_dt[v2])
+                        ex += sympy.diff(g,sym[v2])*dx_dt[v2]
                     ex = sympy.simplify(ex)
                     if ex != 0:
                         ex = sympy.diff(g,sym[var])/ex
@@ -735,18 +735,19 @@ class EventPropCompiler(Compiler):
                                 if B[var].has(sym[v2]):
                                     saved_vars.add(v2)
                     if var in B:
-                        ex= None
+                        ex= 0
                         for v2,f2 in f.items():
-                            ex2= None
+                            ex2= 0
                             for v3 in dx_dt:
-                                ex2 = add(ex2, sympy.diff(f2,sym[v3])*dx_dt[v3])
-                            ex2 = add(ex2,-dx_dtplusn[v2])
-                            ex = add(ex,-sym[f"Lambda{v2}"]*ex2)
+                                ex2 += sympy.diff(f2,sym[v3])*dx_dt[v3]
+                            ex2 -= dx_dtplusn[v2]
+                            ex -= sym[f"Lambda{v2}"]*ex2
                         ex = sympy.simplify(ex)
-                        C[var] = simplify_using_threshold(varnames, sym, g, ex)
-                        for v2 in varnames:
-                            if C[var].has(sym[v2]):
-                                saved_vars.add(v2)
+                        if ex != 0:
+                            C[var] = simplify_using_threshold(varnames, sym, g, ex)
+                            for v2 in varnames:
+                                if C[var].has(sym[v2]):
+                                    saved_vars.add(v2)
 
             if DEBUG:
                 print(f"A: {A}")
@@ -761,7 +762,7 @@ class EventPropCompiler(Compiler):
             ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
             for var in saved_vars:
                 model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                np.empty(ring_size, dtype=np.float32))
+                                   np.empty(ring_size, dtype=np.float32))
 
             # On backward pass transition, update b_jumps and add_to_pre input
 
@@ -784,16 +785,19 @@ class EventPropCompiler(Compiler):
                 for v2 in varnames+["I"]:
                     if jump.has(sym[v2]):
                         saved_vars.add(v2)
-                        jump = jump.subs(sym[v2],sympy.Symbol(f"__v2__"))
+                        jump = jump.subs(sym[v2],sympy.Symbol(f"__{v2}"))
                 ccode= sympy.ccode(jump)
+                # JAMIE: is there a more elegant way to do this? I.e. replacing a variable name
+                # with the full expression of the ring without accidental matches of substrings
+                # to the variable name
                 for v2 in saved_vars:
-                    ccode= ccode.replace(f"__v2__", f"Ring{v2}[ringOffset + RingReadOffset]")
+                    ccode= ccode.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
                 
                 if DEBUG:
                     print(f"jump: {ccode}")
 
                 if jump != 0:
-                    trans_code.append(f"Lambda{var} += {ccode};")
+                    trans_code.append(f"Lambda{var} = {ccode};")
             transition_code = "\n".join(trans_code)
             print(f"transition_code: {transition_code}")
             
@@ -842,6 +846,7 @@ class EventPropCompiler(Compiler):
             drive = sympy.Symbol("drive")
             dl_dt["LambdaV"] = dl_dt["LambdaV"]+drive
 
+            print(f"self.dt: {self.dt}, self.example_timesteps: {self.example_timesteps}")
             # If we want to calculate mean-squared error or per-timestep loss
             if self.per_timestep_loss or mse_loss:
                 # Get reset vars before we add ring-buffer variables
@@ -1224,11 +1229,11 @@ class EventPropCompiler(Compiler):
             # add adjoint variable to post-synapse model
             model_copy.model["vars"].append((f"Lambda{var}","scalar"))
             model_copy.var_vals[f"Lambda{var}"] = 0.0
-            o = None
+            o = 0
             for v2, expr in dx_dt.items():
-                o = add(o, sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"])    
+                o += sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"]
             for v2, expr in n_dx_dt.items():
-                o = add(o, sympy.diff(expr, sym[var])*n_sym[f"Lambda{v2}"])  
+                o += sympy.diff(expr, sym[var])*n_sym[f"Lambda{v2}"]
             dl_dt[f"Lambda{var}"] = o
             err = False
             for v2 in syn.varnames:
@@ -1241,8 +1246,6 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
             for v2 in pop.neuron.varnames:
-                print(v2)
-                print(o)
                 if (o.has(n_sym[f"Lambda{v2}"])):
                     post_var_ref_set.add((f"Lambda{v2}", "scalar"))
                     post_var_refs[f"Lambda{v2}"] = f"Lambda{v2}"
@@ -1393,6 +1396,10 @@ class EventPropCompiler(Compiler):
         # Return weight update model
         """
 
+        # TODO: the jumps that are currently possible to support are essentially where the same
+        # function of w is added to all variables that have synaptic jumps. Normally that is just
+        # var += w but *could* be var+= w^2 or var += sqrt(w) or whatever.
+        # these constraints need to be codified and errors thrown
         source_neuron = conn.source().neuron
         if not isinstance(source_neuron, Input):
             # Add connection to list of feedback connections
@@ -1421,10 +1428,10 @@ class EventPropCompiler(Compiler):
             print(f"h: {h}")
                 
         # assemble gradient update
-        grad_update = None
+        grad_update = 0
         for var in h:
             if h[var] != 0:
-                grad_update = add(grad_update,-sym[f"Lambda{var}"]*sympy.diff(h[var],sympy.Symbol(syn.w_name)))
+                grad_update -= sym[f"Lambda{var}"]*sympy.diff(h[var],sympy.Symbol(syn.w_name))
                 psm_var_ref_set.add((f"Lambda{var}","scalar")) 
                 psm_var_refs[f"Lambda{var}"]= f"Lambda{var}"
 
@@ -1464,15 +1471,15 @@ class EventPropCompiler(Compiler):
         # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
         # variables!
         # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
-        ex = None
+        ex = 0
         # synapse equations first:
         for var, expr in dx_dt.items():
             ex2 = dx_dtplusm[var] - expr
-            ex = add(ex, sym[f"Lambda{var}"]*ex2)
+            ex += sym[f"Lambda{var}"]*ex2
         # then neuron equations:
         for var, expr in n_dx_dt.items():
             ex2 = n_dx_dtplusm[var] - expr
-            ex = add(ex, sympy.Symbol(f"Lambda{var}")*ex2)
+            ex += sympy.Symbol(f"Lambda{var}")*ex2
         if ex is not None:
             add_to_pre = sympy.simplify(ex)
             # check whether any vars might be involved from teh forward pass
