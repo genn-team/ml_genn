@@ -18,7 +18,7 @@ class Uniform(Initializer):
         self.min = min
         self.max = max
 
-    def get_snippet(self) -> InitializerSnippet:
+    def get_snippet(self, context) -> InitializerSnippet:
         return InitializerSnippet("Uniform",
                                   {"min": self.min, "max": self.max})
 

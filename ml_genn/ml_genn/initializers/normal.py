@@ -18,7 +18,7 @@ class Normal(Initializer):
         self.mean = mean
         self.sd = sd
 
-    def get_snippet(self) -> InitializerSnippet:
+    def get_snippet(self, context) -> InitializerSnippet:
         return InitializerSnippet("Normal",
                                   {"mean": self.mean, "sd": self.sd})
 

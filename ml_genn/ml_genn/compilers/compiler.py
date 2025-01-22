@@ -319,7 +319,7 @@ class Compiler:
         # Process model
         (cu_model, cu_param_vals, cu_dynamic_param_names,
          cu_var_vals, cu_egp_vals, cu_var_egp_vals, 
-         cu_var_refs, cu_egp_refs) = model.process()
+         cu_var_refs, cu_egp_refs) = model.process(None)
 
         # Create custom update model
         genn_cum = create_custom_update_model("CustomUpdate",
@@ -511,7 +511,7 @@ class Compiler:
              var_vals, egp_vals, var_egp_vals) =\
                 self.build_neuron_model(
                     pop, neuron_model,
-                    compile_state).process()
+                    compile_state).process(pop)
 
             # Create custom neuron model
             genn_neuron_model = create_neuron_model("NeuronModel",
@@ -547,7 +547,7 @@ class Compiler:
                 self.build_synapse_model(conn,
                                          syn.get_model(conn, self.dt,
                                                        self.batch_size),
-                                         compile_state).process()
+                                         compile_state).process(conn)
             
             # Create custom postsynaptic model
             genn_psm = create_postsynaptic_model("PostsynapticModel", **psm)
@@ -563,7 +563,7 @@ class Compiler:
              wum_pre_var_vals, wum_post_var_vals,
              wum_pre_neuron_var_refs, wum_post_neuron_var_refs) =\
                 self.build_weight_update_model(conn, connect_snippet,
-                                               compile_state).process()
+                                               compile_state).process(conn)
 
             # Create custom weight update model
             genn_wum = create_weight_update_model("WeightUpdateModel", **wum)

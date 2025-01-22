@@ -10,6 +10,6 @@ class Wrapper(Initializer):
         self.param_vals = param_vals
         self.egp_vals = egp_vals
 
-    def get_snippet(self):
+    def get_snippet(self, context):
         return InitializerSnippet(self.snippet, self.param_vals,
                                   self.egp_vals)

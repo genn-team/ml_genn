@@ -67,7 +67,7 @@ class Model:
         self._make_param_var("vars", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
-    def process(self):
+    def process(self, context=None):
         # Make copy of model
         model_copy = deepcopy(self.model)
 
@@ -88,7 +88,7 @@ class Model:
         var_egp = {}
         for name, val in self.var_vals.items():
             if is_value_initializer(val):
-                snippet = val.get_snippet()
+                snippet = val.get_snippet(context)
                 var_vals_copy[name] = init_var(snippet.snippet,
                                                snippet.param_vals)
                 var_egp[name] = snippet.egp_vals
@@ -115,7 +115,7 @@ class Model:
                 model_copy["vars"].append((name, ptype,
                                            VarAccess.READ_ONLY))
                 if is_value_initializer(val):
-                    snippet = val.get_snippet()
+                    snippet = val.get_snippet(context)
                     var_vals_copy[name] = init_var(snippet.snippet,
                                                    snippet.param_vals)
                     var_egp[name] = snippet.egp_vals
@@ -237,8 +237,8 @@ class CustomUpdateModel(Model):
     def append_update_code(self, code):
         self._append_code("update_code", code)
     
-    def process(self):
-        return (super(CustomUpdateModel, self).process() 
+    def process(self, context=None):
+        return (super(CustomUpdateModel, self).process(context) 
                 + (self.var_refs,) + (self.egp_refs,))
 
 
@@ -305,8 +305,8 @@ class SynapseModel(Model):
 
         self.neuron_var_refs = neuron_var_refs
 
-    def process(self):
-        return (super(SynapseModel, self).process() 
+    def process(self, context=None):
+        return (super(SynapseModel, self).process(context) 
                 + (self.neuron_var_refs,))
 
     @staticmethod
@@ -349,8 +349,8 @@ class WeightUpdateModel(Model):
     def append_pre_event_syn_code(self, code):
         self._append_code("pre_event_syn_code", code)
 
-    def process(self):
-        return (super(WeightUpdateModel, self).process() 
+    def process(self, context=None):
+        return (super(WeightUpdateModel, self).process(context) 
                 + (self.pre_var_vals, self.post_var_vals,
                    self.pre_neuron_var_refs, self.post_neuron_var_refs))
 

@@ -7,6 +7,6 @@ from abc import abstractmethod
 class Initializer(ABC):
     """Base class for all initializers"""
     @abstractmethod
-    def get_snippet(self) -> InitializerSnippet:
+    def get_snippet(self, context) -> InitializerSnippet:
         """Gets PyGeNN implementation of initializer"""
         pass
