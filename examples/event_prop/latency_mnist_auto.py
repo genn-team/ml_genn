@@ -12,7 +12,6 @@ from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import AutoSyn
 from ml_genn.callbacks import VarRecorder, SpikeRecorder, ConnVarRecorder
-from ml_genn.callbacks import SpikeRecorder
 
 from time import perf_counter
 from ml_genn.utils.data import linear_latency_encode_data
@@ -23,14 +22,15 @@ NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
-NUM_EPOCHS = 1
-PLOTTING = True
+NUM_EPOCHS = 10
 EXAMPLE_TIME = 20.0
-DT = 1.0
+DT = 0.1
 SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
 DEBUG = True
+PLOTTING = True
+RECORDING = True
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
@@ -38,6 +38,7 @@ spikes = linear_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
     EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
+print(spikes[0])
 serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork(default_params)
 with network:
@@ -47,57 +48,64 @@ with network:
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
-    hidden = Layer(connectivity, AutoNeuron([("V","scalar",0.0)], [("taum","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/taum"}, "V-theta", {"V": "0"}, solver="linear_euler"),
-                   NUM_HIDDEN, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="linear_euler"),record_spikes=True)
+    hidden = Layer(connectivity, AutoNeuron([("V","scalar",0.0)], [("taum","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/taum"}, "V-theta", {"V": "0"}, solver="exponential_euler"),
+                   NUM_HIDDEN, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="exponential_euler"),record_spikes=True)
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   AutoNeuron([("V","scalar",0.0)], [("TauM","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/TauM"}, "", {"V": "0"}, solver="linear_euler", readout="avg_var"),
-                   NUM_OUTPUT, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="linear_euler"))
+                   AutoNeuron([("V","scalar",0.0)], [("TauM","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/TauM"}, "", {"V": "0"}, solver="exponential_euler", readout="avg_var"),
+                   NUM_OUTPUT, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="exponential_euler"))
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
                                  optimiser=Adam(1e-2), batch_size=BATCH_SIZE,
-                                 kernel_profiling=KERNEL_PROFILING)
+                                 kernel_profiling=KERNEL_PROFILING,dt=DT)
     compiled_net = compiler.compile(network)
 
-    print(dir(hidden.connection()))
-    
     with compiled_net:
         visualise_examples = [0, 32, 64, 96]
         # Evaluate model on numpy dataset
         start_time = perf_counter()
+
+        if RECORDING:
+            callbacks = [
+                         SpikeRecorder(input, key="spikes_input",example_filter=[ 32, 33 ]),
+                         SpikeRecorder(hidden, key="spikes_hidden",example_filter=[ 32, 33]),
+                         #VarRecorder(hidden,genn_var="V",key="Vhid",neuron_filter=[0, 1]),
+                         #VarRecorder(output,genn_var="V",key="Vout"),
+                         VarRecorder(hidden,genn_var="LambdaV",key="LVhid",neuron_filter=[0, 1],example_filter=[ 32, 33 ]),
+                         VarRecorder(output,genn_var="LambdaV",key="LVout",example_filter=[ 32, 33 ]),
+                         #ConnVarRecorder(hidden.connection(), "w", "whidout",example_filter=[32]),
+            ]
+        else:
+            callbacks = ["batch_progress_bar", Checkpoint(serialiser),]
         
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser),
-                     SpikeRecorder(input, key="spikes_input"),
-                     SpikeRecorder(hidden, key="spikes_hidden"),
-                     #VarRecorder(hidden,genn_var="V",key="Vhid",neuron_filter=[0, 1]),
-                     #VarRecorder(output,genn_var="V",key="Vout"),
-                     VarRecorder(hidden,genn_var="LambdaV",key="LVhid",neuron_filter=[0, 1]),
-                     VarRecorder(output,genn_var="LambdaV",key="LVout"),
-                     ConnVarRecorder(hidden.connection(), "w", "whidout",example_filter=[0,59000]),]
-        metrics, cb_data = metrics, cb_data  = compiled_net.train({input: spikes},
+        metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
-                                               num_epochs=NUM_EPOCHS, shuffle=True,
+                                               num_epochs=NUM_EPOCHS, shuffle=False,
                                                callbacks=callbacks)
 
+        print(metrics.items())
+        #print(cb_data)
+        #print(type(cb_data))
         if PLOTTING:
             LVout = np.asarray(cb_data["LVout"])
             LVhid = np.asarray(cb_data["LVhid"])
             sin = cb_data["spikes_input"]
+            print(sin[0][0])
             shid =  cb_data["spikes_hidden"]
             plt.figure()
-            for i in range(32,42):
-                plt.plot(np.arange(20)+i*21,LVhid[i,:,:])
+            for i in range(20):
+                plt.plot(np.arange(20/DT)+i*(20/DT+1),LVhid[i,:,:])
             plt.figure()
-            for i in range(32,42):
-                plt.plot(np.arange(20)+i*21,LVout[i,:,:])
+            for i in range(20):
+                plt.plot(np.arange(20/DT)+i*(20/DT+1),LVout[i,:,:])
             plt.figure()
             plt.scatter(sin[0][0],sin[1][0],s=1)
-            plt.xlim([0, 20])
             plt.figure()
-            for i in range(10):
-                plt.scatter(np.asarray(shid[0][i])+i*21,shid[1][i],s=1)
+            print(len(shid[0]))
+            for i in range(20):
+                plt.scatter(np.asarray(shid[0][i])+i*(20/DT+1),shid[1][i],s=1)
             plt.show()
 
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
