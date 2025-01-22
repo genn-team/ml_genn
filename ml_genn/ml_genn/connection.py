@@ -1,4 +1,4 @@
-from itertools import count
+from enum import Enum
 from typing import Optional, Union
 from weakref import ref
 from .connectivity import Connectivity
@@ -15,7 +15,11 @@ from .synapses import default_synapses
 SynapseInitializer = Union[Synapse, str]
 ConnectivityInitializer = Union[Connectivity, str]
 
-
+class Polarity(Enum):
+    NONE = "none"
+    EXCITATORY = "excitatory"
+    INHIBITORY = "inhibitory"
+    
 class Connection:
     """A connection between two populations
     
@@ -38,19 +42,23 @@ class Connection:
                             supports. Only required when learning delays
                             or using heterogeneous delay initialiser from
                             which maximum delay cannot be inferred
+        polarity:           Whether connection is excitatory, inhibitory 
+                            or unconstrained
     """
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta", 
                  name: Optional[str] = None, 
                  max_delay_steps: Optional[int] = None,
+                 polarity: Polarity = Polarity.NONE,
                  add_to_model: bool = True):
         # Store weak references to source and target in class
         self._source = ref(source)
         self._target = ref(target)
 
-        # Stash max delay steps
-        self.max_delay_steps = max_delay_steps
+        # Stash max delay steps and polarity
+        self.max_delay_steps = max_delay_steps        
+        self.polarity = Polarity(polarity)
 
         self.connectivity = get_object(connectivity, Connectivity, 
                                        "Connectivity", default_connectivity)

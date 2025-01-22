@@ -1,7 +1,7 @@
 from typing import Optional
 from weakref import ref
 from .connection import (Connection, ConnectivityInitializer,
-                         SynapseInitializer)
+                         Polarity, SynapseInitializer)
 from .population import Population, Shape, NeuronInitializer
 from .sequential_network import SequentialNetwork
 
@@ -69,6 +69,8 @@ class Layer:
                                 supports. Only required when learning delays
                                 or using heterogeneous delay initialiser from
                                 which maximum delay cannot be inferred
+        polarity:               Whether connection is excitatory, inhibitory 
+                                or unconstrained
     """
     def __init__(self, connectivity: ConnectivityInitializer,
                  neuron: NeuronInitializer, shape: Shape = None,
@@ -76,7 +78,8 @@ class Layer:
                  record_spikes: bool = False,
                  record_spike_events: bool = False,
                  max_delay_steps: Optional[int] = None,
-                 name: Optional[str] = None):
+                 name: Optional[str] = None,
+                 polarity: Polarity = Polarity.NONE):
         # Create population and store weak reference in class
         population = Population(
             neuron, shape=shape, record_spikes=record_spikes,
@@ -92,6 +95,7 @@ class Layer:
                                     connectivity=connectivity,
                                     synapse=synapse,
                                     max_delay_steps=max_delay_steps,
+                                    polarity=polarity,
                                     add_to_model=False)
             self.connection = ref(connection)
         else:
