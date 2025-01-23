@@ -57,7 +57,7 @@ class Connection:
         self._target = ref(target)
 
         # Stash max delay steps and polarity
-        self.max_delay_steps = max_delay_steps        
+        self.max_delay_steps = max_delay_steps
         self.polarity = Polarity(polarity)
 
         self.connectivity = get_object(connectivity, Connectivity, 
