@@ -56,7 +56,7 @@ class FluctuationDrivenCentredNormal(Initializer):
         self.v_sigma = v_sigma
 
     def get_snippet(self, context) -> InitializerSnippet:
-        from ..connection import Connection, Polarity
+        from ..connection import Connection
         from ..neurons import LeakyIntegrateFire
         from ..synapses import Delta, Exponential
         
@@ -78,7 +78,7 @@ class FluctuationDrivenCentredNormal(Initializer):
         
         # Calculate standard deviation of centred weight distribution
         sigma_w = np.sqrt(
-            (self.scale * (neuron.v_thresh * self.v_sigma) ** 2) 
+            (self.scale * (neuron.v_thresh * self.v_sigma)**2) 
             / (self.n * self.nu * ehat))
 
         return InitializerSnippet("Normal", {"mean": 0.0, "sd": sigma_w})
@@ -102,7 +102,7 @@ class FluctuationDrivenExponential(Initializer):
         n_inh:          Average number of inhibitory synapses targetting
                         postsynaptic neurons
         nu:             Estimated presynaptic firing rate [Hz]
-        scale:          ss
+        alpha:          ss
         v_sigma:        Target standard deviation of postsynaptic neuron
                         membrane voltage
     """
@@ -110,22 +110,22 @@ class FluctuationDrivenExponential(Initializer):
     n_exc_rec = ConstantValueDescriptor()
     n_inh = ConstantValueDescriptor()
     nu = ConstantValueDescriptor()
-    scale = ConstantValueDescriptor()
+    alpha = ConstantValueDescriptor()
     v_sigma = ConstantValueDescriptor()
 
     def __init__(self, n_exc_ff: float, n_exc_rec: float, n_inh: float,
-                 nu: float, scale: float = 1.0, v_sigma: float = 1.0):
+                 nu: float, alpha: float = 0.9, v_sigma: float = 1.0):
         super(FluctuationDrivenExponential, self).__init__()
         
         self.n_exc_ff = n_exc_ff
         self.n_exc_rec = n_exc_rec
         self.n_inh = n_inh
         self.nu = nu
-        self.scale = scale
+        self.alpha = alpha
         self.v_sigma = v_sigma
 
     def get_snippet(self, context) -> InitializerSnippet:
-        from ..connection import Connection
+        from ..connection import Connection, Polarity
         from ..neurons import LeakyIntegrateFire
         from ..synapses import Delta, Exponential
         
@@ -166,6 +166,7 @@ class FluctuationDrivenExponential(Initializer):
         ebar_inh, ehat_inh = zip(*(_get_epsilon(c.synapse, neuron.tau_mem)
                                    for c in inh_cons))
         
+        print(f"ebar_exc: {ebar_exc[0]}, ehat_exc: {ehat_exc[0]}, ebar_inh: {ebar_inh[0]}, ehat_inh: {ehat_inh[0]}")
         # Check all inhibitory and excitatory synapses have the same dynamics
         if not np.allclose(ebar_exc[0], ebar_exc):
             raise RuntimeError("FluctuationDrivenExponential requires each "
@@ -183,67 +184,61 @@ class FluctuationDrivenExponential(Initializer):
         n_exc_total = self.n_exc_ff + self.n_exc_rec
         
         # If there is recurrent excitation, use alpha scaling factor
-        if exc_rec_cons >= 1:
-            alpha = self.alpha
-
+        if len(exc_rec_cons) >= 1:
             delta_rec = np.sqrt(
-                (alpha * self.n_exc_rec) / (self.n_exc_ff - alpha * self.n_exc_ff)
-            )
-            delta_ei = (delta_rec * ebar_inh * self.n_inh * self.nu) / (
-                delta_rec * ebar_exc * self.n_exc_ff * self.nu
-                + ebar_exc * self.n_exc_rec * self.nu
-            )
+                (self.alpha * self.n_exc_rec) 
+                / (self.n_exc_ff - self.alpha * self.n_exc_ff))
+            delta_ei = (delta_rec * ebar_inh[0] * self.n_inh * self.nu) / (
+                delta_rec * ebar_exc[0] * self.n_exc_ff * self.nu
+                + ebar_exc[0] * self.n_exc_rec * self.nu)
 
             lambda_exc_ff = (
-                self.xi
-                * np.sqrt(2)
+                np.sqrt(2)
                 * np.sqrt(self.nu)
                 * np.sqrt(
-                    delta_ei**2 * ehat_exc * self.n_exc_rec
+                    delta_ei**2 * ehat_exc[0] * self.n_exc_rec
                     + delta_rec**2
                     * (
-                        self.n_exc_ff * delta_ei**2 * ehat_exc
-                        + ehat_inh * self.n_inh
+                        self.n_exc_ff * delta_ei**2 * ehat_exc[0]
+                        + ehat_inh[0] * self.n_inh
                     )
                 )
-                / (theta * delta_ei * delta_rec)
-            )
-            lambda_exc_rec = lambda_exc_ff * delta_rec
-            lambda_inh = lambda_exc_ff * delta_ei
+                / (neuron.v_thresh * delta_ei * delta_rec * self.v_sigma))
+
+            if context.polarity == Polarity.INHIBITORY:
+                print("Rec INHIB")
+                lambda_w = -lambda_exc_ff * delta_ei
+            else:
+                if context.target() == context.source():
+                    print("Rec Rec")
+                    lambda_w = lambda_exc_ff * delta_rec
+                else:
+                    print("Rec FF")
+                    lambda_w = lambda_exc_ff
 
         # If not, scale automatically by number of synapses
         else:
-            delta_ei = (self.n_inh * ebar_inh * self.nu) / (
-                n_exc_total * ebar_exc * self.nu
-            )
+            delta_ei = (self.n_inh * ebar_inh[0] * self.nu) / (
+                        n_exc_total * ebar_exc[0] * self.nu)
             lambda_exc_ff = (
-                self.xi
-                * np.sqrt(2)
+                np.sqrt(2)
                 * np.sqrt(
-                    delta_ei**2 * n_exc_total * self.nu * ehat_exc
-                    + self.n_inh * self.nu * ehat_inh
+                    delta_ei**2 * n_exc_total * self.nu * ehat_exc[0]
+                    + self.n_inh * self.nu * ehat_inh[0]
                 )
-                / (delta_ei * theta)
-            )
-            lambda_exc_rec = lambda_exc_ff
-            lambda_inh = lambda_exc_ff * delta_EI
+                / (delta_ei * neuron.v_thresh * self.v_sigma))
 
-        # Append parameters for all connections
-        params = []
-        for c in dst.afferents:
-            if c.is_inhibitory:
-                params.append(lambda_inh)
-            elif c.is_recurrent:
-                params.append(lambda_exc_rec)
+            if context.polarity == Polarity.INHIBITORY:
+                print("FF INHIB")
+                lambda_w = -lambda_exc_ff * delta_ei
             else:
-                params.append(lambda_exc_ff)
-
+                print("FF Exc")
+                lambda_w = lambda_exc_ff
 
         print(lambda_w)
         return InitializerSnippet("Exponential", {"lambda": lambda_w})
 
     def __repr__(self):
-        return (f"(FluctuationDrivenCentredNormal) N: {self.n}, "
-                f"Nu: {self.nu}, V sigma: {self.v_sigma}, "
-                f"Tau mem: {self.tau_mem}, Tau syn: {self.tau_syn}, "
-                f"V thresh: {self.v_thresh}")
+        return (f"(FluctuationDrivenExponential) N exc ff: {self.n_exc_ff}, "
+                f"N exc rec: {self.n_exc_rec}, N inh: {self.n_inh}, "
+                f"Nu: {self.nu}, Alpha: {self.alpha}, V sigma: {self.v_sigma}")
