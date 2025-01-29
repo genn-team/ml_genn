@@ -1061,8 +1061,8 @@ class EventPropCompiler(Compiler):
                                        np.empty(ring_size, dtype=np.float32))
                 
                 # Add parameters with synaptic decay and scale constants
-                model_copy.add_param("IsynScale", "scalar",
-                    self.dt / (tau_syn  * (1.0 - beta)))
+                #model_copy.add_param("IsynScale", "scalar",
+                #    self.dt / (tau_syn  * (1.0 - beta)))
             
                 # Readout has to be FirstSpikeTime
                 if isinstance(pop.neuron.readout, FirstSpikeTime):
@@ -1088,7 +1088,7 @@ class EventPropCompiler(Compiler):
                     # 1) This is first timestep of backward pass
                     # 2) No spike occurred in preceding forward pass
                     # 4) This is correct output neuron 
-                    dynamics_code += f"""
+                    dynamics_code = f"""
                         
                         if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
                             drive_p = {phantom_scale / self.batch_size};
@@ -1129,14 +1129,19 @@ class EventPropCompiler(Compiler):
                             example_time=(self.example_timesteps * self.dt),
                             dynamics=dynamics_code,
                             transition=transition_code))
+                    # Prepend code defining the drive vars
+                    model_copy.prepend_sim_code(
+                        f"""
+                        // Backward pass
+                        scalar drive = 0.0;
+                        scalar drive_p = 0.0;
+                        """)
 
                     # Prepend (as it accesses the pre-reset value of V) 
                     # code to reset to write spike time and saved vars to ring buffer
                     # TODO: substitute the correct ring buffer writing
                     write = []
                     for var in saved_vars:
-                        model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                           np.empty(ring_size, dtype=np.float32))
                         the_var = var if var != "I" else "Isyn"
                         write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
                     model_copy.prepend_reset_code(
