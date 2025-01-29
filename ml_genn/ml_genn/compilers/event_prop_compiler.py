@@ -17,7 +17,7 @@ from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
 from ..neurons import (Input, AutoNeuron)
 from ..optimisers import Optimiser
-from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar, Var
+from ..readouts import AvgVar, AvgVarExpWeight, FirstSpikeTime, MaxVar, SumVar, Var
 from ..synapses import AutoSyn
 from ..utils.callback_list import CallbackList
 from ..utils.data import MetricsType
@@ -497,6 +497,8 @@ class EventPropCompiler(Compiler):
         per_timestep_loss:          Should we use the per-timestep or
                                     per-trial loss functions described above?
         dt:                         Simulation timestep [ms]
+        ttfs_alpha                  TODO
+        softmax_temperature         TODO
         batch_size:                 What batch size should be used for
                                     training? In our experience, EventProp works
                                     best with modest batch sizes (32-128)
@@ -527,6 +529,7 @@ class EventPropCompiler(Compiler):
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
+                 ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None,
@@ -550,6 +553,8 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
+        self.ttfs_alpha = ttfs_alpha
+        self.softmax_temperature = softmax_temperature
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
         self._delay_optimiser = get_object(
@@ -1014,8 +1019,8 @@ class EventPropCompiler(Compiler):
                                        np.empty(ring_size, dtype=np.float32))
                 
                 # Add parameters with synaptic decay and scale constants
-                model_copy.add_param("IsynScale", "scalar",
-                    self.dt / (tau_syn  * (1.0 - beta)))
+                #model_copy.add_param("IsynScale", "scalar",
+                #    self.dt / (tau_syn  * (1.0 - beta)))
             
                 # Readout has to be FirstSpikeTime
                 if isinstance(pop.neuron.readout, FirstSpikeTime):
@@ -1041,7 +1046,7 @@ class EventPropCompiler(Compiler):
                     # 1) This is first timestep of backward pass
                     # 2) No spike occurred in preceding forward pass
                     # 4) This is correct output neuron 
-                    dynamics_code += f"""
+                    dynamics_code = f"""
                         
                         if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
                             drive_p = {phantom_scale / self.batch_size};
@@ -1082,14 +1087,19 @@ class EventPropCompiler(Compiler):
                             example_time=(self.example_timesteps * self.dt),
                             dynamics=dynamics_code,
                             transition=transition_code))
+                    # Prepend code defining the drive vars
+                    model_copy.prepend_sim_code(
+                        f"""
+                        // Backward pass
+                        scalar drive = 0.0;
+                        scalar drive_p = 0.0;
+                        """)
 
                     # Prepend (as it accesses the pre-reset value of V) 
                     # code to reset to write spike time and saved vars to ring buffer
                     # TODO: substitute the correct ring buffer writing
                     write = []
                     for var in saved_vars:
-                        model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                           np.empty(ring_size, dtype=np.float32))
                         the_var = var if var != "I" else "Isyn"
                         write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
                     model_copy.prepend_reset_code(
