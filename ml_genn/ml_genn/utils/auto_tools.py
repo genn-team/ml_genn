@@ -1,5 +1,4 @@
 import sympy
-from sympy.parsing.sympy_parser import parse_expr
 
 """
 THis function turns ODEs expressed as two lists for sympy variables and matching rhs expressions 
@@ -7,11 +6,10 @@ into C code to update the variables with timestep "dt"
 """
 
 def _linear_euler(varname, sym, exprs, dt):
-    code = []
-    for var, expr in exprs.items():
-        code.append(sympy.ccode(sym[var]+expr*dt, assign_to= f"const scalar {str(var)}_tmp"))
-    for var in exprs:
-        code.append(f"{var} = {var}_tmp;")
+    code = [sympy.ccode((sym[var] + expr) * dt,
+                        assign_to=f"const scalar {str(var)}_tmp")
+            for var, expr in exprs.items()]
+    code += [f"{var} = {var}_tmp;" for var in exprs]
     return code
 
     
@@ -60,8 +58,8 @@ def _get_conditionally_linear_system(vars, exprs):
 
 
 def _exponential_euler(varname, sym, exprs, dt):
-    vars = [ sym[var] for var in varname ]
-    the_exprs = [ expr for var, expr in exprs.items() ]
+    vars = [sym[var] for var in varname]
+    the_exprs = [expr for var, expr in exprs.items()]
     # Try whether the equations are conditionally linear
     try:
         system = _get_conditionally_linear_system(vars,the_exprs)
@@ -105,19 +103,19 @@ def unused_add(o, expr):
         return o+expr
 
 def get_symbols(vars, params, w_name=None):
-    sym = {}
-    for var in vars:
-        sym[var] = sympy.Symbol(var)
-    for pname in params:
-        sym[pname] = sympy.Symbol(pname)
+    sym = {v: sympy.Symbol(v) for v in vars}
+    sym.update({p: sympy.Symbol(p) for p in params})
+    sym.update({f"Lambda{v}": sympy.Symbol(f"Lambda{v}")
+                for v in vars})
+
     if w_name is not None:
         sym[w_name] = sympy.Symbol(w_name)
-    for var in vars:
-        sym[f"Lambda{var}"] = sympy.Symbol(f"Lambda{var}")
+
     return sym
 
 # solde a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
+# **TODO** solver enum
 def solve_ode(vars, sym, ode, dt, solver):
     dx_dt = {}
     for var, expr in ode.items():
@@ -140,7 +138,7 @@ def solve_ode(vars, sym, ode, dt, solver):
 # the values that need to be saved in the forward pass
 def unused_saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
     saved = set()
-    all = [ adj_ode, adj_jump, add_to_pre ]
+    all = [adj_ode, adj_jump, add_to_pre]
     for expr_list in all:
         for var in varname:
             for v2, expr in expr_list.items():
@@ -150,17 +148,14 @@ def unused_saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
     return saved
 
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
+# **THOMAS** comments here would be nice
 def simplify_using_threshold(varname, sym, g, expr):
     if g is None:
         return expr
 
-    the_var = None
-    for var in varname:
-        if g.has(sym[var]):
-            the_var = sym[var]
-            break
-
-    if the_var is None:
+    try:
+        the_var = next(sym[v] for v in varname if g.has(sym[v]))
+    except StopIteration:
         return adj_jump, add_to_pre
 
     sln = sympy.solve(g, the_var)
@@ -169,10 +164,7 @@ def simplify_using_threshold(varname, sym, g, expr):
         return expr
 
     if isinstance(expr, dict):
-        new_expr = {}
-        for var, ex in expr.items():
-            new_expr[var] = ex.subs(the_var,sln[0])
-        return new_expr
+        return {var: ex.subs(the_var, sln[0])
+                for var, ex in expr.items()}
     else:
-        expr= expr.subs(the_var,sln[0])
-        return expr
+        return expr.subs(the_var,sln[0])
