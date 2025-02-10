@@ -138,7 +138,7 @@ def _get_conn_max_delay(conn, delay):
     # Otherwise, if delays are specified as an array, 
     # calculate maximum delay steps from array 
     elif is_value_array(delay):
-        return np.amax(delay) + 1
+        return np.rint(np.amax(delay)).astype(int) + 1
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
                            f"{conn.name} cannot be determined "
@@ -222,10 +222,10 @@ class Compiler:
 
             # Check delay fits in 16-bit limit
             if max_delay_steps > 65535:
-                raise NotImplementedError(f"Maximum of {conn.max_delay_steps}"
+                raise NotImplementedError(f"Maximum of {max_delay_steps}"
                                           f" delay steps for Connection "
                                           f"{conn.name} exceeds 65535")
-            genn_pop.max_dendritic_delay_timesteps = conn.max_delay_steps
+            genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
                            compile_state) -> NeuronModel:
@@ -281,7 +281,7 @@ class Compiler:
         if het_delay:
             # Get delay type to use for this connection
             delay_type = get_delay_type(
-                _get_conn_max_delay(conn, connect_snippet.delay))
+                _get_conn_max_delay(connection, connect_snippet.delay))
             param_vals["d"] = connect_snippet.delay
 
         # If source neuron model defines a negative threshold condition
@@ -290,7 +290,7 @@ class Compiler:
                                                     self.batch_size)
         if "negative_threshold_condition_code" in src_neuron_model.model:
             wum = WeightUpdateModel(
-                (_get_signed_static_pulse_delay_model(delay_type) if het_delay
+                (get_signed_static_pulse_delay_model(delay_type) if het_delay
                  else deepcopy(signed_static_pulse_model)),
                 param_vals)
 
@@ -301,7 +301,7 @@ class Compiler:
             return wum
         else:
             return WeightUpdateModel(
-                (_get_static_pulse_delay_model(delay_type) if het_delay
+                (get_static_pulse_delay_model(delay_type) if het_delay
                  else deepcopy(static_pulse_model)),
                 param_vals)
 
