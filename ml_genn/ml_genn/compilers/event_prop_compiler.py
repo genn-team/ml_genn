@@ -31,7 +31,6 @@ from ..utils.snippet import ConnectivitySnippet
 from copy import deepcopy
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
-from sympy.parsing.sympy_parser import parse_expr
 from .compiler import create_reset_custom_update, get_delay_type
 from ..utils.auto_tools import (get_symbols, simplify_using_threshold,
                                 solve_ode)
@@ -240,28 +239,6 @@ def _get_static_delay_weight_update_model(delay_type):
             BackSpike_pre
             """}
 
-def _get_tau_syn(pop):
-    # Loop through incoming connections
-    tau_syn = None
-    for conn in pop.incoming_connections:
-        # If synapse model isn't exponential, give error
-        syn = conn().synapse
-        if not isinstance(syn, Exponential):
-            raise NotImplementedError(
-                "EventProp compiler only supports "
-                "Exponential synapses")
-
-        # Update tau_syn
-        if tau_syn is None:
-            tau_syn = syn.tau
-        if tau_syn != syn.tau:
-            raise NotImplementedError("EventProp compiler doesn't"
-                                      " support neurons whose "
-                                      "incoming synapses have "
-                                      "different time constants")
-    assert tau_syn is not None
-    return tau_syn
-
 def _get_conn_max_delay(conn, delay):
     # If maximum delay steps is specified
     if conn.max_delay_steps is not None:
@@ -280,19 +257,17 @@ def _get_conn_max_delay(conn, delay):
 
 
 # Preprocessing of auto-adjoint equations
-
 def _process_odes(vars, params, eqns):
     sym = get_symbols(vars, params)
-    dx_dt = {}
-    for var in vars:
-        if var in eqns:
-            dx_dt[var] = parse_expr(eqns[var],local_dict= sym)
+    dx_dt = {var: sympy.parse_expr(eqns[var], local_dict=sym)
+             for var in vars if var in eqns}
+    
     return sym, dx_dt
 
 def _process_jumps(sym, jumps):
     h = {}
     for var in jumps:
-        tmp = parse_expr(jumps[var],local_dict= sym)-sym[var]
+        tmp = sympy.parse_expr(jumps[var], local_dict=sym) - sym[var]
         if sympy.diff(tmp, sym[var]) == 0:
             if tmp != 0:
                 h[var] = tmp
@@ -657,31 +632,33 @@ class EventPropCompiler(Compiler):
                 adj_var = f"Lambda{var}"
                 sym[adj_var] = sympy.Symbol(adj_var)
                 model_copy.add_var(adj_var, "scalar", 0.0)
+
             # generate adjoint ODE
             # assume that neuron variables do not appear in rhs of post-synapse ODEs
             # therefore, we can do these independent of synapse equations
             dl_dt = {}
             for var in dx_dt:
-                o = 0
-                for v2, expr in dx_dt.items():
-                    o += sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"]  
+                o = sum(sympy.diff(expr, sym[var]) * sym[f"Lambda{v2}"]
+                        for v2, expr in dx_dt.items())
+                
                 dl_dt[f"Lambda{var}"] = o
+                
                 # collect variables they might need to go into a ring buffer:
-                for v2 in dx_dt:
-                    if o.has(sym[v2]):
-                        saved_vars.add(v2)
-
+                saved_vars.update({v2 for v2 in dx_dt if o.has(sym[v2])})
+                
             logger.debug(f"Adjoint ODE: {dl_dt}")
+
             # threshold condition
             if pop.neuron.threshold == "":
                 g = None
             else:
-                g = parse_expr(pop.neuron.threshold)
+                g = sympy.parse_expr(pop.neuron.threshold)
+
             # reset function
-            f = {}
-            for var in pop.neuron.reset:
-                f[var] = parse_expr(pop.neuron.reset[var],local_dict= sym)
-            logger.debug(f"f: {f}")      
+            f = {var: sympy.parse_expr(pop.neuron.reset[var], local_dict=sym)
+                 for var in pop.neuron.reset}
+            logger.debug(f"f: {f}")
+
             # after jump dynamics equation "\dot{x}^+"
             dx_dtplusn = {}
             for var, expr in dx_dt.items():
@@ -690,47 +667,41 @@ class EventPropCompiler(Compiler):
                     plus = plus.subs(sym[v2],f2)
                 dx_dtplusn[var] = plus
             logger.debug(f"dx_dtplusn: {dx_dtplusn}")
-            A = {}
-            B = {}
-            C = {}
+            a = {}
+            b = {}
+            c = {}
             for var in varnames:
-                ex= 0
-                for v2,f2 in f.items():
-                    ex += sympy.diff(f2,sym[var])*sym[f"Lambda{v2}"]
-                A[var] = ex
-                for v2 in varnames:
-                    if A[var].has(sym[v2]):
-                        saved_vars.add(v2)
-                ex= 0
+                a[var] = sum(sympy.diff(f2,sym[var]) * sym[f"Lambda{v2}"]
+                             for v2, f2 in f.items())
+                saved_vars.update({v2 for v2 in varnames
+                                   if a[var].has(sym[v2])})
+
                 if g is not None:
-                    for v2 in varnames:
-                        ex += sympy.diff(g,sym[v2])*dx_dt[v2]
-                    ex = sympy.simplify(ex)
+                    ex = sympy.simplify(sum(sympy.diff(g, sym[v2]) * dx_dt[v2]
+                                            for v2 in varnames))
                     if ex != 0:
-                        ex = sympy.diff(g,sym[var])/ex
+                        ex = sympy.diff(g, sym[var]) / ex
                         if ex != 0:
-                            B[var]= simplify_using_threshold(varnames, sym, g, ex)
-                            for v2 in varnames:
-                                if B[var].has(sym[v2]):
-                                    saved_vars.add(v2)
-                    if var in B:
-                        ex= 0
+                            b[var] = simplify_using_threshold(varnames, sym, g, ex)
+                            saved_vars.update({v2 for v2 in varnames
+                                               if b[var].has(sym[v2])})
+                    if var in b:
+                        ex = 0
                         for v2,f2 in f.items():
-                            ex2= 0
-                            for v3 in dx_dt:
-                                ex2 += sympy.diff(f2,sym[v3])*dx_dt[v3]
+                            ex2 = sum(sympy.diff(f2,sym[v3]) * dx_dt[v3]
+                                      for v3 in dx_dt)
+
                             ex2 -= dx_dtplusn[v2]
-                            ex -= sym[f"Lambda{v2}"]*ex2
+                            ex -= sym[f"Lambda{v2}"] * ex2
                         ex = sympy.simplify(ex)
                         if ex != 0:
-                            C[var] = simplify_using_threshold(varnames, sym, g, ex)
-                            for v2 in varnames:
-                                if C[var].has(sym[v2]):
-                                    saved_vars.add(v2)
+                            c[var] = simplify_using_threshold(varnames, sym, g, ex)
+                            saved_vars.update(v2 for v2 in varnames
+                                              if c[var].has(sym[v2]))
 
-            logger.debug(f"A: {A}")
-            logger.debug(f"B: {B}")
-            logger.debug(f"C: {C}")
+            logger.debug(f"A: {a}")
+            logger.debug(f"B: {b}")
+            logger.debug(f"C: {c}")
                
             # Add additional input variable to receive add_to_pre feedback
             model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
@@ -746,39 +717,40 @@ class EventPropCompiler(Compiler):
             # assemble the different lambda jump parts
             trans_code= []
             for var in varnames:
-                ex = A[var]
-                if var in B and var in C:
-                    ex2 = C[var]
+                ex = a[var]
+                if var in b and var in c:
+                    ex2 = c[var]
                 else:
                     ex2 = 0
-                if var in B:
+                if var in b:
                     if pop.neuron.readout is not None:
                         # TODO: we are missing l_V^- - l_V^+ for output neurons with jumps
                         # that are combined with l_V loss types
                         # This is at the moment categorically excluded
                         ex2 += sympy.Symbol("drive_p")
                     if len(pop.outgoing_connections) > 0:
-                        jump = ex + B[var]*(ex2+sympy.Symbol("RevISyn"))
+                        jump = ex + b[var] * (ex2 + sympy.Symbol("RevISyn"))
                     else:
-                        jump = ex + B[var]*ex2
+                        jump = ex + b[var] * ex2
                 else:
                     jump = ex
                 jump =  simplify_using_threshold(varnames, sym, g, {"j": jump})["j"]
                 for v2 in varnames+["I"]:
                     if jump.has(sym[v2]):
                         saved_vars.add(v2)
-                        jump = jump.subs(sym[v2],sympy.Symbol(f"__{v2}"))
-                ccode= sympy.ccode(jump)
+                        jump = jump.subs(sym[v2], sympy.Symbol(f"__{v2}"))
+
+                jump_code = sympy.ccode(jump)
                 # JAMIE: is there a more elegant way to do this? I.e. replacing a variable name
                 # with the full expression of the ring without accidental matches of substrings
                 # to the variable name
                 for v2 in saved_vars:
-                    ccode= ccode.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
+                    jump_code = jump_code.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
                 
-                logger.debug(f"jump: {ccode}")
+                logger.debug(f"jump: {jump_code}")
 
                 if jump != 0:
-                    trans_code.append(f"Lambda{var} = {ccode};")
+                    trans_code.append(f"Lambda{var} = {jump_code};")
             transition_code = "\n".join(trans_code)
             logger.debug(f"transition_code: {transition_code}")
             
@@ -825,7 +797,7 @@ class EventPropCompiler(Compiler):
             # We assume that the neuron model contains a variable "V" that will
             # receive dl_V/dV
             drive = sympy.Symbol("drive")
-            dl_dt["LambdaV"] = dl_dt["LambdaV"]+drive
+            dl_dt["LambdaV"] = dl_dt["LambdaV"] + drive
 
             if pop.neuron.threshold == "":
                 # this is a non-spiking neuron - MSE and SCE losses of "voltage V" apply
@@ -1227,10 +1199,10 @@ class EventPropCompiler(Compiler):
                     # Add additional transition code to apply regularisation
                     transition_code += """
                     if (SpikeCountBackBatch > RegNuUpperBatch) {
-                    LambdaV -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
+                        LambdaV -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
                     }
                     else {
-                    LambdaV -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
+                        LambdaV -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
                     }
                     """
                         
@@ -1272,7 +1244,7 @@ class EventPropCompiler(Compiler):
             # Add code to start of sim code to run backwards pass 
             # and handle back spikes with correct dynamics
             dt = sympy.Symbol("dt")
-            lbd_names = [ f"Lambda{var}" for var in varnames ]
+            lbd_names = [f"Lambda{var}" for var in varnames]
             _, clines = solve_ode(lbd_names, sym, dl_dt, dt, pop.neuron.solver)
             ccode = "\n".join(clines)
             if pop.neuron.readout is None:
@@ -1289,11 +1261,12 @@ class EventPropCompiler(Compiler):
                 
                 // Forward pass
                 """)
+
             # Add the neuron simcode including all the inherited I ODE equations
-            dx_dt_tmp = {}
-            for var in dx_dt:
-                dx_dt_tmp[var] = dx_dt[var].subs(sym["I"],sympy.Symbol("Isyn"))
-            _, clines = solve_ode(varnames, sym, dx_dt_tmp, dt, pop.neuron.solver)
+            dx_dt_tmp = {var: dx_dt[var].subs(sym["I"], sympy.Symbol("Isyn"))
+                         for var in dx_dt}
+            _, clines = solve_ode(varnames, sym, dx_dt_tmp,
+                                  dt, pop.neuron.solver)
             ccode = "\n".join(clines)
             model_copy.append_sim_code(ccode)
 
@@ -1304,16 +1277,9 @@ class EventPropCompiler(Compiler):
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
                             compile_state: CompileState) -> SynapseModel:
-        # **NOTE** this is probably not necessary as 
-        # it's also checked in build_neuron_model
-        # **NOTE** this must be run after build_neuron_model!!!
-        if not isinstance(conn.synapse, AutoSyn):
-            raise NotImplementedError("EventProp compiler only "
-                                      "supports user-defined synapses (AutoSyn)")
-
         # Make copy of model
         model_copy = deepcopy(model)
-        syn= conn.synapse
+        syn = conn.synapse
         if not isinstance(syn, AutoSyn):
             raise NotImplementedError(
                 "EventProp compiler only supports "
@@ -1327,11 +1293,14 @@ class EventPropCompiler(Compiler):
         logger.debug(f"h: {h}")
                 
         # generate forward jumps
-        clines = []
-        for var, expr in h.items():
-            clines.append(f"{var} += {sympy.ccode(expr.subs(sympy.Symbol(syn.w_name),sympy.Symbol('inSyn')))};")
+        in_syn_sym = sympy.Symbol("inSyn")
+        w_sym = sympy.Symbol(syn.w_name)
+        clines = [f"{v} += {sympy.ccode(e.subs(w_sym, in_syn_sym))};"
+                  for v, e in h.items()]
+
         clines.append("inSyn = 0;")
         jump_ccode = "\n".join(clines)
+    
         # generate adjoint ODE
         pop = conn.target()
         vn = pop.neuron.varnames.copy()
@@ -1343,21 +1312,16 @@ class EventPropCompiler(Compiler):
         params = set()
         for var in dx_dt:
             # add adjoint variable to post-synapse model
-            model_copy.model["vars"].append((f"Lambda{var}","scalar"))
-            model_copy.var_vals[f"Lambda{var}"] = 0.0
-            o = 0
-            for v2, expr in dx_dt.items():
-                o += sympy.diff(expr, sym[var])*sym[f"Lambda{v2}"]
-            for v2, expr in n_dx_dt.items():
-                o += sympy.diff(expr, sym[var])*n_sym[f"Lambda{v2}"]
+            model_copy.add_var(f"Lambda{var}", "scalar", 0.0)
+            
+            o = sum(sympy.diff(expr, sym[var]) * sym[f"Lambda{v2}"]
+                    for v2, expr in dx_dt.items())
+            o += sum(sympy.diff(expr, sym[var]) * n_sym[f"Lambda{v2}"]
+                     for v2, expr in n_dx_dt.items())
             dl_dt[f"Lambda{var}"] = o
-            err = False
-            for v2 in syn.varnames:
-                if o.has(sym[v2]):
-                    err = True
-            for v2 in pop.neuron.varnames:
-                if o.has(n_sym[v2]):
-                    err = True
+            
+            err = (any(o.has(sym[v2]) for v2 in syn.varnames)
+                   or any(o.has(n_sym[v2]) for v2 in pop.neuron.varnames))
             if err:
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
@@ -1365,19 +1329,20 @@ class EventPropCompiler(Compiler):
                 if (o.has(n_sym[f"Lambda{v2}"])):
                     post_var_ref_set.add((f"Lambda{v2}", "scalar"))
                     post_var_refs[f"Lambda{v2}"] = f"Lambda{v2}"
-            for p in pop.neuron.params:
-                if (o.has(n_sym[p[0]])):
-                    params.add(p)
+
+            params.update({p for p in pop.neuron.params 
+                           if o.has(n_sym[p[0]])})
             print(syn)
             print(syn.param_vals)
+
         for p in params:
-            model_copy.model["params"].append((p[0],p[1]))
+            model_copy.model["params"].append((p[0], p[1]))
             model_copy.param_vals[p[0]] = p[2] 
                     
         dt = sympy.Symbol("dt")
         _, clines = solve_ode(syn.varnames, sym, dx_dt, dt, syn.solver)
         fwd_ccode = "\n".join(clines)
-        lbd_names = [ f"Lambda{var}" for var in syn.varnames ]
+        lbd_names = [f"Lambda{var}" for var in syn.varnames]
         _, clines = solve_ode(lbd_names, sym, dl_dt, dt, syn.solver)
         bwd_ccode = "\n".join(clines)
         model_copy.model["sim_code"] = f"""
@@ -1546,9 +1511,9 @@ class EventPropCompiler(Compiler):
         grad_update = 0
         for var in h:
             if h[var] != 0:
-                grad_update -= sym[f"Lambda{var}"]*sympy.diff(h[var],sympy.Symbol(syn.w_name))
+                grad_update -= sym[f"Lambda{var}"] * sympy.diff(h[var], sympy.Symbol(syn.w_name))
                 psm_var_ref_set.add((f"Lambda{var}","scalar")) 
-                psm_var_refs[f"Lambda{var}"]= f"Lambda{var}"
+                psm_var_refs[f"Lambda{var}"] = f"Lambda{var}"
 
         model_copy["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
 
