@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from .synapse import Synapse
 from ..utils.model import SynapseModel
 from ..utils.value import InitValue, ValueDescriptor
-from ..auto_tools import *
 
 if TYPE_CHECKING:
     from .. import Connection

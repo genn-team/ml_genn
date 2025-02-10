@@ -34,11 +34,11 @@ from .compiler import create_reset_custom_update, get_delay_type
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_array, is_value_constant
+from ..utils.auto_tools import *
 
 from .compiler import softmax_1_model, softmax_2_model
 from ..optimisers import default_optimisers
 from ..losses import default_losses
-from ..auto_tools import *
 
 logger = logging.getLogger(__name__)
 
