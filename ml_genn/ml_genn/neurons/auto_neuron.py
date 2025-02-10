@@ -4,8 +4,6 @@ from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
-from ..auto_tools import *
-
 if TYPE_CHECKING:
     from .. import Population
     
