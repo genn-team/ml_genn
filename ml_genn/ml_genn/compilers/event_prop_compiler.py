@@ -42,8 +42,6 @@ from ..losses import default_losses
 
 logger = logging.getLogger(__name__)
 
-DEBUG = True
-
 # EventProp uses a fixed size ring-buffer structure with a read pointer to
 # read data for the backward pass and a write pointer to write data from the
 # forward pass. These start positioned like this:
@@ -663,12 +661,11 @@ class EventPropCompiler(Compiler):
             vn.append("I")
             sym, dx_dt = process_odes(vn, pnames, pop.neuron.ode)
             saved_vars = set()
-            if DEBUG:
-                print(f"varnames: {varnames}")
-                print(f"var_vals: {var_vals}")
-                print(f"pnames: {pnames}")
-                print(f"param_vals: {param_vals}")
-                print(f"neuron ODEs: {dx_dt}")
+            logger.debug(f"varnames: {varnames}")
+            logger.debug(f"var_vals: {var_vals}")
+            logger.debug(f"pnames: {pnames}")
+            logger.debug(f"param_vals: {param_vals}")
+            logger.debug(f"neuron ODEs: {dx_dt}")
 
             # Add adjoint state variables - only for vars that have an ode
             for var in dx_dt:
@@ -689,8 +686,7 @@ class EventPropCompiler(Compiler):
                     if o.has(sym[v2]):
                         saved_vars.add(v2)
 
-            if DEBUG:
-                print(f"Adjoint ODE: {dl_dt}")
+            logger.debug(f"Adjoint ODE: {dl_dt}")
             # threshold condition
             if pop.neuron.threshold == "":
                 g = None
@@ -700,8 +696,7 @@ class EventPropCompiler(Compiler):
             f = {}
             for var in pop.neuron.reset:
                 f[var] = parse_expr(pop.neuron.reset[var],local_dict= sym)
-            if DEBUG:
-                print(f"f: {f}")      
+            logger.debug(f"f: {f}")      
             # after jump dynamics equation "\dot{x}^+"
             dx_dtplusn = {}
             for var, expr in dx_dt.items():
@@ -709,8 +704,7 @@ class EventPropCompiler(Compiler):
                 for v2, f2 in f.items():
                     plus = plus.subs(sym[v2],f2)
                 dx_dtplusn[var] = plus
-            if DEBUG:
-                print(f"dx_dtplusn: {dx_dtplusn}")
+            logger.debug(f"dx_dtplusn: {dx_dtplusn}")
             A = {}
             B = {}
             C = {}
@@ -749,11 +743,9 @@ class EventPropCompiler(Compiler):
                                 if C[var].has(sym[v2]):
                                     saved_vars.add(v2)
 
-            if DEBUG:
-                print(f"A: {A}")
-                print(f"B: {B}")
-                print(f"C: {C}")
-
+            logger.debug(f"A: {A}")
+            logger.debug(f"B: {B}")
+            logger.debug(f"C: {C}")
                
             # Add additional input variable to receive add_to_pre feedback
             model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
@@ -798,13 +790,12 @@ class EventPropCompiler(Compiler):
                 for v2 in saved_vars:
                     ccode= ccode.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
                 
-                if DEBUG:
-                    print(f"jump: {ccode}")
+                logger.debug(f"jump: {ccode}")
 
                 if jump != 0:
                     trans_code.append(f"Lambda{var} = {ccode};")
             transition_code = "\n".join(trans_code)
-            print(f"transition_code: {transition_code}")
+            logger.debug(f"transition_code: {transition_code}")
             
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -1348,8 +1339,7 @@ class EventPropCompiler(Compiler):
 
         # synaptic jumps 
         h = process_jumps(sym, syn.jumps)
-        if DEBUG:
-            print(f"h: {h}")
+        logger.debug(f"h: {h}")
                 
         # generate forward jumps
         clines = []
@@ -1565,8 +1555,7 @@ class EventPropCompiler(Compiler):
         sym, dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
         # synaptic jumps 
         h = process_jumps(sym, syn.jumps)        
-        if DEBUG:
-            print(f"h: {h}")
+        logger.debug(f"h: {h}")
                 
         # assemble gradient update
         grad_update = 0
@@ -1604,11 +1593,10 @@ class EventPropCompiler(Compiler):
             n_dx_dt[var] = ex2
             ex2 = expr.subs(n_sym["I"],inject_plusm)
             n_dx_dtplusm[var] = ex2
-        if DEBUG:
-            print(f"dx_dt: {dx_dt}")
-            print(f"n_dx_dt: {n_dx_dt}")
-            print(f"dx_dtplusm: {dx_dtplusm}")
-            print(f"n_dx_dtplusm: {n_dx_dtplusm}")
+        logger.debug(f"dx_dt: {dx_dt}")
+        logger.debug(f"n_dx_dt: {n_dx_dt}")
+        logger.debug(f"dx_dtplusm: {dx_dtplusm}")
+        logger.debug(f"n_dx_dtplusm: {n_dx_dtplusm}")
         # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
         # variables!
         # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
