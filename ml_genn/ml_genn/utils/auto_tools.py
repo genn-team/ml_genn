@@ -1,31 +1,12 @@
 import sympy
 from sympy.parsing.sympy_parser import parse_expr
 
-
-def add(o, expr):
-    if o is None:
-        return expr
-    else:
-        return o+expr
-
-def get_symbols(vars, params, w_name=None):
-    sym = {}
-    for var in vars:
-        sym[var] = sympy.Symbol(var)
-    for pname in params:
-        sym[pname] = sympy.Symbol(pname)
-    if w_name is not None:
-        sym[w_name] = sympy.Symbol(w_name)
-    for var in vars:
-        sym[f"Lambda{var}"] = sympy.Symbol(f"Lambda{var}")
-    return sym
-    
 """
 THis function turns ODEs expressed as two lists for sympy variables and matching rhs expressions 
 into C code to update the variables with timestep "dt"
 """
 
-def linear_euler(varname, sym, exprs, dt):
+def _linear_euler(varname, sym, exprs, dt):
     code = []
     for var, expr in exprs.items():
         code.append(sympy.ccode(sym[var]+expr*dt, assign_to= f"const scalar {str(var)}_tmp"))
@@ -38,7 +19,7 @@ def linear_euler(varname, sym, exprs, dt):
 This modified from Brian 2's exponential_euler stateupdater
 """
 
-def get_conditionally_linear_system(vars, exprs):
+def _get_conditionally_linear_system(vars, exprs):
     """
     Convert equations into a linear system using sympy.
 
@@ -70,8 +51,7 @@ def get_conditionally_linear_system(vars, exprs):
                 raise ValueError(
                     f"The expression '{expr}', defining the variable "
                     f"'{name}', could not be separated into linear "
-                    "components."
-                )
+                    "components.")
             coefficients[name] = (expr[var], expr.get(1, 0))
         else:
             coefficients[name] = (0, expr)
@@ -79,16 +59,15 @@ def get_conditionally_linear_system(vars, exprs):
     return coefficients
 
 
-def exponential_euler(varname, sym, exprs, dt):
-    vars= [ sym[var] for var in varname ]
-    the_exprs= [ expr for var, expr in exprs.items() ]
+def _exponential_euler(varname, sym, exprs, dt):
+    vars = [ sym[var] for var in varname ]
+    the_exprs = [ expr for var, expr in exprs.items() ]
     # Try whether the equations are conditionally linear
     try:
-        system = get_conditionally_linear_system(vars,the_exprs)
+        system = _get_conditionally_linear_system(vars,the_exprs)
     except ValueError:
         raise NotImplementedError(
-            "Can only solve conditionally linear systems with this state updater."
-        )
+            "Can only solve conditionally linear systems with this state updater.")
 
     code = []
     for var, (A, B) in system.items():
@@ -119,6 +98,24 @@ def exponential_euler(varname, sym, exprs, dt):
 End of Brian 2 modified code
 """
 
+def unused_add(o, expr):
+    if o is None:
+        return expr
+    else:
+        return o+expr
+
+def get_symbols(vars, params, w_name=None):
+    sym = {}
+    for var in vars:
+        sym[var] = sympy.Symbol(var)
+    for pname in params:
+        sym[pname] = sympy.Symbol(pname)
+    if w_name is not None:
+        sym[w_name] = sympy.Symbol(w_name)
+    for var in vars:
+        sym[f"Lambda{var}"] = sympy.Symbol(f"Lambda{var}")
+    return sym
+
 # solde a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
 def solve_ode(vars, sym, ode, dt, solver):
@@ -129,10 +126,10 @@ def solve_ode(vars, sym, ode, dt, solver):
         else:
             dx_dt[var] = expr
     if solver == "exponential_euler":
-        clines = exponential_euler(vars, sym, dx_dt, dt)
+        clines = _exponential_euler(vars, sym, dx_dt, dt)
         print(clines)
     elif solver == "linear_euler":
-        clines = linear_euler(vars, sym, dx_dt, dt)
+        clines = _linear_euler(vars, sym, dx_dt, dt)
     else:
         raise NotImplementedError(
             f"EventProp compiler doesn't support "
@@ -141,7 +138,7 @@ def solve_ode(vars, sym, ode, dt, solver):
 
 
 # the values that need to be saved in the forward pass
-def saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
+def unused_saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
     saved = set()
     all = [ adj_ode, adj_jump, add_to_pre ]
     for expr_list in all:

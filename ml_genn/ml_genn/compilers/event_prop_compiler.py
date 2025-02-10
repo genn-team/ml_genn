@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import sympy
 
 from string import Template
 from typing import Iterator, Sequence
@@ -30,11 +31,13 @@ from ..utils.snippet import ConnectivitySnippet
 from copy import deepcopy
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
+from sympy.parsing.sympy_parser import parse_expr
 from .compiler import create_reset_custom_update, get_delay_type
+from ..utils.auto_tools import (get_symbols, simplify_using_threshold,
+                                solve_ode)
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_array, is_value_constant
-from ..utils.auto_tools import *
 
 from .compiler import softmax_1_model, softmax_2_model
 from ..optimisers import default_optimisers
@@ -94,22 +97,12 @@ default_params = {
     Exponential: {"scale_i": True}}
 """
 
-# Standard EventProp weight update model
-# **NOTE** feedback is added if required
+# **THINK** shouldn't graidnet actually be added per-variable we're learning?
 weight_update_model = {
-    "params": [("TauSyn", "scalar")],
-    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
+    "vars": [("Gradient", "scalar")], 
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
-                             
-    "pre_spike_syn_code": """
-    addToPost(g);
-    """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
-    """,
-    "pre_event_syn_code": """
-    Gradient -= (LambdaI_post * TauSyn);
     """}
 
 # Standard EventProp weight update model with learnable delay
@@ -286,6 +279,32 @@ def _get_conn_max_delay(conn, delay):
                           f"automatically, please set max_delay_steps")
 
 
+# Preprocessing of auto-adjoint equations
+
+def _process_odes(vars, params, eqns):
+    sym = get_symbols(vars, params)
+    dx_dt = {}
+    for var in vars:
+        if var in eqns:
+            dx_dt[var] = parse_expr(eqns[var],local_dict= sym)
+    return sym, dx_dt
+
+def _process_jumps(sym, jumps):
+    h = {}
+    for var in jumps:
+        tmp = parse_expr(jumps[var],local_dict= sym)-sym[var]
+        if sympy.diff(tmp, sym[var]) == 0:
+            if tmp != 0:
+                h[var] = tmp
+        else:
+            raise NotImplementedError(
+                "EventProp compiler only supports "
+                "synapses which (only) add input to target variables.")
+    return h
+
+# Standard EventProp weight update model
+# **NOTE** feedback is added if required
+    
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
         self.losses = get_object_mapping(losses, readouts,
@@ -451,40 +470,6 @@ class CustomUpdateOnFirstBatchEnd(Callback):
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
             self._compiled_network.genn_model.custom_update(self.name)
-
-
-# Preprocessing of auto-adjoint equations
-
-def process_odes(vars, params, eqns):
-    sym = get_symbols(vars, params)
-    dx_dt = {}
-    for var in vars:
-        if var in eqns:
-            dx_dt[var] = parse_expr(eqns[var],local_dict= sym)
-    return sym, dx_dt
-
-def process_jumps(sym, jumps):
-    h = {}
-    for var in jumps:
-        tmp = parse_expr(jumps[var],local_dict= sym)-sym[var]
-        if sympy.diff(tmp, sym[var]) == 0:
-            if tmp != 0:
-                h[var] = tmp
-        else:
-            raise NotImplementedError(
-                "EventProp compiler only supports "
-                "synapses which (only) add input to target variables.")
-    return h
-
-# Standard EventProp weight update model
-# **NOTE** feedback is added if required
-    
-weight_update_model = {
-    "vars": [("Gradient","scalar")], 
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """}
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
@@ -659,7 +644,7 @@ class EventPropCompiler(Compiler):
             n_varnames= varnames.copy()
             vn = varnames.copy()
             vn.append("I")
-            sym, dx_dt = process_odes(vn, pnames, pop.neuron.ode)
+            sym, dx_dt = _process_odes(vn, pnames, pop.neuron.ode)
             saved_vars = set()
             logger.debug(f"varnames: {varnames}")
             logger.debug(f"var_vals: {var_vals}")
@@ -1335,10 +1320,10 @@ class EventPropCompiler(Compiler):
                 "user-defined synapses (AutoSyn)")
 
         # assemble forward and backward pass equations for synaptic ODE
-        sym, dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
+        sym, dx_dt = _process_odes(syn.varnames, syn.pnames, syn.ode)
 
         # synaptic jumps 
-        h = process_jumps(sym, syn.jumps)
+        h = _process_jumps(sym, syn.jumps)
         logger.debug(f"h: {h}")
                 
         # generate forward jumps
@@ -1351,7 +1336,7 @@ class EventPropCompiler(Compiler):
         pop = conn.target()
         vn = pop.neuron.varnames.copy()
         vn.append("I")
-        n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
+        n_sym, n_dx_dt = _process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
         dl_dt = {}
         post_var_ref_set = set()
         post_var_refs = {}
@@ -1552,9 +1537,9 @@ class EventPropCompiler(Compiler):
 
         pop = conn.target()
         # forward ODE
-        sym, dx_dt = process_odes(syn.varnames, syn.pnames, syn.ode)
+        sym, dx_dt = _process_odes(syn.varnames, syn.pnames, syn.ode)
         # synaptic jumps 
-        h = process_jumps(sym, syn.jumps)        
+        h = _process_jumps(sym, syn.jumps)        
         logger.debug(f"h: {h}")
                 
         # assemble gradient update
@@ -1581,7 +1566,7 @@ class EventPropCompiler(Compiler):
        
         vn = pop.neuron.varnames.copy()
         vn.append("I")
-        n_sym, n_dx_dt = process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
+        n_sym, n_dx_dt = _process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
         inject = sympy.parse_expr(syn.inject_current, local_dict=sym)
         inject_plusm = inject
         for var, expr in h.items():
