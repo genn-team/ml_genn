@@ -17,7 +17,7 @@ def _linear_euler(sym, dx_dt, dt):
 This modified from Brian 2's exponential_euler stateupdater
 """
 
-def _get_conditionally_linear_system(vars, exprs):
+def _get_conditionally_linear_system(dx_dt):
     """
     Convert equations into a linear system using sympy.
 
@@ -39,8 +39,8 @@ def _get_conditionally_linear_system(vars, exprs):
     """
 
     coefficients = {}
-    for var, expr in zip(vars, exprs):
-        name = str(var)
+    for name, expr in dx_dt:
+        var = sympy.Symbol(name)
         if expr.has(var):
             # Factor out the variable
             expr = expr.expand()
@@ -57,12 +57,10 @@ def _get_conditionally_linear_system(vars, exprs):
     return coefficients
 
 
-def _exponential_euler(varname, sym, exprs, dt):
-    vars = [sym[var] for var in varname]
-    the_exprs = [expr for var, expr in exprs.items()]
+def _exponential_euler(sym, dx_dt, dt):
     # Try whether the equations are conditionally linear
     try:
-        system = _get_conditionally_linear_system(vars, the_exprs)
+        system = _get_conditionally_linear_system(dx_dt)
     except ValueError:
         raise NotImplementedError(
             "Can only solve conditionally linear systems with this state updater.")
@@ -96,6 +94,7 @@ def _exponential_euler(varname, sym, exprs, dt):
 End of Brian 2 modified code
 """
 
+# **TODO** remove me
 def get_symbols(vars, params, w_name=None):
     sym = {v: sympy.Symbol(v) for v in vars}
     sym.update({p: sympy.Symbol(p) for p in params})
@@ -110,9 +109,9 @@ def get_symbols(vars, params, w_name=None):
 # solde a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
 # **TODO** solver enum
-def solve_ode(vars, sym, dx_dt, dt, solver):
+def solve_ode(sym, dx_dt, dt, solver):
     if solver == "exponential_euler":
-        clines = _exponential_euler(vars, sym, dx_dt, dt)
+        clines = _exponential_euler(sym, dx_dt, dt)
         print(clines)
     elif solver == "linear_euler":
         clines = _linear_euler(sym, dx_dt, dt)
@@ -120,7 +119,7 @@ def solve_ode(vars, sym, dx_dt, dt, solver):
         raise NotImplementedError(
             f"EventProp compiler doesn't support "
             f"{solver} solver")
-    return clines
+    return "\n".join(clines)
 
 
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
