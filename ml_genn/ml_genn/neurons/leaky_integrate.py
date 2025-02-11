@@ -23,9 +23,9 @@ class LeakyIntegrate(Neuron):
         readout:    Type of readout to attach to this neuron's output variable
     """
     
-    v = ValueDescriptor("V")
-    bias = ValueDescriptor("Bias")
-    tau_mem = ValueDescriptor(("Alpha", lambda val, dt: np.exp(-dt / val)))
+    v = ValueDescriptor()
+    bias = ValueDescriptor()
+    tau_mem = ValueDescriptor()
 
     @network_default_params
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,

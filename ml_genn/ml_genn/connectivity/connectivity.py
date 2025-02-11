@@ -22,8 +22,8 @@ class Connectivity(ABC):
         weight: Connection weights
         delay:  Connection delays
     """
-    weight = ValueDescriptor("g")
-    delay = ValueDescriptor("d")
+    weight = ValueDescriptor()
+    delay = ValueDescriptor()
 
     def __init__(self, weight: InitValue, delay: InitValue):
         self.weight = weight

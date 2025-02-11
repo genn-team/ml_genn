@@ -21,8 +21,7 @@ class Exponential(Synapse):
     Args:
         tau:    Time constant of input current [ms]
     """
-    tau = ValueDescriptor(("ExpDecay", lambda val, dt: np.exp(-dt / val)),
-                          ("IScale", lambda val, dt: (val / dt) * (1.0 - np.exp(-dt / val))))
+    tau = ValueDescriptor()
 
     @network_default_params
     def __init__(self, tau: InitValue = 5.0, scale_i : bool = False):

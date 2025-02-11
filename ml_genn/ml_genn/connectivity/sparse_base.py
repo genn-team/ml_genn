@@ -8,8 +8,8 @@ from ..utils.value import is_value_array
 
 class SparseBase(Connectivity):
     """Base class for all sparse connectivity"""
-    pre_ind = ValueDescriptor("pre_ind")
-    post_ind = ValueDescriptor("post_ind")
+    pre_ind = ValueDescriptor()
+    post_ind = ValueDescriptor()
     
     def __init__(self, weight: InitValue, delay: InitValue):
         super(SparseBase, self).__init__(weight, delay)

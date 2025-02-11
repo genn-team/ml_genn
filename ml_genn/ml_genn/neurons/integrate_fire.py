@@ -37,9 +37,9 @@ class IntegrateFire(Neuron):
         readout:    Type of readout to attach to this
                     neuron's output variable
     """
-    v_thresh = ValueDescriptor("Vthresh")
-    v_reset = ValueDescriptor("Vreset")
-    v = ValueDescriptor("V")
+    v_thresh = ValueDescriptor()
+    v_reset = ValueDescriptor()
+    v = ValueDescriptor()
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, readout=None, **kwargs):
