@@ -48,11 +48,11 @@ with network:
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
-    hidden = Layer(connectivity, AutoNeuron([("V","scalar",0.0)], [("taum","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/taum"}, "V-theta", {"V": "0"}, solver="exponential_euler"),
-                   NUM_HIDDEN, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="exponential_euler"),record_spikes=True)
+    hidden = Layer(connectivity, AutoNeuron([("V","scalar",0.0)], [("taum","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/taum"}, "V-theta", {"V": "0"}, solver="linear_euler"),
+                   NUM_HIDDEN, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="linear_euler"),record_spikes=True)
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   AutoNeuron([("V","scalar",0.0)], [("TauM","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/TauM"}, "", {"V": "0"}, solver="exponential_euler", readout="avg_var"),
-                   NUM_OUTPUT, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="exponential_euler"))
+                   AutoNeuron([("V","scalar",0.0)], [("TauM","scalar",20.0), ("theta","scalar",1.0)], {"V": "(-V+I)/TauM"}, "", {"V": "0"}, solver="linear_euler", readout="avg_var"),
+                   NUM_OUTPUT, AutoSyn(vars=[("I","scalar",0.0)],params=[("taus","scalar",5.0)],ode={"I": "-I/taus"},jumps={"I": "I+w"},w_name="w",inject_current="I",solver="linear_euler"))
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
