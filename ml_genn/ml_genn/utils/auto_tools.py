@@ -5,10 +5,10 @@ THis function turns ODEs expressed as two lists for sympy variables and matching
 into C code to update the variables with timestep "dt"
 """
 
-def _linear_euler(varname, sym, exprs, dt):
+def _linear_euler(sym, dx_dt, dt):
     code = [sympy.ccode((sym[var] + expr) * dt,
                         assign_to=f"const scalar {str(var)}_tmp")
-            for var, expr in exprs.items()]
+            for var, expr in dx_dt.items()]
     code += [f"{var} = {var}_tmp;" for var in exprs]
     return code
 
@@ -39,7 +39,7 @@ def _get_conditionally_linear_system(vars, exprs):
     """
 
     coefficients = {}
-    for var, expr in zip(vars,exprs):
+    for var, expr in zip(vars, exprs):
         name = str(var)
         if expr.has(var):
             # Factor out the variable
@@ -62,7 +62,7 @@ def _exponential_euler(varname, sym, exprs, dt):
     the_exprs = [expr for var, expr in exprs.items()]
     # Try whether the equations are conditionally linear
     try:
-        system = _get_conditionally_linear_system(vars,the_exprs)
+        system = _get_conditionally_linear_system(vars, the_exprs)
     except ValueError:
         raise NotImplementedError(
             "Can only solve conditionally linear systems with this state updater.")
@@ -96,12 +96,6 @@ def _exponential_euler(varname, sym, exprs, dt):
 End of Brian 2 modified code
 """
 
-def unused_add(o, expr):
-    if o is None:
-        return expr
-    else:
-        return o+expr
-
 def get_symbols(vars, params, w_name=None):
     sym = {v: sympy.Symbol(v) for v in vars}
     sym.update({p: sympy.Symbol(p) for p in params})
@@ -116,36 +110,18 @@ def get_symbols(vars, params, w_name=None):
 # solde a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
 # **TODO** solver enum
-def solve_ode(vars, sym, ode, dt, solver):
-    dx_dt = {}
-    for var, expr in ode.items():
-        if isinstance(expr, str):
-            dx_dt[var] = parse_expr(expr,local_dict= sym)
-        else:
-            dx_dt[var] = expr
+def solve_ode(vars, sym, dx_dt, dt, solver):
     if solver == "exponential_euler":
         clines = _exponential_euler(vars, sym, dx_dt, dt)
         print(clines)
     elif solver == "linear_euler":
-        clines = _linear_euler(vars, sym, dx_dt, dt)
+        clines = _linear_euler(sym, dx_dt, dt)
     else:
         raise NotImplementedError(
             f"EventProp compiler doesn't support "
             f"{solver} solver")
-    return dx_dt, clines
+    return clines
 
-
-# the values that need to be saved in the forward pass
-def unused_saved_vars(varname, sym, adj_ode, adj_jump, add_to_pre):
-    saved = set()
-    all = [adj_ode, adj_jump, add_to_pre]
-    for expr_list in all:
-        for var in varname:
-            for v2, expr in expr_list.items():
-                if expr.has(sym[var]):
-                    saved.add(var)
-
-    return saved
 
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
 # **THOMAS** comments here would be nice
