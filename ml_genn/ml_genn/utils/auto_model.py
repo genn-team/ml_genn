@@ -16,17 +16,6 @@ class AutoModel:
 
         self.param_vals = param_vals
         self.var_vals = var_vals
-    
-    def add_param(self, name: str, value: Value):
-        assert not self.has_param(name)
-        self._add_to_list("params", (name, type))
-        self.param_vals[name] = value
-
-    def add_var(self, name: str, value: Value,
-                ode: str, jump: str):
-        assert not self.has_var(name)
-        self._add_to_list("vars", (name, ode, jump))
-        self.var_vals[name] = value
 
     def get_vars(self, var_type: str = "scalar"):
         return [(n, var_type) for n in self.var_vals.keys()]
@@ -35,8 +24,8 @@ class AutoModel:
         return [(n, param_type) for n in self.param_vals.keys()]
 
     def get_jump_code(self):
-        jumps = [f"{v[0]} = {v[2]};" for v in self.model["vars"]
-                 if v[2] is not None and v[2] != v[0]]
+        jumps = [f"{n} = {v[1]};" for n, v in self.model["vars"].items()
+                 if v[1] is not None and v[1] != n]
         return "\n".join(jumps)
     
     def get_symbols(self):
@@ -58,7 +47,8 @@ class AutoNeuronModel(AutoModel):
         self.output_var_name = output_var_name
 
     def get_threshold_condition_code(self):
-        return "false" if self.model["threshold"] is None else f"{self.threshold} >= 0"
+        return (f"{self.model['threshold']} >= 0" if "threshold" in self.model
+                else "")
 
     @staticmethod
     def from_val_descriptors(model, output_var_name: str,inst, 
@@ -69,7 +59,7 @@ class AutoNeuronModel(AutoModel):
         
 class AutoSynapseModel(AutoModel):
     @staticmethod
-    def from_val_descriptors(model, str,inst, 
+    def from_val_descriptors(model, inst, 
                              param_vals={}, var_vals={}):
         param_vals, var_vals = get_auto_values(inst, 
                                                model.get("vars", {}).keys())
