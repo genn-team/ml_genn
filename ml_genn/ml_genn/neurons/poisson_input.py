@@ -51,4 +51,4 @@ class PoissonInput(Neuron, InputBase):
                 """
         return self.create_input_model(
             NeuronModel(genn_model, None, {}, {}),
-            batch_size, population.shape, replace_input="Input")
+            dt, batch_size, population.shape, replace_input="Input")
