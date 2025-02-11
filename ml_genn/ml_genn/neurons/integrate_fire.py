@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Union, TYPE_CHECKING
 from .neuron import Neuron
-from ..utils.auto_model import AutoModel
+from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
@@ -33,9 +33,9 @@ class IntegrateFire(Neuron):
         self.v = v
 
     def get_model(self, population: Population, dt: float,
-                  batch_size: int) -> Union[AutoModel, NeuronModel]:
+                  batch_size: int) -> Union[AutoNeuronModel, NeuronModel]:
         genn_model = {
             "vars": {"v": (None, "v_reset")},
             "threshold": "v - v_thresh"}
 
-        return AutoModel.from_val_descriptors(genn_model, self)
+        return AutoNeuronModel.from_val_descriptors(genn_model, "v", self)
