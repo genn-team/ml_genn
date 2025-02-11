@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from typing import TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
 from .synapse import Synapse
+from ..utils.auto_model import AutoModel
 from ..utils.model import SynapseModel
 from ..utils.value import InitValue, ValueDescriptor
 
@@ -35,23 +36,9 @@ class Exponential(Synapse):
                                       "currently support tau values specified"
                                       " using Initialiser objects")
 
-    def get_model(self, connection: Connection,
-                  dt: float, batch_size: int) -> SynapseModel:
-        # Add exponential decay parameter
-        genn_model = {"params": [("ExpDecay", "scalar")]}
+    def get_model(self, connection: Connection, dt: float,
+                  batch_size: int) -> Union[AutoModel, SynapseModel]:
+        # Build basic model
+        genn_model = {"vars": {"I": ("-I / tau", "I + weight")}}
         
-        # If we should scale I, add additional parameter
-        # and create sim code to inject scaled current
-        if self.scale_i:
-            genn_model["params"].append(("IScale", "scalar"))
-            genn_model["sim_code"] = "injectCurrent(inSyn * IScale);"
-        # Otherwise, create sim code to inject unscaled current
-        else:
-            genn_model["sim_code"] = "injectCurrent(inSyn);"
-        
-        # Add standard sim code
-        genn_model["sim_code"] += """
-        inSyn *= ExpDecay;
-        """
-
-        return SynapseModel.from_val_descriptors(genn_model, self, dt)
+        return AutoModel.from_val_descriptors(genn_model, self)
