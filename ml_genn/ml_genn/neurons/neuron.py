@@ -3,9 +3,10 @@ from __future__ import annotations
 import numpy as np
 
 from abc import ABC
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Union, TYPE_CHECKING
 from warnings import warn
 from ..readouts import Readout
+from ..utils.auto_model import AutoModel
 from ..utils.model import NeuronModel
 
 from abc import abstractmethod
@@ -27,8 +28,8 @@ class Neuron(ABC):
         self.readout = readout
 
     @abstractmethod
-    def get_model(self, population: Population,
-                  dt: float, batch_size: int) -> NeuronModel:
+    def get_model(self, population: Population, dt: float,
+                  batch_size: int) -> Union[AutoModel, NeuronModel]:
         """Gets PyGeNN implementation of neuron model
 
         Args:
