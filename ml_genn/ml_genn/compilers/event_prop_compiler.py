@@ -1243,9 +1243,7 @@ class EventPropCompiler(Compiler):
             # Add code to start of sim code to run backwards pass 
             # and handle back spikes with correct dynamics
             dt = sympy.Symbol("dt")
-            lbd_names = [f"Lambda{var}" for var in varnames]
-            clines = solve_ode(lbd_names, sym, dl_dt, dt, pop.neuron.solver)
-            ccode = "\n".join(clines)
+            ccode = solve_ode(sym, dl_dt, dt, pop.neuron.solver)
             if pop.neuron.readout is None:
                 model_copy.append_sim_code(
                     neuron_backward_pass.substitute(
@@ -1264,9 +1262,8 @@ class EventPropCompiler(Compiler):
             # Add the neuron simcode including all the inherited I ODE equations
             dx_dt_tmp = {var: dx_dt[var].subs(sym["I"], sympy.Symbol("Isyn"))
                          for var in dx_dt}
-            clines = solve_ode(varnames, sym, dx_dt_tmp,
-                               dt, pop.neuron.solver)
-            ccode = "\n".join(clines)
+            ccode = solve_ode(sym, dx_dt_tmp,
+                              dt, pop.neuron.solver)
             model_copy.append_sim_code(ccode)
 
         for key,val in model_copy.model.items():
@@ -1339,11 +1336,8 @@ class EventPropCompiler(Compiler):
             model_copy.param_vals[p[0]] = p[2] 
                     
         dt = sympy.Symbol("dt")
-        clines = solve_ode(syn.varnames, sym, dx_dt, dt, syn.solver)
-        fwd_ccode = "\n".join(clines)
-        lbd_names = [f"Lambda{var}" for var in syn.varnames]
-        clines = solve_ode(lbd_names, sym, dl_dt, dt, syn.solver)
-        bwd_ccode = "\n".join(clines)
+        fwd_ccode = solve_ode(sym, dx_dt, dt, syn.solver)
+        bwd_ccode = solve_ode(sym, dl_dt, dt, syn.solver)
         model_copy.model["sim_code"] = f"""
             // Backward pass
             {bwd_ccode}
