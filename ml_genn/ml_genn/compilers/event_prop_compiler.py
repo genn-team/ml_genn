@@ -1260,8 +1260,6 @@ class EventPropCompiler(Compiler):
                 """)
 
             # Add the neuron simcode including all the inherited I ODE equations
-            dx_dt_tmp = {var: dx_dt[var].subs(sym["I"], sympy.Symbol("Isyn"))
-                         for var in dx_dt}
             ccode = solve_ode(sym, dx_dt_tmp,
                               dt, pop.neuron.solver)
             model_copy.append_sim_code(ccode)
