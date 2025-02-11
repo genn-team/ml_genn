@@ -823,11 +823,11 @@ class EventPropCompiler(Compiler):
                                 f"""
                                 const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                                 if (Trial > 0) {{
-                                RingReadOffset--;
-                                const scalar softmax = RingOutputLossTerm[ringOffset + RingReadOffset];
-                                const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
+                                    RingReadOffset--;
+                                    const scalar softmax = RingOutputLossTerm[ringOffset + RingReadOffset];
+                                    const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
+                                    drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                    drive_p = 0.0;
                                 }}
                                 
                                 // Forward pass
@@ -853,10 +853,10 @@ class EventPropCompiler(Compiler):
                                 f"""
                                 const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                                 if (Trial > 0) {{
-                                RingReadOffset--;
-                                const scalar error = RingOutputLossTerm[ringOffset + RingReadOffset];
-                                drive = error / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p  = 0.0;
+                                    RingReadOffset--;
+                                    const scalar error = RingOutputLossTerm[ringOffset + RingReadOffset];
+                                    drive = error / (num_batch * {self.dt * self.example_timesteps});
+                                    drive_p  = 0.0;
                                 }}
                                 """)
                             # Add custom update to reset state JAMIE_CHECK
@@ -888,9 +888,9 @@ class EventPropCompiler(Compiler):
                             model_copy.prepend_sim_code(
                                 f"""
                                 if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
+                                    const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                    drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                    drive_p = 0.0;
                                 }}
                                 
                                 // Forward pass
@@ -912,9 +912,9 @@ class EventPropCompiler(Compiler):
                             model_copy.prepend_sim_code(
                                 f"""
                                 if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
+                                    const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                    drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
+                                    drive_p = 0.0;
                                 }}
                                 
                                 // Forward pass
@@ -936,9 +936,9 @@ class EventPropCompiler(Compiler):
                             model_copy.prepend_sim_code(
                                 f"""
                                 if (Trial > 0 && fabs(backT - VMaxTimeBack) < 1e-3*dt) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
+                                    const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                    drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                    drive_p = 0.0;
                                 }}
                             
                                 // Forward pass
@@ -1037,7 +1037,6 @@ class EventPropCompiler(Compiler):
                     # 2) No spike occurred in preceding forward pass
                     # 4) This is correct output neuron 
                     dynamics_code = f"""
-                        
                         if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
                             drive_p = {phantom_scale / self.batch_size};
                         }}
