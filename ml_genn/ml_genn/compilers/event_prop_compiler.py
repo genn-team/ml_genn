@@ -3,7 +3,7 @@ import numpy as np
 import sympy
 
 from string import Template
-from typing import Iterator, Sequence
+from typing import Iterator, Sequence, Union
 from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
                     SynapseMatrixType, SynapseMatrixWeight)
 
@@ -22,6 +22,7 @@ from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
                         MaxVar, SumVar, Var)
 from ..synapses import AutoSyn
+from ..utils.auto_model import AutoNeuronModel, AutoSynapseModel
 from ..utils.callback_list import CallbackList
 from ..utils.model import (CustomUpdateModel, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
@@ -255,27 +256,6 @@ def _get_conn_max_delay(conn, delay):
                           f"{conn.name} cannot be determined "
                           f"automatically, please set max_delay_steps")
 
-
-# Preprocessing of auto-adjoint equations
-def _process_odes(vars, params, eqns):
-    sym = get_symbols(vars, params)
-    dx_dt = {var: sympy.parse_expr(eqns[var], local_dict=sym)
-             for var in vars if var in eqns}
-    
-    return sym, dx_dt
-
-def _process_jumps(sym, jumps):
-    h = {}
-    for var in jumps:
-        tmp = sympy.parse_expr(jumps[var], local_dict=sym) - sym[var]
-        if sympy.diff(tmp, sym[var]) == 0:
-            if tmp != 0:
-                h[var] = tmp
-        else:
-            raise NotImplementedError(
-                "EventProp compiler only supports "
-                "synapses which (only) add input to target variables.")
-    return h
 
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
@@ -1269,63 +1249,70 @@ class EventPropCompiler(Compiler):
             print(val)
         return model_copy
 
-    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+    def build_synapse_model(self, conn: Connection, 
+                            model: Union[AutoSynapseModel, SynapseModel],
                             compile_state: CompileState) -> SynapseModel:
         # Make copy of model
-        model_copy = deepcopy(model)
+        
         syn = conn.synapse
-        if not isinstance(syn, AutoSyn):
+        if not isinstance(syn, AutoSynapseModel):
             raise NotImplementedError(
                 "EventProp compiler only supports "
-                "user-defined synapses (AutoSyn)")
+                "synapses defined in terms of AutoSynapseModel")
 
-        # assemble forward and backward pass equations for synaptic ODE
-        sym, dx_dt = _process_odes(syn.varnames, syn.pnames, syn.ode)
+        # Get sympy symbols defined by synapse model and parse ODEs
+        syn_symbols = model.get_symbols()
+        syn_dx_dt = model.parse_odes(syn_symbols)
 
-        # synaptic jumps 
-        h = _process_jumps(sym, syn.jumps)
-        logger.debug(f"h: {h}")
-                
-        # generate forward jumps
-        in_syn_sym = sympy.Symbol("inSyn")
-        w_sym = sympy.Symbol(syn.w_name)
-        clines = [f"{v} += {sympy.ccode(e.subs(w_sym, in_syn_sym))};"
-                  for v, e in h.items()]
-
-        clines.append("inSyn = 0;")
-        jump_ccode = "\n".join(clines)
+        # Generate synaptic jump code
+        # **TODO** move down
+        syn_jump_ccode = model.get_jump_code(syn_symbols)
     
-        # generate adjoint ODE
-        pop = conn.target()
-        vn = pop.neuron.varnames.copy()
-        vn.append("I")
-        n_sym, n_dx_dt = _process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
-        dl_dt = {}
+        # Get target neuron mdeol
+        target_pop = conn.target()
+        target_neuron_model = target_pop.neuron.get_model(target_pop, self.dt,
+                                                          self.batch_size)
+        if not isinstance(target_neuron_model, AutoNeuronModel):
+            raise NotImplementedError(
+                "EventProp compiler only supports "
+                "neuron models described using AutoNeuronModel")
+    
+        # Get sympy symbols defined by target neuron model and parse ODEs
+        target_symbols = target_neuron_model.get_symbols()
+        target_dx_dt = target_neuron_model.parse_odes(target_symbols)
+    
+        #pop = conn.target()
+        #vn = pop.neuron.varnames.copy()
+        #vn.append("I")
+        #n_sym, n_dx_dt = _process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
+        syn_dl_dt = {}
         post_var_ref_set = set()
         post_var_refs = {}
         params = set()
-        for var in dx_dt:
+        for syn_n, syn_expr in syn_dx_dt:
             # add adjoint variable to post-synapse model
-            model_copy.add_var(f"Lambda{var}", "scalar", 0.0)
+            model_copy.add_var(f"Lambda{syn_n}", "scalar", 0.0)
             
-            o = sum(sympy.diff(expr, sym[var]) * sym[f"Lambda{v2}"]
-                    for v2, expr in dx_dt.items())
-            o += sum(sympy.diff(expr, sym[var]) * n_sym[f"Lambda{v2}"]
-                     for v2, expr in n_dx_dt.items())
-            dl_dt[f"Lambda{var}"] = o
+            # Differentiate synapse variable ODE w.r.t. syna
+            o = sum(sympy.diff(expr, syn_symbols[syn_n]) * syn_symbols[f"Lambda{n2}"]
+                    for n2, expr in syn_dx_dt.items())
+            o += sum(sympy.diff(expr, syn_symbols[syn_n]) * target_symbols[f"Lambda{n2}"]
+                     for target_n, target_expr in target_dx_dt.items())
+            syn_dl_dt[f"Lambda{syn_n}"] = o
             
-            err = (any(o.has(sym[v2]) for v2 in syn.varnames)
-                   or any(o.has(n_sym[v2]) for v2 in pop.neuron.varnames))
+            err = (any(o.has(syn_symbols[v]) for v in syn.varnames)
+                   or any(o.has(target_symbols[v]) 
+                          for v in target_neuron_model.var_vals.keys()))
             if err:
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
-            for v2 in pop.neuron.varnames:
-                if (o.has(n_sym[f"Lambda{v2}"])):
-                    post_var_ref_set.add((f"Lambda{v2}", "scalar"))
-                    post_var_refs[f"Lambda{v2}"] = f"Lambda{v2}"
+            for target_var in target_neuron_model.var_vals.keys():
+                if (o.has(target_symbols[f"Lambda{target_var}"])):
+                    post_var_ref_set.add((f"Lambda{target_var}", "scalar"))
+                    post_var_refs[f"Lambda{target_var}"] = f"Lambda{target_var}"
 
-            params.update({p for p in pop.neuron.params 
-                           if o.has(n_sym[p[0]])})
+            params.update({p for p in target_neuron_model.param_vals.keys() 
+                           if o.has(target_symbols[p[0]])})
             print(syn)
             print(syn.param_vals)
 
@@ -1334,8 +1321,8 @@ class EventPropCompiler(Compiler):
             model_copy.param_vals[p[0]] = p[2] 
                     
         dt = sympy.Symbol("dt")
-        fwd_ccode = solve_ode(sym, dx_dt, dt, syn.solver)
-        bwd_ccode = solve_ode(sym, dl_dt, dt, syn.solver)
+        fwd_ccode = solve_ode(syn_dx_dt, dt, syn.solver)
+        bwd_ccode = solve_ode(syn_dl_dt, dt, syn.solver)
         model_copy.model["sim_code"] = f"""
             // Backward pass
             {bwd_ccode}
@@ -1479,13 +1466,20 @@ class EventPropCompiler(Compiler):
 
         pop = conn.target()
         syn = conn.synapse
-        syn.var_vals["Gradient"] = 0.0
-        model_copy = deepcopy(weight_update_model)
-        print(f"model_copy['vars']: {model_copy['vars']}")
+
+        wum = WeightUpdateModel(
+            model=deepcopy(weight_update_model),
+            var_vals= {"Gradient": 0.0},
+            pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+
+        wum.add_var("weight", "scalar", connect_snippet.weight, VarAccess.READ_ONLY)
+        
         model_copy["params"] = [ (p[0], p[1]) for p in syn.params ]
-        model_copy["vars"].append((syn.w_name, "scalar", VarAccess.READ_ONLY))
-        model_copy["pre_spike_syn_code"] = f"addToPost({syn.w_name});"
-        print(f"model_copy['vars']: {model_copy['vars']}")
+        for p in syn.params:
+            wum.add_param()
+        
+        wum.append_pre_spike_syn_code(f"addToPost(weight);")
+        
         psm_var_ref_set = set()
         psm_var_refs = {}
         model_copy["psm_var_refs"] = []
