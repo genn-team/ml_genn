@@ -24,6 +24,7 @@ class Delta(Synapse):
     def get_model(self, connection: Connection, dt: float,
                   batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
         # Build basic model
-        genn_model = {"vars": {"I": (None, "I + weight")}}
+        #genn_model = {"vars": {"I": (None, "I + weight")}}
         
-        return AutoSynapseModel.from_val_descriptors(genn_model, self)
+        #return AutoSynapseModel.from_val_descriptors(genn_model, self)
+        return SynapseModel(genn_model, {}, {})
