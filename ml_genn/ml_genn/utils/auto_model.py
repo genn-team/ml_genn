@@ -28,13 +28,13 @@ class AutoModel:
         self._add_to_list("vars", (name, ode, jump))
         self.var_vals[name] = value
 
-    def get_model_vars(self, var_type: str = "scalar"):
+    def get_vars(self, var_type: str = "scalar"):
         return [(n, var_type) for n in self.var_vals.keys()]
     
-    def get_model_params(self, param_type: str = "scalar"):
+    def get_params(self, param_type: str = "scalar"):
         return [(n, param_type) for n in self.param_vals.keys()]
 
-    def get_model_jump_code(self):
+    def get_jump_code(self):
         jumps = [f"{v[0]} = {v[2]};" for v in self.model["vars"]
                  if v[2] is not None and v[2] != v[0]]
         return "\n".join(jumps)
@@ -47,29 +47,31 @@ class AutoModel:
         return {n: sympy.parse_expr(v[0], local_dict=symbols)
                 for n, v in self.model["vars"].items()
                 if v[0] is not None}
+    
+        
+class AutoNeuronModel(AutoModel):
+    def __init__(self, model: MutableMapping[str, Any], output_var_name: str,
+                 param_vals: MutableMapping[str, Value] = {},
+                 var_vals: MutableMapping[str, Value] = {}):
+        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals)
 
-    """
-    def parse_jumps(self):
-        h = {}
-        for n, v in self.model["vars"].items():
-            if v[2] is not None:
-                expr = sympy.parse_expr(jumps[var], local_dict=symbols) - sym[var]
-                if sympy.diff(tmp, sym[var]) == 0:
-                    if tmp != 0:
-                        h[var] = tmp
-                else:
-                    raise NotImplementedError(
-                        "EventProp compiler only supports "
-                        "synapses which (only) add input to target variables.")
-        return h
-    """
+        self.output_var_name = output_var_name
+
+    def get_threshold_condition_code(self):
+        return "false" if self.model["threshold"] is None else f"{self.threshold} >= 0"
+
     @staticmethod
-    def from_val_descriptors(model, inst, 
+    def from_val_descriptors(model, output_var_name: str,inst, 
                              param_vals={}, var_vals={}):
-        param_vals, var_vals = get_auto_values(inst, model.get("vars", {}).keys(),
-                                       var_vals, param_vals)
-        return AutoModel(model, param_vals, var_vals)
+        param_vals, var_vals = get_auto_values(inst, 
+                                               model.get("vars", {}).keys())
+        return AutoNeuronModel(model, output_var_name, param_vals, var_vals)
         
-    
+class AutoSynapseModel(AutoModel):
+    @staticmethod
+    def from_val_descriptors(model, str,inst, 
+                             param_vals={}, var_vals={}):
+        param_vals, var_vals = get_auto_values(inst, 
+                                               model.get("vars", {}).keys())
+        return AutoSynapseModel(model, param_vals, var_vals)
         
-    

@@ -4,7 +4,7 @@ import numpy as np
 
 from typing import Union, TYPE_CHECKING
 from .synapse import Synapse
-from ..utils.auto_model import AutoModel
+from ..utils.auto_model import AutoSynapseModel
 from ..utils.model import SynapseModel
 from ..utils.value import InitValue, ValueDescriptor
 
@@ -37,8 +37,8 @@ class Exponential(Synapse):
                                       " using Initialiser objects")
 
     def get_model(self, connection: Connection, dt: float,
-                  batch_size: int) -> Union[AutoModel, SynapseModel]:
+                  batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
         # Build basic model
         genn_model = {"vars": {"I": ("-I / tau", "I + weight")}}
         
-        return AutoModel.from_val_descriptors(genn_model, self)
+        return AutoSynapseModel.from_val_descriptors(genn_model, self)

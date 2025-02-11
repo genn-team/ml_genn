@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING
 from .synapse import Synapse
-from ..utils.auto_model import AutoModel
+from ..utils.auto_model import AutoSynapseModel
 from ..utils.model import SynapseModel
 
 if TYPE_CHECKING:
@@ -22,8 +22,8 @@ class Delta(Synapse):
         super(Delta, self).__init__()
 
     def get_model(self, connection: Connection, dt: float,
-                  batch_size: int) -> Union[AutoModel, SynapseModel]:
+                  batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
         # Build basic model
         genn_model = {"vars": {"I": (None, "I + weight")}}
         
-        return AutoModel.from_val_descriptors(genn_model, self)
+        return AutoSynapseModel.from_val_descriptors(genn_model, self)

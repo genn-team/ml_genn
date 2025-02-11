@@ -6,7 +6,7 @@ from abc import ABC
 from typing import Optional, Union, TYPE_CHECKING
 from warnings import warn
 from ..readouts import Readout
-from ..utils.auto_model import AutoModel
+from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 
 from abc import abstractmethod
@@ -29,7 +29,7 @@ class Neuron(ABC):
 
     @abstractmethod
     def get_model(self, population: Population, dt: float,
-                  batch_size: int) -> Union[AutoModel, NeuronModel]:
+                  batch_size: int) -> Union[AutoNeuronModel, NeuronModel]:
         """Gets PyGeNN implementation of neuron model
 
         Args:

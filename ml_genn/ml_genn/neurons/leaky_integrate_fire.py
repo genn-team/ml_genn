@@ -4,7 +4,7 @@ import numpy as np
 
 from typing import Optional, Union, TYPE_CHECKING
 from .neuron import Neuron
-from ..utils.auto_model import AutoModel
+from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
@@ -47,7 +47,7 @@ class LeakyIntegrateFire(Neuron):
         self.relative_reset = relative_reset
 
     def get_model(self, population: Population, dt: float,
-                  batch_size: int) -> Union[AutoModel, NeuronModel]:
+                  batch_size: int) -> Union[AutoNeuronModel, NeuronModel]:
         # Build basic model
         v_jump = ("v - (v_thresh - v_reset)" if self.relative_reset
                   else "v_reset")
@@ -56,4 +56,4 @@ class LeakyIntegrateFire(Neuron):
             "threshold": "v - v_thresh"}
 
         # Return model
-        return AutoModel.from_val_descriptors(genn_model, self)
+        return AutoNeuronModel.from_val_descriptors(genn_model, "v", self)
