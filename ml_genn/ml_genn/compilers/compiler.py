@@ -244,6 +244,7 @@ class Compiler:
                             :meth:`.pre_compile`.
         """
         if isinstance(model, AutoNeuronModel):
+            print("auto neuron:", model.model)
             # Get sympy symbols defined by auto model
             symbols = model.get_symbols()
             
@@ -261,8 +262,8 @@ class Compiler:
                 "threshold_condition_code":
                     model.get_threshold_condition_code(),
                 "reset_code":
-                    model.get_jump_code()}
-            
+                    model.get_reset_code()}
+            print("GeNNCode neuron ", genn_model)
             # Wrap in NeuronModel and return
             return NeuronModel(genn_model, model.output_var_name, 
                                model.param_vals, model.var_vals)
@@ -291,6 +292,7 @@ class Compiler:
                             :meth:`.pre_compile`.
         """
         if isinstance(model, AutoSynapseModel):
+            print("auto syn:", model.model)
             # Get sympy symbols defined by auto model
             symbols = model.get_symbols()
             
@@ -306,8 +308,10 @@ class Compiler:
                 "sim_code":
                     f"""
                     injectCurrent(I);
+                    {model.get_jump_code(symbols)}
                     {solve_ode(symbols, dx_dt, self.dt, solver)}
                     """}
+            print("GeNNCode syn:", genn_model)
             return SynapseModel(genn_model, model.param_vals, model.var_vals)
         else:
             assert isinstance(model, SynapseModel)

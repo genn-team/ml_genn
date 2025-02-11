@@ -92,7 +92,7 @@ class InputBase(Input):
                 "threshold_condition_code":
                     base_model.get_threshold_condition_code(),
                 "reset_code":
-                    base_model.get_jump_code()}
+                    base_model.get_reset_code()}
             
             # Wrap in NeuronModel and return
             nm_copy =  NeuronModel(genn_model, base_model.output_var_name, 

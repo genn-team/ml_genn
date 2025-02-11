@@ -39,7 +39,7 @@ def _get_conditionally_linear_system(dx_dt):
     """
 
     coefficients = {}
-    for name, expr in dx_dt:
+    for name, expr in dx_dt.items():
         var = sympy.Symbol(name)
         if expr.has(var):
             # Factor out the variable
