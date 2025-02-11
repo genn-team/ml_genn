@@ -77,17 +77,17 @@ def get_auto_values(inst, var_names, vals={}, params={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
-    # Build set of names we care about
+    # Build set of variable names
     var_names = set(var_names)
     
-    # Update vals with value descriptor values
+    # Update vals and params with value descriptor values
     vals.update({n: d.get_value(inst) for n, d in descriptors
                  if isinstance(d, ValueDescriptor) and n in var_names})
     params.update({n: d.get_value(inst) for n, d in descriptors
                    if isinstance(d, ValueDescriptor) and n not in var_names})
                  
 
-    return vals, params
+    return params, vals
 
 # **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def set_values(inst, vals):

@@ -275,12 +275,12 @@ class NeuronModel(Model):
         self._replace_code("reset_code", source, target)
 
     @staticmethod
-    def from_val_descriptors(model, output_var_name, inst, dt,
+    def from_val_descriptors(model, output_var_name, inst,
                              param_vals={}, var_vals={}, egp_vals={}):
         return NeuronModel(
             model, output_var_name, 
-            get_values(inst, model.get("params", []), dt, param_vals),
-            get_values(inst, model.get("vars", []), dt, var_vals),
+            get_values(inst, model.get("params", []), param_vals),
+            get_values(inst, model.get("vars", []), var_vals),
             egp_vals)
 
     @property
@@ -313,13 +313,13 @@ class SynapseModel(Model):
         self._append_code("sim_code", code)
 
     @staticmethod
-    def from_val_descriptors(model, inst, dt, 
+    def from_val_descriptors(model, inst,
                              param_vals={}, var_vals={},
                              egp_vals={}, neuron_var_refs={}):
         return SynapseModel(
             model, 
-            get_values(inst, model.get("params", []), dt, param_vals),
-            get_values(inst, model.get("vars", []), dt, var_vals),
+            get_values(inst, model.get("params", []), param_vals),
+            get_values(inst, model.get("vars", []), var_vals),
             egp_vals, neuron_var_refs)
 
 
