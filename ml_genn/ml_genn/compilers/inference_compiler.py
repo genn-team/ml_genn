@@ -9,6 +9,7 @@ from ..callbacks import BatchProgressBar, CustomUpdateOnBatchBegin
 from ..communicators import Communicator
 from ..metrics import Metric, MetricsType
 from ..synapses import Delta
+from ..utils.auto_model import AutoNeuronModel, AutoSynapseModel
 from ..utils.callback_list import CallbackList
 from ..utils.model import CustomUpdateModel, NeuronModel, SynapseModel
 from ..utils.network import PopulationType
@@ -399,8 +400,14 @@ class InferenceCompiler(Compiler):
                     genn_model, **kwargs) -> CompileState:
         return CompileState()
 
-    def build_neuron_model(self, pop: Population, model: NeuronModel,
+    def build_neuron_model(self, pop: Population, 
+                           model: Union[AutoNeuronModel, NeuronModel],
                            compile_state: CompileState) -> NeuronModel:
+        # Build neuron model
+        # **NOTE** this will handle AutoNeuron etc
+        model = super(InferenceCompiler, self).build_neuron_model(
+                      pop, model, compile_state)
+
         # If population has a readout i.e. it's an output
         # Add readout logic to model
         if pop.neuron.readout is not None:
@@ -411,24 +418,27 @@ class InferenceCompiler(Compiler):
         # Add any neuron reset variables to compile state
         compile_state.add_neuron_reset_vars(model, pop,
                                             self.reset_vars_between_batches)
+        return model
 
-        # Build neuron model
-        return super(InferenceCompiler, self).build_neuron_model(
-            pop, model, compile_state)
-
-    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+    def build_synapse_model(self, conn: Connection, 
+                            model: Union[AutoSynapseModel, SynapseModel],
                             compile_state: CompileState) -> SynapseModel:
+        # Build neuron model
+        # **NOTE** this will handle AutoNeuron etc
+        model = super(InferenceCompiler, self).build_synapse_model(
+            conn, model, compile_state)
+        
         # Add any PSM reset variables to compile state
         if self.reset_vars_between_batches:
             compile_state.add_psm_reset_vars(model, conn)
 
         # If connection has any synapse model other than delta,
         # add it to the list of connections to zero insyn
+        # **TODO** better test
         if not isinstance(conn.synapse, Delta):
             compile_state.in_syn_zero_conns.append(conn)
 
-        return super(InferenceCompiler, self).build_synapse_model(
-            conn, model, compile_state)
+        return model
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
                                 connection_populations: dict,

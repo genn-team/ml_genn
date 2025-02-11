@@ -25,7 +25,7 @@ from pygenn import (create_custom_update_model, create_den_delay_var_ref,
 from string import digits
 from .weight_update_models import (get_static_pulse_delay_model, 
                                    get_signed_static_pulse_delay_model)
-from ..utils.auto_tools import get_symbols, solve_ode
+from ..utils.auto_tools import solve_ode
 from ..utils.value import is_value_array, is_value_constant
 
 from .weight_update_models import (static_pulse_model,
@@ -308,8 +308,7 @@ class Compiler:
                     injectCurrent(I);
                     {solve_ode(symbols, dx_dt, self.dt, solver)}
                     """}
-            return SynapseModel(genn_model, model.output_var_name, 
-                               model.param_vals, model.var_vals)
+            return SynapseModel(genn_model, model.param_vals, model.var_vals)
         else:
             assert isinstance(model, SynapseModel)
             return model
