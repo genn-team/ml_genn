@@ -35,7 +35,7 @@ class IntegrateFire(Neuron):
     def get_model(self, population: Population, dt: float,
                   batch_size: int) -> Union[AutoNeuronModel, NeuronModel]:
         genn_model = {
-            "vars": {"v": (None, "v_reset")},
+            "vars": {"v": ("Isyn", "v_reset")},
             "threshold": "v - v_thresh"}
 
         return AutoNeuronModel.from_val_descriptors(genn_model, "v", self)

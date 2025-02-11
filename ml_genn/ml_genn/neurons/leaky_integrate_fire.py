@@ -52,7 +52,7 @@ class LeakyIntegrateFire(Neuron):
         v_jump = ("v - (v_thresh - v_reset)" if self.relative_reset
                   else "v_reset")
         genn_model = {
-            "vars": {"v": ("(-v + i) / tau_mem", v_jump)},
+            "vars": {"v": ("(-v + Isyn) / tau_mem", v_jump)},
             "threshold": "v - v_thresh"}
 
         # Return model
