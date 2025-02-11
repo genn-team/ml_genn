@@ -1,15 +1,17 @@
 import inspect
 import numpy as np
 import os
+import sympy
 
 from collections import defaultdict, namedtuple
 from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
 from ..communicators import Communicator
+from ..utils.auto_model import AutoModel
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
@@ -23,6 +25,7 @@ from pygenn import (create_custom_update_model, create_den_delay_var_ref,
 from string import digits
 from .weight_update_models import (get_static_pulse_delay_model, 
                                    get_signed_static_pulse_delay_model)
+from ..utils.auto_tools import get_symbols, solve_ode
 from ..utils.value import is_value_array, is_value_constant
 
 from .weight_update_models import (static_pulse_model,
@@ -227,7 +230,8 @@ class Compiler:
                                           f"{conn.name} exceeds 65535")
             genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
-    def build_neuron_model(self, pop: Population, model: NeuronModel,
+    def build_neuron_model(self, pop: Population, 
+                           model: Union[AutoModel, NeuronModel],
                            compile_state) -> NeuronModel:
         """Apply compiler-specific processing to the base neuron model
         returned by :meth:`ml_genn.neurons.Neuron.get_model`.
@@ -239,16 +243,53 @@ class Compiler:
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        model_copy = deepcopy(model)
+        if isinstance(model, AutoModel):
+            # Get sympy symbols defined by auto model
+            symbols = model.get_symbols()
+            
+            # Parse the ODEs
+            dx_dt = model.parse_odes(symbols)
+            
+            # Parse threshold
+            threshold_expr = (sympy.parse_expr(model.model["threshold"],
+                                               local_dict=symbols) 
+                              if "threshold" in model else None)
+            
+            # Parse reset
+            reset_exprs = {n: sympy.parse_expr(v[1], local_dict=symbols)
+                           for n, v in model.model["vars"]}
+            
+            genn_model = {
+                "vars": model.get_model_vars("scalar"),
+                "params": model.get_model_vars("scalar"),
+                "sim_code":
+                    """
+                    V += Isyn;
+                    """,
+                "threshold_condition_code":
+                    """
+                    V >= Vthresh
+                    """,
+                "reset_code":
+                    """
+                    V = Vreset;
+                    """}
+            
+            # Wrap in NeuronModel and return
+            return NeuronModel(genn_model, "v", model.param_vals,
+                               model.var_vals)
+        else:
+            model_copy = deepcopy(model)
 
-        # Delete negative threshold condition if there is one
-        # (this gets incorporated into weight update model)
-        if "negative_threshold_condition_code" in model_copy.model:
-            del model_copy.model["negative_threshold_condition_code"]
+            # Delete negative threshold condition if there is one
+            # (this gets incorporated into weight update model)
+            if "negative_threshold_condition_code" in model_copy.model:
+                del model_copy.model["negative_threshold_condition_code"]
 
-        return model_copy
+            return model_copy
 
-    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+    def build_synapse_model(self, conn: Connection, 
+                            model: model: Union[AutoModel, SynapseModel],
                             compile_state) -> SynapseModel:
         """Apply compiler-specific processing to the base synapse model
         returned by :meth:`ml_genn.synapses.Synapse.get_model`.
