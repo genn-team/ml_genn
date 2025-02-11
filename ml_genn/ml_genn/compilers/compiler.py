@@ -11,7 +11,7 @@ from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
 from ..communicators import Communicator
-from ..utils.auto_model import AutoModel
+from ..utils.auto_model import AutoNeuronModel, AutoSynapseModel
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
@@ -231,7 +231,7 @@ class Compiler:
             genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
     def build_neuron_model(self, pop: Population, 
-                           model: Union[AutoModel, NeuronModel],
+                           model: Union[AutoNeuronModel, NeuronModel],
                            compile_state) -> NeuronModel:
         """Apply compiler-specific processing to the base neuron model
         returned by :meth:`ml_genn.neurons.Neuron.get_model`.
@@ -243,42 +243,31 @@ class Compiler:
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        if isinstance(model, AutoModel):
+        if isinstance(model, AutoNeuronModel):
             # Get sympy symbols defined by auto model
             symbols = model.get_symbols()
             
             # Parse the ODEs
             dx_dt = model.parse_odes(symbols)
             
-            # Parse threshold
-            threshold_expr = (sympy.parse_expr(model.model["threshold"],
-                                               local_dict=symbols) 
-                              if "threshold" in model else None)
-            
-            # Parse reset
-            reset_exprs = {n: sympy.parse_expr(v[1], local_dict=symbols)
-                           for n, v in model.model["vars"]}
-            
+            # Build GeNNCode model
+            # **TODO** solver
+            solver = "exponential_euler"
             genn_model = {
-                "vars": model.get_model_vars("scalar"),
-                "params": model.get_model_vars("scalar"),
+                "vars": model.get_vars("scalar"),
+                "params": model.get_params("scalar"),
                 "sim_code":
-                    """
-                    V += Isyn;
-                    """,
+                    solve_ode(symbols, dx_dt, self.dt, solver),
                 "threshold_condition_code":
-                    """
-                    V >= Vthresh
-                    """,
+                    model.get_threshold_condition_code(),
                 "reset_code":
-                    """
-                    V = Vreset;
-                    """}
+                    model.get_jump_code()}
             
             # Wrap in NeuronModel and return
-            return NeuronModel(genn_model, "v", model.param_vals,
-                               model.var_vals)
+            return NeuronModel(genn_model, model.output_var_name, 
+                               model.param_vals, model.var_vals)
         else:
+            assert isinstance(model, NeuronModel)
             model_copy = deepcopy(model)
 
             # Delete negative threshold condition if there is one
@@ -289,7 +278,7 @@ class Compiler:
             return model_copy
 
     def build_synapse_model(self, conn: Connection, 
-                            model: model: Union[AutoModel, SynapseModel],
+                            model: Union[AutoSynapseModel, SynapseModel],
                             compile_state) -> SynapseModel:
         """Apply compiler-specific processing to the base synapse model
         returned by :meth:`ml_genn.synapses.Synapse.get_model`.
@@ -301,8 +290,29 @@ class Compiler:
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        # Build model customised for parameters and values
-        return model
+        if isinstance(model, AutoSynapseModel):
+            # Get sympy symbols defined by auto model
+            symbols = model.get_symbols()
+            
+            # Parse the ODEs
+            dx_dt = model.parse_odes(symbols)
+
+            # Build GeNNCode model
+            # **TODO** solver
+            solver = "exponential_euler"
+            genn_model = {
+                "vars": model.get_vars("scalar"),
+                "params": model.get_params("scalar"),
+                "sim_code":
+                    f"""
+                    injectCurrent(I);
+                    {solve_ode(symbols, dx_dt, self.dt, solver)}
+                    """}
+            return SynapseModel(genn_model, model.output_var_name, 
+                               model.param_vals, model.var_vals)
+        else:
+            assert isinstance(model, SynapseModel)
+            return model
 
     def build_weight_update_model(self, connection: Connection,
                                   connect_snippet: ConnectivitySnippet,
