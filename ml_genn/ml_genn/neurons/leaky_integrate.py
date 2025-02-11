@@ -38,9 +38,7 @@ class LeakyIntegrate(Neuron):
 
     def get_model(self, population: Population, dt: float,
                   batch_size: int) -> Union[AutoModel, NeuronModel]:
-        genn_model = {
-            "vars": {"v": ("(-v + i) / tau_mem", None)},
-            "threshold": "v - v_thresh"}
+        genn_model = {"vars": {"v": ("(-v + i) / tau_mem", None)}}
 
         # Return model
         return AutoModel.from_val_descriptors(genn_model, self)
