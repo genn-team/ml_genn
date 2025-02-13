@@ -1326,9 +1326,9 @@ class EventPropCompiler(Compiler):
         model_copy.model["sim_code"] = f"""
             // Backward pass
             {bwd_ccode}
-            injectCurrent({syn.inject_current});
             // Forward pass
             {jump_ccode}
+            injectCurrent({syn.inject_current});
             {fwd_ccode}
         """
         model_copy.model["neuron_var_refs"] = list(post_var_ref_set)
