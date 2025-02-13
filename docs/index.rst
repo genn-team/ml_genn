@@ -41,6 +41,7 @@ on top of GeNN’s GPU-optimised sparse data structures and algorithms.
     usage/metrics
     usage/converting_tf
     usage/bibliography
+    usage/inference
     
     tutorials/index
 
