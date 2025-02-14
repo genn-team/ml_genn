@@ -309,6 +309,14 @@ class SynapseModel(Model):
         return (super(SynapseModel, self).process() 
                 + (self.neuron_var_refs,))
     
+    def has_neuron_var_ref(self, name):
+        return self._is_in_list("neuron_var_refs", name)
+
+
+    def add_neuron_var_ref(self, name, type, target):
+        self._add_to_list("neuron_var_refs", (name, type))
+        self.neuron_var_refs[name] = target
+
     def append_sim_code(self, code):
         self._append_code("sim_code", code)
 

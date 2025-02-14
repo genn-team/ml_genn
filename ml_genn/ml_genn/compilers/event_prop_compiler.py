@@ -1252,105 +1252,94 @@ class EventPropCompiler(Compiler):
     def build_synapse_model(self, conn: Connection, 
                             model: Union[AutoSynapseModel, SynapseModel],
                             compile_state: CompileState) -> SynapseModel:
-        # Make copy of model
-        
-        syn = conn.synapse
-        if not isinstance(syn, AutoSynapseModel):
+        # Check synapse i
+        if not isinstance(model, AutoSynapseModel):
             raise NotImplementedError(
                 "EventProp compiler only supports "
                 "synapses defined in terms of AutoSynapseModel")
 
-        # Get sympy symbols defined by synapse model and parse ODEs
-        syn_symbols = model.get_symbols()
-        syn_dx_dt = model.parse_odes(syn_symbols)
-
-        # Generate synaptic jump code
-        # **TODO** move down
-        syn_jump_ccode = model.get_jump_code(syn_symbols)
-    
         # Get target neuron mdeol
-        target_pop = conn.target()
-        target_neuron_model = target_pop.neuron.get_model(target_pop, self.dt,
-                                                          self.batch_size)
-        if not isinstance(target_neuron_model, AutoNeuronModel):
-            raise NotImplementedError(
-                "EventProp compiler only supports "
-                "neuron models described using AutoNeuronModel")
+        trg_pop = conn.target()
+        trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
+                                                    self.batch_size)
+        assert isinstance(trg_neuron_model, AutoNeuronModel)
     
-        # Get sympy symbols defined by target neuron model and parse ODEs
-        target_symbols = target_neuron_model.get_symbols()
-        target_dx_dt = target_neuron_model.parse_odes(target_symbols)
-    
-        #pop = conn.target()
-        #vn = pop.neuron.varnames.copy()
-        #vn.append("I")
-        #n_sym, n_dx_dt = _process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
+   
+        # Start building basic GeNNCode model with 
+        # variables and parameters from auto synapse model
+        # **THINK** could this be a static method on SynapseModel?
+        genn_model = SynapseModel({"vars": model.get_vars("scalar"),
+                                   "params": model.get_params("scalar")},
+                                   model.param_vals, model.var_vals)
+
+        # Loop through synapse ODEs
         syn_dl_dt = {}
-        post_var_ref_set = set()
-        post_var_refs = {}
         params = set()
-        for syn_n, syn_expr in syn_dx_dt:
-            # add adjoint variable to post-synapse model
-            model_copy.add_var(f"Lambda{syn_n}", "scalar", 0.0)
+        for syn_sym, syn_expr in model.dx_dt.items():
+            # Add adjoint variable to synapse model
+            genn_model.add_var(f"Lambda{syn_sym.name}", "scalar", 0.0)
             
-            # Differentiate synapse variable ODE w.r.t. syna
-            o = sum(sympy.diff(expr, syn_symbols[syn_n]) * syn_symbols[f"Lambda{n2}"]
-                    for n2, expr in syn_dx_dt.items())
-            o += sum(sympy.diff(expr, syn_symbols[syn_n]) * target_symbols[f"Lambda{n2}"]
-                     for target_n, target_expr in target_dx_dt.items())
-            syn_dl_dt[f"Lambda{syn_n}"] = o
+            # Differentiate all synapse and target neuron ODEs wrt this 
+            # synapse var to obtain adjoint lambda ODE
+            o = sum((sympy.diff(syn_expr2, syn_sym)
+                     * sympy.Symbol(f"Lambda{syn_sym2.name}"))
+                    for syn_sym2, syn_expr2 in model.dx_dt.items())
+            o += sum((sympy.diff(trg_expr, syn_sym)
+                      * sympy.Symbol(f"Lambda{trg_sym.name}"))
+                     for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
             
-            err = (any(o.has(syn_symbols[v]) for v in syn.varnames)
-                   or any(o.has(target_symbols[v]) 
-                          for v in target_neuron_model.var_vals.keys()))
+            # Check the that lambda ODE does not end up referencing any 
+            err = (any(o.has(syn_sym2) for syn_sym2 in model.dx_dt.keys())
+                   or any(o.has(trg_sym) 
+                          for trg_sym in trg_neuron_model.dx_dt.keys()))
             if err:
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
-            for target_var in target_neuron_model.var_vals.keys():
-                if (o.has(target_symbols[f"Lambda{target_var}"])):
-                    post_var_ref_set.add((f"Lambda{target_var}", "scalar"))
-                    post_var_refs[f"Lambda{target_var}"] = f"Lambda{target_var}"
+            
+            # If any target population lambda variables are 
+            # referenced, add neuron variable references
+            for trg_var in trg_neuron_model.dx_dt.keys():
+                lambda_var_name = f"Lambda{trg_var.name}"
+                if (o.has(sympy.Symbol(lambda_var_name)) and not genn_model.has_neuron_var_ref(lambda_var_name)):
+                    genn_model.add_neuron_var_ref(lambda_var_name, "scalar", lambda_var_name)
+            
+            # If any target population parameters are 
+            # referenced, duplicate in synapse model
+            for param_name, param_val in trg_neuron_model.param_vals.items():
+                if o.has(sympy.Symbol(param_name)):
+                    genn_model.add_param(param_name, "scalar", param_val)
+            
+            # Finally add lambda ODE to adjoint system
+            syn_dl_dt[f"Lambda{syn_sym.name}"] = o
+    
+        # **TODO
+        solver = "exponential_euler"
 
-            params.update({p for p in target_neuron_model.param_vals.keys() 
-                           if o.has(target_symbols[p[0]])})
-            print(syn)
-            print(syn.param_vals)
-
-        for p in params:
-            model_copy.model["params"].append((p[0], p[1]))
-            model_copy.param_vals[p[0]] = p[2] 
-                    
-        dt = sympy.Symbol("dt")
-        fwd_ccode = solve_ode(syn_dx_dt, dt, syn.solver)
-        bwd_ccode = solve_ode(syn_dl_dt, dt, syn.solver)
-        model_copy.model["sim_code"] = f"""
+        # Build sim code
+        genn_model.append_sim_code(
+            f"""
             // Backward pass
-            {bwd_ccode}
+            {solve_ode(syn_dl_dt, solver)}
             // Forward pass
-            {jump_ccode}
-            injectCurrent({syn.inject_current});
-            {fwd_ccode}
-        """
-        model_copy.model["neuron_var_refs"] = list(post_var_ref_set)
-        model_copy.neuron_var_refs = post_var_refs
-        
+            {model.get_jump_code()}
+            injectCurrent(I);
+            {solve_ode(model.dx_dt, solver)}
+            """)
+
         # Reset lambda variables to zero
-        additional_reset_vars = [(l, "scalar", 0.0) for l in lbd_names]
+        additional_reset_vars = [(l, "scalar", 0.0) for l in syn_dl_dt.keys()]
         
         # Add reset logic to reset adjoint state variables 
         # as well as any state variables from the original model
-        print(type(pop.neuron))
         compile_state.add_synapse_reset_vars(
             conn, model.reset_vars + additional_reset_vars)
         
         # Return model
-        print("Synapse model")
-        for key,val in model_copy.model.items():
-            print(f"\n {key}")
-            print(val)
-        print(dir(model_copy))
-        print(model_copy.neuron_var_refs)
-        return model_copy
+        logger.debug("Synapse model")
+        for key,val in genn_model.model.items():
+            logger.debug(f"\n {key}")
+            logger.debug(val)
+        return genn_model
 
     def build_weight_update_model(self, conn: Connection,
                                   connect_snippet: ConnectivitySnippet,
