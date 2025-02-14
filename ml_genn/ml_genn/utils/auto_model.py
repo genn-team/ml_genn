@@ -5,6 +5,7 @@ from typing import Any, MutableMapping
 from .model import NeuronModel, SynapseModel
 from .value import Value
 
+from copy import deepcopy
 from itertools import chain
 from ..utils.value import get_auto_values
 
@@ -17,21 +18,28 @@ class AutoModel:
         self.param_vals = param_vals
         self.var_vals = var_vals
 
+        # Create sympy symbols for variable and parameter names
+        # **NOTE** model doesn't explicitly list parameters
+        self.symbols = {n: sympy.Symbol(n) 
+                        for n in chain(self.var_vals.keys(),
+                                       self.param_vals.keys())}
+        
+        # Parse ODEs
+        if "vars" in self.model:
+            self.dx_dt =\
+                {sympy.Symbol(n): sympy.parse_expr(v[0], 
+                                                   local_dict=self.symbols)
+                 for n, v in self.model["vars"].items()
+                 if v[0] is not None}
+        else:
+            self.dx_dt = {}
+
+
     def get_vars(self, var_type: str = "scalar"):
         return [(n, var_type) for n in self.var_vals.keys()]
     
     def get_params(self, param_type: str = "scalar"):
         return [(n, param_type) for n in self.param_vals.keys()]
-    
-    def get_symbols(self):
-        return {n: sympy.Symbol(n) for n in chain(self.var_vals.keys(),
-                                                  self.param_vals.keys())}
-    
-    def parse_odes(self, symbols):
-        return {n: sympy.parse_expr(v[0], local_dict=symbols)
-                for n, v in self.model["vars"].items()
-                if v[0] is not None}
-    
         
 class AutoNeuronModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any], output_var_name: str,
@@ -66,12 +74,13 @@ class AutoSynapseModel(AutoModel):
         if "I" not in self.var_vals:
             self.var_vals["I"] = 0.0
 
-    def get_jump_code(self, symbols):
+    def get_jump_code(self):
         h = {}
         for n, v in self.model["vars"].items():
             if v[1] is not None:
-                expr = sympy.parse_expr(v[1], local_dict=symbols) - symbols[n]
-                if sympy.diff(expr, symbols[n]) == 0:
+                expr = (sympy.parse_expr(v[1], local_dict=self.symbols) 
+                        - self.symbols[n])
+                if sympy.diff(expr, self.symbols[n]) == 0:
                     if expr != 0:
                         h[n] = expr
                 else:

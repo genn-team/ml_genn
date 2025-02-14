@@ -74,12 +74,6 @@ class InputBase(Input):
         """
         if isinstance(base_model, AutoNeuronModel):
             # **YUCK** this duplicates Compiler.build_neuron_model somewhat
-            # Get sympy symbols defined by auto model
-            symbols = base_model.get_symbols()
-            
-            # Parse the ODEs
-            dx_dt = base_model.parse_odes(symbols)
-            
             print(base_model.model)
             # Build GeNNCode model
             # **TODO** solver
@@ -88,7 +82,7 @@ class InputBase(Input):
                 "vars": base_model.get_vars("scalar"),
                 "params": base_model.get_params("scalar"),
                 "sim_code":
-                    solve_ode(symbols, dx_dt, dt, solver),
+                    solve_ode(base_model.dx_dt, dt, solver),
                 "threshold_condition_code":
                     base_model.get_threshold_condition_code(),
                 "reset_code":

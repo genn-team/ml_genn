@@ -5,11 +5,11 @@ THis function turns ODEs expressed as two lists for sympy variables and matching
 into C code to update the variables with timestep "dt"
 """
 
-def _linear_euler(sym, dx_dt, dt):
-    code = [sympy.ccode((sym[var] + expr) * dt,
-                        assign_to=f"const scalar {str(var)}_tmp")
-            for var, expr in dx_dt.items()]
-    code += [f"{var} = {var}_tmp;" for var in exprs]
+def _linear_euler(dx_dt, dt):
+    code = [sympy.ccode((sym + expr) * dt,
+                        assign_to=f"const scalar {sym.name}_tmp")
+            for sym, expr in dx_dt.items()]
+    code += [f"{sym.name} = {sym.name}_tmp;" for sym in dx_dt.keys()]
     return code
 
     
@@ -39,25 +39,24 @@ def _get_conditionally_linear_system(dx_dt):
     """
 
     coefficients = {}
-    for name, expr in dx_dt.items():
-        var = sympy.Symbol(name)
-        if expr.has(var):
+    for sym, expr in dx_dt.items():
+        if expr.has(sym):
             # Factor out the variable
             expr = expr.expand()
-            expr = sympy.collect(expr, var, evaluate=False)
-            if len(expr) > 2 or var not in expr:
+            expr = sympy.collect(expr, sym, evaluate=False)
+            if len(expr) > 2 or sym not in expr:
                 raise ValueError(
                     f"The expression '{expr}', defining the variable "
-                    f"'{name}', could not be separated into linear "
+                    f"'{sym.name}', could not be separated into linear "
                     "components.")
-            coefficients[name] = (expr[var], expr.get(1, 0))
+            coefficients[sym] = (expr[sym], expr.get(1, 0))
         else:
-            coefficients[name] = (0, expr)
+            coefficients[sym] = (0, expr)
 
     return coefficients
 
 
-def _exponential_euler(sym, dx_dt, dt):
+def _exponential_euler(dx_dt, dt):
     # Try whether the equations are conditionally linear
     try:
         system = _get_conditionally_linear_system(dx_dt)
@@ -66,27 +65,26 @@ def _exponential_euler(sym, dx_dt, dt):
             "Can only solve conditionally linear systems with this state updater.")
 
     code = []
-    for var, (A, B) in system.items():
-        s_var = sympy.Symbol(var)
+    for sym, (A, B) in system.items():
         s_dt = sympy.Symbol("dt")
         if A == 0:
-            update_expression = s_var + s_dt * B
+            update_expression = sym + s_dt * B
         elif B != 0:
             BA = B / A
             # Avoid calculating B/A twice
-            BA_name = f"BA_{var}_tmp"
+            BA_name = f"BA_{sym.name}_tmp"
             s_BA = sympy.Symbol(BA_name)
             code += [f"const scalar {BA_name} = {sympy.ccode(BA)};"]
-            update_expression = (s_var + s_BA) * sympy.exp(A * s_dt) - s_BA
+            update_expression = (sym + s_BA) * sympy.exp(A * s_dt) - s_BA
         else:
-            update_expression = s_var * sympy.exp(A * s_dt)
+            update_expression = sym * sympy.exp(A * s_dt)
             
         # The actual update step
-        code += [f"const scalar {var}_tmp = {sympy.ccode(update_expression)};"]
+        code += [f"const scalar {sym.name}_tmp = {sympy.ccode(update_expression)};"]
 
     # Replace all the variables with their updated value
-    for var in system:
-        code += [f"{var} = {var}_tmp;"]
+    for sym in system.keys():
+        code += [f"{sym.name} = {sym.name}_tmp;"]
 
     return code
 
@@ -109,12 +107,12 @@ def get_symbols(vars, params, w_name=None):
 # solde a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
 # **TODO** solver enum
-def solve_ode(sym, dx_dt, dt, solver):
+def solve_ode(dx_dt, dt, solver):
     if solver == "exponential_euler":
-        clines = _exponential_euler(sym, dx_dt, dt)
+        clines = _exponential_euler(dx_dt, dt)
         print(clines)
     elif solver == "linear_euler":
-        clines = _linear_euler(sym, dx_dt, dt)
+        clines = _linear_euler(dx_dt, dt)
     else:
         raise NotImplementedError(
             f"EventProp compiler doesn't support "

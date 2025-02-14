@@ -245,12 +245,6 @@ class Compiler:
         """
         if isinstance(model, AutoNeuronModel):
             print("auto neuron:", model.model)
-            # Get sympy symbols defined by auto model
-            symbols = model.get_symbols()
-            
-            # Parse the ODEs
-            dx_dt = model.parse_odes(symbols)
-            
             # Build GeNNCode model
             # **TODO** solver
             solver = "exponential_euler"
@@ -258,7 +252,7 @@ class Compiler:
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
                 "sim_code":
-                    solve_ode(symbols, dx_dt, self.dt, solver),
+                    solve_ode(model.dx_dt, self.dt, solver),
                 "threshold_condition_code":
                     model.get_threshold_condition_code(),
                 "reset_code":
@@ -293,11 +287,6 @@ class Compiler:
         """
         if isinstance(model, AutoSynapseModel):
             print("auto syn:", model.model)
-            # Get sympy symbols defined by auto model
-            symbols = model.get_symbols()
-            
-            # Parse the ODEs
-            dx_dt = model.parse_odes(symbols)
 
             # Build GeNNCode model
             # **TODO** solver
@@ -308,8 +297,8 @@ class Compiler:
                 "sim_code":
                     f"""
                     injectCurrent(I);
-                    {model.get_jump_code(symbols)}
-                    {solve_ode(symbols, dx_dt, self.dt, solver)}
+                    {model.get_jump_code()}
+                    {solve_ode(model.dx_dt, self.dt, solver)}
                     """}
             print("GeNNCode syn:", genn_model)
             return SynapseModel(genn_model, model.param_vals, model.var_vals)
