@@ -50,5 +50,5 @@ class LeakyIntegrateFireInput(LeakyIntegrateFire, InputBase):
                                                             batch_size)
 
         # Add input logic and replace isyn with input
-        return self.create_input_model(nm, dt, batch_size, population.shape,
+        return self.create_input_model(nm, batch_size, population.shape,
                                        replace_input="Isyn")

@@ -52,5 +52,5 @@ class BinarySpikeInput(Neuron, InputBase):
 
         # Add standard input logic to model and return
         return self.create_input_model(NeuronModel(genn_model, None, {}, {}),
-                                       dt, batch_size, population.shape,
+                                       batch_size, population.shape,
                                        replace_input="Input")

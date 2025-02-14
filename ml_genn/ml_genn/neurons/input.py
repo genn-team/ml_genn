@@ -61,7 +61,7 @@ class InputBase(Input):
         self.input_frames = input_frames
         self.input_frame_timesteps = input_frame_timesteps
 
-    def create_input_model(self, base_model, dt: float, batch_size: int, 
+    def create_input_model(self, base_model, batch_size: int, 
                            shape, replace_input: str = None):
         """Convert standard neuron model into input neuron model.
         
@@ -82,7 +82,7 @@ class InputBase(Input):
                 "vars": base_model.get_vars("scalar"),
                 "params": base_model.get_params("scalar"),
                 "sim_code":
-                    solve_ode(base_model.dx_dt, dt, solver),
+                    solve_ode(base_model.dx_dt, solver),
                 "threshold_condition_code":
                     base_model.get_threshold_condition_code(),
                 "reset_code":

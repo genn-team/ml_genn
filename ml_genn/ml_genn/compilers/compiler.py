@@ -252,7 +252,7 @@ class Compiler:
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
                 "sim_code":
-                    solve_ode(model.dx_dt, self.dt, solver),
+                    solve_ode(model.dx_dt, solver),
                 "threshold_condition_code":
                     model.get_threshold_condition_code(),
                 "reset_code":
@@ -298,7 +298,7 @@ class Compiler:
                     f"""
                     injectCurrent(I);
                     {model.get_jump_code()}
-                    {solve_ode(model.dx_dt, self.dt, solver)}
+                    {solve_ode(model.dx_dt, solver)}
                     """}
             print("GeNNCode syn:", genn_model)
             return SynapseModel(genn_model, model.param_vals, model.var_vals)

@@ -5,8 +5,8 @@ THis function turns ODEs expressed as two lists for sympy variables and matching
 into C code to update the variables with timestep "dt"
 """
 
-def _linear_euler(dx_dt, dt):
-    code = [sympy.ccode((sym + expr) * dt,
+def _linear_euler(dx_dt):
+    code = [sympy.ccode((sym + expr) * sympy.Symbol("dt"),
                         assign_to=f"const scalar {sym.name}_tmp")
             for sym, expr in dx_dt.items()]
     code += [f"{sym.name} = {sym.name}_tmp;" for sym in dx_dt.keys()]
@@ -56,17 +56,17 @@ def _get_conditionally_linear_system(dx_dt):
     return coefficients
 
 
-def _exponential_euler(dx_dt, dt):
+def _exponential_euler(dx_dt):
     # Try whether the equations are conditionally linear
     try:
         system = _get_conditionally_linear_system(dx_dt)
     except ValueError:
         raise NotImplementedError(
             "Can only solve conditionally linear systems with this state updater.")
+    s_dt = sympy.Symbol("dt")
 
     code = []
     for sym, (A, B) in system.items():
-        s_dt = sympy.Symbol("dt")
         if A == 0:
             update_expression = sym + s_dt * B
         elif B != 0:
@@ -107,12 +107,12 @@ def get_symbols(vars, params, w_name=None):
 # solde a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
 # **TODO** solver enum
-def solve_ode(dx_dt, dt, solver):
+def solve_ode(dx_dt, solver):
     if solver == "exponential_euler":
-        clines = _exponential_euler(dx_dt, dt)
+        clines = _exponential_euler(dx_dt)
         print(clines)
     elif solver == "linear_euler":
-        clines = _linear_euler(dx_dt, dt)
+        clines = _linear_euler(dx_dt)
     else:
         raise NotImplementedError(
             f"EventProp compiler doesn't support "
