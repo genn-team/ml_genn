@@ -33,8 +33,7 @@ from copy import deepcopy
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
 from .compiler import create_reset_custom_update, get_delay_type
-from ..utils.auto_tools import (get_symbols, simplify_using_threshold,
-                                solve_ode)
+from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_array, is_value_constant
@@ -264,6 +263,29 @@ def _get_lmd_name(symbol: Union[str, sympy.Symbol]):
 def _get_lmd_sym(symbol: Union[str, sympy.Symbol]):
     return sympy.Symbol(_get_lmd_name(symbol))
 
+
+# one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
+# **THOMAS** comments here would be nice
+def _simplify_using_threshold(varname, sym, g, expr):
+    if g is None:
+        return expr
+
+    try:
+        the_var = next(sym[v] for v in varname if g.has(sym[v]))
+    except StopIteration:
+        return adj_jump, add_to_pre
+
+    sln = sympy.solve(g, the_var)
+
+    if len(sln) != 1:
+        return expr
+
+    if isinstance(expr, dict):
+        return {var: ex.subs(the_var, sln[0])
+                for var, ex in expr.items()}
+    else:
+        return expr.subs(the_var,sln[0])
+    
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
     
@@ -596,150 +618,6 @@ class EventPropCompiler(Compiler):
             raise NotImplementedError(
                 f"EventProp compiler only supports "
                 f"Input neurons and user-defined neurons (AutoNeuron)")
-        if isinstance(pop.neuron, AutoNeuron):
-            vars = pop.neuron.vars
-            varnames = pop.neuron.varnames
-            var_vals = pop.neuron.var_vals
-            params = pop.neuron.params
-            pnames = pop.neuron.pnames
-            param_vals = pop.neuron.param_vals
-            n_varnames= varnames.copy()
-            vn = varnames.copy()
-            vn.append("I")
-            sym, dx_dt = _process_odes(vn, pnames, pop.neuron.ode)
-            saved_vars = set()
-            logger.debug(f"varnames: {varnames}")
-            logger.debug(f"var_vals: {var_vals}")
-            logger.debug(f"pnames: {pnames}")
-            logger.debug(f"param_vals: {param_vals}")
-            logger.debug(f"neuron ODEs: {dx_dt}")
-
-            # Add adjoint state variables - only for vars that have an ode
-            for var in dx_dt:
-                adj_var = f"Lambda{var}"
-                sym[adj_var] = sympy.Symbol(adj_var)
-                model_copy.add_var(adj_var, "scalar", 0.0)
-
-            # generate adjoint ODE
-            # assume that neuron variables do not appear in rhs of post-synapse ODEs
-            # therefore, we can do these independent of synapse equations
-            dl_dt = {}
-            for var in dx_dt:
-                o = sum(sympy.diff(expr, sym[var]) * sym[f"Lambda{v2}"]
-                        for v2, expr in dx_dt.items())
-                
-                dl_dt[f"Lambda{var}"] = o
-                
-                # collect variables they might need to go into a ring buffer:
-                saved_vars.update({v2 for v2 in dx_dt if o.has(sym[v2])})
-                
-            logger.debug(f"Adjoint ODE: {dl_dt}")
-
-            # threshold condition
-            if pop.neuron.threshold == "":
-                g = None
-            else:
-                g = sympy.parse_expr(pop.neuron.threshold)
-
-            # reset function
-            f = {var: sympy.parse_expr(pop.neuron.reset[var], local_dict=sym)
-                 for var in pop.neuron.reset}
-            logger.debug(f"f: {f}")
-
-            # after jump dynamics equation "\dot{x}^+"
-            dx_dtplusn = {}
-            for var, expr in dx_dt.items():
-                plus = expr
-                for v2, f2 in f.items():
-                    plus = plus.subs(sym[v2],f2)
-                dx_dtplusn[var] = plus
-            logger.debug(f"dx_dtplusn: {dx_dtplusn}")
-            a = {}
-            b = {}
-            c = {}
-            for var in varnames:
-                a[var] = sum(sympy.diff(f2,sym[var]) * sym[f"Lambda{v2}"]
-                             for v2, f2 in f.items())
-                saved_vars.update({v2 for v2 in varnames
-                                   if a[var].has(sym[v2])})
-
-                if g is not None:
-                    ex = sympy.simplify(sum(sympy.diff(g, sym[v2]) * dx_dt[v2]
-                                            for v2 in varnames))
-                    if ex != 0:
-                        ex = sympy.diff(g, sym[var]) / ex
-                        if ex != 0:
-                            b[var] = simplify_using_threshold(varnames, sym, g, ex)
-                            saved_vars.update({v2 for v2 in varnames
-                                               if b[var].has(sym[v2])})
-                    if var in b:
-                        ex = 0
-                        for v2,f2 in f.items():
-                            ex2 = sum(sympy.diff(f2,sym[v3]) * dx_dt[v3]
-                                      for v3 in dx_dt)
-
-                            ex2 -= dx_dtplusn[v2]
-                            ex -= sym[f"Lambda{v2}"] * ex2
-                        ex = sympy.simplify(ex)
-                        if ex != 0:
-                            c[var] = simplify_using_threshold(varnames, sym, g, ex)
-                            saved_vars.update(v2 for v2 in varnames
-                                              if c[var].has(sym[v2]))
-
-            logger.debug(f"A: {a}")
-            logger.debug(f"B: {b}")
-            logger.debug(f"C: {c}")
-               
-            # Add additional input variable to receive add_to_pre feedback
-            model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
-            
-            # Add EGP for stored vars ring variables
-            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-            for var in saved_vars:
-                model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                   np.empty(ring_size, dtype=np.float32))
-
-            # On backward pass transition, update b_jumps and add_to_pre input
-
-            # assemble the different lambda jump parts
-            trans_code= []
-            for var in varnames:
-                ex = a[var]
-                if var in b and var in c:
-                    ex2 = c[var]
-                else:
-                    ex2 = 0
-                if var in b:
-                    if pop.neuron.readout is not None:
-                        # TODO: we are missing l_V^- - l_V^+ for output neurons with jumps
-                        # that are combined with l_V loss types
-                        # This is at the moment categorically excluded
-                        ex2 += sympy.Symbol("drive_p")
-                    if len(pop.outgoing_connections) > 0:
-                        jump = ex + b[var] * (ex2 + sympy.Symbol("RevISyn"))
-                    else:
-                        jump = ex + b[var] * ex2
-                else:
-                    jump = ex
-                jump =  simplify_using_threshold(varnames, sym, g, {"j": jump})["j"]
-                for v2 in varnames+["I"]:
-                    if jump.has(sym[v2]):
-                        saved_vars.add(v2)
-                        jump = jump.subs(sym[v2], sympy.Symbol(f"__{v2}"))
-
-                jump_code = sympy.ccode(jump)
-                # JAMIE: is there a more elegant way to do this? I.e. replacing a variable name
-                # with the full expression of the ring without accidental matches of substrings
-                # to the variable name
-                for v2 in saved_vars:
-                    jump_code = jump_code.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
-                
-                logger.debug(f"jump: {jump_code}")
-
-                if jump != 0:
-                    trans_code.append(f"Lambda{var} = {jump_code};")
-            transition_code = "\n".join(trans_code)
-            logger.debug(f"transition_code: {transition_code}")
             
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -1315,7 +1193,7 @@ class EventPropCompiler(Compiler):
                     genn_model.add_param(param_name, "scalar", param_val)
             
             # Finally add lambda ODE to adjoint system
-            syn_dl_dt[f"Lambda{syn_sym.name}"] = o
+            syn_dl_dt[_get_lmd_sym(syn_sym)] = o
     
         # **TODO
         solver = "exponential_euler"
@@ -1461,7 +1339,14 @@ class EventPropCompiler(Compiler):
         # Get synapse mdeol
         synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
         assert isinstance(synapse_model, AutoSynapseModel)
-
+        
+        # Check validity of synapse model jumps
+        for jump_sym, jump_expr in synapse_model.jumps.items(): 
+            if sympy.diff(jump_expr - jump_sym, jump_sym) != 0:
+                raise NotImplementedError(
+                    "EventProp compiler only supports "
+                    "synapses which (only) add input to target variables.")
+        
         # Get target neuron mdeol
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
@@ -1842,3 +1727,146 @@ class EventPropCompiler(Compiler):
             self.add_custom_update(
                 genn_model, reduction_optimiser_model, 
                 "SpikeCountReduce", name)
+    
+    def _build_adjoint_system(self, model: AutoNeuronModel):
+        logger.debug(f"varnames: {varnames}")
+        logger.debug(f"var_vals: {var_vals}")
+        logger.debug(f"pnames: {pnames}")
+        logger.debug(f"param_vals: {param_vals}")
+        logger.debug(f"neuron ODEs: {dx_dt}")
+
+        # generate adjoint ODE
+        # assume that neuron variables do not appear in rhs of post-synapse ODEs
+        # therefore, we can do these independent of synapse equations
+        saved_vars = set()
+        dl_dt = {}
+        for sym, expr in model.dx_dt.items():
+            o = sum(sympy.diff(expr, sym) * _get_lmd_sym(sym2)
+                    for sym2 in model.dx_dt.keys())
+            
+            # collect variables they might need to go into a ring buffer:
+            # **TODO** helper
+            saved_vars.update({sym2.name for sym2 in model.dx_dt.keys()
+                               if o.has(sym2)})
+            dl_dt[_get_lmd_sym(sym)] = o
+            
+            
+        logger.debug(f"Adjoint ODE: {dl_dt}")
+
+        # threshold condition
+        syms = model.symbols
+        thresold_expr = (sympy.parse_expr(model.model["threshold"],
+                                          local_dict=syms)
+                         if "threshold" in model.model
+                         else 0)
+
+        # reset function
+        jump_exprs = {sympy.Symbol(n): sympy.parse_expr(v[1], local_dict=syms)
+                      for n, v in model.model["vars"].items()
+                      if v[1] is not None}
+        logger.debug(f"f: {jump_exprs}")
+
+        # after jump dynamics equation "\dot{x}^+"
+        dx_dt_plus_n = {}
+        for sym, expr in model.dx_dt.items():
+            expr_plus_n = expr
+            for jump_sym, jump_expr in jump_exprs.items():
+                plus = plus.subs(jump_sym, jump_expr)
+            
+            dx_dt_plus_n[sym] = plus
+        logger.debug(f"dx_dtplusn: {dx_dt_plus_n}")
+
+        a = {}
+        b = {}
+        c = {}
+        for var_name in model.var_vals.keys():
+            var_sym = sympy.Symbol(var_name)
+            a[var_sym] = sum(
+                sympy.diff(jump_expr, var_sym) * _get_lmd_sym(jump_sym)
+                for jump_sym, jump_expr in jump_exprs.items())
+            # **TODO** helper
+            saved_vars.update({var_name2 for var_name2 in model.var_vals.keys()
+                               if a[var_sym].has(sympy.Symbol(var_name2))})
+
+            if thresold_expr != 0:
+                ex = sympy.simplify(
+                    sum(sympy.diff(thresold_expr, var_sym2) * var_expr2
+                        for var_sym2, var_expr2 in model.dx_dt.items()))
+                if ex != 0:
+                    ex = sympy.diff(thresold_expr, var_sym) / ex
+                    if ex != 0:
+                        b[var] = _simplify_using_threshold(varnames, sym, thresold_expr, ex)
+                        # **TODO** helper
+                        saved_vars.update(
+                            {var_name2 for var_name2 in model.var_vals.keys()
+                             if b[var_sym].has(sympy.Symbol(var_name2))})
+                if var in b:
+                    ex = 0
+                    for jump_sym, jump_expr in jump_exprs.items():
+                        ex2 = sum(
+                            sympy.diff(jump_expr, var_sym2) * var_expr2
+                            for var_sym2, var_expr2 in model.dx_dt.items())
+
+                        ex2 -= dx_dt_plus_n[jump_sym]
+                        ex -= _get_lmd_sym(jump_sym) * jump_expr
+                    ex = sympy.simplify(ex)
+                    if ex != 0:
+                        c[var] = _simplify_using_threshold(varnames, sym, thresold_expr, ex)
+                        saved_vars.update(
+                            {var_name2 for var_name2 in model.var_vals.keys()
+                             if c[var_sym].has(sympy.Symbol(var_name2))})
+
+        logger.debug(f"A: {a}")
+        logger.debug(f"B: {b}")
+        logger.debug(f"C: {c}")
+            
+        # Add additional input variable to receive add_to_pre feedback
+        model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
+        
+        # Add EGP for stored vars ring variables
+        ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+        for var in saved_vars:
+            model_copy.add_egp(f"Ring{var}", "scalar*", 
+                                np.empty(ring_size, dtype=np.float32))
+
+        # On backward pass transition, update b_jumps and add_to_pre input
+
+        # assemble the different lambda jump parts
+        trans_code= []
+        for var in varnames:
+            ex = a[var]
+            if var in b and var in c:
+                ex2 = c[var]
+            else:
+                ex2 = 0
+            if var in b:
+                if pop.neuron.readout is not None:
+                    # TODO: we are missing l_V^- - l_V^+ for output neurons with jumps
+                    # that are combined with l_V loss types
+                    # This is at the moment categorically excluded
+                    ex2 += sympy.Symbol("drive_p")
+                if len(pop.outgoing_connections) > 0:
+                    jump = ex + b[var] * (ex2 + sympy.Symbol("RevISyn"))
+                else:
+                    jump = ex + b[var] * ex2
+            else:
+                jump = ex
+            jump =  simplify_using_threshold(varnames, sym, thresold_expr, {"j": jump})["j"]
+            for v2 in varnames+["I"]:
+                if jump.has(sym[v2]):
+                    saved_vars.add(v2)
+                    jump = jump.subs(sym[v2], sympy.Symbol(f"__{v2}"))
+
+            jump_code = sympy.ccode(jump)
+            # JAMIE: is there a more elegant way to do this? I.e. replacing a variable name
+            # with the full expression of the ring without accidental matches of substrings
+            # to the variable name
+            for v2 in saved_vars:
+                jump_code = jump_code.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
+            
+            logger.debug(f"jump: {jump_code}")
+
+            if jump != 0:
+                trans_code.append(f"Lambda{var} = {jump_code};")
+        transition_code = "\n".join(trans_code)
+        logger.debug(f"transition_code: {transition_code}")

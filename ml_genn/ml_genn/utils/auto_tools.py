@@ -118,26 +118,3 @@ def solve_ode(dx_dt, solver):
             f"EventProp compiler doesn't support "
             f"{solver} solver")
     return "\n".join(clines)
-
-
-# one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
-# **THOMAS** comments here would be nice
-def simplify_using_threshold(varname, sym, g, expr):
-    if g is None:
-        return expr
-
-    try:
-        the_var = next(sym[v] for v in varname if g.has(sym[v]))
-    except StopIteration:
-        return adj_jump, add_to_pre
-
-    sln = sympy.solve(g, the_var)
-
-    if len(sln) != 1:
-        return expr
-
-    if isinstance(expr, dict):
-        return {var: ex.subs(the_var, sln[0])
-                for var, ex in expr.items()}
-    else:
-        return expr.subs(the_var,sln[0])

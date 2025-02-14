@@ -24,13 +24,21 @@ class AutoModel:
                         for n in chain(self.var_vals.keys(),
                                        self.param_vals.keys())}
         
-        # Parse ODEs
+        # If model has any variables
         if "vars" in self.model:
+            # Parse ODEs
             self.dx_dt =\
                 {sympy.Symbol(n): sympy.parse_expr(v[0], 
                                                    local_dict=self.symbols)
                  for n, v in self.model["vars"].items()
                  if v[0] is not None}
+            
+            # Parse jumps
+            self.jumps =\
+                {sympy.Symbol(n): sympy.parse_expr(v[0], 
+                                                   local_dict=self.symbols)
+                 for n, v in self.model["vars"].items()
+                 if v[1] is not None}
         else:
             self.dx_dt = {}
 
@@ -72,29 +80,13 @@ class AutoSynapseModel(AutoModel):
         super(AutoSynapseModel, self).__init__(model, param_vals, var_vals)
 
         if "I" not in self.var_vals:
-            self.var_vals["I"] = 0.0
-        
-        # Loop through variables
-        self.jumps = {}
-        for n, v in self.model["vars"].items():
-            # If variable has jump
-            if v[1] is not None:
-                sym = sympy.Symbols(n)
-                expr = sympy.parse_expr(v[1], local_dict=self.symbols) - sym
-                if sympy.diff(expr, sym) == 0:
-                    if expr != 0:
-                        self.jumps[sym] = expr
-                else:
-                    raise NotImplementedError(
-                        "EventProp compiler only supports "
-                        "synapses which (only) add input to target variables.")
-        
+            self.var_vals["I"] = 0.0        
 
     def get_jump_code(self):
         # Generate C code for forward jumps, 
         in_syn_sym = sympy.Symbol("inSyn")
         w_sym = sympy.Symbol("weight")
-        clines = [f"{sym.name} += {sympy.ccode(expr.subs(w_sym, in_syn_sym))};"
+        clines = [f"{sym.name} += {sympy.ccode(expr.subs(w_sym, in_syn_sym) - sym)};"
                   for sym, expr in self.jumps.items()]
 
         clines.append("inSyn = 0;")
