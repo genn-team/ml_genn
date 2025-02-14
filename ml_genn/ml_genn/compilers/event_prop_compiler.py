@@ -256,6 +256,13 @@ def _get_conn_max_delay(conn, delay):
                           f"{conn.name} cannot be determined "
                           f"automatically, please set max_delay_steps")
 
+def _get_lmd_name(symbol: Union[str, sympy.Symbol]):
+    symbol_name = (symbol.name if isinstance(symbol, sympy.Symbol)
+                   else symbol)
+    return f"Lambda{symbol_name}"
+
+def _get_lmd_sym(symbol: Union[str, sympy.Symbol]):
+    return sympy.Symbol(_get_lmd_name(symbol))
 
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
@@ -1277,15 +1284,13 @@ class EventPropCompiler(Compiler):
         params = set()
         for syn_sym, syn_expr in model.dx_dt.items():
             # Add adjoint variable to synapse model
-            genn_model.add_var(f"Lambda{syn_sym.name}", "scalar", 0.0)
+            genn_model.add_var(_get_lmd_name(syn_sym), "scalar", 0.0)
             
             # Differentiate all synapse and target neuron ODEs wrt this 
             # synapse var to obtain adjoint lambda ODE
-            o = sum((sympy.diff(syn_expr2, syn_sym)
-                     * sympy.Symbol(f"Lambda{syn_sym2.name}"))
+            o = sum(sympy.diff(syn_expr2, syn_sym) * _get_lmd_sym(syn_sym2)
                     for syn_sym2, syn_expr2 in model.dx_dt.items())
-            o += sum((sympy.diff(trg_expr, syn_sym)
-                      * sympy.Symbol(f"Lambda{trg_sym.name}"))
+            o += sum(sympy.diff(trg_expr, syn_sym) * _get_lmd_sym(trg_sym)
                      for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
             
             # Check the that lambda ODE does not end up referencing any 
@@ -1298,15 +1303,15 @@ class EventPropCompiler(Compiler):
             
             # If any target population lambda variables are 
             # referenced, add neuron variable references
-            for trg_var in trg_neuron_model.dx_dt.keys():
-                lambda_var_name = f"Lambda{trg_var.name}"
-                if (o.has(sympy.Symbol(lambda_var_name)) and not genn_model.has_neuron_var_ref(lambda_var_name)):
-                    genn_model.add_neuron_var_ref(lambda_var_name, "scalar", lambda_var_name)
+            for trg_var_name in trg_neuron_model.var_vals.keys():
+                lambda_var = _get_lmd_sym(trg_var_name)
+                if (o.has(lambda_var) and not genn_model.has_neuron_var_ref(lambda_var.name)):
+                    genn_model.add_neuron_var_ref(lambda_var.name, "scalar", lambda_var.name)
             
             # If any target population parameters are 
             # referenced, duplicate in synapse model
             for param_name, param_val in trg_neuron_model.param_vals.items():
-                if o.has(sympy.Symbol(param_name)):
+                if (o.has(sympy.Symbol(param_name)) and not genn_model.has_param(param_name)):
                     genn_model.add_param(param_name, "scalar", param_val)
             
             # Finally add lambda ODE to adjoint system
@@ -1453,43 +1458,33 @@ class EventPropCompiler(Compiler):
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
 
-        pop = conn.target()
-        syn = conn.synapse
+        # Get synapse mdeol
+        synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
+        assert isinstance(synapse_model, AutoSynapseModel)
 
-        wum = WeightUpdateModel(
+        # Get target neuron mdeol
+        trg_pop = conn.target()
+        trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
+                                                    self.batch_size)
+        assert isinstance(trg_neuron_model, AutoNeuronModel)
+
+        genn_model = WeightUpdateModel(
             model=deepcopy(weight_update_model),
             var_vals= {"Gradient": 0.0},
             pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
 
-        wum.add_var("weight", "scalar", connect_snippet.weight, VarAccess.READ_ONLY)
+        genn_model.add_var("weight", "scalar", connect_snippet.weight, VarAccess.READ_ONLY)
         
-        model_copy["params"] = [ (p[0], p[1]) for p in syn.params ]
-        for p in syn.params:
-            wum.add_param()
-        
-        wum.append_pre_spike_syn_code(f"addToPost(weight);")
-        
-        psm_var_ref_set = set()
-        psm_var_refs = {}
-        model_copy["psm_var_refs"] = []
-        param_vals = syn.param_vals
-
-        pop = conn.target()
-        # forward ODE
-        sym, dx_dt = _process_odes(syn.varnames, syn.pnames, syn.ode)
-        # synaptic jumps 
-        h = _process_jumps(sym, syn.jumps)        
-        logger.debug(f"h: {h}")
-                
+        genn_model.append_pre_spike_syn_code(f"addToPost(weight);")
+             
         # assemble gradient update
         grad_update = 0
-        for var in h:
-            if h[var] != 0:
-                grad_update -= sym[f"Lambda{var}"] * sympy.diff(h[var], sympy.Symbol(syn.w_name))
-                psm_var_ref_set.add((f"Lambda{var}","scalar")) 
-                psm_var_refs[f"Lambda{var}"] = f"Lambda{var}"
-
-        model_copy["pre_event_syn_code"] = f"Gradient += {sympy.ccode(grad_update)};"
+        for jump_sym, jump_expr in synapse_model.jumps.items():
+            lambda_sym = _get_lmd_sym(jump_sym)
+            grad_update -= lambda_sym * sympy.diff(jump_expr, sympy.Symbol("weight"))
+            genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
+        
+        genn_model.append_pre_event_syn_code(f"Gradient += {sympy.ccode(grad_update)};")
 
         # assemble dx_dt_plusm; 
         # ***NOTE: we here have to work with the POST-SYNAPTIC neurons and their equations
@@ -1497,104 +1492,106 @@ class EventPropCompiler(Compiler):
         # inject_current only enters linearly into rhs of any ODEs
         # Do dx_dt_plusm
         # synaptic ODEs first
-        dx_dtplusm = {}
-        for var, expr in dx_dt.items():
-            for v2, ex2 in h.items():
-                expr = expr.subs(sym[v2],sym[v2]+ex2)
-            dx_dtplusm[var] = expr
+        syn_dx_dt_plus_m = {}
+        for syn_sym, syn_expr in synapse_model.dx_dt.items():
+            syn_expr_plus_m = syn_expr
+            for jump_sym, jump_expr in synapse_model.jumps.items():
+                syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym,
+                                                       jump_sym + jump_expr)
+            syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
        
-        vn = pop.neuron.varnames.copy()
-        vn.append("I")
-        n_sym, n_dx_dt = _process_odes(vn, pop.neuron.pnames, pop.neuron.ode)
-        inject = sympy.parse_expr(syn.inject_current, local_dict=sym)
-        inject_plusm = inject
-        for var, expr in h.items():
-                inject_plusm = inject_plusm.subs(sym[var],sym[var]+expr)
-        n_dx_dtplusm = {}
-        print(f"n_dx_dt: {n_dx_dt}")
-        for var, expr in n_dx_dt.items():
-            ex2 = expr.subs(n_sym["I"],inject)
-            n_dx_dt[var] = ex2
-            ex2 = expr.subs(n_sym["I"],inject_plusm)
-            n_dx_dtplusm[var] = ex2
-        logger.debug(f"dx_dt: {dx_dt}")
-        logger.debug(f"n_dx_dt: {n_dx_dt}")
-        logger.debug(f"dx_dtplusm: {dx_dtplusm}")
-        logger.debug(f"n_dx_dtplusm: {n_dx_dtplusm}")
+        #vn = pop.neuron.varnames.copy()
+        #vn.append("I")
+        #inject = sympy.parse_expr(syn.inject_current, local_dict=sym)
+        inject_expr = sympy.parse_expr("I", local_dict=synapse_model.symbols)
+        inject_plus_m_expr = inject_expr
+        for jump_sym, jump_expr in synapse_model.jumps.items():
+            inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym,
+                                                         jump_sym + jump_expr)
+        
+        trg_dx_dt = deepcopy(trg_neuron_model.dx_dt)
+        trg_dx_dt_plus_m = {}
+        logger.debug(f"n_dx_dt: {trg_neuron_model.dx_dt}")
+        for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
+            trg_dx_dt[trg_sym] = trg_expr.subs(sympy.Symbol("Isyn"),
+                                               inject_expr)
+            
+            trg_dx_dt_plus_m[trg_sym] = trg_expr.subs(sympy.Symbol("Isyn"), 
+                                                      inject_plus_m_expr)
+        logger.debug(f"dx_dt: {synapse_model.dx_dt}")
+        logger.debug(f"n_dx_dt: {trg_neuron_model.dx_dt}")
+        logger.debug(f"dx_dtplusm: {syn_dx_dt_plus_m}")
+        logger.debug(f"n_dx_dtplusm: {trg_dx_dt_plus_m}")
+
         # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
         # variables!
         # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
-        ex = 0
+        
         # synapse equations first:
-        for var, expr in dx_dt.items():
-            ex2 = dx_dtplusm[var] - expr
-            ex += sym[f"Lambda{var}"]*ex2
+        ex = 0
+        for syn_sym, syn_expr in synapse_model.dx_dt.items():
+            syn_expr_plus_m = syn_dx_dt_plus_m[syn_sym]
+            ex += _get_lmd_sym(syn_sym) * (syn_expr_plus_m - syn_expr)
+
         # then neuron equations:
-        for var, expr in n_dx_dt.items():
-            ex2 = n_dx_dtplusm[var] - expr
-            ex += sympy.Symbol(f"Lambda{var}")*ex2
-        if ex is not None:
+        for trg_sym, trg_expr in trg_dx_dt_plus_m.items():
+            trg_expr_plus_m = trg_dx_dt_plus_m[trg_sym]
+            ex += _get_lmd_sym(var) * (trg_expr_plus_m - trg_expr)
+        
+        if ex != 0:
             add_to_pre = sympy.simplify(ex)
-            # check whether any vars might be involved from teh forward pass
-            err = False
-            for var in syn.varnames:
-                if add_to_pre.has(sym[var]):
-                    err = True
-            for var in pop.neuron.varnames:
-                if add_to_pre.has(n_sym[var]):
-                    err = True
+            
+            # check whether any vars might be involved from the forward pass
+            err = (any(add_to_pre.has(sympy.Symbol(s)) 
+                       for s in synapse_model.var_vals.keys())
+                   or any(add_to_pre.has(sympy.Symbol(s)
+                          for s in trg_neuron_model.var_vals.keys())))
             if err:
                 raise NotImplementedError(
                     f"Equations necessitate saving forward pass variables in a currently not supported setting.")
-            # put var_refs to post-synaptic vars as needed
-            add_to_pre_ccode = sympy.ccode(add_to_pre)
-            for p,value in pop.neuron.param_vals.items():
-                sym_p = sympy.Symbol(p)
-                if add_to_pre.has(sym_p):
-                    param_vals[p]= value
-                    model_copy["params"].append((p,"scalar"))
-            model_copy["post_neuron_var_refs"] = []
-            post_var_refs = {}
-            for var,tpe,_ in pop.neuron.vars:
-                sym_v = sympy.Symbol(var)
-                if add_to_pre.has(sym_v):
-                    model_copy["post_neuron_var_refs"].append((var,tpe))
-                    post_var_refs[var] = var
-                sym_l = sympy.Symbol(f"Lambda{var}")
-                if add_to_pre.has(sym_l):
-                    model_copy["post_neuron_var_refs"].append((f"Lambda{var}",tpe))
-                    post_var_refs[f"Lambda{var}"] = f"Lambda{var}"
-            for var,tpe,_ in syn.vars:
-                sym_v = sympy.Symbol(var)
-                if add_to_pre.has(sym_v):
-                    psm_var_ref_set.add((var,tpe))
-                    psm_var_refs[var] = var
-                sym_l = sympy.Symbol(f"Lambda{var}")
-                if add_to_pre.has(sym_l):
-                    psm_var_ref_set.add((f"Lambda{var}",tpe))
-                    psm_var_refs[f"Lambda{var}"] = f"Lambda{var}"
 
-        model_copy["psm_var_refs"] = list(psm_var_ref_set)
-        wum = WeightUpdateModel(
-            model= model_copy,
-            param_vals= param_vals,
-            var_vals= {syn.w_name: connect_snippet.weight, "Gradient": 0.0},
-            pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
-            post_neuron_var_refs=post_var_refs,
-            psm_var_refs=psm_var_refs
-        )
-        wum.append_pre_event_syn_code(f"addToPre({add_to_pre_ccode});")
+            # If any target population parameters are 
+            # referenced, duplicate in weight update model
+            for param_name, param_val in trg_neuron_model.param_vals.items():
+                if add_to_pre.has(sympy.Symbol(param_name)):
+                    genn_model.add_param(param_name, "scalar", param_val)
+
+            # If any target population variables or lambda variables are 
+            # referenced, add neuron variable references
+            for trg_var_name in trg_neuron_model.var_vals.keys():
+                lambda_var = _get_lmd_sym(trg_var_name)
+                if add_to_pre.has(sympy.Symbol(trg_var_name)):
+                    genn_model.add_post_neuron_var_ref(trg_var_name, 
+                                                       "scalar", trg_var_name)
+                if add_to_pre.has(lambda_var):
+                    genn_model.add_post_neuron_var_ref(lambda_var.name, 
+                                                       "scalar", lambda_var.name)
+
+            # If any synapse model variables or lambda variables are 
+            # referenced, add psm variable references
+            for syn_var_name in trg_neuron_model.var_vals.keys():
+                lambda_var = _get_lmd_sym(syn_var_name)
+                if add_to_pre.has(sympy.Symbol(lambda_var)):
+                    genn_model.add_psm_var_ref(syn_var_name, 
+                                               "scalar", syn_var_name)
+                if add_to_pre.has(lambda_var):
+                    genn_model.add_psm_var_ref(lambda_var.name, 
+                                               "scalar", lambda_var.name)
+
+       
+        # **TODO** this shouldn't be happening if we've reached input neurons!
+        genn_model.append_pre_event_syn_code(f"addToPre({sympy.ccode(add_to_pre)});")
+    
         # Mark connection as requiring weight optimisation
-        compile_state.add_optimiser_connection(conn, syn.w_name, None)
+        compile_state.add_optimiser_connection(conn, "weight", None)
 
         # Add weights to list of checkpoint vars
-        compile_state.checkpoint_connection_vars.append((conn, syn.w_name))
-        for key,val in wum.model.items():
-            print(f"\n {key}")
-            print(val)
-        print(wum.post_neuron_var_refs)
-        print(wum.psm_var_refs)
-        return wum
+        compile_state.checkpoint_connection_vars.append((conn, "weight"))
+
+        for key,val in genn_model.model.items():
+            logger.debug(f"\n {key}")
+            logger.debug(val)
+        return genn_model
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
                                 connection_populations: dict, 

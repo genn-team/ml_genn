@@ -73,26 +73,29 @@ class AutoSynapseModel(AutoModel):
 
         if "I" not in self.var_vals:
             self.var_vals["I"] = 0.0
-
-    def get_jump_code(self):
-        h = {}
+        
+        # Loop through variables
+        self.jumps = {}
         for n, v in self.model["vars"].items():
+            # If variable has jump
             if v[1] is not None:
-                expr = (sympy.parse_expr(v[1], local_dict=self.symbols) 
-                        - self.symbols[n])
-                if sympy.diff(expr, self.symbols[n]) == 0:
+                sym = sympy.Symbols(n)
+                expr = sympy.parse_expr(v[1], local_dict=self.symbols) - sym
+                if sympy.diff(expr, sym) == 0:
                     if expr != 0:
-                        h[n] = expr
+                        self.jumps[sym] = expr
                 else:
                     raise NotImplementedError(
                         "EventProp compiler only supports "
                         "synapses which (only) add input to target variables.")
         
+
+    def get_jump_code(self):
         # Generate C code for forward jumps, 
         in_syn_sym = sympy.Symbol("inSyn")
         w_sym = sympy.Symbol("weight")
-        clines = [f"{v} += {sympy.ccode(e.subs(w_sym, in_syn_sym))};"
-                  for v, e in h.items()]
+        clines = [f"{sym.name} += {sympy.ccode(expr.subs(w_sym, in_syn_sym))};"
+                  for sym, expr in self.jumps.items()]
 
         clines.append("inSyn = 0;")
         return "\n".join(clines)
