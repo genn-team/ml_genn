@@ -35,7 +35,7 @@ class AutoModel:
             
             # Parse jumps
             self.jumps =\
-                {sympy.Symbol(n): sympy.parse_expr(v[0], 
+                {sympy.Symbol(n): sympy.parse_expr(v[1], 
                                                    local_dict=self.symbols)
                  for n, v in self.model["vars"].items()
                  if v[1] is not None}
