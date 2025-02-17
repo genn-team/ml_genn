@@ -1525,6 +1525,8 @@ class EventPropCompiler(Compiler):
                 
         # Check loss function is compatible
         # **TODO** categorical crossentropy i.e. one-hot encoded
+        sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
+        mse_loss = isinstance(compile_state.losses[pop], MeanSquareError)
         if not (sce_loss or mse_loss):
             raise NotImplementedError(
                 f"EventProp compiler doesn't support "
