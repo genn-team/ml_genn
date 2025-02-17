@@ -11,7 +11,7 @@ from .compiled_training_network import CompiledTrainingNetwork
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
-                         CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnTimestepEnd, Regulariser)
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
@@ -522,6 +522,8 @@ class EventPropCompiler(Compiler):
                                     None, ``optimiser`` will be used for delays
         delay_learn_conns:          Connection for which delays should be 
                                     learned as well as weight
+        regularise_conns:           Connections to apply L1 to
+        l1:                         L1 regularisation strength
         
     """
 
@@ -536,6 +538,8 @@ class EventPropCompiler(Compiler):
                  communicator: Communicator = None,
                  delay_optimiser=None,
                  delay_learn_conns: Sequence = [],
+                 regularise_conns: Sequence = [],
+                 l1: float  = 0.0,
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
@@ -563,6 +567,8 @@ class EventPropCompiler(Compiler):
             Optimiser, "Optimiser", default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
+        self.regularise_conns = regularise_conns
+        self.l1 = l1
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -1356,6 +1362,9 @@ class EventPropCompiler(Compiler):
         base_validate_callbacks = []
         if len(weight_optimiser_cus) > 0 or len(delay_optimiser_cus) > 0:
             if self.full_batch_size > 1:
+                for reg_conn in self.regularise_conns:
+                    base_train_callbacks.append(
+                        Regulariser(reg_conn, self.l1))
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
             base_train_callbacks.append(
