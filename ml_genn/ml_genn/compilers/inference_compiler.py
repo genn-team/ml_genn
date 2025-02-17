@@ -366,6 +366,7 @@ class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
+                 solver: str = "exponential_euler",
                  prefer_in_memory_connect=True, 
                  reset_time_between_batches=True,
                  reset_vars_between_batches=True,
@@ -388,7 +389,7 @@ class InferenceCompiler(Compiler):
                                      SynapseMatrixType.DENSE]
         super(InferenceCompiler, self).__init__(supported_matrix_type, dt,
                                                 batch_size, rng_seed,
-                                                kernel_profiling,
+                                                kernel_profiling, solver,
                                                 communicator,
                                                 **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps

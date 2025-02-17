@@ -555,6 +555,7 @@ class EventPropCompiler(Compiler):
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
+                 solver: str = "exponential_euler",
                  communicator: Communicator = None,
                  delay_optimiser=None,
                  delay_learn_conns: Sequence = [],
@@ -565,7 +566,7 @@ class EventPropCompiler(Compiler):
                                   SynapseMatrixType.SPARSE]
         super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
                                                 batch_size, rng_seed,
-                                                kernel_profiling,
+                                                kernel_profiling, solver,
                                                 communicator,
                                                 **genn_kwargs)
         self.example_timesteps = example_timesteps
@@ -683,18 +684,15 @@ class EventPropCompiler(Compiler):
             # Finally add lambda ODE to adjoint system
             syn_dl_dt[_get_lmd_sym(syn_sym)] = o
     
-        # **TODO
-        solver = "exponential_euler"
-
         # Build sim code
         genn_model.append_sim_code(
             f"""
             // Backward pass
-            {solve_ode(syn_dl_dt, solver)}
+            {solve_ode(syn_dl_dt, self.solver)}
             // Forward pass
             {model.get_jump_code()}
             injectCurrent(I);
-            {solve_ode(model.dx_dt, solver)}
+            {solve_ode(model.dx_dt, self.solver)}
             """)
 
         # Reset lambda variables to zero
@@ -1408,7 +1406,7 @@ class EventPropCompiler(Compiler):
                                   else "")))
         # Otherwise i.e. it's hidden
         else:
-            if not (isinstance(model, AutoNeuronModel):
+            if not isinstance(model, AutoNeuronModel):
                 raise NotImplementedError(
                     "EventProp compiler only supports hidden "
                     "neurons defined in terms of AutoSynapseModel")
@@ -1518,7 +1516,7 @@ class EventPropCompiler(Compiler):
                                 genn_model: NeuronModel,
                                 compile_state: CompileState) -> NeuronModel:
         # Check neuron model is compatible
-        if not (isinstance(model, AutoNeuronModel):
+        if not isinstance(model, AutoNeuronModel):
             raise NotImplementedError(
                 "EventProp compiler only supports output neurons "
                 "defined in terms of AutoSynapseModel")

@@ -170,11 +170,13 @@ class Compiler:
     def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
+                 solver: str = "exponential_euler",
                  communicator: Communicator = None, **genn_kwargs):
         self.dt = dt
         self.full_batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
+        self.solver = solver
         self.supported_matrix_type = SupportedMatrixType(supported_matrix_type)
         self.communicator = communicator
         self.genn_kwargs = genn_kwargs
@@ -246,13 +248,11 @@ class Compiler:
         if isinstance(model, AutoNeuronModel):
             print("auto neuron:", model.model)
             # Build GeNNCode model
-            # **TODO** solver
-            solver = "exponential_euler"
             genn_model = {
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
                 "sim_code":
-                    solve_ode(model.dx_dt, solver),
+                    solve_ode(model.dx_dt, self.solver),
                 "threshold_condition_code":
                     model.get_threshold_condition_code(),
                 "reset_code":
@@ -290,7 +290,6 @@ class Compiler:
 
             # Build GeNNCode model
             # **TODO** solver
-            solver = "exponential_euler"
             genn_model = {
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
@@ -298,7 +297,7 @@ class Compiler:
                     f"""
                     injectCurrent(I);
                     {model.get_jump_code()}
-                    {solve_ode(model.dx_dt, solver)}
+                    {solve_ode(model.dx_dt, self.solver)}
                     """}
             print("GeNNCode syn:", genn_model)
             return SynapseModel(genn_model, model.param_vals, model.var_vals)
