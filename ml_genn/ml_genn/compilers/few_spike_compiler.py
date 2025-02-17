@@ -277,7 +277,7 @@ class FewSpikeCompiler(Compiler):
                     "neurons with Var readout")
 
             # Add readout logic to model
-            model = pop.neuron.readout.add_readout_logic(model)
+            pop.neuron.readout.add_readout_logic(model)
 
         # Build neuron model
         return super(FewSpikeCompiler, self).build_neuron_model(

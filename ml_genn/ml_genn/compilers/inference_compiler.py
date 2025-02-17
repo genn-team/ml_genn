@@ -412,7 +412,7 @@ class InferenceCompiler(Compiler):
         # If population has a readout i.e. it's an output
         # Add readout logic to model
         if pop.neuron.readout is not None:
-            model = pop.neuron.readout.add_readout_logic(
+            pop.neuron.readout.add_readout_logic(
                 model, example_timesteps=self.evaluate_timesteps,
                 dt=self.dt)
 

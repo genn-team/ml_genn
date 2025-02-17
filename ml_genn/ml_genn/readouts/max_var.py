@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class MaxVar(Readout):
     """Read out per-neuron maximum value of neuron model's output variable"""
-    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -26,9 +26,6 @@ class MaxVar(Readout):
             raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to max")
 
-        # Make copy of model
-        model_copy = deepcopy(model)
-
         # Determine name and type of sum variable
         max_var_name = self.output_var_name + "Max"
         self.output_var_type = output_var[1]
@@ -36,17 +33,17 @@ class MaxVar(Readout):
         # Add max variable with same type as output
         # variable and initialise to zero
         # **TODO** min value of output_var_type
-        model_copy.add_var(max_var_name, self.output_var_type, 0)
+        model.add_var(max_var_name, self.output_var_type, 0)
 
         # If compiler needs time max occurred at
         if kwargs.get("max_time_required", False):
             # Add variable to hold max time
             # **TODO** should use time type from GeNNModel
             max_time_var_name = self.output_var_name + "MaxTime"
-            model_copy.add_var(max_time_var_name, "scalar", 0)
+            model.add_var(max_time_var_name, "scalar", 0)
             
             # Add code to update max variable and time 
-            model_copy.append_sim_code(
+            model.append_sim_code(
                 f"""
                 if ($({self.output_var_name}) > $({max_var_name})) {{
                     $({max_var_name})= $({self.output_var_name});
@@ -55,14 +52,12 @@ class MaxVar(Readout):
                 """)
         # Otherwise, just add code to update max variable
         else:
-            model_copy.append_sim_code(
+            model.append_sim_code(
                 f"""
                 if ($({self.output_var_name}) > $({max_var_name})) {{
                     $({max_var_name})= $({self.output_var_name});
                 }}
                 """)
-
-        return model_copy
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         max_var = genn_pop.vars[self.output_var_name + "Max"]
