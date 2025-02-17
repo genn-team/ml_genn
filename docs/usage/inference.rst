@@ -1,71 +1,13 @@
 Inference
 =========
-
 The inference functionality in mlGeNN allows you to run trained networks efficiently.
-This section covers how to use the inference compiler and its compiled networks.
-
-Creating an Inference Compiler
-----------------------------
 The :class:`.compilers.InferenceCompiler` provides the core functionality for running inference on
-trained networks. Here's a basic example:
+trained networks:
 
-.. code-block:: python
-
-    from ml_genn.compilers import InferenceCompiler
-
-    # Create compiler
-    compiler = InferenceCompiler(example_timesteps=500)
-
-    # Compile network
-    compiled_net = compiler.compile(network)
-
-Key Methods
-----------
-
-predict()
-~~~~~~~~
-.. automethod:: ml_genn.compilers.InferenceCompiler.predict
+.. autoclass:: ml_genn.compilers.InferenceCompiler
     :noindex:
-
-evaluate()
-~~~~~~~~~
-.. automethod:: ml_genn.compilers.InferenceCompiler.evaluate
-    :noindex:
-
-Configuration Options
--------------------
-The :class:`.compilers.InferenceCompiler` accepts several configuration parameters:
-
-.. code-block:: python
-
-    compiler = InferenceCompiler(
-        example_timesteps=500,    # Number of timesteps per example
-        batch_size=32,           # Default batch size
-        reset_time=True,         # Reset time between samples
-        kernel_profiling=False   # Enable kernel profiling
-    )
-
-Advanced Features
----------------
-
-Using Callbacks
-~~~~~~~~~~~~~
-The compiler supports callbacks for monitoring inference:
-
-.. code-block:: python
-
-    class CustomCallback:
-        def on_batch_begin(self, batch):
-            pass
-        
-        def on_batch_end(self, batch):
-            pass
-
-    compiler = InferenceCompiler(callbacks=[CustomCallback()])
-
-Complete Example
---------------
-Here's a complete example showing typical usage:
+    
+Here's a basic example:
 
 .. code-block:: python
 
@@ -74,8 +16,7 @@ Here's a complete example showing typical usage:
     # Create compiler with metric
     compiler = InferenceCompiler(
         example_timesteps=500,
-        metrics="mean_square_error"
-    )
+        metrics="mean_square_error")
 
     # Compile network
     compiled_net = compiler.compile(network)
@@ -84,6 +25,31 @@ Here's a complete example showing typical usage:
     with compiled_net:
         metrics, _ = compiled_net.evaluate(
             {input_layer: x_test},
-            {output_layer: y_test}
-        )
+            {output_layer: y_test})
+
         print(f"Error: {metrics['mean_square_error']}")
+
+
+The :class:`.compilers.CompiledInferenceNetwork` objects produced by the
+:class:`.compilers.InferenceCompiler` provide methods for evaluation on 
+datasets specified as sequences (typically numpy arrays or lists of 
+:class:`.utils.data.PreprocessedSpikes`: objects):
+
+.. automethod:: ml_genn.compilers.CompiledInferenceNetwork.evaluate
+    :noindex:
+
+Alternatively, you can evaluate a model on a dataset iterator (such as a :
+
+.. automethod:: ml_genn.compilers.CompiledInferenceNetwork.evaluate_batch_iter
+    :noindex:
+
+Finally, raw predictions (i.e. the output of your model's readouts) 
+can be obtained on a dataset:
+
+.. automethod:: ml_genn.compilers.CompiledInferenceNetwork.predict
+    :noindex:
+    
+Like in Keras, additional logic such as checkpointing and recording of 
+state variables can be added to any of these standard inference loops using callbacks 
+as described in the :ref:`section-callbacks-recording` section.
+

@@ -37,11 +37,11 @@ on top of GeNN’s GPU-optimised sparse data structures and algorithms.
     usage/building_networks
     usage/datasets
     usage/training_networks
+    usage/inference
     usage/callbacks_recording
     usage/metrics
     usage/converting_tf
     usage/bibliography
-    usage/inference
     
     tutorials/index
 

@@ -38,6 +38,13 @@ class CompiledInferenceNetwork(CompiledNetwork):
                  metrics: MetricsType = "sparse_categorical_accuracy",
                  callbacks=[BatchProgressBar()]):
         """ Evaluate metrics on a numpy dataset
+        
+        Args:
+            x:          Dictionary of testing inputs
+            y:          Dictionary of testing labels to compare 
+                        predictions against
+            metrics:    Metrics to calculate.
+            callbacks:  List of callbacks to run during inference.
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
@@ -81,6 +88,11 @@ class CompiledInferenceNetwork(CompiledNetwork):
     def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
                 callbacks=[BatchProgressBar()]):
         """ Generate predictions from a numpy dataset
+  
+        Args:
+            x:          Dictionary of testing inputs
+            outputs:    Output population(s) to extract predictions from
+            callbacks:  List of callbacks to run during inference.
         """
         # Determine the number of elements in x
         x_size = get_dataset_size(x)
@@ -135,6 +147,15 @@ class CompiledInferenceNetwork(CompiledNetwork):
             metrics: MetricsType = "sparse_categorical_accuracy",
             callbacks=[BatchProgressBar()]):
         """ Evaluate metrics on an iterator that provides batches of a dataset
+        
+        Args:
+            inputs:         Input population(s)
+            outputs:        Output population(s)
+            data:           Iterator which produces batches of inputs and labels 
+            num_batches:    Number of batches iterator will produce
+            metrics:        Metrics to calculate.
+            callbacks:      List of callbacks to run during inference.
+            
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
@@ -303,6 +324,44 @@ class CompileState:
 
 
 class InferenceCompiler(Compiler):
+    """Compiler for performing inference on trained networks
+    
+    Args:
+        evaluate_timesteps:             How many timestamps each example will
+                                        be presented to the network for
+        
+        dt:                             Simulation timestep [ms]
+        batch_size:                     What batch size should be used for
+                                        inference?
+        rng_seed:                       What value should GeNN's GPU RNG be
+                                        seeded with? This is used for all GPU
+                                        randomness e.g. weight initialisation
+                                        and Poisson spike train generation
+        kernel_profiling:               Should GeNN record the time spent in
+                                        each GPU kernel? These values can be
+                                        extracted directly from the GeNN
+                                        model which can be  accessed via the
+                                        ``genn_model`` property of 
+                                        the compiled model.
+        prefer_in_memory_connect:       Should in-memory connectivity
+                                        strategies such as TOEPLITZ be used
+                                        rather than converting all
+                                        connectivity into matrices.
+        reset_time_between_batches:     Should time be reset to zero at the 
+                                        start of each example or allowed to
+                                        run continously? 
+        reset_vars_between_batches:     Should neuron variables be reset to
+                                        their initial values at the start of
+                                        each example or allowed to run 
+                                        continously?
+        reset_in_syn_between_batches:   Should synaptic input variables be
+                                        reset to their initial values at the
+                                        start of each example or allowed to
+                                        run continously?
+        communicator:                   Communicator used for inter-process
+                                        communications when training across
+                                        multiple GPUs.
+    """
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
@@ -312,6 +371,7 @@ class InferenceCompiler(Compiler):
                  reset_in_syn_between_batches=False,
                  communicator: Communicator = None,
                  **genn_kwargs):
+
         # Determine matrix type order of preference based on flag
         if prefer_in_memory_connect:
             supported_matrix_type = [SynapseMatrixType.SPARSE,
