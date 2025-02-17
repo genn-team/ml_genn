@@ -1307,19 +1307,6 @@ class EventPropCompiler(Compiler):
         logger.debug(f"A: {a}")
         logger.debug(f"B: {b}")
         logger.debug(f"C: {c}")
-            
-        # Add additional input variable to receive add_to_pre feedback
-        # **TODO** move elsewhere
-        model_copy.add_additional_input_var("RevISyn", "scalar", 0.0)
-        
-        # Add EGP for stored vars ring variables
-        # **TODO** move elsewhere
-        ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-        for var in saved_vars:
-            model_copy.add_egp(f"Ring{var}", "scalar*", 
-                                np.empty(ring_size, dtype=np.float32))
-
-        # On backward pass transition, update b_jumps and add_to_pre input
 
         # assemble the different lambda jump parts
         adjoint_jumps = {}
@@ -1360,7 +1347,7 @@ class EventPropCompiler(Compiler):
             #    trans_code.append(f"Lambda{var} = {jump_code};")
         #transition_code = "\n".join(trans_code)
         #logger.debug(f"transition_code: {transition_code}")
-        return dl_dt, adjoint_jumps
+        return dl_dt, adjoint_jumps, saved_vars
     
     def _build_in_hid_neuron_model(self, pop: Population,
                                    model: Union[AutoNeuronModel, NeuronModel],
@@ -1422,8 +1409,18 @@ class EventPropCompiler(Compiler):
             
             # Build adjoint system from model
             # **TODO** saved_vars
-            dl_dt, adjoint_jumps = self._build_adjoint_system(model)
+            dl_dt, adjoint_jumps, saved_vars =\
+                self._build_adjoint_system(model)
             
+            # Add additional input variable to receive add_to_pre feedback
+            genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
+
+            # Add EGP for stored vars ring variables
+            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            for var in saved_vars:
+                model_copy.add_egp(f"Ring{var}", "scalar*", 
+                                   np.empty(ring_size, dtype=np.float32))
+
             # Add adjoint state variables
             # **THINK** what about reset
             for lambda_sym in dl_dt.keys():
@@ -1431,7 +1428,7 @@ class EventPropCompiler(Compiler):
             
             # **TODO** solver
             # Prepend continous adjoint system update
-            genn_model.prepend_sim_code(solve_ode(dl_dt, "exponential_euler"))
+            genn_model.prepend_sim_code(solve_ode(dl_dt, self.solver))
             
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
@@ -1544,16 +1541,21 @@ class EventPropCompiler(Compiler):
 
         # Build adjoint system from model
         # **TODO** what if there are saved vars?
-        dl_dt, adjoint_jumps = self._build_adjoint_system(model)
+        dl_dt, adjoint_jumps, saved_vars =\
+            self._build_adjoint_system(model)
         
         # Add adjoint state variables
         # **THINK** what about reset
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
         
-        # **TODO** solver
+        # Add EGP for stored vars ring variables
+        ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+        for var in saved_vars:
+            model_copy.add_egp(f"Ring{var}", "scalar*", 
+                               np.empty(ring_size, dtype=np.float32))
         # Prepend continous adjoint system update
-        genn_model.prepend_sim_code(solve_ode(dl_dt, "exponential_euler"))
+        genn_model.prepend_sim_code(solve_ode(dl_dt, self.solver))
         
         # **TODO** move logic into loss classes
         # **HACK** we don't want to call add_to_neuron on loss function as
