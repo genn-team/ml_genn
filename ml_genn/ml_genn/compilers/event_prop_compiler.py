@@ -265,26 +265,30 @@ def _get_lmd_sym(symbol: Union[str, sympy.Symbol]):
 
 
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
-# **THOMAS** comments here would be nice
-def _simplify_using_threshold(varname, sym, g, expr):
-    if g is None:
+def _simplify_using_threshold(var_names, thresold_expr, expr):
+    # If no threshold expression is provided, return expression un-modified
+    if thresold_expr is None:
         return expr
 
+    # Find variable referenced by threshold condition
+    # **THOMAS** why first? e.g. V and A in threshold condition for
     try:
-        the_var = next(sym[v] for v in varname if g.has(sym[v]))
+        the_var = next(sympy.Symbol(v) for v in var_names 
+                       if thresold_expr.has(sympy.Symbol(v)))
     except StopIteration:
+        # **TODO** intention?
         return adj_jump, add_to_pre
 
-    sln = sympy.solve(g, the_var)
+    # Solve threshold expression wrt variable
+    sln = sympy.solve(thresold_expr, the_var)
 
+    # If there is no solution, return un-modified expression
     if len(sln) != 1:
         return expr
 
-    if isinstance(expr, dict):
-        return {var: ex.subs(the_var, sln[0])
-                for var, ex in expr.items()}
-    else:
-        return expr.subs(the_var,sln[0])
+    # Substitute variable from original expression 
+    # with solution from threshold condition
+    return expr.subs(the_var, sln[0])
     
 # Standard EventProp weight update model
 # **NOTE** feedback is added if required
@@ -1276,7 +1280,9 @@ class EventPropCompiler(Compiler):
                 if ex != 0:
                     ex = sympy.diff(thresold_expr, var_sym) / ex
                     if ex != 0:
-                        b[var_sym] = _simplify_using_threshold(varnames, sym, thresold_expr, ex)
+                        b[var_sym] = _simplify_using_threshold(
+                            model.var_vals.keys(), thresold_expr, ex)
+
                         # **TODO** helper
                         saved_vars.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
@@ -1292,7 +1298,8 @@ class EventPropCompiler(Compiler):
                         ex -= _get_lmd_sym(jump_sym) * jump_expr
                     ex = sympy.simplify(ex)
                     if ex != 0:
-                        c[var_sym] = _simplify_using_threshold(varnames, sym, thresold_expr, ex)
+                        c[var_sym] = _simplify_using_threshold(
+                            model.var_vals.keys(), thresold_expr, ex)
                         saved_vars.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
@@ -1333,10 +1340,12 @@ class EventPropCompiler(Compiler):
                     jump = a_exp + b[a_sym] * ex2
             else:
                 jump = a_exp
-            jump =  simplify_using_threshold(varnames, sym, thresold_expr, {"j": jump})["j"]
+            jump =  _simplify_using_threshold(model.var_vals.keys(),
+                                              thresold_expr, jump)
             for v2 in varnames+["I"]:
                 if jump.has(sym[v2]):
-                    saved_vars.add(v2)
+                    # **THOMAS**  this was being added AFTER saved_vars is used - I think you said it was fine to remove
+                    #saved_vars.add(v2)
                     jump = jump.subs(sym[v2], sympy.Symbol(f"__{v2}"))
 
             if jump != 0:
