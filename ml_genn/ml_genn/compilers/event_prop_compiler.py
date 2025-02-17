@@ -30,6 +30,7 @@ from ..utils.network import PopulationType
 from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
+from itertools import chain
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
 from .compiler import create_reset_custom_update, get_delay_type
@@ -1218,12 +1219,12 @@ class EventPropCompiler(Compiler):
                 genn_model, reduction_optimiser_model, 
                 "SpikeCountReduce", name)
     
-    def _build_adjoint_system(self, model: AutoNeuronModel):
-        logger.debug(f"varnames: {varnames}")
-        logger.debug(f"var_vals: {var_vals}")
-        logger.debug(f"pnames: {pnames}")
-        logger.debug(f"param_vals: {param_vals}")
-        logger.debug(f"neuron ODEs: {dx_dt}")
+    def _build_adjoint_system(self, model: AutoNeuronModel,
+                              output: bool):
+        logger.debug("Building adjoint system for AutoNeuronModel:")
+        logger.debug(f"\tVariables: {model.var_vals.keys()}")
+        logger.debug(f"\tParameters: {model.param_vals.keys()}")
+        logger.debug(f"\tForward ODEs: {model.dx_dt}")
 
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
@@ -1240,8 +1241,7 @@ class EventPropCompiler(Compiler):
                                if o.has(sym2)})
             dl_dt[_get_lmd_sym(sym)] = o
             
-            
-        logger.debug(f"Adjoint ODE: {dl_dt}")
+        logger.debug(f"\tAdjoint ODE: {dl_dt}")
 
         # threshold condition
         syms = model.symbols
@@ -1256,10 +1256,10 @@ class EventPropCompiler(Compiler):
         for sym, expr in model.dx_dt.items():
             expr_plus_n = expr
             for jump_sym, jump_expr in model.jumps.items():
-                plus = plus.subs(jump_sym, jump_expr)
+                expr_plus_n = expr_plus_n.subs(jump_sym, jump_expr)
             
-            dx_dt_plus_n[sym] = plus
-        logger.debug(f"dx_dtplusn: {dx_dt_plus_n}")
+            dx_dt_plus_n[sym] = expr_plus_n
+        logger.debug(f"\tdx_dtplusn: {dx_dt_plus_n}")
 
         a = {}
         b = {}
@@ -1304,9 +1304,9 @@ class EventPropCompiler(Compiler):
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
 
-        logger.debug(f"A: {a}")
-        logger.debug(f"B: {b}")
-        logger.debug(f"C: {c}")
+        logger.debug(f"\tA: {a}")
+        logger.debug(f"\tB: {b}")
+        logger.debug(f"\tC: {c}")
 
         # assemble the different lambda jump parts
         adjoint_jumps = {}
@@ -1316,24 +1316,26 @@ class EventPropCompiler(Compiler):
             else:
                 ex2 = 0
             if a_sym in b:
-                if pop.neuron.readout is not None:
+                if output:
                     # TODO: we are missing l_V^- - l_V^+ for output neurons with jumps
                     # that are combined with l_V loss types
                     # This is at the moment categorically excluded
                     ex2 += sympy.Symbol("drive_p")
-                if len(pop.outgoing_connections) > 0:
-                    jump = a_exp + b[a_sym] * (ex2 + sympy.Symbol("RevISyn"))
                 else:
-                    jump = a_exp + b[a_sym] * ex2
+                    jump = a_exp + b[a_sym] * (ex2 + sympy.Symbol("RevISyn"))
+                # **THOMAS** when would this ever occur?
+                #else:
+                #    jump = a_exp + b[a_sym] * ex2
             else:
                 jump = a_exp
             jump =  _simplify_using_threshold(model.var_vals.keys(),
                                               thresold_expr, jump)
-            for v2 in varnames+["I"]:
-                if jump.has(sym[v2]):
+            for var_name in chain(model.var_vals.keys(), ["Isyn"]):
+                var_sym = sympy.Symbol(var_name)
+                if jump.has(var_sym):
                     # **THOMAS**  this was being added AFTER saved_vars is used - I think you said it was fine to remove
                     #saved_vars.add(v2)
-                    jump = jump.subs(sym[v2], sympy.Symbol(f"__{v2}"))
+                    jump = jump.subs(var_sym, sympy.Symbol(f"__{var_name}"))
 
             if jump != 0:
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
@@ -1375,12 +1377,11 @@ class EventPropCompiler(Compiler):
                            np.empty(ring_size, dtype=np.float32))
 
         # If neuron is an input
+        additional_reset_vars = []
         if isinstance(pop.neuron, Input):
-            # **TODO** if auto neuron model, build model 
-            # **TOD** this needs to have already been done
             # Add reset logic to reset any state 
             # variables from the original model
-            compile_state.add_neuron_reset_vars(pop, model.reset_vars,
+            compile_state.add_neuron_reset_vars(pop, genn_model.reset_vars,
                                                 True, False)
 
             # Add code to start of sim code to run 
@@ -1410,7 +1411,7 @@ class EventPropCompiler(Compiler):
             # Build adjoint system from model
             # **TODO** saved_vars
             dl_dt, adjoint_jumps, saved_vars =\
-                self._build_adjoint_system(model)
+                self._build_adjoint_system(model, False)
             
             # Add additional input variable to receive add_to_pre feedback
             genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
@@ -1421,10 +1422,11 @@ class EventPropCompiler(Compiler):
                 model_copy.add_egp(f"Ring{var}", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
 
-            # Add adjoint state variables
+            # Add state variables and reset for lambda variables
             # **THINK** what about reset
             for lambda_sym in dl_dt.keys():
                 genn_model.add_var(lambda_sym.name, "scalar", 0.0)
+                additional_reset_vars.append((lambda_sym.name, "scalar", 0.0))
             
             # **TODO** solver
             # Prepend continous adjoint system update
@@ -1487,33 +1489,27 @@ class EventPropCompiler(Compiler):
                 # Add code to update SpikeCount in forward reset code
                 genn_model.append_reset_code("SpikeCount++;")
 
-        # List of variables aside from those in base 
-        # model we want to reset every batch
-        additional_reset_vars = [(f"Lambda{var}", "scalar", 0.0) for var in varnames]
+            # Add reset logic to reset adjoint state variables 
+            # as well as any state variables from the original model
+            print(f"model.reset_vars: {genn_model.reset_vars + additional_reset_vars}")
+            compile_state.add_neuron_reset_vars(
+                pop, genn_model.reset_vars + additional_reset_vars,
+                True, False)
 
-        # Add reset logic to reset adjoint state variables 
-        # as well as any state variables from the original model
-        compile_state.add_neuron_reset_vars(
-            pop, model.reset_vars + additional_reset_vars,
-            True, False)
-        print(f"model.reset_vars: {model.reset_vars}")
+            # Prepend (as it accesses the pre-reset value of V) 
+            # code to reset to write spike time and saved vars to ring buffer
+            write = []
+            for var in saved_vars:
+                the_var = var if var != "I" else "Isyn"
+                write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
 
-        # Prepend (as it accesses the pre-reset value of V) 
-        # code to reset to write spike time and saved vars to ring buffer
-        write = []
-        for var in saved_vars:
-            genn_model.add_egp(f"Ring{var}", "scalar*", 
-                               np.empty(ring_size, dtype=np.float32))
-            the_var = var if var != "I" else "Isyn"
-            write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
-
-        genn_model.prepend_reset_code(
-            neuron_reset.substitute(
-                max_spikes=self.max_spikes,
-                write="\n".join(write),
-                strict_check=(neuron_reset_strict_check 
-                              if self.strict_buffer_checking
-                              else "")))
+            genn_model.prepend_reset_code(
+                neuron_reset.substitute(
+                    max_spikes=self.max_spikes,
+                    write="\n".join(write),
+                    strict_check=(neuron_reset_strict_check 
+                                  if self.strict_buffer_checking
+                                  else "")))
 
         return genn_model
         
@@ -1535,14 +1531,13 @@ class EventPropCompiler(Compiler):
                 f"{type(pop_loss).__name__} loss")
 
         # Add output logic to model
-        genn_model = pop.neuron.readout.add_readout_logic(
+        pop.neuron.readout.add_readout_logic(
             genn_model, max_time_required=True, dt=self.dt,
             example_timesteps=self.example_timesteps)
 
         # Build adjoint system from model
-        # **TODO** what if there are saved vars?
         dl_dt, adjoint_jumps, saved_vars =\
-            self._build_adjoint_system(model)
+            self._build_adjoint_system(model, True)
         
         # Add adjoint state variables
         # **THINK** what about reset
