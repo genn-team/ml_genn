@@ -92,19 +92,7 @@ def _exponential_euler(dx_dt):
 End of Brian 2 modified code
 """
 
-# **TODO** remove me
-def get_symbols(vars, params, w_name=None):
-    sym = {v: sympy.Symbol(v) for v in vars}
-    sym.update({p: sympy.Symbol(p) for p in params})
-    sym.update({f"Lambda{v}": sympy.Symbol(f"Lambda{v}")
-                for v in vars})
-
-    if w_name is not None:
-        sym[w_name] = sympy.Symbol(w_name)
-
-    return sym
-
-# solde a set of ODEs. They can be passed as a dict of strings
+# solve a set of ODEs. They can be passed as a dict of strings
 # or dict of sympy expressions
 # **TODO** solver enum
 def solve_ode(dx_dt, solver):
