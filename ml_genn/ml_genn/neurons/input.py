@@ -8,7 +8,7 @@ from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 
 from abc import abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
 from ..utils.auto_tools import solve_ode
 
 def _replace_neuron_code(nm, source, target):
@@ -90,7 +90,8 @@ class InputBase(Input):
             
             # Wrap in NeuronModel and return
             nm_copy =  NeuronModel(genn_model, base_model.output_var_name, 
-                                   base_model.param_vals, base_model.var_vals)
+                                   copy(base_model.param_vals), 
+                                   copy(base_model.var_vals))
         # Otherwise, just make copy of model
         else:
             assert isinstance(base_model, NeuronModel)
