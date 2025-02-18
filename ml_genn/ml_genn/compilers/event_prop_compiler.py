@@ -632,6 +632,7 @@ class EventPropCompiler(Compiler):
                             model: Union[AutoSynapseModel, SynapseModel],
                             compile_state: CompileState) -> SynapseModel:
         # Check synapse i
+        logger.debug(f"Building synapse model for '{conn.name}'")
         if not isinstance(model, AutoSynapseModel):
             raise NotImplementedError(
                 "EventProp compiler only supports "
@@ -651,10 +652,15 @@ class EventPropCompiler(Compiler):
                                    "params": model.get_params("scalar")},
                                    model.param_vals, model.var_vals)
 
+        logger.debug("\tBuilding adjoint system for AutoSynapseModel:")
+        logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
+        logger.debug(f"\t\tParameters: {model.param_vals.keys()}")
+        logger.debug(f"\t\tForward ODEs: {model.dx_dt}")
+        logger.debug(f"\t\tForward jumps: {model.jumps}")
+
         # Loop through synapse ODEs
-        syn_dl_dt = {}
-        params = set()
-        for syn_sym, syn_expr in model.dx_dt.items():
+        dl_dt = {}
+        for syn_sym in model.dx_dt.keys():
             # Add adjoint variable to synapse model
             genn_model.add_var(_get_lmd_name(syn_sym), "scalar", 0.0)
             
@@ -662,9 +668,8 @@ class EventPropCompiler(Compiler):
             # synapse var to obtain adjoint lambda ODE
             o = sum(sympy.diff(syn_expr2, syn_sym) * _get_lmd_sym(syn_sym2)
                     for syn_sym2, syn_expr2 in model.dx_dt.items())
-            o += sum(sympy.diff(trg_expr, syn_sym) * _get_lmd_sym(trg_sym)
+            o += sum(sympy.diff(trg_expr.subs(sympy.Symbol("Isyn"), sympy.Symbol("I")), syn_sym) * _get_lmd_sym(trg_sym)
                      for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
-            
             # Check the that lambda ODE does not end up referencing any 
             err = (any(o.has(syn_sym2) for syn_sym2 in model.dx_dt.keys())
                    or any(o.has(trg_sym) 
@@ -687,13 +692,15 @@ class EventPropCompiler(Compiler):
                     genn_model.add_param(param_name, "scalar", param_val)
             
             # Finally add lambda ODE to adjoint system
-            syn_dl_dt[_get_lmd_sym(syn_sym)] = o
-    
+            dl_dt[_get_lmd_sym(syn_sym)] = o
+
+        logger.debug(f"\t\tAdjoint ODEs: {dl_dt}")
+
         # Build sim code
         genn_model.append_sim_code(
             f"""
             // Backward pass
-            {solve_ode(syn_dl_dt, self.solver)}
+            {solve_ode(dl_dt, self.solver)}
             // Forward pass
             {model.get_jump_code()}
             injectCurrent(I);
@@ -701,18 +708,14 @@ class EventPropCompiler(Compiler):
             """)
 
         # Reset lambda variables to zero
-        additional_reset_vars = [(l, "scalar", 0.0) for l in syn_dl_dt.keys()]
-        
+        additional_reset_vars = [(l, "scalar", 0.0) for l in dl_dt.keys()]
+
         # Add reset logic to reset adjoint state variables 
         # as well as any state variables from the original model
         compile_state.add_synapse_reset_vars(
-            conn, model.reset_vars + additional_reset_vars)
+            conn, genn_model.reset_vars + additional_reset_vars)
         
         # Return model
-        logger.debug("Synapse model")
-        for key,val in genn_model.model.items():
-            logger.debug(f"\n {key}")
-            logger.debug(val)
         return genn_model
 
     def build_weight_update_model(self, conn: Connection,
@@ -731,12 +734,6 @@ class EventPropCompiler(Compiler):
 
         # If this is some form of trainable connectivity
         if connect_snippet.trainable:
-            # **NOTE** this is probably not necessary as 
-            # it's also checked in build_neuron_model
-            if not isinstance(conn.synapse, AutoSyn):
-                raise NotImplementedError("EventProp compiler only "
-                                          "supports Auto synapses")
-
             # Determine whether atomic weight updates are required
             # **YUCK** backend-specific code shouldn't be required in models
             # **TODO** something when OpenCL
@@ -832,7 +829,7 @@ class EventPropCompiler(Compiler):
         assert isinstance(synapse_model, AutoSynapseModel)
         
         # Check validity of synapse model jumps
-        for jump_sym, jump_expr in synapse_model.jumps.items(): 
+        for jump_sym, jump_expr in synapse_model.jumps.items():
             if sympy.diff(jump_expr - jump_sym, jump_sym) != 0:
                 raise NotImplementedError(
                     "EventProp compiler only supports "
@@ -1298,7 +1295,7 @@ class EventPropCompiler(Compiler):
                             for var_sym2, var_expr2 in model.dx_dt.items())
 
                         ex2 -= dx_dt_plus_n[jump_sym]
-                        ex -= _get_lmd_sym(jump_sym) * jump_expr
+                        ex -= _get_lmd_sym(jump_sym) * ex2
                     ex = sympy.simplify(ex)
                     if ex != 0:
                         c[var_sym] = _simplify_using_threshold(
