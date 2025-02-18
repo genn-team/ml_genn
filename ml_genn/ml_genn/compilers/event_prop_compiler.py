@@ -1325,25 +1325,22 @@ class EventPropCompiler(Compiler):
                 jump = a_exp
             jump =  _simplify_using_threshold(model.var_vals.keys(),
                                               thresold_expr, jump)
-            for var_name in chain(model.var_vals.keys(), ["Isyn"]):
-                var_sym = sympy.Symbol(var_name)
-                if jump.has(var_sym):
-                    # **THOMAS**  this was being added AFTER saved_vars is used - I think you said it was fine to remove
-                    #saved_vars.add(v2)
-                    jump = jump.subs(var_sym, sympy.Symbol(f"__{var_name}"))
-
+            
+            # If any jumping remains
             if jump != 0:
+                # Loop through all forward variables (and Isyn)
+                for var_name in chain(model.var_vals.keys(), ["Isyn"]):
+                    var_sym = sympy.Symbol(var_name)
+
+                    # If there're referenced in jump, add $ to name so we can 
+                    # go through with template engine and replace them all
+                    if jump.has(var_sym):
+                        saved_vars.add(var_sym.name)
+                        jump = jump.subs(var_sym, sympy.Symbol(f"${var_name}"))
+                
+                # Add to dictionary as jump for adjoint variable
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
-            #jump_code = sympy.ccode(jump)
-            # JAMIE: is there a more elegant way to do this? I.e. replacing a variable name
-            # with the full expression of the ring without accidental matches of substrings
-            # to the variable name
-            #for v2 in saved_vars:
-            #    jump_code = jump_code.replace(f"__{v2}", f"Ring{v2}[ringOffset + RingReadOffset]")
-            #if jump != 0:
-            #    trans_code.append(f"Lambda{var} = {jump_code};")
-        #transition_code = "\n".join(trans_code)
-        #logger.debug(f"transition_code: {transition_code}")
+
         logger.debug(f"\t\tAdjoint Jumps: {adjoint_jumps}")
         logger.debug(f"\t\tSaved variables: {saved_vars}")
         
@@ -1409,17 +1406,25 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoSynapseModel")
             
             # Build adjoint system from model
-            # **TODO** saved_vars
             dl_dt, adjoint_jumps, saved_vars =\
                 self._build_adjoint_system(model, False)
             
+            # Generate transition code
+            transition_code = "\n".join(
+                f"{jump_sym.name} = {sympy.ccode(jump_expr)};"
+                for jump_sym, jump_expr in adjoint_jumps.items())
+            
+            # Substitute saved variables for those in the ring buffer
+            transition_code = Template(transition_code).substitute(
+                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
+
             # Add additional input variable to receive add_to_pre feedback
             genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
 
             # Add EGP for stored vars ring variables
             ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
             for var in saved_vars:
-                model_copy.add_egp(f"Ring{var}", "scalar*", 
+                genn_model.add_egp(f"Ring{var}", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
 
             # Add state variables and reset for lambda variables
@@ -1491,22 +1496,22 @@ class EventPropCompiler(Compiler):
 
             # Add reset logic to reset adjoint state variables 
             # as well as any state variables from the original model
+            # **TODO** we don't want all the ring crud being in this list
             print(f"model.reset_vars: {genn_model.reset_vars + additional_reset_vars}")
             compile_state.add_neuron_reset_vars(
                 pop, genn_model.reset_vars + additional_reset_vars,
                 True, False)
 
+            # Generate ring-buffer write code
+            write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
+                                  for v in saved_vars)
+
             # Prepend (as it accesses the pre-reset value of V) 
             # code to reset to write spike time and saved vars to ring buffer
-            write = []
-            for var in saved_vars:
-                the_var = var if var != "I" else "Isyn"
-                write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
-
             genn_model.prepend_reset_code(
                 neuron_reset.substitute(
                     max_spikes=self.max_spikes,
-                    write="\n".join(write),
+                    write=write_code,
                     strict_check=(neuron_reset_strict_check 
                                   if self.strict_buffer_checking
                                   else "")))
