@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import mnist
 
@@ -43,7 +44,7 @@ with network:
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
     hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                                    tau_refrac=None),
+                                                    relative_reset=False),
                    NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
                    LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
@@ -51,6 +52,7 @@ with network:
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
+    logging.basicConfig(level=logging.DEBUG)
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
                                  optimiser=Adam(1e-2), batch_size=BATCH_SIZE, dt=DT,
