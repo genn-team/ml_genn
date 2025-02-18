@@ -1316,16 +1316,11 @@ class EventPropCompiler(Compiler):
             else:
                 ex2 = 0
             if a_sym in b:
-                if output:
-                    # TODO: we are missing l_V^- - l_V^+ for output neurons with jumps
-                    # that are combined with l_V loss types
-                    # This is at the moment categorically excluded
-                    ex2 += sympy.Symbol("drive_p")
-                else:
-                    jump = a_exp + b[a_sym] * (ex2 + sympy.Symbol("RevISyn"))
-                # **THOMAS** when would this ever occur?
-                #else:
-                #    jump = a_exp + b[a_sym] * ex2
+                # TODO: we are missing l_V^- - l_V^+ for output neurons with jumps
+                # that are combined with l_V loss types
+                # This is at the moment categorically excluded
+                drive = sympy.Symbol("drive_p" if output else "RevISyn")
+                jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
             jump =  _simplify_using_threshold(model.var_vals.keys(),
