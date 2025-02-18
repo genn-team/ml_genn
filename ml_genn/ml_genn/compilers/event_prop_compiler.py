@@ -867,25 +867,20 @@ class EventPropCompiler(Compiler):
             for jump_sym, jump_expr in synapse_model.jumps.items():
                 syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
             syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
-       
-        #vn = pop.neuron.varnames.copy()
-        #vn.append("I")
-        #inject = sympy.parse_expr(syn.inject_current, local_dict=sym)
-        inject_plus_m_expr = synapse_model.inject_current
+
+        inject_expr = synapse_model.inject_current
+        inject_plus_m_expr = inject_expr
         for jump_sym, jump_expr in synapse_model.jumps.items():
             inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
         
-        trg_dx_dt = deepcopy(trg_neuron_model.dx_dt)
-        trg_dx_dt_plus_m = {}
-        for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
-            trg_dx_dt[trg_sym] = trg_expr.subs(sympy.Symbol("Isyn"),
-                                               synapse_model.inject_current)
-            
-            trg_dx_dt_plus_m[trg_sym] = trg_expr.subs(sympy.Symbol("Isyn"), 
-                                                      inject_plus_m_expr)
+        isyn_sym = sympy.Symbol("Isyn")
+        trg_dx_dt_plus_m = {
+            trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
+            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
+        
         logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
         logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
-        logger.debug(f"\tTarget neuron forward ODEs: {trg_dx_dt}")
+        logger.debug(f"\tTarget neuron forward ODEs: {trg_neuron_model.dx_dt}")
         logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
 
         # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
@@ -898,8 +893,9 @@ class EventPropCompiler(Compiler):
         
         # then neuron equations:
         ex += sum(
-            _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] - trg_expr)
-            for trg_sym, trg_expr in trg_dx_dt.items())
+            _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
+                                     - trg_expr.subs(isyn_sym, inject_expr))
+            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
         
         if ex != 0:
             add_to_pre = sympy.simplify(ex)
