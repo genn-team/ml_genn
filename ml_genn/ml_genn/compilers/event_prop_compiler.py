@@ -956,9 +956,6 @@ class EventPropCompiler(Compiler):
         # Add weights to list of checkpoint vars
         compile_state.checkpoint_connection_vars.append((conn, "weight"))
 
-        for key,val in genn_model.model.items():
-            logger.debug(f"\n {key}")
-            logger.debug(val)
         return genn_model
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
@@ -1583,6 +1580,7 @@ class EventPropCompiler(Compiler):
             assert len(adjoint_jumps) == 0
 
             # If we want to calculate mean-squared error or per-timestep loss
+            out_var_name = model.output_var_name
             if self.per_timestep_loss or mse_loss:
                 # Get reset vars before we add ring-buffer variables
                 reset_vars = genn_model.reset_vars
@@ -1597,7 +1595,7 @@ class EventPropCompiler(Compiler):
                 genn_model.add_egp("RingOutputLossTerm", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
                 
-                # **TODO** use some sort of Python visitor pattern here e.g. https://tavianator.com/2014/python_visitor.html
+                # If sparse cross-entropy loss is selected
                 if sce_loss:
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
@@ -1650,7 +1648,7 @@ class EventPropCompiler(Compiler):
                             const unsigned int timestep = (int)round(t / dt);
                             const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
                             + (timestep * num_neurons) + id;
-                            RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - V;
+                            RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - {out_var_name};
                             RingWriteOffset++;
                             """)
                     # Otherwise, unsupported readout type
@@ -1680,10 +1678,10 @@ class EventPropCompiler(Compiler):
                     
                         # Add custom updates to calculate 
                         # softmax from VSum or VAvg
-                        var = ("VSum" if isinstance(pop.neuron.readout, SumVar)
-                               else "VAvg")
+                        suffix = ("Sum" if isinstance(pop.neuron.readout, SumVar)
+                                  else "Avg")
                         compile_state.batch_softmax_populations.append(
-                            (pop, var, "Softmax"))
+                            (pop, out_var_name + suffix, "Softmax"))
 
                         # Add custom update to reset state
                         compile_state.add_neuron_reset_vars(
@@ -1704,7 +1702,7 @@ class EventPropCompiler(Compiler):
                     
                         # Add custom updates to calculate softmax from VAvg
                         compile_state.batch_softmax_populations.append(
-                            (pop, "VAvg", "Softmax"))
+                            (pop, out_var_name + "Avg", "Softmax"))
 
                         # Add custom update to reset state
                         compile_state.add_neuron_reset_vars(
@@ -1712,12 +1710,12 @@ class EventPropCompiler(Compiler):
                     # Otherwise, if readout is MaxVar
                     elif isinstance(pop.neuron.readout, MaxVar):
                         # Add state variable to hold vmax from previous trial
-                        genn_model.add_var("VMaxTimeBack", "scalar", 0.0,
+                        genn_model.add_var(model.output_var_name + "MaxTimeBack", "scalar", 0.0,
                                            VarAccess.READ_ONLY_DUPLICATE)
 
                         genn_model.prepend_sim_code(
                             f"""
-                            if (Trial > 0 && fabs(backT - VMaxTimeBack) < 1e-3*dt) {{
+                            if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
                                 drive_p = 0.0;
@@ -1728,14 +1726,15 @@ class EventPropCompiler(Compiler):
                     
                         # Add custom updates to calculate softmax from VMax
                         compile_state.batch_softmax_populations.append(
-                            (pop, "VMax", "Softmax"))
+                            (pop, model.output_var_name + "Max", "Softmax"))
 
                         # Add custom update to reset state
                         # **NOTE** reset VMaxTimeBack first so VMaxTime isn't zeroed
                         # **TODO** time type
                         compile_state.add_neuron_reset_vars(
                             pop, 
-                            [("VMaxTimeBack", "scalar", "VMaxTime")] + genn_model.reset_vars, 
+                            [(f"{out_var_name}MaxTimeBack", "scalar", 
+                              f"{out_var_name}MaxTime")] + genn_model.reset_vars,
                             False, False)
                     # Otherwise, unsupported readout type
                     else:

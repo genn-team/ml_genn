@@ -246,7 +246,6 @@ class Compiler:
                             :meth:`.pre_compile`.
         """
         if isinstance(model, AutoNeuronModel):
-            print("auto neuron:", model.model)
             # Build GeNNCode model
             genn_model = {
                 "vars": model.get_vars("scalar"),
@@ -257,7 +256,7 @@ class Compiler:
                     model.get_threshold_condition_code(),
                 "reset_code":
                     model.get_reset_code()}
-            print("GeNNCode neuron ", genn_model)
+
             # Wrap in NeuronModel and return
             return NeuronModel(genn_model, model.output_var_name, 
                                copy(model.param_vals),
@@ -287,8 +286,6 @@ class Compiler:
                             :meth:`.pre_compile`.
         """
         if isinstance(model, AutoSynapseModel):
-            print("auto syn:", model.model)
-
             # Build GeNNCode model
             # **TODO** solver
             genn_model = {
@@ -300,7 +297,7 @@ class Compiler:
                     injectCurrent({model.get_inject_current_code()});
                     {solve_ode(model.dx_dt, self.solver)}
                     """}
-            print("GeNNCode syn:", genn_model)
+
             return SynapseModel(genn_model, copy(model.param_vals),
                                 copy(model.var_vals))
         else:

@@ -110,7 +110,6 @@ def get_symbols(vars, params, w_name=None):
 def solve_ode(dx_dt, solver):
     if solver == "exponential_euler":
         clines = _exponential_euler(dx_dt)
-        print(clines)
     elif solver == "linear_euler":
         clines = _linear_euler(dx_dt)
     else:
