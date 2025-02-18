@@ -296,8 +296,8 @@ class Compiler:
                 "params": model.get_params("scalar"),
                 "sim_code":
                     f"""
-                    injectCurrent(I);
                     {model.get_jump_code()}
+                    injectCurrent({model.get_inject_current_code()});
                     {solve_ode(model.dx_dt, self.solver)}
                     """}
             print("GeNNCode syn:", genn_model)

@@ -59,7 +59,6 @@ def is_value_initializer(value):
     return isinstance(value, Initializer)
 
 
-# **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def get_values(inst, name_types, dt, vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
@@ -72,20 +71,21 @@ def get_values(inst, name_types, dt, vals={}):
                  if isinstance(d, ValueDescriptor) and n in names})
     return vals
 
-# **THINK** should maybe a method in a base class for Neuron/Synapse etc
-def get_auto_values(inst, var_names):
+def get_auto_values(inst, var_names, param_vals={}, var_vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
     # Build set of variable names
     var_names = set(var_names)
     
-    # Build dictionaries of var and parameter values from value descriptors
-    params = {n: d.get_value(inst) for n, d in descriptors
-              if isinstance(d, ValueDescriptor) and n not in var_names}
-    vars = {n: d.get_value(inst) for n, d in descriptors
-            if isinstance(d, ValueDescriptor) and n in var_names}
-    return params, vars
+    # Update dictionaries of var and parameter values from value descriptors
+    param_vals.update(
+        {n: d.get_value(inst) for n, d in descriptors
+         if isinstance(d, ValueDescriptor) and n not in var_names})
+    var_vals.update(
+        {n: d.get_value(inst) for n, d in descriptors
+         if isinstance(d, ValueDescriptor) and n in var_names})
+    return param_vals, var_vals
 
 # **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def set_values(inst, vals):

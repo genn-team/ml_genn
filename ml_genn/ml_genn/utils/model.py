@@ -320,6 +320,9 @@ class SynapseModel(Model):
     def append_sim_code(self, code):
         self._append_code("sim_code", code)
 
+    def prepend_sim_code(self, code):
+        self._prepend_code("sim_code", code)
+
     @staticmethod
     def from_val_descriptors(model, inst,
                              param_vals={}, var_vals={},

@@ -645,12 +645,9 @@ class EventPropCompiler(Compiler):
         assert isinstance(trg_neuron_model, AutoNeuronModel)
     
    
-        # Start building basic GeNNCode model with 
-        # variables and parameters from auto synapse model
-        # **THINK** could this be a static method on SynapseModel?
-        genn_model = SynapseModel({"vars": model.get_vars("scalar"),
-                                   "params": model.get_params("scalar")},
-                                   model.param_vals, model.var_vals)
+        # Build GeNNCode neuron model implementing forward pass of model
+        genn_model = super(EventPropCompiler, self).build_synapse_model(
+                           conn, model, compile_state)
 
         logger.debug("\tBuilding adjoint system for AutoSynapseModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
@@ -660,6 +657,7 @@ class EventPropCompiler(Compiler):
 
         # Loop through synapse ODEs
         dl_dt = {}
+        isyn_sym = sympy.Symbol("Isyn")
         for syn_sym in model.dx_dt.keys():
             # Add adjoint variable to synapse model
             genn_model.add_var(_get_lmd_name(syn_sym), "scalar", 0.0)
@@ -668,8 +666,10 @@ class EventPropCompiler(Compiler):
             # synapse var to obtain adjoint lambda ODE
             o = sum(sympy.diff(syn_expr2, syn_sym) * _get_lmd_sym(syn_sym2)
                     for syn_sym2, syn_expr2 in model.dx_dt.items())
-            o += sum(sympy.diff(trg_expr.subs(sympy.Symbol("Isyn"), sympy.Symbol("I")), syn_sym) * _get_lmd_sym(trg_sym)
+            o += sum(sympy.diff(trg_expr.subs(isyn_sym, model.inject_current), 
+                                syn_sym) * _get_lmd_sym(trg_sym)
                      for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
+            
             # Check the that lambda ODE does not end up referencing any 
             err = (any(o.has(syn_sym2) for syn_sym2 in model.dx_dt.keys())
                    or any(o.has(trg_sym) 
@@ -697,14 +697,10 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\t\tAdjoint ODEs: {dl_dt}")
 
         # Build sim code
-        genn_model.append_sim_code(
+        genn_model.prepend_sim_code(
             f"""
             // Backward pass
             {solve_ode(dl_dt, self.solver)}
-            // Forward pass
-            {model.get_jump_code()}
-            injectCurrent(I);
-            {solve_ode(model.dx_dt, self.solver)}
             """)
 
         # Reset lambda variables to zero
@@ -1243,9 +1239,8 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
 
         # threshold condition
-        syms = model.symbols
         thresold_expr = (sympy.parse_expr(model.model["threshold"],
-                                          local_dict=syms)
+                                          local_dict=model.symbols)
                          if "threshold" in model.model
                          else 0)
 

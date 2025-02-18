@@ -57,10 +57,12 @@ class AutoNeuronModel(AutoModel):
 
         self.output_var_name = output_var_name
 
+    # **TODO** property
     def get_threshold_condition_code(self):
         return (f"({self.model['threshold']}) >= 0" if "threshold" in self.model
                 else "")
 
+    # **TODO** property
     def get_reset_code(self):
         jumps = [f"{n} = {v[1]};" for n, v in self.model["vars"].items()
                  if v[1] is not None and v[1] != n]
@@ -70,7 +72,8 @@ class AutoNeuronModel(AutoModel):
     def from_val_descriptors(model, output_var_name: str,inst, 
                              param_vals={}, var_vals={}):
         param_vals, var_vals = get_auto_values(inst, 
-                                               model.get("vars", {}).keys())
+                                               model.get("vars", {}).keys(),
+                                               param_vals, var_vals)
         return AutoNeuronModel(model, output_var_name, param_vals, var_vals)
         
 class AutoSynapseModel(AutoModel):
@@ -79,9 +82,14 @@ class AutoSynapseModel(AutoModel):
                  var_vals: Optional[MutableMapping[str, Value]] = None):
         super(AutoSynapseModel, self).__init__(model, param_vals, var_vals)
 
-        if "I" not in self.var_vals:
-            self.var_vals["I"] = 0.0
+        if "inject_current" in self.model:
+            self.inject_current = sympy.parse_expr(
+                self.model["inject_current"], local_dict=self.symbols)
+        else:
+            raise RuntimeError("AutoSynapseModel requires an "
+                               "'inject_current' expression.")
 
+    # **TODO** property
     def get_jump_code(self):
         # Generate C code for forward jumps, 
         in_syn_sym = sympy.Symbol("inSyn")
@@ -92,10 +100,15 @@ class AutoSynapseModel(AutoModel):
         clines.append("inSyn = 0;")
         return "\n".join(clines)
 
+    # **TODO** property
+    def get_inject_current_code(self):
+        return sympy.ccode(self.inject_current)
+
     @staticmethod
     def from_val_descriptors(model, inst, 
                              param_vals={}, var_vals={}):
         param_vals, var_vals = get_auto_values(inst, 
-                                               model.get("vars", {}).keys())
+                                               model.get("vars", {}).keys(),
+                                               param_vals, var_vals)
         return AutoSynapseModel(model, param_vals, var_vals)
         
