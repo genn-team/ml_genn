@@ -721,6 +721,8 @@ class EventPropCompiler(Compiler):
     def build_weight_update_model(self, conn: Connection,
                                   connect_snippet: ConnectivitySnippet,
                                   compile_state: CompileState) -> WeightUpdateModel:
+        logger.debug(f"Building weight update model for '{conn.name}'")
+
         # Does this connection have a delay?
         has_delay = (not is_value_constant(connect_snippet.delay)
                      or connect_snippet.delay > 0)
@@ -814,11 +816,6 @@ class EventPropCompiler(Compiler):
 
         # Return weight update model
         """
-
-        # TODO: the jumps that are currently possible to support are essentially where the same
-        # function of w is added to all variables that have synaptic jumps. Normally that is just
-        # var += w but *could* be var+= w^2 or var += sqrt(w) or whatever.
-        # these constraints need to be codified and errors thrown
         source_neuron = conn.source().neuron
         if not isinstance(source_neuron, Input):
             # Add connection to list of feedback connections
@@ -829,6 +826,10 @@ class EventPropCompiler(Compiler):
         assert isinstance(synapse_model, AutoSynapseModel)
         
         # Check validity of synapse model jumps
+        # TODO: the jumps that are currently possible to support are essentially where the same
+        # function of w is added to all variables that have synaptic jumps. Normally that is just
+        # var += w but *could* be var+= w^2 or var += sqrt(w) or whatever.
+        # these constraints need to be codified and errors thrown
         for jump_sym, jump_expr in synapse_model.jumps.items():
             if sympy.diff(jump_expr - jump_sym, jump_sym) != 0:
                 raise NotImplementedError(
@@ -1334,6 +1335,7 @@ class EventPropCompiler(Compiler):
 
                     # If there're referenced in jump, add $ to name so we can 
                     # go through with template engine and replace them all
+                    # **THOMAS** are any previous points where things are added to saved_vars required?
                     if jump.has(var_sym):
                         saved_vars.add(var_sym.name)
                         jump = jump.subs(var_sym, sympy.Symbol(f"${var_name}"))
@@ -1367,9 +1369,9 @@ class EventPropCompiler(Compiler):
         genn_model.add_var("BackSpike", "uint8_t", False)
 
         # Add EGP for spike time ring variables
-        ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+        spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
         genn_model.add_egp("RingSpikeTime", "scalar*", 
-                           np.empty(ring_size, dtype=np.float32))
+                           np.empty(spike_ring_size, dtype=np.float32))
 
         # If neuron is an input
         additional_reset_vars = []
@@ -1532,8 +1534,9 @@ class EventPropCompiler(Compiler):
                 
         # Check loss function is compatible
         # **TODO** categorical crossentropy i.e. one-hot encoded
-        sce_loss = isinstance(compile_state.losses[pop], SparseCategoricalCrossentropy)
-        mse_loss = isinstance(compile_state.losses[pop], MeanSquareError)
+        pop_loss = compile_state.losses[pop]
+        sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
+        mse_loss = isinstance(pop_loss, MeanSquareError)
         if not (sce_loss or mse_loss):
             raise NotImplementedError(
                 f"EventProp compiler doesn't support "
@@ -1543,7 +1546,7 @@ class EventPropCompiler(Compiler):
         pop.neuron.readout.add_readout_logic(
             genn_model, max_time_required=True, dt=self.dt,
             example_timesteps=self.example_timesteps)
-        print(genn_model.model, genn_model.egp_vals)
+
         # Build adjoint system from model
         dl_dt, adjoint_jumps, saved_vars =\
             self._build_adjoint_system(model, True)
@@ -1553,11 +1556,6 @@ class EventPropCompiler(Compiler):
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
         
-        # Add EGP for stored vars ring variables
-        ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-        for var in saved_vars:
-            model_copy.add_egp(f"Ring{var}", "scalar*", 
-                               np.empty(ring_size, dtype=np.float32))
         # Prepend continous adjoint system update
         genn_model.prepend_sim_code(solve_ode(dl_dt, self.solver))
         
@@ -1577,7 +1575,7 @@ class EventPropCompiler(Compiler):
             flat_shape = np.prod(pop.shape)
             egp_size = (self.example_timesteps * self.batch_size * flat_shape)
             genn_model.add_egp("YTrue", "scalar*",
-                          np.empty(egp_size, dtype=np.float32))
+                               np.empty(egp_size, dtype=np.float32))
 
         # Add dynamic parameter to contain trial index and add 
         # population to list of those which require it updating
@@ -1587,6 +1585,10 @@ class EventPropCompiler(Compiler):
 
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         if "threshold" not in model.model:
+            # Check adjoint system is also jump-less
+            assert len(saved_vars) == 0
+            assert len(adjoint_jumps) == 0
+
             # If we want to calculate mean-squared error or per-timestep loss
             if self.per_timestep_loss or mse_loss:
                 # Get reset vars before we add ring-buffer variables
@@ -1765,6 +1767,15 @@ class EventPropCompiler(Compiler):
                 compile_state.add_neuron_reset_vars(
                     pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
         else:
+            # Generate transition code
+            transition_code = "\n".join(
+                f"{jump_sym.name} = {sympy.ccode(jump_expr)};"
+                for jump_sym, jump_expr in adjoint_jumps.items())
+            
+            # Substitute saved variables for those in the ring buffer
+            transition_code = Template(transition_code).substitute(
+                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
+    
             # it is a spiking neuron -> it has to use TTFS loss
             # Get reset vars before we add ring-buffer variables
             reset_vars = genn_model.reset_vars
@@ -1786,15 +1797,16 @@ class EventPropCompiler(Compiler):
             genn_model.add_var("BackSpike", "uint8_t", False)
 
             # Add EGP for spike time ring variables
-            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
             genn_model.add_egp("RingSpikeTime", "scalar*", 
-                                np.empty(ring_size, dtype=np.float32))
+                                np.empty(spike_ring_size, dtype=np.float32))
+            
             # Add EGP for stored vars ring variables
-            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
             for var in saved_vars:
                 genn_model.add_egp(f"Ring{var}", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
-            
+
             # Add parameters with synaptic decay and scale constants
             #model_copy.add_param("IsynScale", "scalar",
             #    self.dt / (tau_syn  * (1.0 - beta)))
@@ -1843,7 +1855,7 @@ class EventPropCompiler(Compiler):
                         }}
                     }}
                     
-                    """+ transition_code
+                    """ + transition_code
 
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
@@ -1864,6 +1876,7 @@ class EventPropCompiler(Compiler):
                         example_time=(self.example_timesteps * self.dt),
                         dynamics=dynamics_code,
                         transition=transition_code))
+
                 # Prepend code defining the drive vars
                 genn_model.prepend_sim_code(
                     f"""
@@ -1872,17 +1885,16 @@ class EventPropCompiler(Compiler):
                     scalar drive_p = 0.0;
                     """)
 
+                # Generate ring-buffer write code
+                write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
+                                    for v in saved_vars)
+
                 # Prepend (as it accesses the pre-reset value of V) 
                 # code to reset to write spike time and saved vars to ring buffer
-                # TODO: substitute the correct ring buffer writing
-                write = []
-                for var in saved_vars:
-                    the_var = var if var != "I" else "Isyn"
-                    write.append(f"Ring{var}[ringOffset + RingWriteOffset] = {the_var};")
                 genn_model.prepend_reset_code(
                     neuron_reset.substitute(
                         max_spikes=self.max_spikes,
-                        write= "\n".join(write),
+                        write= write_code,
                         strict_check=(neuron_reset_strict_check 
                                       if self.strict_buffer_checking
                                       else "")))
