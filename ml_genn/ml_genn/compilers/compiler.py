@@ -260,7 +260,8 @@ class Compiler:
             print("GeNNCode neuron ", genn_model)
             # Wrap in NeuronModel and return
             return NeuronModel(genn_model, model.output_var_name, 
-                               model.param_vals, model.var_vals)
+                               copy(model.param_vals),
+                               copy(model.var_vals))
         else:
             assert isinstance(model, NeuronModel)
             model_copy = deepcopy(model)
@@ -300,7 +301,8 @@ class Compiler:
                     {solve_ode(model.dx_dt, self.solver)}
                     """}
             print("GeNNCode syn:", genn_model)
-            return SynapseModel(genn_model, model.param_vals, model.var_vals)
+            return SynapseModel(genn_model, copy(model.param_vals),
+                                copy(model.var_vals))
         else:
             assert isinstance(model, SynapseModel)
             return model
