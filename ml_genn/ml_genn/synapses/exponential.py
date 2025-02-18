@@ -25,11 +25,10 @@ class Exponential(Synapse):
     tau = ValueDescriptor()
 
     @network_default_params
-    def __init__(self, tau: InitValue = 5.0, scale_i : bool = False):
+    def __init__(self, tau: InitValue = 5.0):
         super(Exponential, self).__init__()
 
         self.tau = tau
-        self.scale_i = scale_i
 
         if is_value_initializer(self.tau):
             raise NotImplementedError("Exponential synapse model does not "
@@ -39,6 +38,8 @@ class Exponential(Synapse):
     def get_model(self, connection: Connection, dt: float,
                   batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
         # Build basic model
-        genn_model = {"vars": {"I": ("-I / tau", "I + weight")}}
+        genn_model = {"vars": {"i": ("-i / tau", "i + weight")},
+                      "inject_current": "i"}
         
-        return AutoSynapseModel.from_val_descriptors(genn_model, self)
+        return AutoSynapseModel.from_val_descriptors(genn_model, self,
+                                                     var_vals={"i": 0.0})
