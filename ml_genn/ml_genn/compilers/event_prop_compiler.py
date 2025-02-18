@@ -612,7 +612,8 @@ class EventPropCompiler(Compiler):
                                       f"{conn.name} exceeds 65535")
         genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
-    def build_neuron_model(self, pop: Population, model: NeuronModel,
+    def build_neuron_model(self, pop: Population,
+                           model: Union[AutoNeuronModel, SynapseModel],
                            compile_state: CompileState) -> NeuronModel:
         # Build GeNNCode neuron model implementing forward pass of model
         genn_model = super(EventPropCompiler, self).build_neuron_model(
@@ -1224,7 +1225,7 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
         logger.debug(f"\t\tParameters: {model.param_vals.keys()}")
         logger.debug(f"\t\tForward ODEs: {model.dx_dt}")
-        logger.debug(f"\t\tJumps: {model.jumps}")
+        logger.debug(f"\t\tForward jumps: {model.jumps}")
 
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
@@ -1351,6 +1352,9 @@ class EventPropCompiler(Compiler):
             #    trans_code.append(f"Lambda{var} = {jump_code};")
         #transition_code = "\n".join(trans_code)
         #logger.debug(f"transition_code: {transition_code}")
+        logger.debug(f"\t\tAdjoint Jumps: {adjoint_jumps}")
+        logger.debug(f"\t\tSaved variables: {saved_vars}")
+        
         return dl_dt, adjoint_jumps, saved_vars
     
     def _build_in_hid_neuron_model(self, pop: Population,
@@ -1542,7 +1546,7 @@ class EventPropCompiler(Compiler):
         pop.neuron.readout.add_readout_logic(
             genn_model, max_time_required=True, dt=self.dt,
             example_timesteps=self.example_timesteps)
-
+        print(genn_model.model, genn_model.egp_vals)
         # Build adjoint system from model
         dl_dt, adjoint_jumps, saved_vars =\
             self._build_adjoint_system(model, True)
@@ -1780,7 +1784,7 @@ class EventPropCompiler(Compiler):
                                 self.max_spikes - 1)
             genn_model.add_var("RingReadEndOffset", "int", 
                                 self.max_spikes - 1)
-            
+
             # Add variable to hold backspike flag
             genn_model.add_var("BackSpike", "uint8_t", False)
 
