@@ -1,7 +1,7 @@
 import numpy as np
 import sympy
 
-from typing import Any, MutableMapping
+from typing import Any, MutableMapping, Optional
 from .model import NeuronModel, SynapseModel
 from .value import Value
 
@@ -11,12 +11,12 @@ from ..utils.value import get_auto_values
 
 class AutoModel:
     def __init__(self, model: MutableMapping[str, Any],
-                 param_vals: MutableMapping[str, Value] = {},
-                 var_vals: MutableMapping[str, Value] = {}):
+                 param_vals: Optional[MutableMapping[str, Value]] = None,
+                 var_vals: Optional[MutableMapping[str, Value]] = None):
         self.model = model
 
-        self.param_vals = param_vals
-        self.var_vals = var_vals
+        self.param_vals = param_vals or {}
+        self.var_vals = var_vals or {}
 
         # Create sympy symbols for variable and parameter names
         # **NOTE** model doesn't explicitly list parameters
@@ -51,8 +51,8 @@ class AutoModel:
         
 class AutoNeuronModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any], output_var_name: str,
-                 param_vals: MutableMapping[str, Value] = {},
-                 var_vals: MutableMapping[str, Value] = {}):
+                 param_vals: Optional[MutableMapping[str, Value]] = None,
+                 var_vals: Optional[MutableMapping[str, Value]] = None):
         super(AutoNeuronModel, self).__init__(model, param_vals, var_vals)
 
         self.output_var_name = output_var_name
@@ -75,12 +75,12 @@ class AutoNeuronModel(AutoModel):
         
 class AutoSynapseModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any],
-                 param_vals: MutableMapping[str, Value] = {},
-                 var_vals: MutableMapping[str, Value] = {}):
+                 param_vals: Optional[MutableMapping[str, Value]] = None,
+                 var_vals: Optional[MutableMapping[str, Value]] = None):
         super(AutoSynapseModel, self).__init__(model, param_vals, var_vals)
 
         if "I" not in self.var_vals:
-            self.var_vals["I"] = 0.0        
+            self.var_vals["I"] = 0.0
 
     def get_jump_code(self):
         # Generate C code for forward jumps, 

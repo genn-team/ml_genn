@@ -1,7 +1,7 @@
 import numpy as np
 
 from numbers import Number
-from typing import Any, MutableMapping, Sequence, Union
+from typing import Any, MutableMapping, Optional, Sequence, Union
 from pygenn import VarAccess, VarAccessModeAttribute
 from .value import Value
 
@@ -16,15 +16,15 @@ EGPValue = Union[Number, Sequence[Number], np.ndarray]
 
 class Model:
     def __init__(self, model: MutableMapping[str, Any],
-                 param_vals: MutableMapping[str, Value] = {},
-                 var_vals: MutableMapping[str, Value] = {},
-                 egp_vals: MutableMapping[str, EGPValue] = {}):
+                 param_vals: Optional[MutableMapping[str, Value]] = None,
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 egp_vals: Optional[MutableMapping[str, EGPValue]] = None):
         self.model = model
 
-        self.param_vals = param_vals
+        self.param_vals = param_vals or {}
         self.dynamic_param_names = set()
-        self.var_vals = var_vals
-        self.egp_vals = egp_vals
+        self.var_vals = var_vals or {}
+        self.egp_vals = egp_vals or {}
 
     def has_param(self, name):
         return self._is_in_list("params", name)
@@ -207,13 +207,13 @@ class Model:
 
 
 class CustomUpdateModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, 
-                 var_refs={}, egp_vals={}, egp_refs={}):
+    def __init__(self, model, param_vals=None, var_vals=None, 
+                 var_refs=None, egp_vals=None, egp_refs=None):
         super(CustomUpdateModel, self).__init__(model, param_vals,
                                                 var_vals, egp_vals)
 
-        self.var_refs = var_refs
-        self.egp_refs = egp_refs
+        self.var_refs = var_refs or {}
+        self.egp_refs = egp_refs or {P}
 
     def has_var_ref(self, name):
         return self._is_in_list("var_refs", name)
@@ -244,7 +244,7 @@ class CustomUpdateModel(Model):
 
 class NeuronModel(Model):
     def __init__(self, model, output_var_name,
-                 param_vals={}, var_vals={}, egp_vals={}):
+                 param_vals=None, var_vals=None, egp_vals=None):
         super(NeuronModel, self).__init__(model, param_vals, 
                                           var_vals, egp_vals)
 
@@ -298,12 +298,12 @@ class NeuronModel(Model):
         return output_var
 
 class SynapseModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, egp_vals={},
-                 neuron_var_refs={}):
+    def __init__(self, model, param_vals=None, var_vals=None,
+                 egp_vals=None, neuron_var_refs=None):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
 
-        self.neuron_var_refs = neuron_var_refs
+        self.neuron_var_refs = neuron_var_refs or {}
 
     def process(self):
         return (super(SynapseModel, self).process() 
@@ -332,17 +332,18 @@ class SynapseModel(Model):
 
 
 class WeightUpdateModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
-                 post_var_vals={}, egp_vals={}, pre_neuron_var_refs={},
-                 post_neuron_var_refs={},psm_var_refs={}):
+    def __init__(self, model, param_vals=None, var_vals=None,
+                 pre_var_vals=None, post_var_vals=None, egp_vals=None,
+                 pre_neuron_var_refs=None, post_neuron_var_refs=None,
+                 psm_var_refs=None):
         super(WeightUpdateModel, self).__init__(model, param_vals, 
                                                 var_vals, egp_vals)
 
-        self.pre_var_vals = pre_var_vals
-        self.post_var_vals = post_var_vals
-        self.pre_neuron_var_refs = pre_neuron_var_refs
-        self.post_neuron_var_refs = post_neuron_var_refs
-        self.psm_var_refs = psm_var_refs
+        self.pre_var_vals = pre_var_vals or {}
+        self.post_var_vals = post_var_vals or {}
+        self.pre_neuron_var_refs = pre_neuron_var_refs or {}
+        self.post_neuron_var_refs = post_neuron_var_refs or {}
+        self.psm_var_refs = psm_var_refs or {}
     
     def add_pre_neuron_var_ref(self, name, type, target):
         self._add_to_list("pre_neuron_var_refs", (name, type))
