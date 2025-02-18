@@ -213,7 +213,7 @@ class CustomUpdateModel(Model):
                                                 var_vals, egp_vals)
 
         self.var_refs = var_refs or {}
-        self.egp_refs = egp_refs or {P}
+        self.egp_refs = egp_refs or {}
 
     def has_var_ref(self, name):
         return self._is_in_list("var_refs", name)
