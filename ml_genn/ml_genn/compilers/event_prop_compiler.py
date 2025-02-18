@@ -1366,23 +1366,10 @@ class EventPropCompiler(Compiler):
             compile_state.add_neuron_reset_vars(pop, genn_model.reset_vars,
                                                 True, False)
 
-            # Add code to start of sim code to run 
-            # backwards pass and handle back spikes
-            genn_model.prepend_sim_code(
-                neuron_backward_pass.substitute(
-                    max_spikes=self.max_spikes,
-                    example_time=(self.example_timesteps * self.dt),
-                    dynamics="",
-                    transition=""))
-
-            # Prepend code to reset to write spike time to ring buffer
-            genn_model.prepend_reset_code(
-                neuron_reset.substitute(
-                    max_spikes=self.max_spikes,
-                    write="",
-                    strict_check=(neuron_reset_strict_check
-                                  if self.strict_buffer_checking
-                                  else "")))
+            # No additional dynamics, transition or writing code is required
+            dynamics_code = ""
+            transition_code = ""
+            write_code = ""
         # Otherwise i.e. it's hidden
         else:
             logger.debug(f"Building hidden neuron model for '{pop.name}'")
@@ -1417,9 +1404,6 @@ class EventPropCompiler(Compiler):
             for lambda_sym in dl_dt.keys():
                 genn_model.add_var(lambda_sym.name, "scalar", 0.0)
 
-            # Prepend continous adjoint system update
-            genn_model.prepend_sim_code(solve_ode(dl_dt, self.solver))
-            
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
             additional_reset_vars = []
@@ -1487,16 +1471,26 @@ class EventPropCompiler(Compiler):
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                   for v in saved_vars)
 
-            # Prepend (as it accesses the pre-reset value of V) 
-            # code to reset to write spike time and saved vars to ring buffer
-            genn_model.prepend_reset_code(
-                neuron_reset.substitute(
-                    max_spikes=self.max_spikes,
-                    write=write_code,
-                    strict_check=(neuron_reset_strict_check 
-                                  if self.strict_buffer_checking
-                                  else "")))
+            # Solve ODE and generate dynamics code
+            dynamics_code = solve_ode(dl_dt, self.solver)
+            
+        # Add code to start of sim code to run 
+        # backwards pass and handle back spikes
+        genn_model.prepend_sim_code(
+            neuron_backward_pass.substitute(
+                max_spikes=self.max_spikes,
+                example_time=(self.example_timesteps * self.dt),
+                dynamics=dynamics_code,
+                transition=transition_code))
 
+        # Prepend code to reset to write spike time to ring buffer
+        genn_model.prepend_reset_code(
+            neuron_reset.substitute(
+                max_spikes=self.max_spikes,
+                write=write_code,
+                strict_check=(neuron_reset_strict_check
+                                if self.strict_buffer_checking
+                                else "")))
         return genn_model
         
     def _build_out_neuron_model(self, pop: Population, 
