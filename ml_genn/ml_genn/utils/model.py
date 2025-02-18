@@ -23,6 +23,7 @@ class Model:
 
         self.param_vals = param_vals or {}
         self.dynamic_param_names = set()
+        self.non_reset_vars = set()
         self.var_vals = var_vals or {}
         self.egp_vals = egp_vals or {}
 
@@ -41,10 +42,15 @@ class Model:
         self.param_vals[name] = value
 
     def add_var(self, name: str, type: str, value: Value,
-                access_mode: int = VarAccess.READ_WRITE):
+                access_mode: int = VarAccess.READ_WRITE,
+                reset: bool = True):
         assert not self.has_var(name)
         self._add_to_list("vars", (name, type, access_mode))
         self.var_vals[name] = value
+
+        # If reset is disabled, add to set of non-reset variables
+        if not reset:
+            self.non_reset_vars.add(name)
 
     def add_egp(self, name: str, type: str, value: EGPValue):
         assert not self.has_egp(name)
@@ -130,7 +136,8 @@ class Model:
 
     @property
     def reset_vars(self):
-        return self._get_reset_vars("vars", self.var_vals)
+        return self._get_reset_vars("vars", self.var_vals,
+                                    self.non_reset_vars)
 
     def _search_list(self, name: str, value: str):
         item = [(i, p) for i, p in enumerate(self.model[name])
@@ -193,17 +200,15 @@ class Model:
         # Remove parameter value and add into var vals
         var_vals[param_name] = param_vals.pop(param_name)
 
-    def _get_reset_vars(self, name: str, var_vals):
-        reset_vars = []
+    def _get_reset_vars(self, name: str, var_vals, non_reset_vars):
         if name in self.model:
-            # Loop through them
-            for v in self.model[name]:
-                # If variable either has default (read-write)
-                # access or this is explicitly set
-                # **TODO** mechanism to exclude variables from reset
-                if len(v) < 3 or (v[2] & VarAccessModeAttribute.READ_WRITE) != 0:
-                    reset_vars.append((v[0], v[1], var_vals[v[0]]))
-        return reset_vars
+            # Return list of variables which either have default (read-write)
+            # access or this is explicitly set and aren't in non-reset set
+            return [(v[0], v[1], var_vals[v[0]]) for v in self.model[name]
+                    if ((len(v) < 3 or (v[2] & VarAccessModeAttribute.READ_WRITE) != 0)
+                        and v[0] not in non_reset_vars)]
+        else:
+            return []
 
 
 class CustomUpdateModel(Model):
@@ -346,6 +351,8 @@ class WeightUpdateModel(Model):
         self.pre_neuron_var_refs = pre_neuron_var_refs or {}
         self.post_neuron_var_refs = post_neuron_var_refs or {}
         self.psm_var_refs = psm_var_refs or {}
+        self.non_reset_pre_vars = set()
+        self.non_reset_post_vars = set()
     
     def has_pre_neuron_var_ref(self, name):
         return self._is_in_list("pre_neuron_var_refs", name)
@@ -384,8 +391,10 @@ class WeightUpdateModel(Model):
 
     @property
     def reset_pre_vars(self):
-        return self._get_reset_vars("pre_vars", self.pre_var_vals)
+        return self._get_reset_vars("pre_vars", self.pre_var_vals,
+                                    self.non_reset_pre_vars)
 
     @property
     def reset_post_vars(self):
-        return self._get_reset_vars("post_vars", self.post_var_vals)
+        return self._get_reset_vars("post_vars", self.post_var_vals, 
+                                    self.non_reset_post_vars)

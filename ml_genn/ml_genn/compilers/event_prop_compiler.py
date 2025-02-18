@@ -695,6 +695,7 @@ class EventPropCompiler(Compiler):
             dl_dt[_get_lmd_sym(syn_sym)] = o
 
         logger.debug(f"\t\tAdjoint ODEs: {dl_dt}")
+        logger.debug(f"\t\tReset variables: {genn_model.reset_vars}")
 
         # Build sim code
         genn_model.prepend_sim_code(
@@ -703,13 +704,9 @@ class EventPropCompiler(Compiler):
             {solve_ode(dl_dt, self.solver)}
             """)
 
-        # Reset lambda variables to zero
-        additional_reset_vars = [(l, "scalar", 0.0) for l in dl_dt.keys()]
-
         # Add reset logic to reset adjoint state variables 
         # as well as any state variables from the original model
-        compile_state.add_synapse_reset_vars(
-            conn, genn_model.reset_vars + additional_reset_vars)
+        compile_state.add_synapse_reset_vars(conn, genn_model.reset_vars)
         
         # Return model
         return genn_model
@@ -1344,19 +1341,20 @@ class EventPropCompiler(Compiler):
                                    compile_state: CompileState) -> NeuronModel:
         # Add variables to hold offsets for 
         # reading and writing ring variables
-        genn_model.add_var("RingWriteOffset", "int", 0)
-        genn_model.add_var("RingReadOffset", "int", self.max_spikes - 1)
+        genn_model.add_var("RingWriteOffset", "int", 0, reset=False)
+        genn_model.add_var("RingReadOffset", "int", self.max_spikes - 1,
+                           reset=False)
 
         # Add variables to hold offsets where this neuron
         # started writing to ring during the forward
         # pass and where data to read during backward pass ends
         genn_model.add_var("RingWriteStartOffset", "int",
-                           self.max_spikes - 1)
+                           self.max_spikes - 1, reset=False)
         genn_model.add_var("RingReadEndOffset", "int", 
-                           self.max_spikes - 1)
+                           self.max_spikes - 1, reset=False)
 
         # Add variable to hold backspike flag
-        genn_model.add_var("BackSpike", "uint8_t", False)
+        genn_model.add_var("BackSpike", "uint8_t", False, reset=False)
 
         # Add EGP for spike time ring variables
         spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
@@ -1364,11 +1362,11 @@ class EventPropCompiler(Compiler):
                            np.empty(spike_ring_size, dtype=np.float32))
 
         # If neuron is an input
-        additional_reset_vars = []
         if isinstance(pop.neuron, Input):
             # Add reset logic to reset any state 
             # variables from the original model
             logger.debug(f"Building input neuron model for '{pop.name}'")
+            logger.debug(f"\tReset variables: {genn_model.reset_vars}")
             compile_state.add_neuron_reset_vars(pop, genn_model.reset_vars,
                                                 True, False)
 
@@ -1420,25 +1418,26 @@ class EventPropCompiler(Compiler):
                                    np.empty(ring_size, dtype=np.float32))
 
             # Add state variables and reset for lambda variables
-            # **THINK** what about reset
             for lambda_sym in dl_dt.keys():
                 genn_model.add_var(lambda_sym.name, "scalar", 0.0)
-                additional_reset_vars.append((lambda_sym.name, "scalar", 0.0))
-            
-            # **TODO** solver
+
             # Prepend continous adjoint system update
             genn_model.prepend_sim_code(solve_ode(dl_dt, self.solver))
             
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
+            additional_reset_vars = []
             if self.regulariser_enabled:
                 # Add state variables to hold spike count
                 # during forward and backward pass. 
                 # **NOTE** SpikeCountBackSum is shared across
                 # batches as it is the result of a reduction
-                genn_model.add_var("SpikeCount", "int", 0)
+                # **NOTE** if batch size > 1, SpikeCountBackBatch is
+                # calculated with a reduction which zeroes SpikeCount
+                genn_model.add_var("SpikeCount", "int", 0, 
+                                   reset=(self.full_batch_size == 1))
                 genn_model.add_var("SpikeCountBackBatch", "int", 0,
-                                   VarAccess.READ_ONLY)
+                                   VarAccess.READ_ONLY, reset=False)
 
                 # Add parameters for regulariser
                 # **NOTE** this is multiplied by batch_size so it
@@ -1460,16 +1459,12 @@ class EventPropCompiler(Compiler):
 
                 # If batch size is 1, add reset variables to copy SpikeCount
                 # into SpikeCountBackBatch and zero SpikeCount
-                # **NOTE** if batch size > 1, SpikeCountBackBatch is
-                # calculated with a reduction which zeroes SpikeCount
                 if self.full_batch_size == 1:
-                    additional_reset_vars.extend(
-                        [("SpikeCountBackBatch", "int", "SpikeCount"),
-                         ("SpikeCount", "int", 0)])
+                    additional_reset_vars.append(
+                        ("SpikeCountBackBatch", "int", "SpikeCount"))
 
                 # Add additional transition code to apply regularisation
                 # **THOMAS** how do we know which lamba to apply this too?
-                # **TODO** build transition_code from adjoint_jumps here
                 transition_code += """
                     if (SpikeCountBackBatch > RegNuUpperBatch) {
                         LambdaV -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
@@ -1486,13 +1481,11 @@ class EventPropCompiler(Compiler):
                 # Add code to update SpikeCount in forward reset code
                 genn_model.append_reset_code("SpikeCount++;")
 
-            # Add reset logic to reset adjoint state variables 
-            # as well as any state variables from the original model
-            # **TODO** we don't want all the ring crud being in this list
-            print(f"model.reset_vars: {genn_model.reset_vars + additional_reset_vars}")
+            # Add reset logic to reset state variables (including adjoint)
+            all_reset_vars = genn_model.reset_vars + additional_reset_vars
+            logger.debug(f"\tReset variables: {all_reset_vars}")
             compile_state.add_neuron_reset_vars(
-                pop, genn_model.reset_vars + additional_reset_vars,
-                True, False)
+                pop, all_reset_vars, True, False)
 
             # Generate ring-buffer write code
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
@@ -1582,13 +1575,10 @@ class EventPropCompiler(Compiler):
             # If we want to calculate mean-squared error or per-timestep loss
             out_var_name = model.output_var_name
             if self.per_timestep_loss or mse_loss:
-                # Get reset vars before we add ring-buffer variables
-                reset_vars = genn_model.reset_vars
-
                 # Add variables to hold offsets for 
                 # reading and writing ring variables
-                genn_model.add_var("RingWriteOffset", "int", 0)
-                genn_model.add_var("RingReadOffset", "int", 0)
+                genn_model.add_var("RingWriteOffset", "int", 0, reset=False)
+                genn_model.add_var("RingReadOffset", "int", 0, reset=False)
 
                 # Add EGP for softmax V (SCE) or regression difference (MSE) ring variable
                 ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
@@ -1616,10 +1606,11 @@ class EventPropCompiler(Compiler):
                         # Add custom updates to calculate 
                         # softmax from V and write directly to buffermodel_copy
                         compile_state.timestep_softmax_populations.append(
-                            (pop, "V"))
+                            (pop, out_var_name))
+
                         # Add custom update to reset state
-                        compile_state.add_neuron_reset_vars(
-                            pop, reset_vars, False, True)
+                        compile_state.add_neuron_reset_vars(pop, genn_model.reset_vars,
+                                                            False, True)
                     
                     # Otherwise, unsupported readout type
                     else:
@@ -1639,9 +1630,11 @@ class EventPropCompiler(Compiler):
                                 drive_p  = 0.0;
                             }}
                             """)
+
                         # Add custom update to reset state JAMIE_CHECK
                         compile_state.add_neuron_reset_vars(
-                            pop, reset_vars, False, True)
+                            pop, genn_model.reset_vars, False, True)
+
                         # Add code to fill errors into RingBuffer
                         genn_model.append_sim_code(
                             f"""
@@ -1774,19 +1767,20 @@ class EventPropCompiler(Compiler):
                 
             # Add variables to hold offsets for 
             # reading and writing ring variables
-            genn_model.add_var("RingWriteOffset", "int", 0)
-            genn_model.add_var("RingReadOffset", "int", self.max_spikes - 1)
+            genn_model.add_var("RingWriteOffset", "int", 0, reset=False)
+            genn_model.add_var("RingReadOffset", "int", self.max_spikes - 1,
+                               reset=False)
 
             # Add variables to hold offsets where this neuron
             # started writing to ring during the forward
             # pass and where data to read during backward pass ends
             genn_model.add_var("RingWriteStartOffset", "int",
-                                self.max_spikes - 1)
+                                self.max_spikes - 1, reset=False)
             genn_model.add_var("RingReadEndOffset", "int", 
-                                self.max_spikes - 1)
+                                self.max_spikes - 1, reset=False)
 
             # Add variable to hold backspike flag
-            genn_model.add_var("BackSpike", "uint8_t", False)
+            genn_model.add_var("BackSpike", "uint8_t", False, reset=False)
 
             # Add EGP for spike time ring variables
             spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
