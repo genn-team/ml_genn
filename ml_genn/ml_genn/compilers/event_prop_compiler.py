@@ -268,17 +268,16 @@ def _get_lmd_sym(symbol: Union[str, sympy.Symbol]):
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
 def _simplify_using_threshold(var_names, thresold_expr, expr):
     # If no threshold expression is provided, return expression un-modified
-    if thresold_expr is None:
+    if thresold_expr == 0:
         return expr
 
-    # Find variable referenced by threshold condition
-    # **THOMAS** why first? e.g. V and A in threshold condition for
+    # Find first variable referenced by threshold condition
     try:
         the_var = next(sympy.Symbol(v) for v in var_names 
                        if thresold_expr.has(sympy.Symbol(v)))
+    # If no variables are referenced, return expression un-modified
     except StopIteration:
-        # **TODO** intention?
-        return adj_jump, add_to_pre
+        return expr
 
     # Solve threshold expression wrt variable
     sln = sympy.solve(thresold_expr, the_var)
@@ -1221,10 +1220,11 @@ class EventPropCompiler(Compiler):
     
     def _build_adjoint_system(self, model: AutoNeuronModel,
                               output: bool):
-        logger.debug("Building adjoint system for AutoNeuronModel:")
-        logger.debug(f"\tVariables: {model.var_vals.keys()}")
-        logger.debug(f"\tParameters: {model.param_vals.keys()}")
-        logger.debug(f"\tForward ODEs: {model.dx_dt}")
+        logger.debug("\tBuilding adjoint system for AutoNeuronModel:")
+        logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
+        logger.debug(f"\t\tParameters: {model.param_vals.keys()}")
+        logger.debug(f"\t\tForward ODEs: {model.dx_dt}")
+        logger.debug(f"\t\tJumps: {model.jumps}")
 
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
@@ -1241,7 +1241,7 @@ class EventPropCompiler(Compiler):
                                if o.has(sym2)})
             dl_dt[_get_lmd_sym(sym)] = o
             
-        logger.debug(f"\tAdjoint ODE: {dl_dt}")
+        logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
 
         # threshold condition
         syms = model.symbols
@@ -1251,24 +1251,26 @@ class EventPropCompiler(Compiler):
                          else 0)
 
 
-        # after jump dynamics equation "\dot{x}^+"
+        # Substitute jumps into ODEs to get post-jump dynamics "\dot{x}^+"
         dx_dt_plus_n = {}
         for sym, expr in model.dx_dt.items():
             expr_plus_n = expr
             for jump_sym, jump_expr in model.jumps.items():
                 expr_plus_n = expr_plus_n.subs(jump_sym, jump_expr)
-            
+
             dx_dt_plus_n[sym] = expr_plus_n
-        logger.debug(f"\tdx_dtplusn: {dx_dt_plus_n}")
+
+        logger.debug(f"\t\tdx_dtplusn: {dx_dt_plus_n}")
 
         a = {}
         b = {}
         c = {}
         for var_name in model.var_vals.keys():
             var_sym = sympy.Symbol(var_name)
-            a[var_sym] = sum(
-                sympy.diff(jump_expr, var_sym) * _get_lmd_sym(jump_sym)
-                for jump_sym, jump_expr in model.jumps.items())
+            a[var_sym] = sympy.simplify(
+                sum(sympy.diff(jump_expr, var_sym) * _get_lmd_sym(jump_sym)
+                    for jump_sym, jump_expr in model.jumps.items()))
+
             # **TODO** helper
             saved_vars.update({var_name2 for var_name2 in model.var_vals.keys()
                                if a[var_sym].has(sympy.Symbol(var_name2))})
@@ -1304,9 +1306,9 @@ class EventPropCompiler(Compiler):
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
 
-        logger.debug(f"\tA: {a}")
-        logger.debug(f"\tB: {b}")
-        logger.debug(f"\tC: {c}")
+        logger.debug(f"\t\tA: {a}")
+        logger.debug(f"\t\tB: {b}")
+        logger.debug(f"\t\tC: {c}")
 
         # assemble the different lambda jump parts
         adjoint_jumps = {}
@@ -1381,6 +1383,7 @@ class EventPropCompiler(Compiler):
         if isinstance(pop.neuron, Input):
             # Add reset logic to reset any state 
             # variables from the original model
+            logger.debug(f"Building input neuron model for '{pop.name}'")
             compile_state.add_neuron_reset_vars(pop, genn_model.reset_vars,
                                                 True, False)
 
@@ -1403,6 +1406,7 @@ class EventPropCompiler(Compiler):
                                   else "")))
         # Otherwise i.e. it's hidden
         else:
+            logger.debug(f"Building hidden neuron model for '{pop.name}'")
             if not isinstance(model, AutoNeuronModel):
                 raise NotImplementedError(
                     "EventProp compiler only supports hidden "
@@ -1517,6 +1521,8 @@ class EventPropCompiler(Compiler):
                                 model: AutoNeuronModel,
                                 genn_model: NeuronModel,
                                 compile_state: CompileState) -> NeuronModel:
+        logger.debug(f"Building output neuron model for '{pop.name}'")
+
         # Check neuron model is compatible
         if not isinstance(model, AutoNeuronModel):
             raise NotImplementedError(
@@ -1685,7 +1691,7 @@ class EventPropCompiler(Compiler):
 
                         # Add custom update to reset state
                         compile_state.add_neuron_reset_vars(
-                            pop, model_copy.reset_vars, False, False)
+                            pop, genn_model.reset_vars, False, False)
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
                         local_t_scale = 1.0 / (self.dt * self.example_timesteps)
@@ -1887,4 +1893,6 @@ class EventPropCompiler(Compiler):
             else:
                 raise NotImplementedError(
                     f"EventProp compiler with spiking output "
-                    f"neurons only supports 'FirstSpikeTime' readouts") 
+                    f"neurons only supports 'FirstSpikeTime' readouts")
+
+        return genn_model
