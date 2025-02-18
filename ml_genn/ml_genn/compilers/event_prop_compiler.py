@@ -855,6 +855,8 @@ class EventPropCompiler(Compiler):
             genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
         
         genn_model.append_pre_event_syn_code(f"Gradient += {sympy.ccode(grad_update)};")
+        logger.debug(f"\tGradient update: {grad_update}")
+        logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
 
         # assemble dx_dt_plusm; 
         # ***NOTE: we here have to work with the POST-SYNAPTIC neurons and their equations
@@ -866,59 +868,55 @@ class EventPropCompiler(Compiler):
         for syn_sym, syn_expr in synapse_model.dx_dt.items():
             syn_expr_plus_m = syn_expr
             for jump_sym, jump_expr in synapse_model.jumps.items():
-                syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym,
-                                                       jump_sym + jump_expr)
+                syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
             syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
        
         #vn = pop.neuron.varnames.copy()
         #vn.append("I")
         #inject = sympy.parse_expr(syn.inject_current, local_dict=sym)
-        inject_expr = sympy.parse_expr("I", local_dict=synapse_model.symbols)
-        inject_plus_m_expr = inject_expr
+        inject_plus_m_expr = synapse_model.inject_current
         for jump_sym, jump_expr in synapse_model.jumps.items():
-            inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym,
-                                                         jump_sym + jump_expr)
+            inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
         
         trg_dx_dt = deepcopy(trg_neuron_model.dx_dt)
         trg_dx_dt_plus_m = {}
-        logger.debug(f"n_dx_dt: {trg_neuron_model.dx_dt}")
         for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
             trg_dx_dt[trg_sym] = trg_expr.subs(sympy.Symbol("Isyn"),
-                                               inject_expr)
+                                               synapse_model.inject_current)
             
             trg_dx_dt_plus_m[trg_sym] = trg_expr.subs(sympy.Symbol("Isyn"), 
                                                       inject_plus_m_expr)
-        logger.debug(f"dx_dt: {synapse_model.dx_dt}")
-        logger.debug(f"n_dx_dt: {trg_neuron_model.dx_dt}")
-        logger.debug(f"dx_dtplusm: {syn_dx_dt_plus_m}")
-        logger.debug(f"n_dx_dtplusm: {trg_dx_dt_plus_m}")
+        logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
+        logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
+        logger.debug(f"\tTarget neuron forward ODEs: {trg_dx_dt}")
+        logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
 
         # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
         # variables!
         # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
-        
         # synapse equations first:
-        ex = 0
-        for syn_sym, syn_expr in synapse_model.dx_dt.items():
-            syn_expr_plus_m = syn_dx_dt_plus_m[syn_sym]
-            ex += _get_lmd_sym(syn_sym) * (syn_expr_plus_m - syn_expr)
-
+        ex = sum(
+            _get_lmd_sym(syn_sym) * (syn_dx_dt_plus_m[syn_sym] - syn_expr)
+            for syn_sym, syn_expr in synapse_model.dx_dt.items())
+        
         # then neuron equations:
-        for trg_sym, trg_expr in trg_dx_dt_plus_m.items():
-            trg_expr_plus_m = trg_dx_dt_plus_m[trg_sym]
-            ex += _get_lmd_sym(var) * (trg_expr_plus_m - trg_expr)
+        ex += sum(
+            _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] - trg_expr)
+            for trg_sym, trg_expr in trg_dx_dt.items())
         
         if ex != 0:
             add_to_pre = sympy.simplify(ex)
-            
+            logger.debug(f"\tAdd to pre: {add_to_pre}")
+
             # check whether any vars might be involved from the forward pass
             err = (any(add_to_pre.has(sympy.Symbol(s)) 
                        for s in synapse_model.var_vals.keys())
-                   or any(add_to_pre.has(sympy.Symbol(s)
-                          for s in trg_neuron_model.var_vals.keys())))
+                   or any(add_to_pre.has(sympy.Symbol(s))
+                          for s in trg_neuron_model.var_vals.keys()))
             if err:
                 raise NotImplementedError(
-                    f"Equations necessitate saving forward pass variables in a currently not supported setting.")
+                    "Synapse equations which require saving forward "
+                    "pass variables are currently not supported.")
 
             # If any target population parameters are 
             # referenced, duplicate in weight update model
@@ -929,22 +927,22 @@ class EventPropCompiler(Compiler):
             # If any target population variables or lambda variables are 
             # referenced, add neuron variable references
             for trg_var_name in trg_neuron_model.var_vals.keys():
-                lambda_var = _get_lmd_sym(trg_var_name)
                 if add_to_pre.has(sympy.Symbol(trg_var_name)):
                     genn_model.add_post_neuron_var_ref(trg_var_name, 
                                                        "scalar", trg_var_name)
+                lambda_var = _get_lmd_sym(trg_var_name)
                 if add_to_pre.has(lambda_var):
                     genn_model.add_post_neuron_var_ref(lambda_var.name, 
                                                        "scalar", lambda_var.name)
 
             # If any synapse model variables or lambda variables are 
             # referenced, add psm variable references
-            for syn_var_name in trg_neuron_model.var_vals.keys():
-                lambda_var = _get_lmd_sym(syn_var_name)
-                if add_to_pre.has(sympy.Symbol(lambda_var)):
+            for syn_var_name in synapse_model.var_vals.keys():
+                if add_to_pre.has(sympy.Symbol(syn_var_name)):
                     genn_model.add_psm_var_ref(syn_var_name, 
                                                "scalar", syn_var_name)
-                if add_to_pre.has(lambda_var):
+                l_var = _get_lmd_sym(syn_var_name)
+                if add_to_pre.has(l_var) and not genn_model.has_psm_var_ref(l_var.name):
                     genn_model.add_psm_var_ref(lambda_var.name, 
                                                "scalar", lambda_var.name)
 

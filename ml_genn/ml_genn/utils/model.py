@@ -312,7 +312,6 @@ class SynapseModel(Model):
     def has_neuron_var_ref(self, name):
         return self._is_in_list("neuron_var_refs", name)
 
-
     def add_neuron_var_ref(self, name, type, target):
         self._add_to_list("neuron_var_refs", (name, type))
         self.neuron_var_refs[name] = target
@@ -348,6 +347,15 @@ class WeightUpdateModel(Model):
         self.post_neuron_var_refs = post_neuron_var_refs or {}
         self.psm_var_refs = psm_var_refs or {}
     
+    def has_pre_neuron_var_ref(self, name):
+        return self._is_in_list("pre_neuron_var_refs", name)
+    
+    def has_post_neuron_var_ref(self, name):
+        return self._is_in_list("post_neuron_var_refs", name)
+    
+    def has_psm_var_ref(self, name):
+        return self._is_in_list("psm_var_refs", name)
+
     def add_pre_neuron_var_ref(self, name, type, target):
         self._add_to_list("pre_neuron_var_refs", (name, type))
         self.pre_neuron_var_refs[name] = target
