@@ -1453,13 +1453,13 @@ class EventPropCompiler(Compiler):
 
                 # Add additional transition code to apply regularisation
                 # **THOMAS** how do we know which lamba to apply this too?
-                transition_code += """
-                    if (SpikeCountBackBatch > RegNuUpperBatch) {
-                        LambdaV -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
-                    }
-                    else {
-                        LambdaV -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
-                    }
+                transition_code += f"""
+                    if (SpikeCountBackBatch > RegNuUpperBatch) {{
+                        {_get_lmd_name('v')} -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
+                    }}
+                    else {{
+                        {_get_lmd_name('v')} -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
+                    }}
                     """
                     
                 # Add population to list of those that 
