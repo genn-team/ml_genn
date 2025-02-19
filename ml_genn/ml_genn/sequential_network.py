@@ -13,8 +13,8 @@ class SequentialNetwork(Network):
                         These are typically provided by the compiler.
     """
 
-    def __init__(self, default_params: dict = {}):
-        super(SequentialNetwork, self).__init__(default_params)
+    def __init__(self):
+        super(SequentialNetwork, self).__init__()
 
         self.layers = []
 

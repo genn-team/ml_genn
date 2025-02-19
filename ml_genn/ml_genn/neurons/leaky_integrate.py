@@ -11,8 +11,6 @@ from ..utils.value import InitValue, ValueDescriptor
 if TYPE_CHECKING:
     from .. import Population
 
-from ..utils.decorators import network_default_params
-
 class LeakyIntegrate(Neuron):
     """A leaky-integrator, typically used as an output neuron
 
@@ -27,7 +25,6 @@ class LeakyIntegrate(Neuron):
     bias = ValueDescriptor()
     tau_mem = ValueDescriptor()
 
-    @network_default_params
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, readout=None):
         super(LeakyIntegrate, self).__init__(readout)

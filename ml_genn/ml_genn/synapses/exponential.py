@@ -13,8 +13,6 @@ if TYPE_CHECKING:
 
 from ..utils.value import is_value_initializer
 
-from ..utils.decorators import network_default_params
-
 class Exponential(Synapse):
     """Synapse model where inputs produce 
     exponentially decaying currents in target neuron.
@@ -24,7 +22,6 @@ class Exponential(Synapse):
     """
     tau = ValueDescriptor()
 
-    @network_default_params
     def __init__(self, tau: InitValue = 5.0):
         super(Exponential, self).__init__()
 

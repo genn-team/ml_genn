@@ -15,8 +15,6 @@ from ml_genn.synapses import Exponential
 from time import perf_counter
 from ml_genn.utils.data import linear_latency_encode_data
 
-from ml_genn.compilers.event_prop_compiler import default_params
-
 NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
@@ -35,7 +33,7 @@ spikes = linear_latency_encode_data(
     EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
-network = SequentialNetwork(default_params)
+network = SequentialNetwork()
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),

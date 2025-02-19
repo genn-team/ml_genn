@@ -83,7 +83,6 @@ logger = logging.getLogger(__name__)
 # read and write offsets check for wraparound, this can continue forever
 # **NOTE** due to the inprecision of ASCII diagramming there are out-by-one errors in the above
 
-default_params = {}
 """
 default_params = {
     LeakyIntegrate: {"scale_i": True}, 
