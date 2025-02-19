@@ -97,8 +97,11 @@ default_params = {
 
 # **THINK** shouldn't graidnet actually be added per-variable we're learning?
 weight_update_model = {
-    "vars": [("Gradient", "scalar")], 
+    "vars": [("weight", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")], 
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "pre_spike_syn_code": """
+    addToPost(weight);
+    """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """}
@@ -808,11 +811,6 @@ class EventPropCompiler(Compiler):
 
         # Return weight update model
         """
-        source_neuron = conn.source().neuron
-        if not isinstance(source_neuron, Input):
-            # Add connection to list of feedback connections
-            compile_state.feedback_connections.append(conn)
-
         # Get synapse mdeol
         synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
         assert isinstance(synapse_model, AutoSynapseModel)
@@ -836,13 +834,9 @@ class EventPropCompiler(Compiler):
 
         genn_model = WeightUpdateModel(
             model=deepcopy(weight_update_model),
-            var_vals= {"Gradient": 0.0},
+            var_vals= {"weight": connect_snippet.weight, "Gradient": 0.0},
             pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
 
-        genn_model.add_var("weight", "scalar", connect_snippet.weight, VarAccess.READ_ONLY)
-        
-        genn_model.append_pre_spike_syn_code(f"addToPost(weight);")
-             
         # assemble gradient update
         grad_update = 0
         for jump_sym, jump_expr in synapse_model.jumps.items():
@@ -858,96 +852,102 @@ class EventPropCompiler(Compiler):
         # update expression, duplicate in weight update model
         _add_required_parameters(synapse_model, genn_model, grad_update)
         
-        # assemble dx_dt_plusm; 
-        # ***NOTE: we here have to work with the POST-SYNAPTIC neurons and their equations
-        # this currently only works if the inject_current jumps only depend on w and
-        # inject_current only enters linearly into rhs of any ODEs
-        # Do dx_dt_plusm
-        # synaptic ODEs first
-        syn_dx_dt_plus_m = {}
-        for syn_sym, syn_expr in synapse_model.dx_dt.items():
-            syn_expr_plus_m = syn_expr
+        # If source neuron isn't an input neuron
+        source_neuron = conn.source().neuron
+        if not isinstance(source_neuron, Input):
+            # Add connection to list of feedback connections
+            compile_state.feedback_connections.append(conn)
+
+            # assemble dx_dt_plusm; 
+            # ***NOTE: we here have to work with the POST-SYNAPTIC neurons 
+            # and their equations. This currently only works if the
+            # inject_current jumps only depend on weight and inject_current 
+            # only enters linearly into rhs of any ODEs
+            # Do dx_dt_plusm
+            # synaptic ODEs first
+            syn_dx_dt_plus_m = {}
+            for syn_sym, syn_expr in synapse_model.dx_dt.items():
+                syn_expr_plus_m = syn_expr
+                for jump_sym, jump_expr in synapse_model.jumps.items():
+                    syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
+                syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
+
+            inject_expr = synapse_model.inject_current
+            inject_plus_m_expr = inject_expr
             for jump_sym, jump_expr in synapse_model.jumps.items():
-                syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
-            syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
+                inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
+            
+            isyn_sym = sympy.Symbol("Isyn")
+            trg_dx_dt_plus_m = {
+                trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
+                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
+            
+            logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
+            logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
+            logger.debug(f"\tTarget neuron forward ODEs: {trg_neuron_model.dx_dt}")
+            logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
 
-        inject_expr = synapse_model.inject_current
-        inject_plus_m_expr = inject_expr
-        for jump_sym, jump_expr in synapse_model.jumps.items():
-            inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
+            # SIMPLIFICATON: no dependencies of synaptic jumps on 
+            # pre- or post-synaptic variables!
+            # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
+            # synapse equations first:
+            ex = sum(
+                _get_lmd_sym(syn_sym) * (syn_dx_dt_plus_m[syn_sym] - syn_expr)
+                for syn_sym, syn_expr in synapse_model.dx_dt.items())
+            
+            # then neuron equations:
+            ex += sum(
+                _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
+                                        - trg_expr.subs(isyn_sym, inject_expr))
+                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
+            
+            if ex != 0:
+                add_to_pre = sympy.simplify(ex)
+                logger.debug(f"\tAdd to pre: {add_to_pre}")
+
+                # check whether any vars might be involved from the forward pass
+                err = (any(add_to_pre.has(sympy.Symbol(s)) 
+                        for s in synapse_model.var_vals.keys())
+                    or any(add_to_pre.has(sympy.Symbol(s))
+                            for s in trg_neuron_model.var_vals.keys()))
+                if err:
+                    raise NotImplementedError(
+                        "Synapse equations which require saving forward "
+                        "pass variables are currently not supported.")
+
+                # If any target neuron parameters are referenced in 
+                # add to pre expression, duplicate in weight update model
+                _add_required_parameters(trg_neuron_model, genn_model, add_to_pre)
+
+                # If any synapse parameters are referenced in add to pre
+                # expression, duplicate in weight update model
+                _add_required_parameters(synapse_model, genn_model, add_to_pre)
+
+                # If any target population variables or lambda variables are 
+                # referenced, add neuron variable references
+                for trg_var_name in trg_neuron_model.var_vals.keys():
+                    if add_to_pre.has(sympy.Symbol(trg_var_name)):
+                        genn_model.add_post_neuron_var_ref(trg_var_name, 
+                                                        "scalar", trg_var_name)
+                    lambda_var = _get_lmd_sym(trg_var_name)
+                    if add_to_pre.has(lambda_var):
+                        genn_model.add_post_neuron_var_ref(lambda_var.name, 
+                                                        "scalar", lambda_var.name)
+
+                # If any synapse model variables or lambda variables are 
+                # referenced, add psm variable references
+                for syn_var_name in synapse_model.var_vals.keys():
+                    if add_to_pre.has(sympy.Symbol(syn_var_name)):
+                        genn_model.add_psm_var_ref(syn_var_name, 
+                                                "scalar", syn_var_name)
+                    l_var = _get_lmd_sym(syn_var_name)
+                    if add_to_pre.has(l_var) and not genn_model.has_psm_var_ref(l_var.name):
+                        genn_model.add_psm_var_ref(lambda_var.name, 
+                                                "scalar", lambda_var.name)
+
+            # Convert expression to c-code and insert call to addToPre
+            genn_model.append_pre_event_syn_code(f"addToPre({sympy.ccode(add_to_pre)});")
         
-        isyn_sym = sympy.Symbol("Isyn")
-        trg_dx_dt_plus_m = {
-            trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
-            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
-        
-        logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
-        logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
-        logger.debug(f"\tTarget neuron forward ODEs: {trg_neuron_model.dx_dt}")
-        logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
-
-        # SIMPLIFICATON: no dependencies of synaptic jumps on pre- or post-synaptic
-        # variables!
-        # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
-        # synapse equations first:
-        ex = sum(
-            _get_lmd_sym(syn_sym) * (syn_dx_dt_plus_m[syn_sym] - syn_expr)
-            for syn_sym, syn_expr in synapse_model.dx_dt.items())
-        
-        # then neuron equations:
-        ex += sum(
-            _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
-                                     - trg_expr.subs(isyn_sym, inject_expr))
-            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
-        
-        if ex != 0:
-            add_to_pre = sympy.simplify(ex)
-            logger.debug(f"\tAdd to pre: {add_to_pre}")
-
-            # check whether any vars might be involved from the forward pass
-            err = (any(add_to_pre.has(sympy.Symbol(s)) 
-                       for s in synapse_model.var_vals.keys())
-                   or any(add_to_pre.has(sympy.Symbol(s))
-                          for s in trg_neuron_model.var_vals.keys()))
-            if err:
-                raise NotImplementedError(
-                    "Synapse equations which require saving forward "
-                    "pass variables are currently not supported.")
-
-            # If any target neuron parameters are referenced in 
-            # add to pre expression, duplicate in weight update model
-            _add_required_parameters(trg_neuron_model, genn_model, add_to_pre)
-
-            # If any synapse parameters are referenced in add to pre
-            # expression, duplicate in weight update model
-            _add_required_parameters(synapse_model, genn_model, add_to_pre)
-
-            # If any target population variables or lambda variables are 
-            # referenced, add neuron variable references
-            for trg_var_name in trg_neuron_model.var_vals.keys():
-                if add_to_pre.has(sympy.Symbol(trg_var_name)):
-                    genn_model.add_post_neuron_var_ref(trg_var_name, 
-                                                       "scalar", trg_var_name)
-                lambda_var = _get_lmd_sym(trg_var_name)
-                if add_to_pre.has(lambda_var):
-                    genn_model.add_post_neuron_var_ref(lambda_var.name, 
-                                                       "scalar", lambda_var.name)
-
-            # If any synapse model variables or lambda variables are 
-            # referenced, add psm variable references
-            for syn_var_name in synapse_model.var_vals.keys():
-                if add_to_pre.has(sympy.Symbol(syn_var_name)):
-                    genn_model.add_psm_var_ref(syn_var_name, 
-                                               "scalar", syn_var_name)
-                l_var = _get_lmd_sym(syn_var_name)
-                if add_to_pre.has(l_var) and not genn_model.has_psm_var_ref(l_var.name):
-                    genn_model.add_psm_var_ref(lambda_var.name, 
-                                               "scalar", lambda_var.name)
-
-       
-        # **TODO** this shouldn't be happening if we've reached input neurons!
-        genn_model.append_pre_event_syn_code(f"addToPre({sympy.ccode(add_to_pre)});")
-    
         # Mark connection as requiring weight optimisation
         # **TODO** depends on model
         compile_state.add_optimiser_connection(conn, "weight", None)
