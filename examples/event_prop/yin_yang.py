@@ -13,8 +13,6 @@ from ml_genn.synapses import Exponential
 from time import perf_counter
 from ml_genn.utils.data import generate_yin_yang_dataset
 
-from ml_genn.compilers.event_prop_compiler import default_params
-
 import matplotlib.pyplot as plt
 
 NUM_INPUT = 5
@@ -35,18 +33,16 @@ spikes, labels = generate_yin_yang_dataset(NUM_TRAIN if TRAIN else NUM_TEST,
 
 
 serialiser = Numpy("yin_yang_checkpoints")
-network = SequentialNetwork(default_params)
+network = SequentialNetwork()
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
                                   NUM_INPUT, record_spikes=True)
     hidden = Layer(Dense(Normal(mean=1.5, sd=0.78)), 
-                   LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                      tau_refrac=None),
+                   LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
                    NUM_HIDDEN, Exponential(5.0), record_spikes=True)
     output = Layer(Dense(Normal(mean=0.93, sd=0.1)),
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                      tau_refrac=None,
                                       readout="first_spike_time"),
                    NUM_OUTPUT, Exponential(5.0), record_spikes=True)
 

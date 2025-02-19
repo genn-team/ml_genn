@@ -41,8 +41,7 @@ with network:
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
-    hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                                    relative_reset=False),
+    hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
                    NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
                    LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
