@@ -17,14 +17,13 @@ from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
 from ..metrics import MetricsType
-from ..neurons import AutoNeuron, Input
+from ..neurons import Input
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
                         MaxVar, SumVar, Var)
-from ..synapses import AutoSyn
-from ..utils.auto_model import AutoNeuronModel, AutoSynapseModel
+from ..utils.auto_model import AutoModel, AutoNeuronModel, AutoSynapseModel
 from ..utils.callback_list import CallbackList
-from ..utils.model import (CustomUpdateModel, NeuronModel, 
+from ..utils.model import (CustomUpdateModel, Model, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
 from ..utils.network import PopulationType
 from ..utils.snippet import ConnectivitySnippet
@@ -264,7 +263,6 @@ def _get_lmd_name(symbol: Union[str, sympy.Symbol]):
 def _get_lmd_sym(symbol: Union[str, sympy.Symbol]):
     return sympy.Symbol(_get_lmd_name(symbol))
 
-
 # one could reduce saved vars by solving the threshold equation for one of the vars and substituting the equation
 def _simplify_using_threshold(var_names, thresold_expr, expr):
     # If no threshold expression is provided, return expression un-modified
@@ -289,10 +287,14 @@ def _simplify_using_threshold(var_names, thresold_expr, expr):
     # Substitute variable from original expression 
     # with solution from threshold condition
     return expr.subs(the_var, sln[0])
-    
-# Standard EventProp weight update model
-# **NOTE** feedback is added if required
-    
+
+def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
+    # If any target population parameters are 
+    # referenced, duplicate in synapse model
+    for n, v in model.param_vals.items():
+        if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
+            genn_model.add_param(n, "scalar", v)
+
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
         self.losses = get_object_mapping(losses, readouts,
@@ -687,10 +689,8 @@ class EventPropCompiler(Compiler):
             
             # If any target population parameters are 
             # referenced, duplicate in synapse model
-            for param_name, param_val in trg_neuron_model.param_vals.items():
-                if (o.has(sympy.Symbol(param_name)) and not genn_model.has_param(param_name)):
-                    genn_model.add_param(param_name, "scalar", param_val)
-            
+            _add_required_parameters(trg_neuron_model, genn_model, o)
+    
             # Finally add lambda ODE to adjoint system
             dl_dt[_get_lmd_sym(syn_sym)] = o
 
@@ -854,7 +854,11 @@ class EventPropCompiler(Compiler):
         genn_model.append_pre_event_syn_code(f"Gradient += {sympy.ccode(grad_update)};")
         logger.debug(f"\tGradient update: {grad_update}")
         logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
-
+        
+        # If any synapse parameters are referenced in gradient 
+        # update expression, duplicate in weight update model
+        _add_required_parameters(synapse_model, genn_model, grad_update)
+        
         # assemble dx_dt_plusm; 
         # ***NOTE: we here have to work with the POST-SYNAPTIC neurons and their equations
         # this currently only works if the inject_current jumps only depend on w and
@@ -911,11 +915,13 @@ class EventPropCompiler(Compiler):
                     "Synapse equations which require saving forward "
                     "pass variables are currently not supported.")
 
-            # If any target population parameters are 
-            # referenced, duplicate in weight update model
-            for param_name, param_val in trg_neuron_model.param_vals.items():
-                if add_to_pre.has(sympy.Symbol(param_name)):
-                    genn_model.add_param(param_name, "scalar", param_val)
+            # If any target neuron parameters are referenced in 
+            # add to pre expression, duplicate in weight update model
+            _add_required_parameters(trg_neuron_model, genn_model, add_to_pre)
+
+            # If any synapse parameters are referenced in add to pre
+            # expression, duplicate in weight update model
+            _add_required_parameters(synapse_model, genn_model, add_to_pre)
 
             # If any target population variables or lambda variables are 
             # referenced, add neuron variable references
@@ -944,9 +950,11 @@ class EventPropCompiler(Compiler):
         genn_model.append_pre_event_syn_code(f"addToPre({sympy.ccode(add_to_pre)});")
     
         # Mark connection as requiring weight optimisation
+        # **TODO** depends on model
         compile_state.add_optimiser_connection(conn, "weight", None)
 
         # Add weights to list of checkpoint vars
+        # **TODO** depends on model
         compile_state.checkpoint_connection_vars.append((conn, "weight"))
 
         return genn_model
