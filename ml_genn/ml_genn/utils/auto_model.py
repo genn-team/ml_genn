@@ -104,7 +104,6 @@ class AutoSynapseModel(AutoModel):
         finally:
             # Rename variable in dx_dt and jumps as inSyn
             # and substitute in all jumps and dynamics
-            print(f"AutoSynapseModel {rep_sym.name} can be implemented as inSyn")
             in_syn_sym = sympy.Symbol("inSyn")
             self.dx_dt = {in_syn_sym if sym == rep_sym else sym: expr.subs(rep_sym, in_syn_sym)
                           for sym, expr in self.dx_dt.items()}
