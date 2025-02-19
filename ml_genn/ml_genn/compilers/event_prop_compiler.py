@@ -1236,7 +1236,8 @@ class EventPropCompiler(Compiler):
         # threshold condition
         thresold_expr = (sympy.parse_expr(model.model["threshold"],
                                           local_dict=model.symbols)
-                         if "threshold" in model.model
+                         if ("threshold" in model.model 
+                             and model.model["threshold"] is not None)
                          else 0)
 
 
@@ -1568,7 +1569,7 @@ class EventPropCompiler(Compiler):
         compile_state.update_trial_pops.append(pop)
 
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
-        if "threshold" not in model.model:
+        if "threshold" not in model.model or model.model["threshold"] is None:
             # Check adjoint system is also jump-less
             assert len(saved_vars) == 0
             assert len(adjoint_jumps) == 0

@@ -1,13 +1,15 @@
 import numpy as np
 import sympy
 
-from typing import Any, MutableMapping, Optional
+from typing import Any, MutableMapping, Optional, Tuple
 from .model import NeuronModel, SynapseModel
 from .value import Value
 
 from copy import deepcopy
 from itertools import chain
 from ..utils.value import get_auto_values
+
+Variables = MutableMapping[str, Tuple[Optional[str], Optional[str]]]
 
 class AutoModel:
     def __init__(self, model: MutableMapping[str, Any],
@@ -59,7 +61,9 @@ class AutoNeuronModel(AutoModel):
 
     # **TODO** property
     def get_threshold_condition_code(self):
-        return (f"({self.model['threshold']}) >= 0" if "threshold" in self.model
+        return (f"({self.model['threshold']}) >= 0" 
+                if ("threshold" in self.model 
+                    and self.model["threshold"] is not None)
                 else "")
 
     # **TODO** property
