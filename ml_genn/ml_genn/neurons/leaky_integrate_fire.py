@@ -36,7 +36,7 @@ class LeakyIntegrateFire(Neuron):
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
-                 relative_reset: bool = True, readout=None, **kwargs):
+                 relative_reset: bool = False, readout=None, **kwargs):
         super(LeakyIntegrateFire, self).__init__(readout, **kwargs)
 
         self.v_thresh = v_thresh
