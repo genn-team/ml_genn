@@ -93,15 +93,45 @@ class AutoSynapseModel(AutoModel):
             raise RuntimeError("AutoSynapseModel requires an "
                                "'inject_current' expression.")
 
+        try:
+            # Find first variable that can be implemented using built-in inSyn
+            weight_sym = sympy.Symbol("weight")
+            rep_sym = next(sym for sym, expr in self.jumps.items()
+                           if (expr == (sym + weight_sym)
+                               and self.var_vals[sym.name] == 0))
+        except StopIteration:
+            pass
+        finally:
+            # Rename variable in dx_dt and jumps as inSyn
+            # and substitute in all jumps and dynamics
+            print(f"AutoSynapseModel {rep_sym.name} can be implemented as inSyn")
+            in_syn_sym = sympy.Symbol("inSyn")
+            self.dx_dt = {in_syn_sym if sym == rep_sym else sym: expr.subs(rep_sym, in_syn_sym)
+                          for sym, expr in self.dx_dt.items()}
+            self.jumps = {in_syn_sym if sym == rep_sym else sym: expr.subs(rep_sym, in_syn_sym)
+                          for sym, expr in self.jumps.items()}
+
+            # Also substitue in inject expression            
+            self.inject_current = self.inject_current.subs(rep_sym, in_syn_sym)
+
+            # Remove from var_vals 
+            # **NOTE** this prevents it getting implemented as a variable
+            self.var_vals.pop(rep_sym.name)
+
     # **TODO** property
     def get_jump_code(self):
         # Generate C code for forward jumps, 
         in_syn_sym = sympy.Symbol("inSyn")
         w_sym = sympy.Symbol("weight")
-        clines = [f"{sym.name} += {sympy.ccode(expr.subs(w_sym, in_syn_sym) - sym)};"
-                  for sym, expr in self.jumps.items()]
 
-        clines.append("inSyn = 0;")
+        # Add jumps for non-inSyn symbols
+        clines = [f"{sym.name} += {sympy.ccode(expr.subs(w_sym, in_syn_sym) - sym)};"
+                  for sym, expr in self.jumps.items()
+                  if sym != in_syn_sym]
+
+        # If an inSyn jump isn't specified, zero it
+        if in_syn_sym not in self.jumps:
+            clines.append("inSyn = 0;")
         return "\n".join(clines)
 
     # **TODO** property
