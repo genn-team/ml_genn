@@ -1531,7 +1531,11 @@ class EventPropCompiler(Compiler):
         # Build adjoint system from model
         dl_dt, adjoint_jumps, saved_vars =\
             self._build_adjoint_system(model, True)
-        
+
+        # Add continous drive term to LambdaV
+        # **THOMAS** how do we know where this goes? is it always the 'output' variable?
+        dl_dt[_get_lmd_sym("v")] += sympy.Symbol("drive")
+
         # Add adjoint state variables
         # **THINK** what about reset
         for lambda_sym in dl_dt.keys():
