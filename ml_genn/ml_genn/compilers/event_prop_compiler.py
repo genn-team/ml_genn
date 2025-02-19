@@ -83,60 +83,13 @@ logger = logging.getLogger(__name__)
 # read and write offsets check for wraparound, this can continue forever
 # **NOTE** due to the inprecision of ASCII diagramming there are out-by-one errors in the above
 
-"""
-default_params = {
-    LeakyIntegrate: {"scale_i": True}, 
-    LeakyIntegrateFire: {"relative_reset": False, 
-                         "integrate_during_refrac": False,
-                         "scale_i": True},
-    LeakyIntegrateFireInput: {"relative_reset": False, 
-                              "integrate_during_refrac": False,
-                              "scale_i": True},
-    Exponential: {"scale_i": True}}
-"""
-
-# **THINK** shouldn't graidnet actually be added per-variable we're learning?
+# Basic weight-update model for connections without delay
 weight_update_model = {
-    "vars": [("weight", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")], 
+    "params": [("weight", "scalar")], 
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "pre_spike_syn_code": """
     addToPost(weight);
     """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """}
-
-# Standard EventProp weight update model with learnable delay
-# **NOTE** feedback is added if required
-learnable_delay_weight_update_model = {
-    "params": [("TauSyn", "scalar"), ("MaxDelay", "int")],
-    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar"),
-             ("d", "scalar", VarAccess.READ_ONLY), ("DelayGradient", "scalar")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "post_neuron_var_refs": [("LambdaI_post", "scalar"), ("LambdaV_post", "scalar")],
-                             
-    "pre_spike_syn_code": """
-    const int delay = max(0, min(MaxDelay, (int)round(d)));
-    addToPostDelay(g, delay);
-    """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """,
-    "pre_event_syn_code": """
-    const int delay = max(0, min(MaxDelay, (int)round(d)));
-    Gradient -= (LambdaI_post[delay] * TauSyn);
-    DelayGradient -= g * (LambdaI_post[delay] - LambdaV_post[delay]);
-    """}
-
-# Weight update model used on non-trainable connections
-# **NOTE** feedback is added if required
-static_weight_update_model = {
-    "params": [("g", "scalar")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "pre_spike_syn_code":
-        """
-        addToPost(g);
-        """,
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """}
@@ -209,34 +162,14 @@ neuron_reset_strict_check = """
     }
     """
 
-# Standard EventProp weight update model with fixed delay
-# **NOTE** feedback is added if required
+# Build basic weight-update model for connections with delay
 def _get_delay_weight_update_model(delay_type):
-    return {"params": [("TauSyn", "scalar"), ("d", delay_type)],
-            "vars": [("g", "scalar", VarAccess.READ_ONLY), 
-                     ("Gradient", "scalar")],
+    return {"params": [("delay", delay_type), ("weight", "scalar")],
             "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-            "post_neuron_var_refs": [("LambdaI_post", "scalar")],
                              
             "pre_spike_syn_code": """
             addToPostDelay(g, d);
             """,
-            "pre_event_threshold_condition_code": """
-            BackSpike_pre
-            """,
-            "pre_event_syn_code": """
-            Gradient -= (LambdaI_post[d] * TauSyn);
-            """}
-
-# Weight update model used on non-trainable connections with delay
-# **NOTE** feedback is added if required
-def _get_static_delay_weight_update_model(delay_type):
-    return {"params": [("g", "scalar"), ("d", delay_type)],
-            "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-            "pre_spike_syn_code":
-                """
-                addToPostDelay(g, d);
-                """,
             "pre_event_threshold_condition_code": """
             BackSpike_pre
             """}
@@ -313,7 +246,7 @@ class CompileState:
         self.feedback_connections = []
         self.update_trial_pops = []
 
-    def add_optimiser_connection(self, conn, weight, delay):
+    def add_optimiser_connection(self, conn, weight: bool, delay: bool):
         self._optimiser_connections.append((conn, weight, delay))
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
@@ -729,88 +662,10 @@ class EventPropCompiler(Compiler):
         delay_type = get_delay_type(
             _get_conn_max_delay(conn, connect_snippet.delay))
 
-        # If this is some form of trainable connectivity
-        if connect_snippet.trainable:
-            # Determine whether atomic weight updates are required
-            # **YUCK** backend-specific code shouldn't be required in models
-            # **TODO** something when OpenCL
-            use_atomic = (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
-            assert not use_atomic
+        # Mark which sorts of optimiser connection will require
+        compile_state.add_optimiser_connection(conn, connect_snippet.trainable,
+                                               has_learnable_delay)
 
-            """
-            # If this connection has learnable delays
-            if has_learnable_delay:
-                # Check maximum delay steps is set
-                if conn.max_delay_steps is None:
-                    raise RuntimeError(f"Maximum delay steps must be specified for "
-                                       f"Connection {conn.name} with delay learning")
-
-                # Create weight update model with learable delays
-                wum = WeightUpdateModel(
-                    model=deepcopy(learnable_delay_weight_update_model),
-                    param_vals={"TauSyn": tau_syn, "MaxDelay": conn.max_delay_steps},
-                    var_vals={"g": connect_snippet.weight, "Gradient": 0.0,
-                              "d": connect_snippet.delay, "DelayGradient": 0.0},
-                    pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
-                    post_neuron_var_refs={"LambdaI_post": "LambdaI", "LambdaV_post": "LambdaV"})
-
-                # Add delays to list of checkpoint vars
-                compile_state.checkpoint_connection_vars.append((conn, "d"))
-
-                # Mark connection as requiring delay and weight optimisation
-                compile_state.add_optimiser_connection(conn, True, True)
-            # Otherwise
-            else:
-                # Create basic weight update model
-                # **TODO** call getter
-                wum = WeightUpdateModel(
-                    model=(_get_delay_weight_update_model(delay_type) if has_delay 
-                           else deepcopy(weight_update_model)),
-                    param_vals={"TauSyn": tau_syn},
-                    var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
-                    pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
-                    post_neuron_var_refs={"LambdaI_post": "LambdaI"})
-
-                # Mark connection as requiring weight optimisation
-                compile_state.add_optimiser_connection(conn, True, False)
-
-            # Add weights to list of checkpoint vars
-            compile_state.checkpoint_connection_vars.append((conn, "g"))
-
-        # Otherwise, e.g. it's a pooling layer
-        else:
-            wum = WeightUpdateModel(
-                model=(_get_static_delay_weight_update_model(delay_type)
-                       if has_delay 
-                       else deepcopy(static_weight_update_model)),
-                param_vals={"g": connect_snippet.weight},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
-        
-        # If connection has non-learnable delay, set parameter value
-        # **NOTE** delay is a state variable for learnable connections
-        if not has_learnable_delay and has_delay:
-            wum.param_vals["d"] = connect_snippet.delay
-
-        # If source neuron isn't an input neuron
-        source_neuron = conn.source().neuron
-        if not isinstance(source_neuron, Input):
-            # Add connection to list of feedback connections
-            compile_state.feedback_connections.append(conn)
-
-            # If it's LIF, add additional event code to backpropagate gradient
-            if isinstance(source_neuron, LeakyIntegrateFire):
-                if has_learnable_delay:
-                    wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[delay] - LambdaI_post[delay]));")
-                else:
-                    wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
-                    
-                    if has_delay:
-                        wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[d] - LambdaI_post[d]));")
-                    else:
-                        wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post - LambdaI_post));")
-
-        # Return weight update model
-        """
         # Get synapse mdeol
         synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
         assert isinstance(synapse_model, AutoSynapseModel)
@@ -832,26 +687,39 @@ class EventPropCompiler(Compiler):
                                                     self.batch_size)
         assert isinstance(trg_neuron_model, AutoNeuronModel)
 
+        # Create basic weight update model
+        # **TODO** start with _get_delay_weight_update_model if delayed
         genn_model = WeightUpdateModel(
             model=deepcopy(weight_update_model),
-            var_vals= {"weight": connect_snippet.weight, "Gradient": 0.0},
+            param_vals= {"weight": connect_snippet.weight},
             pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
 
-        # assemble gradient update
-        grad_update = 0
-        for jump_sym, jump_expr in synapse_model.jumps.items():
-            lambda_sym = _get_lmd_sym(jump_sym)
-            grad_update -= lambda_sym * sympy.diff(jump_expr, sympy.Symbol("weight"))
-            genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
-        
-        genn_model.append_pre_event_syn_code(f"Gradient += {sympy.ccode(grad_update)};")
-        logger.debug(f"\tGradient update: {grad_update}")
-        logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
-        
-        # If any synapse parameters are referenced in gradient 
-        # update expression, duplicate in weight update model
-        _add_required_parameters(synapse_model, genn_model, grad_update)
-        
+        # If weights can be trained
+        if connect_snippet.trainable:
+            # Ensure weights are instantiated as a state variable
+            genn_model.make_param_var("weight")
+
+            # Add weight gradient
+            genn_model.add_var("weightGradient", "scalar", 0.0)
+
+            # Add weights to list of checkpoint vars
+            compile_state.checkpoint_connection_vars.append((conn, "weight"))
+            
+            # assemble gradient update
+            grad_update = 0
+            for jump_sym, jump_expr in synapse_model.jumps.items():
+                lambda_sym = _get_lmd_sym(jump_sym)
+                grad_update -= lambda_sym * sympy.diff(jump_expr, sympy.Symbol("weight"))
+                genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
+            
+            genn_model.append_pre_event_syn_code(f"weightGradient += {sympy.ccode(grad_update)};")
+            logger.debug(f"\tGradient update: {grad_update}")
+            logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
+            
+            # If any synapse parameters are referenced in gradient 
+            # update expression, duplicate in weight update model
+            _add_required_parameters(synapse_model, genn_model, grad_update)
+            
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
         if not isinstance(source_neuron, Input):
@@ -947,14 +815,6 @@ class EventPropCompiler(Compiler):
 
             # Convert expression to c-code and insert call to addToPre
             genn_model.append_pre_event_syn_code(f"addToPre({sympy.ccode(add_to_pre)});")
-        
-        # Mark connection as requiring weight optimisation
-        # **TODO** depends on model
-        compile_state.add_optimiser_connection(conn, "weight", None)
-
-        # Add weights to list of checkpoint vars
-        # **TODO** depends on model
-        compile_state.checkpoint_connection_vars.append((conn, "weight"))
 
         return genn_model
 
@@ -973,25 +833,25 @@ class EventPropCompiler(Compiler):
             
             # If weight optimisation is required
             gradient_vars = []
-            if w is not None:
+            if w:
                 # Create weight optimiser custom update
                 cu_weight = self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, w),
-                    create_wu_var_ref(genn_pop, "Gradient"), 
+                    f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
+                    create_wu_var_ref(genn_pop, "weightGradient"), 
                     self._optimiser, genn_model)
                 
                 # Add custom update to list of optimisers
                 weight_optimiser_cus.append(cu_weight)
 
                 # Add gradient to list of gradient vars to zero
-                gradient_vars.append(("Gradient", "scalar", 0.0))
+                gradient_vars.append(("weightGradient", "scalar", 0.0))
             
             # If delay optimiser is required
-            if d is not None:
+            if d:
                 # Create delay optimiser custom update
                 cu_delay = self._create_optimiser_custom_update(
-                    f"Delay{i}", create_wu_var_ref(genn_pop, d),
-                    create_wu_var_ref(genn_pop, "DelayGradient"),
+                    f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
+                    create_wu_var_ref(genn_pop, "delayGradient"),
                     self._delay_optimiser, genn_model,
                     (0.0, c.max_delay_steps))
 
@@ -999,7 +859,7 @@ class EventPropCompiler(Compiler):
                 delay_optimiser_cus.append(cu_delay)
                 
                 # Add gradient to list of gradient vars to zero
-                gradient_vars.append(("DelayGradient", "scalar", 0.0))
+                gradient_vars.append(("delayGradient", "scalar", 0.0))
 
             # Create reset model for gradient variables
             assert len(gradient_vars) > 0
