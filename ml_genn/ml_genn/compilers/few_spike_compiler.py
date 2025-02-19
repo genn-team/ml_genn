@@ -268,6 +268,10 @@ class FewSpikeCompiler(Compiler):
                 "FewSpike models only support FewSpikeRelu "
                 "and FewSpikeReluInput neurons")
 
+        # Build neuron model
+        model = super(FewSpikeCompiler, self).build_neuron_model(
+            pop, model, compile_state)
+
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             # Check readout is supported
@@ -278,10 +282,8 @@ class FewSpikeCompiler(Compiler):
 
             # Add readout logic to model
             pop.neuron.readout.add_readout_logic(model)
-
-        # Build neuron model
-        return super(FewSpikeCompiler, self).build_neuron_model(
-            pop, model, compile_state)
+        
+        return model
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
                             compile_state: CompileState) -> SynapseModel:
