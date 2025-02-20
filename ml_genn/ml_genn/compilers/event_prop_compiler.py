@@ -1312,13 +1312,12 @@ class EventPropCompiler(Compiler):
                         ("SpikeCountBackBatch", "int", "SpikeCount"))
 
                 # Add additional transition code to apply regularisation
-                # **THOMAS** how do we know which lamba to apply this too?
                 transition_code += f"""
                     if (SpikeCountBackBatch > RegNuUpperBatch) {{
-                        {_get_lmd_name('v')} -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
+                        {_get_lmd_name(model.output_var_name)} -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
                     }}
                     else {{
-                        {_get_lmd_name('v')} -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
+                        {_get_lmd_name(model.output_var_name)} -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
                     }}
                     """
                     
@@ -1393,8 +1392,7 @@ class EventPropCompiler(Compiler):
             self._build_adjoint_system(model, True)
 
         # Add continous drive term to LambdaV
-        # **THOMAS** how do we know where this goes? is it always the 'output' variable?
-        dl_dt[_get_lmd_sym("v")] += sympy.Symbol("drive")
+        dl_dt[_get_lmd_sym(model.output_var_name)] += sympy.Symbol("drive")
 
         # Add adjoint state variables
         # **THINK** what about reset
