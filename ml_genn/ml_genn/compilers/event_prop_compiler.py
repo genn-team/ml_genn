@@ -332,7 +332,7 @@ class CompileState:
     @property
     def is_reset_custom_update_required(self):
         return (len(self._neuron_reset_vars) > 0
-                and len(self._synapse_reset_vars) > 0)
+                or len(self._synapse_reset_vars) > 0)
 
 
 class UpdateTrial(Callback):
