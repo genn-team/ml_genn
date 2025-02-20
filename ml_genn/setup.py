@@ -6,5 +6,6 @@ setup(name="ml_genn",
 
       python_requires=">=3.7.0",
       install_requires=["pygenn>=5.1.0,<6.0.0",
-                        "enum-compat",
-                        "tqdm>=4.27.0", "deprecated"])
+                        "enum-compat", "deprecated",
+                        "sympy>=1.9.0,<2.0.0",
+                        "tqdm>=4.27.0", ])
