@@ -12,8 +12,8 @@ class Readout(ABC):
     """Base class for all readouts"""
     
     @abstractmethod
-    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
-        """Create a copy of a neuron model with any additional state 
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
+        """Add any additional state to neuron model
         and functionality required to implement this readout added.
 
         Args:

@@ -7,10 +7,10 @@ from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
-from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.neurons import UserNeuron, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
-from ml_genn.synapses import Exponential
+from ml_genn.synapses import UserSynapse
 
 from time import perf_counter
 from ml_genn.utils.data import linear_latency_encode_data
@@ -25,6 +25,21 @@ DT = 1.0
 SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
+
+exp_synapse = UserSynapse(vars={"i": ("-i / tau", "i + weight")},
+                          inject_current="i",
+                          param_vals={"tau": 5.0},
+                          var_vals={"i": 0.0})
+lif_neuron = UserNeuron(vars={"v": ("(-v + Isyn) / tau_mem", "0.0")},
+                        threshold="v - 1.0",
+                        output_var_name="v",
+                        param_vals={"tau_mem": 20.0},
+                        var_vals={"v": 0.0})
+li_neuron = UserNeuron(vars={"v": ("(-v + Isyn) / tau_mem", None)},
+                       output_var_name="v",
+                       param_vals={"tau_mem": 20.0},
+                       var_vals={"v": 0.0},
+                       readout="avg_var")
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
@@ -41,11 +56,9 @@ with network:
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
-    hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
-                   NUM_HIDDEN, Exponential(5.0))
-    output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
-                   NUM_OUTPUT, Exponential(5.0))
+    hidden = Layer(connectivity, lif_neuron, NUM_HIDDEN, exp_synapse)
+    output = Layer(Dense(Normal(mean=0.2, sd=0.37)), li_neuron,
+                   NUM_OUTPUT, exp_synapse)
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
