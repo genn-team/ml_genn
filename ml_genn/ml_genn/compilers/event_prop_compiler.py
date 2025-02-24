@@ -129,7 +129,7 @@ neuron_backward_pass = Template(
         BackSpike = false;
     }
     // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if (RingReadOffset != RingReadEndOffset && fabs(backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) < 1e-3*dt) {
+    if (RingReadOffset != RingReadEndOffset && (backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) <= 0.0) {
         BackSpike = true;
     }
 
@@ -1218,7 +1218,7 @@ class EventPropCompiler(Compiler):
                            self.max_spikes - 1, reset=False)
 
         # Add variable to hold backspike flag
-        genn_model.add_var("BackSpike", "uint8_t", False, reset=False)
+        genn_model.add_var("BackSpike", "uint8_t", False)
 
         # Add EGP for spike time ring variables
         spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
@@ -1312,7 +1312,8 @@ class EventPropCompiler(Compiler):
                         ("SpikeCountBackBatch", "int", "SpikeCount"))
 
                 # Add additional transition code to apply regularisation
-                transition_code += f"""
+                transition_code = f"""
+                    {transition_code}
                     if (SpikeCountBackBatch > RegNuUpperBatch) {{
                         {_get_lmd_name(model.output_var_name)} -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
                     }}
@@ -1408,11 +1409,11 @@ class EventPropCompiler(Compiler):
         if sce_loss:
             # Add variable, shared across neurons to hold true label for batch
             genn_model.add_var("YTrue", "uint8_t", 0, 
-                               VarAccess.READ_ONLY_SHARED_NEURON)
+                               VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
 
             # Add second variable to hold the true label for the backward pass
             genn_model.add_var("YTrueBack", "uint8_t", 0, 
-                               VarAccess.READ_ONLY_SHARED_NEURON)
+                               VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
         elif mse_loss:
             # The true label is the desired voltage output over time
             flat_shape = np.prod(pop.shape)
@@ -1514,7 +1515,8 @@ class EventPropCompiler(Compiler):
                 if sce_loss:
                     # Add state variable to hold softmax of output
                     genn_model.add_var("Softmax", "scalar", 0.0,
-                                       VarAccess.READ_ONLY_DUPLICATE)
+                                       VarAccess.READ_ONLY_DUPLICATE,
+                                       reset=False)
 
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
@@ -1564,7 +1566,7 @@ class EventPropCompiler(Compiler):
                     elif isinstance(pop.neuron.readout, MaxVar):
                         # Add state variable to hold vmax from previous trial
                         genn_model.add_var(model.output_var_name + "MaxTimeBack", "scalar", 0.0,
-                                           VarAccess.READ_ONLY_DUPLICATE)
+                                           VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
                         genn_model.prepend_sim_code(
                             f"""
@@ -1620,11 +1622,7 @@ class EventPropCompiler(Compiler):
             # Substitute saved variables for those in the ring buffer
             transition_code = Template(transition_code).substitute(
                 {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
-    
-            # it is a spiking neuron -> it has to use TTFS loss
-            # Get reset vars before we add ring-buffer variables
-            reset_vars = genn_model.reset_vars
-                
+
             # Add variables to hold offsets for 
             # reading and writing ring variables
             genn_model.add_var("RingWriteOffset", "int", 0, reset=False)
@@ -1640,7 +1638,7 @@ class EventPropCompiler(Compiler):
                                 self.max_spikes - 1, reset=False)
 
             # Add variable to hold backspike flag
-            genn_model.add_var("BackSpike", "uint8_t", False, reset=False)
+            genn_model.add_var("BackSpike", "uint8_t", False)
 
             # Add EGP for spike time ring variables
             spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
@@ -1670,12 +1668,12 @@ class EventPropCompiler(Compiler):
                 
                 # Add state variable to hold softmax of output
                 genn_model.add_var("Softmax", "scalar", 0.0,
-                                    VarAccess.READ_ONLY_DUPLICATE)
+                                    VarAccess.READ_ONLY_DUPLICATE, reset=False)
                 
                 # Add state variable to hold TFirstSpike from previous trial
                 # **YUCK** REALLY should be timepoint but then you can't softmax
                 genn_model.add_var("TFirstSpikeBack", "scalar", 0.0,
-                                    VarAccess.READ_ONLY_DUPLICATE)
+                                    VarAccess.READ_ONLY_DUPLICATE, reset=False)
                 
                 # In backward pass, update lambdas and apply phantom spike if:
                 # 1) This is first timestep of backward pass
@@ -1700,13 +1698,13 @@ class EventPropCompiler(Compiler):
                             drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
                         }}
                     }}
-                    
-                    """ + transition_code
+                    {transition_code}
+                    """
 
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
                 compile_state.add_neuron_reset_vars(
-                    pop, [("TFirstSpikeBack", "scalar", "TFirstSpike")] + reset_vars,
+                    pop, [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars,
                     True, False)
                 
                 # Add second reset custom update to reset YTrueBack to YTrue
