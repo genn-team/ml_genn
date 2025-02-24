@@ -1401,7 +1401,7 @@ class EventPropCompiler(Compiler):
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
         
         # Prepend continous adjoint system update
-        genn_model.prepend_sim_code(solve_ode(dl_dt, self.solver))
+        dynamics_code = solve_ode(dl_dt, self.solver)
         
         # **TODO** move logic into loss classes
         # **HACK** we don't want to call add_to_neuron on loss function as
@@ -1452,16 +1452,16 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         genn_model.prepend_sim_code(
                             f"""
+                            scalar drive = 0.0;
                             const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
                                 RingReadOffset--;
                                 const scalar softmax = RingOutputLossTerm[ringOffset + RingReadOffset];
                                 const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
                             }}
-                            
-                            // Forward pass
+
+                            {dynamics_code}
                             """)
 
                         # Add custom updates to calculate 
@@ -1483,13 +1483,15 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, Var):
                         genn_model.prepend_sim_code(
                             f"""
+                            scalar drive = 0.0;
                             const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
                                 RingReadOffset--;
                                 const scalar error = RingOutputLossTerm[ringOffset + RingReadOffset];
                                 drive = error / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p  = 0.0;
                             }}
+                            
+                            {dynamics_code}
                             """)
 
                         # Add custom update to reset state JAMIE_CHECK
@@ -1522,13 +1524,13 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         genn_model.prepend_sim_code(
                             f"""
+                            scalar drive = 0.0;
                             if (Trial > 0) {{
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
                             }}
                             
-                            // Forward pass
+                            {dynamics_code}
                             """)
                     
                         # Add custom updates to calculate 
@@ -1546,13 +1548,14 @@ class EventPropCompiler(Compiler):
                         local_t_scale = 1.0 / (self.dt * self.example_timesteps)
                         genn_model.prepend_sim_code(
                             f"""
+                            // Backward pass
+                            scalar drive = 0.0;
                             if (Trial > 0) {{
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
                             }}
                             
-                            // Forward pass
+                            {dynamics_code}
                             """)
                     
                         # Add custom updates to calculate softmax from VAvg
@@ -1570,13 +1573,13 @@ class EventPropCompiler(Compiler):
 
                         genn_model.prepend_sim_code(
                             f"""
+                            scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
-                                drive_p = 0.0;
                             }}
                         
-                            // Forward pass
+                            {dynamics_code}
                             """)
                     
                         # Add custom updates to calculate softmax from VMax
@@ -1600,13 +1603,6 @@ class EventPropCompiler(Compiler):
                     raise NotImplementedError(
                         f"EventProp compiler doesn't support "
                         f"time averaged loss for regression.")
-            # Prepend standard code to update LambdaV and LambdaI
-            genn_model.prepend_sim_code(
-                f"""
-                // Backward pass
-                scalar drive = 0.0;
-                scalar drive_p = 0.0;
-                """)
 
             # Add second reset custom update to reset YTrueBack to YTrue
             # **NOTE** seperate as these are SHARED_NEURON variables
@@ -1668,7 +1664,7 @@ class EventPropCompiler(Compiler):
                 
                 # Add state variable to hold softmax of output
                 genn_model.add_var("Softmax", "scalar", 0.0,
-                                    VarAccess.READ_ONLY_DUPLICATE, reset=False)
+                                   VarAccess.READ_ONLY_DUPLICATE, reset=False)
                 
                 # Add state variable to hold TFirstSpike from previous trial
                 # **YUCK** REALLY should be timepoint but then you can't softmax
@@ -1680,8 +1676,11 @@ class EventPropCompiler(Compiler):
                 # 2) No spike occurred in preceding forward pass
                 # 4) This is correct output neuron 
                 dynamics_code = f"""
+                    const scalar drive = 0.0;
+                    {dynamics_code}
+
                     if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
-                        drive_p = {phantom_scale / self.batch_size};
+                        {_get_lmd_name(model.output_var_name)} += {phantom_scale / self.batch_size};
                     }}
                     """
 
@@ -1689,6 +1688,7 @@ class EventPropCompiler(Compiler):
                 # **THOMAS** why are we dividing by what looks like softmax temperature?
                 # **TODO** build transition_code from adjoint_jumps here
                 transition_code = f"""
+                    scalar drive_p = 0.0;
                     if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                         if (id == YTrueBack) {{
                             const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
@@ -1721,14 +1721,6 @@ class EventPropCompiler(Compiler):
                         dynamics=dynamics_code,
                         transition=transition_code))
 
-                # Prepend code defining the drive vars
-                genn_model.prepend_sim_code(
-                    f"""
-                    // Backward pass
-                    scalar drive = 0.0;
-                    scalar drive_p = 0.0;
-                    """)
-
                 # Generate ring-buffer write code
                 write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                     for v in saved_vars)
@@ -1738,7 +1730,7 @@ class EventPropCompiler(Compiler):
                 genn_model.prepend_reset_code(
                     neuron_reset.substitute(
                         max_spikes=self.max_spikes,
-                        write= write_code,
+                        write=write_code,
                         strict_check=(neuron_reset_strict_check 
                                       if self.strict_buffer_checking
                                       else "")))
