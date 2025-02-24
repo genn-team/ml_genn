@@ -1657,11 +1657,7 @@ class EventPropCompiler(Compiler):
                     raise NotImplementedError(
                         f"EventProp compiler only supports calculating "
                         f"cross-entropy loss with 'FirstSpikeTime' readouts.")
-                
-                # **THOMAS** where does this madness come from?
-                example_time = self.dt * self.example_timesteps
-                phantom_scale = self.ttfs_alpha / (0.0001 * example_time * example_time)
-                
+
                 # Add state variable to hold softmax of output
                 genn_model.add_var("Softmax", "scalar", 0.0,
                                    VarAccess.READ_ONLY_DUPLICATE, reset=False)
@@ -1670,23 +1666,11 @@ class EventPropCompiler(Compiler):
                 # **YUCK** REALLY should be timepoint but then you can't softmax
                 genn_model.add_var("TFirstSpikeBack", "scalar", 0.0,
                                     VarAccess.READ_ONLY_DUPLICATE, reset=False)
-                
-                # In backward pass, update lambdas and apply phantom spike if:
-                # 1) This is first timestep of backward pass
-                # 2) No spike occurred in preceding forward pass
-                # 4) This is correct output neuron 
-                dynamics_code = f"""
-                    const scalar drive = 0.0;
-                    {dynamics_code}
-
-                    if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
-                        {_get_lmd_name(model.output_var_name)} += {phantom_scale / self.batch_size};
-                    }}
-                    """
 
                 # On backward pass transition, update LambdaV if this is the first spike
                 # **THOMAS** why are we dividing by what looks like softmax temperature?
                 # **TODO** build transition_code from adjoint_jumps here
+                example_time = self.dt * self.example_timesteps
                 transition_code = f"""
                     scalar drive_p = 0.0;
                     if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
@@ -1717,8 +1701,11 @@ class EventPropCompiler(Compiler):
                 genn_model.prepend_sim_code(
                     neuron_backward_pass.substitute(
                         max_spikes=self.max_spikes,
-                        example_time=(self.example_timesteps * self.dt),
-                        dynamics=dynamics_code,
+                        example_time=example_time,
+                        dynamics=f"""
+                            const scalar drive = 0.0;
+                            {dynamics_code}
+                            """,
                         transition=transition_code))
 
                 # Generate ring-buffer write code
@@ -1727,13 +1714,24 @@ class EventPropCompiler(Compiler):
 
                 # Prepend (as it accesses the pre-reset value of V) 
                 # code to reset to write spike time and saved vars to ring buffer
-                genn_model.prepend_reset_code(
-                    neuron_reset.substitute(
-                        max_spikes=self.max_spikes,
-                        write=write_code,
-                        strict_check=(neuron_reset_strict_check 
-                                      if self.strict_buffer_checking
-                                      else "")))
+                reset_code = neuron_reset.substitute(
+                    max_spikes=self.max_spikes,
+                    write=write_code,
+                    strict_check=(neuron_reset_strict_check 
+                                  if self.strict_buffer_checking
+                                  else ""))
+                genn_model.prepend_reset_code(reset_code)
+
+                # If it's last timestep, neuron hasn't spiked, 
+                # isn't just about to and is correct output, update 
+                # TFirstSpike and insert event into ring-buffer
+                phantom_code = f"""
+                if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
+                    TFirstSpike = fmax(-t, TFirstSpike);
+                    {reset_code}
+                }}
+                """
+                genn_model.append_sim_code(phantom_code)
                 
                 # Add custom updates to calculate softmax from TFirstSpike
                 compile_state.batch_softmax_populations.append(
