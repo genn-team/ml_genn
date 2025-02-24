@@ -1263,10 +1263,10 @@ class EventPropCompiler(Compiler):
             genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
 
             # Add EGP for stored vars ring variables
-            ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
             for var in saved_vars:
                 genn_model.add_egp(f"Ring{var}", "scalar*", 
-                                   np.empty(ring_size, dtype=np.float32))
+                                   np.empty(spike_ring_size, dtype=np.float32))
 
             # Add state variables and reset for lambda variables
             for lambda_sym in dl_dt.keys():
