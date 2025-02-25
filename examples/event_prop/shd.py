@@ -86,21 +86,21 @@ if TRAIN:
                      SpikeRecorder(hidden, key="hidden_spikes", example_filter=[0,32,64]),
                      VarRecorder(output, "v", key="out_v", example_filter=[0,32,64]),
                      VarRecorder(hidden, "v", key="hidden_v", example_filter=[0,32,64]),
-                     VarRecorder(hidden, genn_var="LambdaV", key="hidden_lambda_v", example_filter=[0,32,64]),
-                     VarRecorder(hidden, genn_var="LambdaI", key="hidden_lambda_i", example_filter=[0,32,64]),
-                     VarRecorder(hidden, genn_var="SpikeCount", key="hidden_spike_count", example_filter=[0,32,64]),
-                     VarRecorder(hidden, genn_var="SpikeCountBackBatch", key="hidden_spike_count_back", example_filter=[0,32,64]),
-                     VarRecorder(output, genn_var="LambdaV", key="out_lambda_v", example_filter=[0,32,64]),
-                     VarRecorder(output, genn_var="LambdaI", key="out_lambda_i", example_filter=[0,32,64]),
-                     ConnVarRecorder(in_hid, "g", key="in_hid_g", example_filter=[0,32,64]),
-                     ConnVarRecorder(in_hid, "Gradient", key="in_hid_grad", example_filter=[0,32,64]),
-                     ConnVarRecorder(hid_out, "g", key="hid_out_g", example_filter=[0,32,64]),
-                     ConnVarRecorder(hid_out, "Gradient", key="hid_out_grad", example_filter=[0,32,64])]
+                     VarRecorder(hidden, "Lambdav", key="hidden_lambda_v", example_filter=[0,32,64]),
+                     #VarRecorder(hidden, "Lambdai", key="hidden_lambda_i", example_filter=[0,32,64]),
+                     VarRecorder(hidden, "SpikeCount", key="hidden_spike_count", example_filter=[0,32,64]),
+                     VarRecorder(hidden, "SpikeCountBackBatch", key="hidden_spike_count_back", example_filter=[0,32,64]),
+                     VarRecorder(output, "Lambdav", key="out_lambda_v", example_filter=[0,32,64]),
+                     #VarRecorder(output, "Lambdai", key="out_lambda_i", example_filter=[0,32,64]),
+                     ConnVarRecorder(in_hid, "weight", key="in_hid_g", example_filter=[0,32,64]),
+                     ConnVarRecorder(in_hid, "weightGradient", key="in_hid_grad", example_filter=[0,32,64]),
+                     ConnVarRecorder(hid_out, "weight", key="hid_out_g", example_filter=[0,32,64]),
+                     ConnVarRecorder(hid_out, "weightGradient", key="hid_out_grad", example_filter=[0,32,64])]
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=False,
                                                callbacks=callbacks)
-        tag = "_master"
+        tag = "_auto"
         np.savez(f"in_spike_times{tag}", *cb_data["in_spikes"][0])
         np.savez(f"in_spike_ids{tag}", *cb_data["in_spikes"][1])
         np.savez(f"hidden_spike_times{tag}", *cb_data["hidden_spikes"][0])
@@ -108,11 +108,11 @@ if TRAIN:
         np.save(f"out_v{tag}.npy", cb_data["out_v"])
         np.save(f"hidden_v{tag}.npy", cb_data["hidden_v"])
         np.save(f"hidden_lambda_v{tag}.npy", cb_data["hidden_lambda_v"])
-        np.save(f"hidden_lambda_i{tag}.npy", cb_data["hidden_lambda_i"])
+        #np.save(f"hidden_lambda_i{tag}.npy", cb_data["hidden_lambda_i"])
         np.save(f"hidden_spike_count{tag}.npy", cb_data["hidden_spike_count"])
         np.save(f"hidden_spike_count_back{tag}.npy", cb_data["hidden_spike_count_back"])
         np.save(f"out_lambda_v{tag}.npy", cb_data["out_lambda_v"])
-        np.save(f"out_lambda_i{tag}.npy", cb_data["out_lambda_i"])
+        #np.save(f"out_lambda_i{tag}.npy", cb_data["out_lambda_i"])
         np.save(f"in_hid_g{tag}.npy", cb_data["in_hid_g"])
         np.save(f"in_hid_grad{tag}.npy", cb_data["in_hid_grad"])
         np.save(f"hid_out_g{tag}.npy", cb_data["hid_out_g"])
