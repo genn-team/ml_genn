@@ -15,13 +15,14 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
+from ..metrics import MetricsType
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
-from ..readouts import AvgVar, AvgVarExpWeight, MaxVar, SumVar, Var
+from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
+                        MaxVar, SumVar, Var)
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
-from ..utils.data import MetricsType
 from ..utils.model import (CustomUpdateModel, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
 from ..utils.network import PopulationType
@@ -29,7 +30,7 @@ from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
 from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
-from .compiler import create_reset_custom_update
+from .compiler import create_reset_custom_update, get_delay_type
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_array, is_value_constant
@@ -89,6 +90,158 @@ default_params = {
                               "scale_i": True},
     Exponential: {"scale_i": True}}
 
+# Standard EventProp weight update model
+# **NOTE** feedback is added if required
+weight_update_model = {
+    "params": [("TauSyn", "scalar")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
+                             
+    "pre_spike_syn_code": """
+    addToPost(g);
+    """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """,
+    "pre_event_syn_code": """
+    Gradient -= (LambdaI_post * TauSyn);
+    """}
+
+# Standard EventProp weight update model with learnable delay
+# **NOTE** feedback is added if required
+learnable_delay_weight_update_model = {
+    "params": [("TauSyn", "scalar"), ("MaxDelay", "int")],
+    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar"),
+             ("d", "scalar", VarAccess.READ_ONLY), ("DelayGradient", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "post_neuron_var_refs": [("LambdaI_post", "scalar"), ("LambdaV_post", "scalar")],
+                             
+    "pre_spike_syn_code": """
+    const int delay = max(0, min(MaxDelay, (int)round(d)));
+    addToPostDelay(g, delay);
+    """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """,
+    "pre_event_syn_code": """
+    const int delay = max(0, min(MaxDelay, (int)round(d)));
+    Gradient -= (LambdaI_post[delay] * TauSyn);
+    DelayGradient -= g * (LambdaI_post[delay] - LambdaV_post[delay]);
+    """}
+
+# Weight update model used on non-trainable connections
+# **NOTE** feedback is added if required
+static_weight_update_model = {
+    "params": [("g", "scalar")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+    "pre_spike_syn_code":
+        """
+        addToPost(g);
+        """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """}
+
+gradient_batch_reduce_model = {
+    "vars": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
+    "var_refs": [("Gradient", "scalar")],
+    "update_code": """
+    ReducedGradient = Gradient;
+    Gradient = 0;
+    """}
+
+spike_count_batch_reduce_model = {
+    "var_refs": [("SpikeCount", "int"),
+                 ("SpikeCountBatch", "int", VarAccessMode.REDUCE_SUM)],
+    "update_code": """
+    SpikeCountBatch = SpikeCount;
+    SpikeCount = 0;
+    """}
+
+# Template used to generate backward passes for neurons
+neuron_backward_pass = Template(
+    """
+    const int ringOffset = (batch * num_neurons * $max_spikes) + (id * $max_spikes);
+    const scalar backT = $example_time - t - dt;
+
+    // Backward pass
+    $dynamics
+    if (BackSpike) {
+        $transition
+
+        // Decrease read pointer
+        RingReadOffset--;
+        if (RingReadOffset < 0) {
+            RingReadOffset = $max_spikes - 1;
+        }
+        BackSpike = false;
+    }
+    // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
+    if (RingReadOffset != RingReadEndOffset && fabs(backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) < 1e-3*dt) {
+        BackSpike = true;
+    }
+
+    // Forward pass
+    """)
+
+# Template used to generate reset code for neurons
+neuron_reset = Template(
+    """
+    if(RingWriteOffset != RingReadEndOffset) {
+        // Write spike time and I-V to tape
+        RingSpikeTime[ringOffset + RingWriteOffset] = t;
+        $write
+        RingWriteOffset++;
+
+        // Loop around if we've reached end of circular buffer
+        if (RingWriteOffset >= $max_spikes) {
+            RingWriteOffset = 0;
+        }
+    }
+    $strict_check
+    """)
+
+# Code used to add optional strict checking after neuron reset
+neuron_reset_strict_check = """
+    else {
+        printf("%f: hidden: ring buffer violation in neuron %d, read end offset: %d, write start offset: %d, read offset: %d, write offset: %d\\n", t, id, RingReadEndOffset, RingWriteStartOffset, RingReadOffset, RingWriteOffset);
+        assert(false);
+    }
+    """
+
+# Standard EventProp weight update model with fixed delay
+# **NOTE** feedback is added if required
+def _get_delay_weight_update_model(delay_type):
+    return {"params": [("TauSyn", "scalar"), ("d", delay_type)],
+            "vars": [("g", "scalar", VarAccess.READ_ONLY), 
+                     ("Gradient", "scalar")],
+            "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+            "post_neuron_var_refs": [("LambdaI_post", "scalar")],
+                             
+            "pre_spike_syn_code": """
+            addToPostDelay(g, d);
+            """,
+            "pre_event_threshold_condition_code": """
+            BackSpike_pre
+            """,
+            "pre_event_syn_code": """
+            Gradient -= (LambdaI_post[d] * TauSyn);
+            """}
+
+# Weight update model used on non-trainable connections with delay
+# **NOTE** feedback is added if required
+def _get_static_delay_weight_update_model(delay_type):
+    return {"params": [("g", "scalar"), ("d", delay_type)],
+            "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+            "pre_spike_syn_code":
+                """
+                addToPostDelay(g, d);
+                """,
+            "pre_event_threshold_condition_code": """
+            BackSpike_pre
+            """}
+
 def _get_tau_syn(pop):
     # Loop through incoming connections
     tau_syn = None
@@ -110,6 +263,23 @@ def _get_tau_syn(pop):
                                       "different time constants")
     assert tau_syn is not None
     return tau_syn
+
+def _get_conn_max_delay(conn, delay):
+    # If maximum delay steps is specified
+    if conn.max_delay_steps is not None:
+        return conn.max_delay_steps
+    # Otherwise, if delay is constant
+    elif is_value_constant(delay):
+        return 1 + delay
+    # Otherwise, if delays are specified as an array,
+    # calculate maximum delay steps from array
+    elif is_value_array(delay):
+        return np.amax(delay) + 1
+    else:
+        raise RuntimeError(f"Maximum delay associated with Connection "
+                          f"{conn.name} cannot be determined "
+                          f"automatically, please set max_delay_steps")
+
 
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
@@ -245,6 +415,7 @@ class CustomUpdateOnBatchEndNotFirst(Callback):
                          f"at end of batch {batch}")
             self._compiled_network.genn_model.custom_update(self.name)
 
+
 class CustomUpdateOnFirstBatchEnd(Callback):
     """Callback that triggers a GeNN custom update 
     at the end of first batch."""
@@ -261,156 +432,6 @@ class CustomUpdateOnFirstBatchEnd(Callback):
                          f"at end of batch {batch}")
             self._compiled_network.genn_model.custom_update(self.name)
 
-# Standard EventProp weight update model
-# **NOTE** feedback is added if required
-weight_update_model = {
-    "params": [("TauSyn", "scalar")],
-    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
-                             
-    "pre_spike_syn_code": """
-    addToPost(g);
-    """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """,
-    "pre_event_syn_code": """
-    Gradient -= (LambdaI_post * TauSyn);
-    """}
-
-# Standard EventProp weight update model with fixed delay
-# **NOTE** feedback is added if required
-delay_weight_update_model = {
-    "params": [("TauSyn", "scalar"), ("d", "uint8_t")],
-    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "post_neuron_var_refs": [("LambdaI_post", "scalar")],
-                             
-    "pre_spike_syn_code": """
-    addToPostDelay(g, d);
-    """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """,
-    "pre_event_syn_code": """
-    Gradient -= (LambdaI_post[d] * TauSyn);
-    """}
-
-# Standard EventProp weight update model with learnable delay
-# **NOTE** feedback is added if required
-learnable_delay_weight_update_model = {
-    "params": [("TauSyn", "scalar"), ("MaxDelay", "int")],
-    "vars": [("g", "scalar", VarAccess.READ_ONLY), ("Gradient", "scalar"),
-             ("d", "scalar", VarAccess.READ_ONLY), ("DelayGradient", "scalar")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "post_neuron_var_refs": [("LambdaI_post", "scalar"), ("LambdaV_post", "scalar")],
-                             
-    "pre_spike_syn_code": """
-    const int delay = max(0, min(MaxDelay, (int)round(d)));
-    addToPostDelay(g, delay);
-    """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """,
-    "pre_event_syn_code": """
-    const int delay = max(0, min(MaxDelay, (int)round(d)));
-    Gradient -= (LambdaI_post[delay] * TauSyn);
-    DelayGradient -= g * (LambdaI_post[delay] - LambdaV_post[delay]);
-    """}
-
-# Weight update model used on non-trainable connections
-# **NOTE** feedback is added if required
-static_weight_update_model = {
-    "params": [("g", "scalar")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "pre_spike_syn_code":
-        """
-        addToPost(g);
-        """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """}
-
-# Weight update model used on non-trainable connections with delay
-# **NOTE** feedback is added if required
-static_delay_weight_update_model = {
-    "params": [("g", "scalar"), ("d", "uint8_t")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "pre_spike_syn_code":
-        """
-        addToPostDelay(g, d);
-        """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
-    """}
-
-gradient_batch_reduce_model = {
-    "vars": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
-    "var_refs": [("Gradient", "scalar")],
-    "update_code": """
-    ReducedGradient = Gradient;
-    Gradient = 0;
-    """}
-
-spike_count_batch_reduce_model = {
-    "var_refs": [("SpikeCount", "int"),
-                 ("SpikeCountBatch", "int", VarAccessMode.REDUCE_SUM)],
-    "update_code": """
-    SpikeCountBatch = SpikeCount;
-    SpikeCount = 0;
-    """}
-
-# Template used to generate backward passes for neurons
-neuron_backward_pass = Template(
-    """
-    const int ringOffset = (batch * num_neurons * $max_spikes) + (id * $max_spikes);
-    const scalar backT = $example_time - t - dt;
-
-    // Backward pass
-    $dynamics
-    if (BackSpike) {
-        $transition
-
-        // Decrease read pointer
-        RingReadOffset--;
-        if (RingReadOffset < 0) {
-            RingReadOffset = $max_spikes - 1;
-        }
-        BackSpike = false;
-    }
-    // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if (RingReadOffset != RingReadEndOffset && fabs(backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) < 1e-3*dt) {
-        BackSpike = true;
-    }
-
-    // Forward pass
-    """)
-
-# Template used to generate reset code for neurons
-neuron_reset = Template(
-    """
-    if(RingWriteOffset != RingReadEndOffset) {
-        // Write spike time and I-V to tape
-        RingSpikeTime[ringOffset + RingWriteOffset] = t;
-        $write
-        RingWriteOffset++;
-
-        // Loop around if we've reached end of circular buffer
-        if (RingWriteOffset >= $max_spikes) {
-            RingWriteOffset = 0;
-        }
-    }
-    $strict_check
-    """)
-
-# Code used to add optional strict checking after neuron reset
-neuron_reset_strict_check = """
-    else {
-        printf("%f: hidden: ring buffer violation in neuron %d, read end offset: %d, write start offset: %d, read offset: %d, write offset: %d\\n", t, id, RingReadEndOffset, RingWriteStartOffset, RingReadOffset, RingWriteOffset);
-        assert(false);
-    }
-    """
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
@@ -477,6 +498,8 @@ class EventPropCompiler(Compiler):
         per_timestep_loss:          Should we use the per-timestep or
                                     per-trial loss functions described above?
         dt:                         Simulation timestep [ms]
+        ttfs_alpha                  TODO
+        softmax_temperature         TODO
         batch_size:                 What batch size should be used for
                                     training? In our experience, EventProp works
                                     best with modest batch sizes (32-128)
@@ -507,6 +530,7 @@ class EventPropCompiler(Compiler):
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
+                 ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None,
@@ -530,6 +554,8 @@ class EventPropCompiler(Compiler):
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
+        self.ttfs_alpha = ttfs_alpha
+        self.softmax_temperature = softmax_temperature
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
         self._delay_optimiser = get_object(
@@ -549,27 +575,14 @@ class EventPropCompiler(Compiler):
 
     def apply_delay(self, genn_pop, conn: Connection,
                     delay, compile_state):
-        # If maximum delay steps is specified
-        if conn.max_delay_steps is not None:
-            max_delay_steps = conn.max_delay_steps
-        # Otherwise, if delay is constant
-        elif is_value_constant(delay):
-            max_delay_steps = 1 + delay
-        # Otherwise, if delays are specified as an array,
-        # calculate maximum delay steps from array
-        elif is_value_array(delay):
-            max_delay_steps = np.amax(delay) + 1
-        else:
-            raise RuntimeError(f"Maximum delay associated with Connection "
-                              f"{conn.name} cannot be determined "
-                              f"automatically, please set max_delay_steps")
-    
-        # If maximum delay steps is within 8-bit limit, set max delay steps
-        # **NOTE** wouldn't be too hard to pick appropriate type
-        if max_delay_steps > 255:
-            raise NotImplmentedError(f"Maximum of {conn.max_delay_steps} "
-                                     f"delay steps for Connection "
-                                     f"{conn.name} exceeds 255")
+        # Get max delay
+        max_delay_steps = _get_conn_max_delay(conn, delay)
+        
+        # If maximum delay steps is within 16-bit limit, set max delay steps
+        if max_delay_steps > 65535:
+            raise NotImplementedError(f"Maximum of {conn.max_delay_steps} "
+                                      f"delay steps for Connection "
+                                      f"{conn.name} exceeds 65535")
         genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
     def build_neuron_model(self, pop: Population, model: NeuronModel,
@@ -609,31 +622,32 @@ class EventPropCompiler(Compiler):
                 egp_size = (self.example_timesteps * self.batch_size * flat_shape)
                 model_copy.add_egp("YTrue", "scalar*",
                               np.empty(egp_size, dtype=np.float32))
-                
+            
+             # Get tau_syn from population's incoming connections
+            tau_syn = _get_tau_syn(pop)
+
+            # Add adjoint state variables
+            model_copy.add_var("LambdaV", "scalar", 0.0)
+            model_copy.add_var("LambdaI", "scalar", 0.0)
+
+            # Add parameter with synaptic decay constant
+            beta = np.exp(-self.dt / tau_syn)
+            model_copy.add_param("Beta", "scalar", beta)
+
+            # Add parameter for scaling factor
+            tau_mem = pop.neuron.tau_mem
+            model_copy.add_param("TauM", "scalar", tau_mem)
+            model_copy.add_param("A", "scalar", 
+                                 tau_mem / (tau_mem - tau_syn))
+
+            # Add dynamic parameter to contain trial index and add 
+            # population to list of those which require it updating
+            model_copy.add_param("Trial", "unsigned int", 0)
+            model_copy.set_param_dynamic("Trial")
+            compile_state.update_trial_pops.append(pop)
+
             # If neuron model is a leaky integrator
             if isinstance(pop.neuron, LeakyIntegrate):
-                # Get tau_syn from population's incoming connections
-                tau_syn = _get_tau_syn(pop)
-
-                # Add adjoint state variables
-                model_copy.add_var("LambdaV", "scalar", 0.0)
-                model_copy.add_var("LambdaI", "scalar", 0.0)
-
-                # Add parameter with synaptic decay constant
-                model_copy.add_param("Beta", "scalar", np.exp(-self.dt / tau_syn))
-
-                # Add parameter for scaling factor
-                tau_mem = pop.neuron.tau_mem
-                model_copy.add_param("TauM", "scalar", tau_mem)
-                model_copy.add_param("A", "scalar", 
-                                     tau_mem / (tau_mem - tau_syn))
-
-                # Add dynamic parameter to contain trial index and add 
-                # population to list of those which require it updating
-                model_copy.add_param("Trial", "unsigned int", 0)
-                model_copy.set_param_dynamic("Trial")
-                compile_state.update_trial_pops.append(pop)
-
                 # Prepend standard code to update LambdaV and LambdaI
                 model_copy.prepend_sim_code(
                     f"""
@@ -813,6 +827,138 @@ class EventPropCompiler(Compiler):
                 if sce_loss:
                     compile_state.add_neuron_reset_vars(
                         pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+            # Otherwise, if neuron is LIF
+            elif isinstance(pop.neuron, LeakyIntegrateFire):
+                # Check EventProp constraints
+                if pop.neuron.integrate_during_refrac:
+                    logger.warning("EventProp learning works best with "
+                                    "LIF neurons which do not continue to "
+                                    "integrate in their refractory period")
+                if pop.neuron.relative_reset:
+                    logger.warning("EventProp learning works best "
+                                    "with LIF neurons with an "
+                                    "absolute reset mechanism")
+
+                # Get reset vars before we add ring-buffer variables
+                reset_vars = model_copy.reset_vars
+                    
+                # Add variables to hold offsets for 
+                # reading and writing ring variables
+                model_copy.add_var("RingWriteOffset", "int", 0)
+                model_copy.add_var("RingReadOffset", "int", self.max_spikes - 1)
+
+                # Add variables to hold offsets where this neuron
+                # started writing to ring during the forward
+                # pass and where data to read during backward pass ends
+                model_copy.add_var("RingWriteStartOffset", "int",
+                                    self.max_spikes - 1)
+                model_copy.add_var("RingReadEndOffset", "int", 
+                                    self.max_spikes - 1)
+                
+                # Add variable to hold backspike flag
+                model_copy.add_var("BackSpike", "uint8_t", False)
+
+                # Add EGP for spike time ring variables
+                ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+                model_copy.add_egp("RingSpikeTime", "scalar*", 
+                                    np.empty(ring_size, dtype=np.float32))
+                
+                # Add EGP for IMinusV ring variables
+                model_copy.add_egp("RingIMinusV", "scalar*", 
+                                    np.empty(ring_size, dtype=np.float32))
+                
+                # Add parameters with synaptic decay and scale constants
+                model_copy.add_param("IsynScale", "scalar",
+                    self.dt / (tau_syn  * (1.0 - beta)))
+            
+                # Readout has to be FirstSpikeTime
+                if isinstance(pop.neuron.readout, FirstSpikeTime):
+                    if not sce_loss:
+                        raise NotImplementedError(
+                            f"EventProp compiler only supports calculating "
+                            f"cross-entropy loss with 'FirstSpikeTime' readouts.")
+                    
+                    # **THOMAS** where does this madness come from?
+                    example_time = self.dt * self.example_timesteps
+                    phantom_scale = self.ttfs_alpha / (0.0001 * example_time * example_time)
+                    
+                    # Add state variable to hold softmax of output
+                    model_copy.add_var("Softmax", "scalar", 0.0,
+                                        VarAccess.READ_ONLY_DUPLICATE)
+                    
+                    # Add state variable to hold TFirstSpike from previous trial
+                    # **YUCK** REALLY should be timepoint but then you can't softmax
+                    model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
+                                        VarAccess.READ_ONLY_DUPLICATE)
+                    
+                    # In backward pass, update lambdas and apply phantom spike if:
+                    # 1) This is first timestep of backward pass
+                    # 2) No spike occurred in preceding forward pass
+                    # 4) This is correct output neuron 
+                    dynamics_code = f"""
+                        LambdaI = (A * LambdaV * (Alpha - Beta)) + (LambdaI * Beta);
+                        LambdaV *= Alpha;
+                            
+                        if (Trial > 0 && t == 0.0 && TFirstSpikeBack < -{example_time} && id == YTrueBack) {{
+                            LambdaV += {phantom_scale / self.batch_size};
+                        }}
+                        """
+
+                    # On backward pass transition, update LambdaV if this is the first spike
+                    # **THOMAS** why are we dividing by what looks like softmax temperature?
+                    transition_code = f"""
+                        const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
+                        LambdaV += iMinusVRecip * (Vthresh * LambdaV);
+                        if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                            if (id == YTrueBack) {{
+                                const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
+                                LambdaV += iMinusVRecip * (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
+                            }}
+                            else {{
+                                LambdaV -= iMinusVRecip * Softmax / ({self.softmax_temperature * self.batch_size});
+                            }}
+                        }}
+                        
+                        """
+
+                    # Add reset logic to reset adjoint state variables 
+                    # as well as any state variables from the original model
+                    compile_state.add_neuron_reset_vars(
+                        pop, [("TFirstSpikeBack", "scalar", "TFirstSpike")] + reset_vars,
+                        True, False)
+                    
+                    # Add second reset custom update to reset YTrueBack to YTrue
+                    # **NOTE** seperate as these are SHARED_NEURON variables
+                    compile_state.add_neuron_reset_vars(
+                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+            
+                    # Add code to start of sim code to run backwards pass 
+                    # and handle back spikes with correct LIF dynamics
+                    model_copy.prepend_sim_code(
+                        neuron_backward_pass.substitute(
+                            max_spikes=self.max_spikes,
+                            example_time=(self.example_timesteps * self.dt),
+                            dynamics=dynamics_code,
+                            transition=transition_code))
+
+                    # Prepend (as it accesses the pre-reset value of V) 
+                    # code to reset to write spike time and I-V to ring buffer
+                    model_copy.prepend_reset_code(
+                        neuron_reset.substitute(
+                            max_spikes=self.max_spikes,
+                            write="RingIMinusV[ringOffset + RingWriteOffset] = (Isyn * IsynScale) - V;",
+                            strict_check=(neuron_reset_strict_check 
+                                        if self.strict_buffer_checking
+                                        else "")))
+                    
+                    # Add custom updates to calculate softmax from TFirstSpike
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "TFirstSpike", "Softmax"))
+                # Otherwise, unsupported readout type
+                else:
+                    raise NotImplementedError(
+                        f"EventProp compiler with LeakyIntegrateFire output "
+                        f"neurons only supports 'FirstSpikeTime' readouts") 
             # Otherwise, neuron type is unsupported
             else:
                 raise NotImplementedError(
@@ -1027,7 +1173,11 @@ class EventPropCompiler(Compiler):
         
         # Does this connection have learnable delays
         has_learnable_delay = conn in self.delay_learn_conns
-    
+
+        # Get delay type to use for this connection
+        delay_type = get_delay_type(
+            _get_conn_max_delay(conn, connect_snippet.delay))
+
         # If this is some form of trainable connectivity
         if connect_snippet.trainable:
             # **NOTE** this is probably not necessary as 
@@ -1043,7 +1193,7 @@ class EventPropCompiler(Compiler):
             # **TODO** something when OpenCL
             use_atomic = (connect_snippet.matrix_type & SynapseMatrixWeight.KERNEL)
             assert not use_atomic
-            
+
             # If this connection has learnable delays
             if has_learnable_delay:
                 # Check maximum delay steps is set
@@ -1059,7 +1209,7 @@ class EventPropCompiler(Compiler):
                               "d": connect_snippet.delay, "DelayGradient": 0.0},
                     pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
                     post_neuron_var_refs={"LambdaI_post": "LambdaI", "LambdaV_post": "LambdaV"})
-                
+
                 # Add delays to list of checkpoint vars
                 compile_state.checkpoint_connection_vars.append((conn, "d"))
 
@@ -1068,9 +1218,10 @@ class EventPropCompiler(Compiler):
             # Otherwise
             else:
                 # Create basic weight update model
+                # **TODO** call getter
                 wum = WeightUpdateModel(
-                    model=deepcopy(delay_weight_update_model if has_delay 
-                                else weight_update_model),
+                    model=(_get_delay_weight_update_model(delay_type) if has_delay 
+                           else deepcopy(weight_update_model)),
                     param_vals={"TauSyn": tau_syn},
                     var_vals={"g": connect_snippet.weight, "Gradient": 0.0},
                     pre_neuron_var_refs={"BackSpike_pre": "BackSpike"},
@@ -1085,8 +1236,9 @@ class EventPropCompiler(Compiler):
         # Otherwise, e.g. it's a pooling layer
         else:
             wum = WeightUpdateModel(
-                model=deepcopy(static_delay_weight_update_model if has_delay 
-                               else static_weight_update_model),
+                model=(_get_static_delay_weight_update_model(delay_type)
+                       if has_delay 
+                       else deepcopy(static_weight_update_model)),
                 param_vals={"g": connect_snippet.weight},
                 pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
         
