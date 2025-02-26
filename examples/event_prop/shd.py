@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import mnist
@@ -70,12 +71,14 @@ with network:
 
 max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
+    #logging.basicConfig(level=logging.DEBUG)
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
                                  reg_lambda_upper=2.5e-09, reg_lambda_lower=2.5e-09, 
                                  reg_nu_upper=14, max_spikes=1500, 
                                  optimiser=Adam(0.0), batch_size=BATCH_SIZE, 
-                                 kernel_profiling=KERNEL_PROFILING)
+                                 kernel_profiling=KERNEL_PROFILING,
+                                 solver="linear_euler")
     compiled_net = compiler.compile(network)
 
     with compiled_net:

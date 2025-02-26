@@ -59,7 +59,7 @@ assert tag_2_out_lambda_v.shape[2] == 20
 
 num_trials = 3
 vis_num_hidden = 3
-vis_num_out = 3
+vis_num_out = 10
 
 spikes_fig, spikes_axes = plt.subplots(2, num_trials, sharex="col", sharey="row")
 spikes_fig.suptitle("Spikes")
@@ -117,7 +117,7 @@ for i in range(num_trials):
     for j in range(vis_num_out):
         # Plot tag 1 values
         tag_1_out_v_actor = out_v_axes[j, i].plot(tag_1_out_v[i,:,j])[0]
-        out_lambda_v_actor = out_axes[j,i].plot(tag_1_out_lambda_v[i,:,j + 10] * 20.0, alpha=0.5)[0]
+        out_lambda_v_actor = out_axes[j,i].plot(tag_1_out_lambda_v[i,:,j + 10]* 400.0, alpha=0.5)[0]
         #out_lambda_i_actor = out_axes[j,i].plot(tag_1_out_lambda_i[i,:,j + 10] * 5.0, alpha=0.5)[0]
         
         # Plot tag 2 values
@@ -132,6 +132,7 @@ for i in range(num_trials):
     spikes_axes[0,i].set_title(f"Trial {i}")
     hid_axes[0,i].set_title(f"Trial {i}")
     out_axes[0,i].set_title(f"Trial {i}")
+    out_v_axes[0,i].set_title(f"Trial {i}")
     spikes_axes[-1,i].set_xlabel("t [ms]")
     hid_axes[-1,i].set_xlabel("t [ms]")
     out_axes[-1,i].set_xlabel("t [ms]")
