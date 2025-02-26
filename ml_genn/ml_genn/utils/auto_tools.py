@@ -6,7 +6,7 @@ into C code to update the variables with timestep "dt"
 """
 
 def _linear_euler(dx_dt):
-    code = [sympy.ccode((sym + expr) * sympy.Symbol("dt"),
+    code = [sympy.ccode(sym + (expr * sympy.Symbol("dt")),
                         assign_to=f"const scalar {sym.name}_tmp")
             for sym, expr in dx_dt.items()]
     code += [f"{sym.name} = {sym.name}_tmp;" for sym in dx_dt.keys()]
