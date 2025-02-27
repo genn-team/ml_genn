@@ -1,7 +1,7 @@
 import numpy as np
 
 from numbers import Number
-from typing import Any, MutableMapping, Sequence, Union
+from typing import Any, MutableMapping, Optional, Sequence, Union
 from pygenn import VarAccess, VarAccessModeAttribute
 from .value import Value
 
@@ -16,15 +16,16 @@ EGPValue = Union[Number, Sequence[Number], np.ndarray]
 
 class Model:
     def __init__(self, model: MutableMapping[str, Any],
-                 param_vals: MutableMapping[str, Value] = {},
-                 var_vals: MutableMapping[str, Value] = {},
-                 egp_vals: MutableMapping[str, EGPValue] = {}):
+                 param_vals: Optional[MutableMapping[str, Value]] = None,
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 egp_vals: Optional[MutableMapping[str, EGPValue]] = None):
         self.model = model
 
-        self.param_vals = param_vals
+        self.param_vals = param_vals or {}
         self.dynamic_param_names = set()
-        self.var_vals = var_vals
-        self.egp_vals = egp_vals
+        self.non_reset_vars = set()
+        self.var_vals = var_vals or {}
+        self.egp_vals = egp_vals or {}
 
     def has_param(self, name):
         return self._is_in_list("params", name)
@@ -41,10 +42,15 @@ class Model:
         self.param_vals[name] = value
 
     def add_var(self, name: str, type: str, value: Value,
-                access_mode: int = VarAccess.READ_WRITE):
+                access_mode: int = VarAccess.READ_WRITE,
+                reset: bool = True):
         assert not self.has_var(name)
         self._add_to_list("vars", (name, type, access_mode))
         self.var_vals[name] = value
+
+        # If reset is disabled, add to set of non-reset variables
+        if not reset:
+            self.non_reset_vars.add(name)
 
     def add_egp(self, name: str, type: str, value: EGPValue):
         assert not self.has_egp(name)
@@ -130,7 +136,8 @@ class Model:
 
     @property
     def reset_vars(self):
-        return self._get_reset_vars("vars", self.var_vals)
+        return self._get_reset_vars("vars", self.var_vals,
+                                    self.non_reset_vars)
 
     def _search_list(self, name: str, value: str):
         item = [(i, p) for i, p in enumerate(self.model[name])
@@ -193,27 +200,25 @@ class Model:
         # Remove parameter value and add into var vals
         var_vals[param_name] = param_vals.pop(param_name)
 
-    def _get_reset_vars(self, name: str, var_vals):
-        reset_vars = []
+    def _get_reset_vars(self, name: str, var_vals, non_reset_vars):
         if name in self.model:
-            # Loop through them
-            for v in self.model[name]:
-                # If variable either has default (read-write)
-                # access or this is explicitly set
-                # **TODO** mechanism to exclude variables from reset
-                if len(v) < 3 or (v[2] & VarAccessModeAttribute.READ_WRITE) != 0:
-                    reset_vars.append((v[0], v[1], var_vals[v[0]]))
-        return reset_vars
+            # Return list of variables which either have default (read-write)
+            # access or this is explicitly set and aren't in non-reset set
+            return [(v[0], v[1], var_vals[v[0]]) for v in self.model[name]
+                    if ((len(v) < 3 or (v[2] & VarAccessModeAttribute.READ_WRITE) != 0)
+                        and v[0] not in non_reset_vars)]
+        else:
+            return []
 
 
 class CustomUpdateModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, 
-                 var_refs={}, egp_vals={}, egp_refs={}):
+    def __init__(self, model, param_vals=None, var_vals=None, 
+                 var_refs=None, egp_vals=None, egp_refs=None):
         super(CustomUpdateModel, self).__init__(model, param_vals,
                                                 var_vals, egp_vals)
 
-        self.var_refs = var_refs
-        self.egp_refs = egp_refs
+        self.var_refs = var_refs or {}
+        self.egp_refs = egp_refs or {}
 
     def has_var_ref(self, name):
         return self._is_in_list("var_refs", name)
@@ -244,7 +249,7 @@ class CustomUpdateModel(Model):
 
 class NeuronModel(Model):
     def __init__(self, model, output_var_name,
-                 param_vals={}, var_vals={}, egp_vals={}):
+                 param_vals=None, var_vals=None, egp_vals=None):
         super(NeuronModel, self).__init__(model, param_vals, 
                                           var_vals, egp_vals)
 
@@ -275,12 +280,12 @@ class NeuronModel(Model):
         self._replace_code("reset_code", source, target)
 
     @staticmethod
-    def from_val_descriptors(model, output_var_name, inst, dt,
+    def from_val_descriptors(model, output_var_name, inst,
                              param_vals={}, var_vals={}, egp_vals={}):
         return NeuronModel(
             model, output_var_name, 
-            get_values(inst, model.get("params", []), dt, param_vals),
-            get_values(inst, model.get("vars", []), dt, var_vals),
+            get_values(inst, model.get("params", []), param_vals),
+            get_values(inst, model.get("vars", []), var_vals),
             egp_vals)
 
     @property
@@ -298,40 +303,66 @@ class NeuronModel(Model):
         return output_var
 
 class SynapseModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, egp_vals={},
-                 neuron_var_refs={}):
+    def __init__(self, model, param_vals=None, var_vals=None,
+                 egp_vals=None, neuron_var_refs=None):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
 
-        self.neuron_var_refs = neuron_var_refs
+        self.neuron_var_refs = neuron_var_refs or {}
 
     def process(self):
         return (super(SynapseModel, self).process() 
                 + (self.neuron_var_refs,))
+    
+    def has_neuron_var_ref(self, name):
+        return self._is_in_list("neuron_var_refs", name)
+
+    def add_neuron_var_ref(self, name, type, target):
+        self._add_to_list("neuron_var_refs", (name, type))
+        self.neuron_var_refs[name] = target
+
+    def append_sim_code(self, code):
+        self._append_code("sim_code", code)
+
+    def prepend_sim_code(self, code):
+        self._prepend_code("sim_code", code)
 
     @staticmethod
-    def from_val_descriptors(model, inst, dt, 
+    def from_val_descriptors(model, inst,
                              param_vals={}, var_vals={},
                              egp_vals={}, neuron_var_refs={}):
         return SynapseModel(
             model, 
-            get_values(inst, model.get("params", []), dt, param_vals),
-            get_values(inst, model.get("vars", []), dt, var_vals),
+            get_values(inst, model.get("params", []), param_vals),
+            get_values(inst, model.get("vars", []), var_vals),
             egp_vals, neuron_var_refs)
 
 
 class WeightUpdateModel(Model):
-    def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
-                 post_var_vals={}, egp_vals={}, pre_neuron_var_refs={},
-                 post_neuron_var_refs={},):
+    def __init__(self, model, param_vals=None, var_vals=None,
+                 pre_var_vals=None, post_var_vals=None, egp_vals=None,
+                 pre_neuron_var_refs=None, post_neuron_var_refs=None,
+                 psm_var_refs=None):
         super(WeightUpdateModel, self).__init__(model, param_vals, 
                                                 var_vals, egp_vals)
 
-        self.pre_var_vals = pre_var_vals
-        self.post_var_vals = post_var_vals
-        self.pre_neuron_var_refs = pre_neuron_var_refs
-        self.post_neuron_var_refs = post_neuron_var_refs
+        self.pre_var_vals = pre_var_vals or {}
+        self.post_var_vals = post_var_vals or {}
+        self.pre_neuron_var_refs = pre_neuron_var_refs or {}
+        self.post_neuron_var_refs = post_neuron_var_refs or {}
+        self.psm_var_refs = psm_var_refs or {}
+        self.non_reset_pre_vars = set()
+        self.non_reset_post_vars = set()
     
+    def has_pre_neuron_var_ref(self, name):
+        return self._is_in_list("pre_neuron_var_refs", name)
+    
+    def has_post_neuron_var_ref(self, name):
+        return self._is_in_list("post_neuron_var_refs", name)
+    
+    def has_psm_var_ref(self, name):
+        return self._is_in_list("psm_var_refs", name)
+
     def add_pre_neuron_var_ref(self, name, type, target):
         self._add_to_list("pre_neuron_var_refs", (name, type))
         self.pre_neuron_var_refs[name] = target
@@ -339,6 +370,10 @@ class WeightUpdateModel(Model):
     def add_post_neuron_var_ref(self, name, type, target):
         self._add_to_list("post_neuron_var_refs", (name, type))
         self.post_neuron_var_refs[name] = target
+
+    def add_psm_var_ref(self, name, type, target):
+        self._add_to_list("psm_var_refs", (name, type))
+        self.psm_var_refs[name] = target
         
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
@@ -352,12 +387,14 @@ class WeightUpdateModel(Model):
     def process(self):
         return (super(WeightUpdateModel, self).process() 
                 + (self.pre_var_vals, self.post_var_vals,
-                   self.pre_neuron_var_refs, self.post_neuron_var_refs))
+                   self.pre_neuron_var_refs, self.post_neuron_var_refs, self.psm_var_refs))
 
     @property
     def reset_pre_vars(self):
-        return self._get_reset_vars("pre_vars", self.pre_var_vals)
+        return self._get_reset_vars("pre_vars", self.pre_var_vals,
+                                    self.non_reset_pre_vars)
 
     @property
     def reset_post_vars(self):
-        return self._get_reset_vars("post_vars", self.post_var_vals)
+        return self._get_reset_vars("post_vars", self.post_var_vals, 
+                                    self.non_reset_post_vars)

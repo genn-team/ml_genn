@@ -6,7 +6,7 @@ from ..utils.model import NeuronModel
 
 class Var(Readout):
     """Read out instantaneous value of neuron model's output variable"""
-    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -23,8 +23,6 @@ class Var(Readout):
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to read")
-
-        return model
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         # Pull variable from genn

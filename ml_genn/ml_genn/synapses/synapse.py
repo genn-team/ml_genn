@@ -1,7 +1,8 @@
 from __future__ import annotations
 from abc import ABC
 
-from typing import TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
+from ..utils.auto_model import AutoSynapseModel
 from ..utils.model import SynapseModel
 
 if TYPE_CHECKING:
@@ -14,8 +15,8 @@ class Synapse(ABC):
     """Base class for all synapse models"""
 
     @abstractmethod
-    def get_model(self, connection: Connection,
-                  dt: float, batch_size: int) -> SynapseModel:
+    def get_model(self, connection: Connection, dt: float,
+                  batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
         """Gets PyGeNN implementation of synapse
 
         Args:

@@ -1,15 +1,17 @@
 import inspect
 import numpy as np
 import os
+import sympy
 
 from collections import defaultdict, namedtuple
 from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
 from ..communicators import Communicator
+from ..utils.auto_model import AutoNeuronModel, AutoSynapseModel
 from ..utils.model import (CustomUpdateModel, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
@@ -23,6 +25,7 @@ from pygenn import (create_custom_update_model, create_den_delay_var_ref,
 from string import digits
 from .weight_update_models import (get_static_pulse_delay_model, 
                                    get_signed_static_pulse_delay_model)
+from ..utils.auto_tools import solve_ode
 from ..utils.value import is_value_array, is_value_constant
 
 from .weight_update_models import (static_pulse_model,
@@ -167,11 +170,13 @@ class Compiler:
     def __init__(self, supported_matrix_type: List[int], dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
+                 solver: str = "exponential_euler",
                  communicator: Communicator = None, **genn_kwargs):
         self.dt = dt
         self.full_batch_size = batch_size
         self.rng_seed = rng_seed
         self.kernel_profiling = kernel_profiling
+        self.solver = solver
         self.supported_matrix_type = SupportedMatrixType(supported_matrix_type)
         self.communicator = communicator
         self.genn_kwargs = genn_kwargs
@@ -227,7 +232,8 @@ class Compiler:
                                           f"{conn.name} exceeds 65535")
             genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
-    def build_neuron_model(self, pop: Population, model: NeuronModel,
+    def build_neuron_model(self, pop: Population, 
+                           model: Union[AutoNeuronModel, NeuronModel],
                            compile_state) -> NeuronModel:
         """Apply compiler-specific processing to the base neuron model
         returned by :meth:`ml_genn.neurons.Neuron.get_model`.
@@ -239,16 +245,35 @@ class Compiler:
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        model_copy = deepcopy(model)
+        if isinstance(model, AutoNeuronModel):
+            # Build GeNNCode model
+            genn_model = {
+                "vars": model.get_vars("scalar"),
+                "params": model.get_params("scalar"),
+                "sim_code":
+                    solve_ode(model.dx_dt, self.solver),
+                "threshold_condition_code":
+                    model.get_threshold_condition_code(),
+                "reset_code":
+                    model.get_reset_code()}
 
-        # Delete negative threshold condition if there is one
-        # (this gets incorporated into weight update model)
-        if "negative_threshold_condition_code" in model_copy.model:
-            del model_copy.model["negative_threshold_condition_code"]
+            # Wrap in NeuronModel and return
+            return NeuronModel(genn_model, model.output_var_name, 
+                               copy(model.param_vals),
+                               copy(model.var_vals))
+        else:
+            assert isinstance(model, NeuronModel)
+            model_copy = deepcopy(model)
 
-        return model_copy
+            # Delete negative threshold condition if there is one
+            # (this gets incorporated into weight update model)
+            if "negative_threshold_condition_code" in model_copy.model:
+                del model_copy.model["negative_threshold_condition_code"]
 
-    def build_synapse_model(self, conn: Connection, model: SynapseModel,
+            return model_copy
+
+    def build_synapse_model(self, conn: Connection, 
+                            model: Union[AutoSynapseModel, SynapseModel],
                             compile_state) -> SynapseModel:
         """Apply compiler-specific processing to the base synapse model
         returned by :meth:`ml_genn.synapses.Synapse.get_model`.
@@ -260,8 +285,24 @@ class Compiler:
             compile_state:  Compiler-specific state created by
                             :meth:`.pre_compile`.
         """
-        # Build model customised for parameters and values
-        return model
+        if isinstance(model, AutoSynapseModel):
+            # Build GeNNCode model
+            # **TODO** solver
+            genn_model = {
+                "vars": model.get_vars("scalar"),
+                "params": model.get_params("scalar"),
+                "sim_code":
+                    f"""
+                    {model.get_jump_code()}
+                    injectCurrent({model.get_inject_current_code()});
+                    {solve_ode(model.dx_dt, self.solver)}
+                    """}
+
+            return SynapseModel(genn_model, copy(model.param_vals),
+                                copy(model.var_vals))
+        else:
+            assert isinstance(model, SynapseModel)
+            return model
 
     def build_weight_update_model(self, connection: Connection,
                                   connect_snippet: ConnectivitySnippet,
@@ -561,7 +602,7 @@ class Compiler:
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals,
-             wum_pre_neuron_var_refs, wum_post_neuron_var_refs) =\
+             wum_pre_neuron_var_refs, wum_post_neuron_var_refs, wum_psm_var_refs) =\
                 self.build_weight_update_model(conn, connect_snippet,
                                                compile_state).process()
 
@@ -573,12 +614,12 @@ class Compiler:
             post_genn_group = neuron_populations[conn.target()]
 
             # Use to create local variable references
-            psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
-                                                        post_genn_group)
-            wum_pre_neuron_var_refs = create_local_var_refs(
-                wum_pre_neuron_var_refs, pre_genn_group)
-            wum_post_neuron_var_refs = create_local_var_refs(
-                wum_post_neuron_var_refs, post_genn_group)
+            #psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
+            #                                            post_genn_group)
+            #wum_pre_neuron_var_refs = create_local_var_refs(
+            #    wum_pre_neuron_var_refs, pre_genn_group)
+            #wum_post_neuron_var_refs = create_local_var_refs(
+            #    wum_post_neuron_var_refs, post_genn_group)
     
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
@@ -587,7 +628,8 @@ class Compiler:
                 init_weight_update(genn_wum, wum_param_vals, wum_var_vals,
                                    wum_pre_var_vals, wum_post_var_vals,
                                    wum_pre_neuron_var_refs, 
-                                   wum_post_neuron_var_refs),
+                                   wum_post_neuron_var_refs,
+                                   wum_psm_var_refs),
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
                                   psm_neuron_var_refs),
                 connect_snippet.snippet)

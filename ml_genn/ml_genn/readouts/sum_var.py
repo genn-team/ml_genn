@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class SumVar(Readout):
     """Read out per-neuron sum of neuron model's output variable"""
-    def add_readout_logic(self, model: NeuronModel, **kwargs) -> NeuronModel:
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -26,22 +26,16 @@ class SumVar(Readout):
             raise RuntimeError(f"Model does not have variable "
                                f"{self.output_var_name} to sum")
 
-        # Make copy of model
-        model_copy = deepcopy(model)
-
         # Determine name and type of sum variable
         sum_var_name = self.output_var_name + "Sum"
         self.output_var_type = output_var[1]
 
         # Add code to update sum variable
-        model_copy.append_sim_code(
-            f"{sum_var_name} += {self.output_var_name};")
+        model.append_sim_code(f"{sum_var_name} += {self.output_var_name};")
 
         # Add sum variable with same type as output
         # variable and initialise to zero
-        model_copy.add_var(sum_var_name, self.output_var_type, 0)
-
-        return model_copy
+        model.add_var(sum_var_name, self.output_var_type, 0)
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         sum_var = genn_pop.vars[self.output_var_name + "Sum"]
