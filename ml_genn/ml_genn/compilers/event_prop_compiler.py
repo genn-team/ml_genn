@@ -94,6 +94,19 @@ weight_update_model = {
     BackSpike_pre
     """}
 
+learnable_delay_weight_update_model = {
+    "params": [("weight", "scalar"), ("delay", "scalar"),
+               ("MaxDelay", "int")],
+    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
+                             
+    "pre_spike_syn_code": """
+    const int delayInt = max(0, min(MaxDelay, (int)round(delay)));
+    addToPostDelay(weight, delayInt);
+    """,
+    "pre_event_threshold_condition_code": """
+    BackSpike_pre
+    """}
+
 gradient_batch_reduce_model = {
     "vars": [("ReducedGradient", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
     "var_refs": [("Gradient", "scalar")],
@@ -168,7 +181,7 @@ def _get_delay_weight_update_model(delay_type):
             "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
                              
             "pre_spike_syn_code": """
-            addToPostDelay(g, d);
+            addToPostDelay(weight, delay);
             """,
             "pre_event_threshold_condition_code": """
             BackSpike_pre
@@ -189,6 +202,9 @@ def _get_conn_max_delay(conn, delay):
         raise RuntimeError(f"Maximum delay associated with Connection "
                           f"{conn.name} cannot be determined "
                           f"automatically, please set max_delay_steps")
+
+def _template_symbol(expression, symbol: sympy.Symbol):
+    return expression.subs(symbol, sympy.Symbol(f"${symbol.name}"))
 
 def _get_lmd_name(symbol: Union[str, sympy.Symbol]):
     symbol_name = (symbol.name if isinstance(symbol, sympy.Symbol)
@@ -613,7 +629,8 @@ class EventPropCompiler(Compiler):
                           for trg_sym in trg_neuron_model.dx_dt.keys()))
             if err:
                 raise NotImplementedError(
-                    f"Equations necessitate saving forward pass variables in a currently not supported setting.")
+                    "Synapse equations which require saving forward "
+                    "pass variables are currently not supported.")
             
             # If any target population lambda variables are 
             # referenced, add neuron variable references
@@ -658,9 +675,8 @@ class EventPropCompiler(Compiler):
         # Does this connection have learnable delays
         has_learnable_delay = conn in self.delay_learn_conns
 
-        # Get delay type to use for this connection
-        delay_type = get_delay_type(
-            _get_conn_max_delay(conn, connect_snippet.delay))
+        # Get name of variable containing integer delay for indexing
+        int_delay_name = "delayInt" if has_learnable_delay else "delay"
 
         # Mark which sorts of optimiser connection will require
         compile_state.add_optimiser_connection(conn, connect_snippet.trainable,
@@ -669,7 +685,7 @@ class EventPropCompiler(Compiler):
         # Get synapse mdeol
         synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
         assert isinstance(synapse_model, AutoSynapseModel)
-        
+    
         # Check validity of synapse model jumps
         # TODO: the jumps that are currently possible to support are essentially where the same
         # function of w is added to all variables that have synaptic jumps. Normally that is just
@@ -681,20 +697,162 @@ class EventPropCompiler(Compiler):
                     "EventProp compiler only supports "
                     "synapses which (only) add input to target variables.")
         
+        # Build post-jump synapse ODEs by replacing all variables
+        # with jumps in the ODE expressions with jump expressions
+        syn_dx_dt_plus_m = {}
+        for syn_sym, syn_expr in synapse_model.dx_dt.items():
+            syn_expr_plus_m = syn_expr
+            for jump_sym, jump_expr in synapse_model.jumps.items():
+                syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
+            syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
+        
+        # Build post-jump injection expression by replacing 
+        # all variables with jumps with jump expressions
+        inject_expr = synapse_model.inject_current
+        inject_plus_m_expr = inject_expr
+        for jump_sym, jump_expr in synapse_model.jumps.items():
+            inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
+
+        logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
+        logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
+        logger.debug(f"\tSynapse inject_plusm: {inject_plus_m_expr}")
+        logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
+        
         # Get target neuron mdeol
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
                                                     self.batch_size)
         assert isinstance(trg_neuron_model, AutoNeuronModel)
 
-        # Create basic weight update model
-        # **TODO** start with _get_delay_weight_update_model if delayed
-        genn_model = WeightUpdateModel(
-            model=deepcopy(weight_update_model),
-            param_vals= {"weight": connect_snippet.weight},
-            pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+        # Build post-injection neuron ODEs by replacing Isyn
+        # summed input variable with post-jump injection expression
+        isyn_sym = sympy.Symbol("Isyn")
+        trg_dx_dt_plus_m = {
+            trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
+            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
+        
+        logger.debug(f"\tTarget neuron forward ODEs: {trg_neuron_model.dx_dt}")
+        logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
+        
+        #---------------------------------------------------------------------
+        # Step 1: create basic GeNN model
+        #---------------------------------------------------------------------
+        # If connection has learnable delays
+        if has_learnable_delay:
+            # Check connectivity is trainable
+            if not connect_snippet.trainable:
+                raise RuntimeError(f"Connection {conn.name} delays cannot be "
+                                   f"learned - connectivity is not trainable")
 
-        # If weights can be trained
+            # Check maximum delay steps is set
+            if conn.max_delay_steps is None:
+                raise RuntimeError(f"Maximum delay steps must be specified for "
+                                   f"Connection {conn.name} with delay learning")
+
+            # Create weight update model
+            genn_model = WeightUpdateModel(
+                model=deepcopy(learnable_delay_weight_update_model),
+                param_vals= {"weight": connect_snippet.weight,
+                             "delay": connect_snippet.delay,
+                             "MaxDelay": conn.max_delay_steps},
+                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+        # Otherwise, if connection has static delays
+        elif has_delay:
+            # Get delay type to use for this connection
+            delay_type = get_delay_type(_get_conn_max_delay(
+                conn, connect_snippet.delay))
+
+            # Create weight update model with delay
+            genn_model = WeightUpdateModel(
+                model=_get_delay_weight_update_model(delay_type),
+                param_vals= {"weight": connect_snippet.weight,
+                             "delay": connect_snippet.delay},
+                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+        # Otherwise, just create basic weight update model
+        else:
+            genn_model = WeightUpdateModel(
+                model=deepcopy(weight_update_model),
+                param_vals= {"weight": connect_snippet.weight},
+                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+
+        #---------------------------------------------------------------------
+        # Step 2: derive dx_dt_diff_sum 
+        #---------------------------------------------------------------------
+        # If connection has learnable delays or propagates gradients
+        source_neuron = conn.source().neuron
+        if has_learnable_delay or not isinstance(source_neuron, Input):
+            # Both add_to_pre and delay learning is based
+            # on the difference of dx_dt and dx_dtplusm
+            # synapse equations first:
+            dx_dt_diff_sum = sum(
+                _get_lmd_sym(syn_sym) * (syn_dx_dt_plus_m[syn_sym] - syn_expr)
+                for syn_sym, syn_expr in synapse_model.dx_dt.items())
+
+            # then neuron equations:
+            dx_dt_diff_sum += sum(
+                _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
+                                        - trg_expr.subs(isyn_sym, inject_expr))
+                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
+
+            # and simplify
+            dx_dt_diff_sum = sympy.simplify(dx_dt_diff_sum)
+
+            # If any target neuron parameters are referenced in 
+            # add to pre expression, duplicate in weight update model
+            _add_required_parameters(trg_neuron_model, genn_model, dx_dt_diff_sum)
+
+            # If any synapse parameters are referenced in add to pre
+            # expression, duplicate in weight update model
+            _add_required_parameters(synapse_model, genn_model, dx_dt_diff_sum)
+
+            # If any target population variables or lambda variables are 
+            # referenced, add neuron variable references and, if connection
+            # is delayed, put $ at the start of symbol names in expression 
+            # so they can be replaced by the template engine
+            for trg_var in trg_neuron_model.dx_dt.keys():
+                if dx_dt_diff_sum.has(trg_var):
+                    raise NotImplementedError(
+                        "Synapse equations which require saving forward "
+                        "pass neuron variables are currently not supported.")
+
+                trg_lambda_var = _get_lmd_sym(trg_var)
+                if dx_dt_diff_sum.has(trg_lambda_var):
+                    genn_model.add_post_neuron_var_ref(trg_lambda_var.name, 
+                                                       "scalar", 
+                                                       trg_lambda_var.name)
+                    if has_delay:
+                        dx_dt_diff_sum = _template_symbol(dx_dt_diff_sum,
+                                                          trg_lambda_var)
+
+            # If any synapse model variables or lambda variables are 
+            # referenced, add psm variable references
+            for syn_var in synapse_model.dx_dt.keys():
+                if dx_dt_diff_sum.has(syn_var):
+                    raise NotImplementedError(
+                        "Synapse equations which require saving forward "
+                        "pass synapse variables are currently not supported.")
+
+                syn_lambda_var = _get_lmd_sym(syn_var)
+                if dx_dt_diff_sum.has(syn_lambda_var):
+                    genn_model.add_psm_var_ref(syn_lambda_var.name, 
+                                               "scalar", 
+                                               syn_lambda_var.name)
+                    if has_delay:
+                        dx_dt_diff_sum = _template_symbol(dx_dt_diff_sum,
+                                                          syn_lambda_var)
+
+            # Use template engine to add delay subscript
+            # to any references to lambda variables
+            dx_dt_diff_sum_code =\
+                Template(sympy.ccode(dx_dt_diff_sum)).substitute(
+                    {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
+                     for p in chain(trg_neuron_model.dx_dt.keys(),
+                                    synapse_model.dx_dt.keys())})
+
+        #---------------------------------------------------------------------
+        # Step 3: Update weight and delay gradients
+        #---------------------------------------------------------------------
+        # If connection is trainable
         if connect_snippet.trainable:
             # Ensure weights are instantiated as a state variable
             genn_model.make_param_var("weight")
@@ -704,117 +862,72 @@ class EventPropCompiler(Compiler):
 
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "weight"))
-            
-            # assemble gradient update
-            grad_update = 0
+
+            # If connection is delayed, add delay index calculation
+            if has_learnable_delay:
+                genn_model.append_pre_event_syn_code(
+                    "const int delayInt = max(0, min(MaxDelay, (int)round(delay)));")
+    
+            # Assemble gradient update
+            weight_grad_update = 0
             for jump_sym, jump_expr in synapse_model.jumps.items():
                 lambda_sym = _get_lmd_sym(jump_sym)
-                grad_update -= lambda_sym * sympy.diff(jump_expr, sympy.Symbol("weight"))
-                genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
-            
-            genn_model.append_pre_event_syn_code(f"weightGradient += {sympy.ccode(grad_update)};")
-            logger.debug(f"\tGradient update: {grad_update}")
-            logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
+                weight_grad_update -= (lambda_sym 
+                                       * sympy.diff(jump_expr, 
+                                                    sympy.Symbol("weight")))
+                if not genn_model.has_psm_var_ref(lambda_sym.name):
+                    genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
+
+                # If connection has delays, add $ to name so we 
+                # can use template engine to add delay indexing
+                if has_delay:
+                    weight_grad_update = _template_symbol(weight_grad_update,
+                                                          lambda_sym)
+
+            logger.debug(f"\tWeight gradient update: {weight_grad_update}")
+            weight_grad_update_code =\
+                Template(sympy.ccode(weight_grad_update)).substitute(
+                    {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
+                     for p in synapse_model.jumps.keys()})
+            genn_model.append_pre_event_syn_code(
+                f"weightGradient += {weight_grad_update_code};")
             
             # If any synapse parameters are referenced in gradient 
             # update expression, duplicate in weight update model
-            _add_required_parameters(synapse_model, genn_model, grad_update)
-            
+            _add_required_parameters(synapse_model, genn_model,
+                                     weight_grad_update)
+        
+            # If delays can be learned
+            if has_learnable_delay:
+                # Ensure delays are instantiated as a state variable
+                genn_model.make_param_var("delay")
+
+                # Add delay gradient
+                genn_model.add_var("delayGradient", "scalar", 0.0)
+
+                # Add delays to list of checkpoint vars
+                compile_state.checkpoint_connection_vars.append(
+                    (conn, "delay"))
+
+                # Add delay calculation
+                logger.debug(f"\tDelay gradient update: {dx_dt_diff_sum}")
+                genn_model.append_pre_event_syn_code(
+                    f"delayGradient += {dx_dt_diff_sum_code};")
+
+        #---------------------------------------------------------------------
+        # Step 4: Backpropagate gradients
+        #---------------------------------------------------------------------
         # If source neuron isn't an input neuron
-        source_neuron = conn.source().neuron
         if not isinstance(source_neuron, Input):
+            # There should be some gradient injection!
+            assert dx_dt_diff_sum != 0
+
             # Add connection to list of feedback connections
             compile_state.feedback_connections.append(conn)
-
-            # assemble dx_dt_plusm; 
-            # ***NOTE: we here have to work with the POST-SYNAPTIC neurons 
-            # and their equations. This currently only works if the
-            # inject_current jumps only depend on weight and inject_current 
-            # only enters linearly into rhs of any ODEs
-            # Do dx_dt_plusm
-            # synaptic ODEs first
-            syn_dx_dt_plus_m = {}
-            for syn_sym, syn_expr in synapse_model.dx_dt.items():
-                syn_expr_plus_m = syn_expr
-                for jump_sym, jump_expr in synapse_model.jumps.items():
-                    syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
-                syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
-
-            inject_expr = synapse_model.inject_current
-            inject_plus_m_expr = inject_expr
-            for jump_sym, jump_expr in synapse_model.jumps.items():
-                inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
-            
-            isyn_sym = sympy.Symbol("Isyn")
-            trg_dx_dt_plus_m = {
-                trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
-                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
-            
-            logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
-            logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
-            logger.debug(f"\tTarget neuron forward ODEs: {trg_neuron_model.dx_dt}")
-            logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
-
-            # SIMPLIFICATON: no dependencies of synaptic jumps on 
-            # pre- or post-synaptic variables!
-            # add_to_pre is based on the difference of dx_dt and dx_dtplusm 
-            # synapse equations first:
-            ex = sum(
-                _get_lmd_sym(syn_sym) * (syn_dx_dt_plus_m[syn_sym] - syn_expr)
-                for syn_sym, syn_expr in synapse_model.dx_dt.items())
-            
-            # then neuron equations:
-            ex += sum(
-                _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
-                                        - trg_expr.subs(isyn_sym, inject_expr))
-                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
-            
-            if ex != 0:
-                add_to_pre = sympy.simplify(ex)
-                logger.debug(f"\tAdd to pre: {add_to_pre}")
-
-                # check whether any vars might be involved from the forward pass
-                err = (any(add_to_pre.has(sympy.Symbol(s)) 
-                        for s in synapse_model.var_vals.keys())
-                    or any(add_to_pre.has(sympy.Symbol(s))
-                            for s in trg_neuron_model.var_vals.keys()))
-                if err:
-                    raise NotImplementedError(
-                        "Synapse equations which require saving forward "
-                        "pass variables are currently not supported.")
-
-                # If any target neuron parameters are referenced in 
-                # add to pre expression, duplicate in weight update model
-                _add_required_parameters(trg_neuron_model, genn_model, add_to_pre)
-
-                # If any synapse parameters are referenced in add to pre
-                # expression, duplicate in weight update model
-                _add_required_parameters(synapse_model, genn_model, add_to_pre)
-
-                # If any target population variables or lambda variables are 
-                # referenced, add neuron variable references
-                for trg_var_name in trg_neuron_model.var_vals.keys():
-                    if add_to_pre.has(sympy.Symbol(trg_var_name)):
-                        genn_model.add_post_neuron_var_ref(trg_var_name, 
-                                                        "scalar", trg_var_name)
-                    lambda_var = _get_lmd_sym(trg_var_name)
-                    if add_to_pre.has(lambda_var):
-                        genn_model.add_post_neuron_var_ref(lambda_var.name, 
-                                                        "scalar", lambda_var.name)
-
-                # If any synapse model variables or lambda variables are 
-                # referenced, add psm variable references
-                for syn_var_name in synapse_model.var_vals.keys():
-                    if add_to_pre.has(sympy.Symbol(syn_var_name)):
-                        genn_model.add_psm_var_ref(syn_var_name, 
-                                                "scalar", syn_var_name)
-                    l_var = _get_lmd_sym(syn_var_name)
-                    if add_to_pre.has(l_var) and not genn_model.has_psm_var_ref(l_var.name):
-                        genn_model.add_psm_var_ref(lambda_var.name, 
-                                                "scalar", lambda_var.name)
+            logger.debug(f"\tAdd to pre: {dx_dt_diff_sum}")
 
             # Convert expression to c-code and insert call to addToPre
-            genn_model.append_pre_event_syn_code(f"addToPre({sympy.ccode(add_to_pre)});")
+            genn_model.append_pre_event_syn_code(f"addToPre({dx_dt_diff_sum_code});")
 
         return genn_model
 
@@ -1188,8 +1301,8 @@ class EventPropCompiler(Compiler):
                     # go through with template engine and replace them all
                     # **THOMAS** are any previous points where things are added to saved_vars required?
                     if jump.has(var_sym):
-                        saved_vars.add(var_sym.name)
-                        jump = jump.subs(var_sym, sympy.Symbol(f"${var_name}"))
+                        saved_vars.add(var_name)
+                        jump = _template_symbol(jump, var_sym)
                 
                 # Add to dictionary as jump for adjoint variable
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
@@ -1252,7 +1365,7 @@ class EventPropCompiler(Compiler):
             
             # Generate transition code
             transition_code = "\n".join(
-                f"{jump_sym.name} = {sympy.ccode(jump_expr)};"
+                f"{sympy.ccode(jump_expr, assign_to=jump_sym.name)};"
                 for jump_sym, jump_expr in adjoint_jumps.items())
             
             # Substitute saved variables for those in the ring buffer
@@ -1612,7 +1725,7 @@ class EventPropCompiler(Compiler):
         else:
             # Generate transition code
             transition_code = "\n".join(
-                f"{jump_sym.name} = {sympy.ccode(jump_expr)};"
+                f"{sympy.ccode(jump_expr, assign_to=jump_sym.name)};"
                 for jump_sym, jump_expr in adjoint_jumps.items())
             
             # Substitute saved variables for those in the ring buffer
