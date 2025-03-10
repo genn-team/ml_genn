@@ -231,6 +231,25 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
         if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
             genn_model.add_param(n, "scalar", v)
 
+def _get_threshold_derivative(threshold, dx_dt):
+    # Loop through neuron dx_dt
+    threshold_sub = threshold
+    t_sym = sympy.Symbol("t")
+    for sym, expr in dx_dt.items():
+        # Create local class which return variable derivative as 
+        class X(sympy.Function):
+            def fdiff(self, arg_index):
+                assert arg_index == 1
+                return expr
+        
+        # Replace symbol in threshold condition with 
+        # object which provides derivative wrt t
+        threshold_sub = threshold_sub.subs(sym, X(t_sym))
+    
+    # Return derivate of threshold wrt t
+    return threshold_sub.diff(t_sym)
+
+
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
         self.losses = get_object_mapping(losses, readouts,
@@ -1191,14 +1210,6 @@ class EventPropCompiler(Compiler):
             
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
 
-        # threshold condition
-        thresold_expr = (sympy.parse_expr(model.model["threshold"],
-                                          local_dict=model.symbols)
-                         if ("threshold" in model.model 
-                             and model.model["threshold"] is not None)
-                         else 0)
-
-
         # Substitute jumps into ODEs to get post-jump dynamics "\dot{x}^+"
         dx_dt_plus_n = {}
         for sym, expr in model.dx_dt.items():
@@ -1223,15 +1234,15 @@ class EventPropCompiler(Compiler):
             saved_vars.update({var_name2 for var_name2 in model.var_vals.keys()
                                if a[var_sym].has(sympy.Symbol(var_name2))})
 
-            if thresold_expr != 0:
+            if model.threshold != 0:
                 ex = sympy.simplify(
-                    sum(sympy.diff(thresold_expr, var_sym2) * var_expr2
+                    sum(sympy.diff(model.threshold, var_sym2) * var_expr2
                         for var_sym2, var_expr2 in model.dx_dt.items()))
                 if ex != 0:
-                    ex = sympy.diff(thresold_expr, var_sym) / ex
+                    ex = sympy.diff(model.threshold, var_sym) / ex
                     if ex != 0:
                         b[var_sym] = _simplify_using_threshold(
-                            model.var_vals.keys(), thresold_expr, ex)
+                            model.var_vals.keys(), model.threshold, ex)
 
                         # **TODO** helper
                         saved_vars.update(
@@ -1249,7 +1260,7 @@ class EventPropCompiler(Compiler):
                     ex = sympy.simplify(ex)
                     if ex != 0:
                         c[var_sym] = _simplify_using_threshold(
-                            model.var_vals.keys(), thresold_expr, ex)
+                            model.var_vals.keys(), model.threshold, ex)
                         saved_vars.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
@@ -1274,7 +1285,7 @@ class EventPropCompiler(Compiler):
             else:
                 jump = a_exp
             jump =  _simplify_using_threshold(model.var_vals.keys(),
-                                              thresold_expr, jump)
+                                              model.threshold, jump)
             
             # If any jumping remains
             if jump != 0:
@@ -1374,6 +1385,11 @@ class EventPropCompiler(Compiler):
             # **THINK** is this LIF-specific?
             additional_reset_vars = []
             if self.regulariser_enabled:
+                d_threshold_dt = _get_threshold_derivative(model.threshold,
+                                                           model.dx_dt)
+
+                logger.debug(f"\td_threshold_dt: {d_threshold_dt}")
+
                 # Add state variables to hold spike count
                 # during forward and backward pass. 
                 # **NOTE** SpikeCountBackSum is shared across
