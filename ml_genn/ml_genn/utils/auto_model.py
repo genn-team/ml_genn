@@ -58,12 +58,17 @@ class AutoNeuronModel(AutoModel):
         super(AutoNeuronModel, self).__init__(model, param_vals, var_vals)
 
         self.output_var_name = output_var_name
+        
+        if "threshold" in self.model and self.model["threshold"] is not None:
+            self.threshold = sympy.parse_expr(self.model["threshold"],
+                                              local_dict=self.symbols)
+        else:
+            self.threshold = 0
 
     # **TODO** property
     def get_threshold_condition_code(self):
-        return (f"({self.model['threshold']}) >= 0" 
-                if ("threshold" in self.model 
-                    and self.model["threshold"] is not None)
+        return (f"({sympy.ccode(self.threshold)}) >= 0" 
+                if self.threshold != 0
                 else "")
 
     # **TODO** property
