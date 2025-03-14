@@ -134,11 +134,11 @@ def get_delay_type(max_delay):
 def _get_conn_max_delay(conn, delay):
     # if maximum delay steps is specified
     if conn.max_delay_steps is not None:
-        return conn.max_delay_steps
+        return 1 + conn.max_delay_steps
     # Otherwise, if delays are specified as an array, 
     # calculate maximum delay steps from array 
     elif is_value_array(delay):
-        return np.rint(np.amax(delay)).astype(int) + 1
+        return 1 + np.rint(np.amax(delay)).astype(int)
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
                            f"{conn.name} cannot be determined "

@@ -267,14 +267,14 @@ def _get_tau_syn(pop):
 def _get_conn_max_delay(conn, delay):
     # If maximum delay steps is specified
     if conn.max_delay_steps is not None:
-        return conn.max_delay_steps
+        return 1 + conn.max_delay_steps
     # Otherwise, if delay is constant
     elif is_value_constant(delay):
         return 1 + delay
     # Otherwise, if delays are specified as an array,
     # calculate maximum delay steps from array
     elif is_value_array(delay):
-        return np.amax(delay) + 1
+        return 1 + np.amax(delay)
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
                           f"{conn.name} cannot be determined "
