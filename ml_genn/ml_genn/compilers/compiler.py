@@ -324,10 +324,13 @@ class Compiler:
             delay_type = get_delay_type(
                 _get_conn_max_delay(connection, connect_snippet.delay))
 
-            # Use rounded heterogeneous delay for parameter value
-            # **NOTE** this is to handle floating point delays e.g. obtained
-            # by Eventprop training being truncated at inference-time
-            param_vals["d"] = np.round(connect_snippet.delay)
+            # If delays are specified as array, round
+            # **NOTE** this is to prevent floating point delays e.g. those
+            # obtained by Eventprop training being truncated later
+            if is_value_array(connect_snippet.delay):
+                param_vals["d"] = np.round(connect_snippet.delay)
+            else:
+                param_vals["d"] = connect_snippet.delay
 
 
         # If source neuron model defines a negative threshold condition
