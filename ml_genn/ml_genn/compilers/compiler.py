@@ -147,8 +147,8 @@ def get_conn_max_delay(conn, delay):
         return 1 + np.round(np.amax(delay)).astype(int)
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
-                          f"{conn.name} cannot be determined "
-                          f"automatically, please set max_delay_steps")
+                           f"{conn.name} cannot be determined "
+                           f"automatically, please set max_delay_steps")
 
 class SupportedMatrixType:
     def __init__(self, supported: List[int]):
