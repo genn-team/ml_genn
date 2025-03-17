@@ -131,18 +131,21 @@ def get_delay_type(max_delay):
     else:
         return "uint16_t"
 
-def _get_conn_max_delay(conn, delay):
-    # if maximum delay steps is specified
+def get_conn_max_delay(conn, delay):
+    # If maximum delay steps is specified
     if conn.max_delay_steps is not None:
         return 1 + conn.max_delay_steps
-    # Otherwise, if delays are specified as an array, 
-    # calculate maximum delay steps from array 
+    # Otherwise, if delay is constant
+    elif is_value_constant(delay):
+        return 1 + delay
+    # Otherwise, if delays are specified as an array,
+    # calculate maximum delay steps from array
     elif is_value_array(delay):
-        return 1 + np.rint(np.amax(delay)).astype(int)
+        return 1 + np.amax(delay)
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
-                           f"{conn.name} cannot be determined "
-                           f"automatically, please set max_delay_steps")
+                          f"{conn.name} cannot be determined "
+                          f"automatically, please set max_delay_steps")
 
 class SupportedMatrixType:
     def __init__(self, supported: List[int]):
@@ -218,7 +221,7 @@ class Compiler:
         # Otherwise
         else:
             # Get maximum delay
-            max_delay_steps = _get_conn_max_delay(conn, delay)
+            max_delay_steps = get_conn_max_delay(conn, delay)
 
             # Check delay fits in 16-bit limit
             if max_delay_steps > 65535:
@@ -281,7 +284,7 @@ class Compiler:
         if het_delay:
             # Get delay type to use for this connection
             delay_type = get_delay_type(
-                _get_conn_max_delay(connection, connect_snippet.delay))
+                get_conn_max_delay(connection, connect_snippet.delay))
 
             # If delays are specified as array, round
             # **NOTE** this is to prevent floating point delays e.g. those
