@@ -32,7 +32,8 @@ from copy import deepcopy
 from itertools import chain
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
-from .compiler import create_reset_custom_update, get_delay_type
+from .compiler import (create_reset_custom_update, get_delay_type,
+                       get_conn_max_delay)
 from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
@@ -186,22 +187,6 @@ def _get_delay_weight_update_model(delay_type):
             "pre_event_threshold_condition_code": """
             BackSpike_pre
             """}
-
-def _get_conn_max_delay(conn, delay):
-    # If maximum delay steps is specified
-    if conn.max_delay_steps is not None:
-        return 1 + conn.max_delay_steps
-    # Otherwise, if delay is constant
-    elif is_value_constant(delay):
-        return 1 + delay
-    # Otherwise, if delays are specified as an array,
-    # calculate maximum delay steps from array
-    elif is_value_array(delay):
-        return 1 + np.amax(delay)
-    else:
-        raise RuntimeError(f"Maximum delay associated with Connection "
-                          f"{conn.name} cannot be determined "
-                          f"automatically, please set max_delay_steps")
 
 def _template_symbol(expression, symbol: sympy.Symbol):
     return expression.subs(symbol, sympy.Symbol(f"${symbol.name}"))
@@ -556,7 +541,7 @@ class EventPropCompiler(Compiler):
     def apply_delay(self, genn_pop, conn: Connection,
                     delay, compile_state):
         # Get max delay
-        max_delay_steps = _get_conn_max_delay(conn, delay)
+        max_delay_steps = get_conn_max_delay(conn, delay)
         
         # If maximum delay steps is within 16-bit limit, set max delay steps
         if max_delay_steps > 65535:
@@ -759,7 +744,7 @@ class EventPropCompiler(Compiler):
         # Otherwise, if connection has static delays
         elif has_delay:
             # Get delay type to use for this connection
-            delay_type = get_delay_type(_get_conn_max_delay(
+            delay_type = get_delay_type(get_conn_max_delay(
                 conn, connect_snippet.delay))
 
             # Create weight update model with delay
