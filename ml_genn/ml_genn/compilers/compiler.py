@@ -140,11 +140,11 @@ def get_conn_max_delay(conn, delay):
         return 1 + conn.max_delay_steps
     # Otherwise, if delay is constant
     elif is_value_constant(delay):
-        return 1 + delay
+        return 1 + round(delay)
     # Otherwise, if delays are specified as an array,
     # calculate maximum delay steps from array
     elif is_value_array(delay):
-        return 1 + np.amax(delay)
+        return 1 + np.round(np.amax(delay)).astype(int)
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
                           f"{conn.name} cannot be determined "
