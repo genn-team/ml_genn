@@ -1245,7 +1245,13 @@ class EventPropCompiler(Compiler):
         # If connection has non-learnable delay, set parameter value
         # **NOTE** delay is a state variable for learnable connections
         if not has_learnable_delay and has_delay:
-            wum.param_vals["d"] = connect_snippet.delay
+            # If delays are specified as array, round
+            # **NOTE** this is to prevent floating point delays e.g. those
+            # obtained by Eventprop training being truncated later
+            if is_value_array(connect_snippet.delay):
+                wum.param_vals["d"] = np.round(connect_snippet.delay)
+            else:
+                wum.param_vals["d"] = connect_snippet.delay
 
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
