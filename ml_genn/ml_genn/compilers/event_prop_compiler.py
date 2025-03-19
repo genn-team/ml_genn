@@ -143,7 +143,7 @@ abs_sum_assign = {
     "var_refs": [("NBRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
                  ("Limit", "scalar")],
     "update_code": """
-    Limit = 5.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
+    Limit = 10.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
