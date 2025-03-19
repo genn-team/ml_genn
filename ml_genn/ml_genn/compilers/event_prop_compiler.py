@@ -140,11 +140,11 @@ abs_sum_reduce_neuron_model = {
     """}
 
 abs_sum_assign = {
-    "params": [("timesteps","scalar"),("batch_size","scalar")],
+    "params": [("timesteps","int"),("batch_size","int"),("num_neurons","int")],
     "var_refs": [("NBRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
                  ("Limit", "scalar")],
     "update_code": """
-    Limit = 5.0*NBRedAbsSum/timesteps/batch_size;
+    Limit = 5.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
@@ -297,9 +297,8 @@ def _add_abs_sum_reduce_custom_update(compiler, genn_model, genn_pop, var,
         {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum")}
     )
     genn_reduce_nb = compiler.add_custom_update(genn_model, reduce_neuron, custom_update_group_prefix+"AbsSumReduceNeuron", "AbsSumReduceNeuron"+genn_pop.name+var)
-
     assign_neuron = CustomUpdateModel(
-        abs_sum_assign, {"timesteps": compiler.example_timesteps,"batch_size": compiler.batch_size}, {},
+        abs_sum_assign, {"timesteps": compiler.example_timesteps,"batch_size": compiler.batch_size,"num_neurons": genn_pop.num_neurons}, {},
         {"NBRedAbsSum": create_var_ref(genn_reduce_nb, "NBRedAbsSum"),
          "Limit": create_var_ref(genn_pop, f"{var}Limit")}
     )
