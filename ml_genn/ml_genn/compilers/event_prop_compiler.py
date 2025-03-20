@@ -1225,8 +1225,8 @@ class EventPropCompiler(Compiler):
         
         # Add custom uopdate for adjoint limit calculation if required
         if len(compile_state.adjoint_limit_pops_vars) > 0:
-            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchAbsSumReduceBatch"))
-            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchReduceAssign"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchAbsSumReduceBatch"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchReduceAssign"))
 
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
@@ -1527,7 +1527,7 @@ class EventPropCompiler(Compiler):
                 genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
                 genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0, reset=False, access_mode= VarAccess.READ_ONLY_SHARED_NEURON) # 1.0 as arbitrary guess for initial limit
                 compile_state.adjoint_limit_pops_vars.append((pop,jump_sym.name))
-                dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});"
+                dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
             # Generate transition code
             transition_code = "\n".join(
                 f"{jump_sym.name} = fmax(fmin({sympy.ccode(jump_expr)},{jump_sym.name}Limit),-{jump_sym.name}Limit);"
@@ -1612,7 +1612,7 @@ class EventPropCompiler(Compiler):
                             genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
                             genn_model.add_var(f"{lmd_name}Limit", "scalar", 1.0, reset=False) # 1.0 as arbitrary guess for initial limit
                             compile_state.adjoint_limit_pops_vars.append((pop,lmd_name))
-                            dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});"
+                            dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
 
                         # Add jump to transition code
                         transition_code += f"""{lmd_name} += RegLambda * {reg_jump_code} * (SpikeCountBackBatch - RegNuUpperBatch);
@@ -1644,7 +1644,6 @@ class EventPropCompiler(Compiler):
 
             # Solve ODE and generate dynamics code
             dynamics_code += solve_ode(dl_dt, self.solver)
-            
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
         genn_model.prepend_sim_code(
