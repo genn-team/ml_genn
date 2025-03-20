@@ -132,27 +132,12 @@ abs_sum_reduce_batch_model = {
     BRedAbsSum = AbsSum;
     """}
 
-abs_sum_reduce_neuron_model = {
-    "vars": [("NBRedAbsSum", "scalar", CustomUpdateVarAccess.REDUCE_NEURON_SUM)],
-    "var_refs": [("BRedAbsSum", "scalar",VarAccessMode.READ_ONLY)],
-    "update_code": """
-    NBRedAbsSum = BRedAbsSum;
-    """}
-
-abs_sum_assign = {
-    "params": [("timesteps","int"),("batch_size","int"),("num_neurons","int")],
-    "var_refs": [("NBRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
-                 ("Limit", "scalar")],
-    "update_code": """
-    Limit = 10.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
-    """}
-
 abs_sum_reduce_neuron_model_assign  = {
     "params": [("timesteps","int"),("batch_size","int"),("num_neurons","int")],
     "var_refs": [("BRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
                  ("Limit", "scalar", VarAccessMode.REDUCE_SUM)],
     "update_code": """
-    Limit = 10.0*BRedAbsSum/timesteps/batch_size/num_neurons;
+    Limit = 100.0*BRedAbsSum/timesteps/batch_size/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
