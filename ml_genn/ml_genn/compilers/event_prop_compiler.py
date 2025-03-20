@@ -124,6 +124,21 @@ spike_count_batch_reduce_model = {
     SpikeCount = 0;
     """}
 
+abs_sum_reduce_batch_model = {
+    "vars": [("BRedAbsSum", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
+    "var_refs": [("AbsSum", "scalar",VarAccessMode.READ_ONLY)],
+    "update_code": """
+    BRedAbsSum = AbsSum;
+    """}
+
+abs_sum_reduce_neuron_model_assign  = {
+    "params": [("timesteps","int"),("batch_size","int"),("num_neurons","int")],
+    "var_refs": [("BRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
+                 ("Limit", "scalar", VarAccessMode.REDUCE_SUM)],
+    "update_code": """
+    Limit = 100.0*BRedAbsSum/timesteps/batch_size/num_neurons;
+    """}
+
 # Template used to generate backward passes for neurons
 neuron_backward_pass = Template(
     """
@@ -277,6 +292,20 @@ def _get_threshold_derivative(threshold, dx_dt):
     # Return derivate of threshold wrt t
     return threshold_sub.diff(t_sym)
 
+def _add_abs_sum_reduce_custom_update(compiler, genn_model, genn_pop, var,
+                                      custom_update_group_prefix):
+    reduce_batch = CustomUpdateModel(
+        abs_sum_reduce_batch_model, {}, {"BRedAbsSum": 0.0},
+        {"AbsSum": create_var_ref(genn_pop, f"{var}AbsSum")}
+    )
+    genn_reduce_batch = compiler.add_custom_update(genn_model, reduce_batch, custom_update_group_prefix+"AbsSumReduceBatch", "AbsSumReduceBatch"+genn_pop.name+var)
+
+    reduce_assign = CustomUpdateModel(
+        abs_sum_reduce_neuron_model_assign, {"timesteps": compiler.example_timesteps,"batch_size": compiler.batch_size,"num_neurons": genn_pop.num_neurons}, {},
+        {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum"),
+         "Limit": create_var_ref(genn_pop, f"{var}Limit")}
+    )
+    genn_reduce_assign = compiler.add_custom_update(genn_model, reduce_assign, custom_update_group_prefix+"ReduceAssign", "ReduceAssign"+genn_pop.name+var)
 
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
@@ -293,6 +322,7 @@ class CompileState:
         self.timestep_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
+        self.adjoint_limit_pops_vars = []
 
     def add_optimiser_connection(self, conn, weight: bool, delay: bool):
         self._optimiser_connections.append((conn, weight, delay))
@@ -635,7 +665,7 @@ class EventPropCompiler(Compiler):
                 "EventProp compiler only supports "
                 "synapses defined in terms of AutoSynapseModel")
 
-        # Get target neuron mdeol
+        # Get target neuron model
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
                                                     self.batch_size)
@@ -1152,6 +1182,12 @@ class EventPropCompiler(Compiler):
                                                   neuron_populations,
                                                   connection_populations)
 
+        # Add per-batch adjoint limit custom updates for each population and adjoint var that requires them
+        for p, var in compile_state.adjoint_limit_pops_vars:
+            genn_pop = neuron_populations[p]
+            _add_abs_sum_reduce_custom_update(self,genn_model,genn_pop,
+                                              var, "Batch")
+
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
@@ -1187,6 +1223,11 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
         
+        # Add custom uopdate for adjoint limit calculation if required
+        if len(compile_state.adjoint_limit_pops_vars) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchAbsSumReduceBatch"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchReduceAssign"))
+
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
@@ -1195,7 +1236,7 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
-        
+
         # Build list of optimisers and their custom updates
         optimisers = []
         if len(weight_optimiser_cus) > 0:
@@ -1476,13 +1517,20 @@ class EventPropCompiler(Compiler):
                     "EventProp compiler only supports hidden "
                     "neurons defined in terms of AutoSynapseModel")
             
+            dynamics_code = ""
             # Build adjoint system from model
             dl_dt, adjoint_jumps, saved_vars =\
                 self._build_adjoint_system(model, False)
-            
+
+            # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
+            for jump_sym in adjoint_jumps.keys():
+                genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
+                genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0, reset=False, access_mode= VarAccess.READ_ONLY_SHARED_NEURON) # 1.0 as arbitrary guess for initial limit
+                compile_state.adjoint_limit_pops_vars.append((pop,jump_sym.name))
+                dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
             # Generate transition code
             transition_code = "\n".join(
-                f"{sympy.ccode(jump_expr, assign_to=jump_sym.name)};"
+                f"{jump_sym.name} = fmax(fmin({sympy.ccode(jump_expr)},{jump_sym.name}Limit),-{jump_sym.name}Limit);"
                 for jump_sym, jump_expr in adjoint_jumps.items())
             
             # Substitute saved variables for those in the ring buffer
@@ -1558,9 +1606,18 @@ class EventPropCompiler(Compiler):
                             {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
                         logger.debug(f"\t\t{_get_lmd_name(sym)} jump: {reg_jump_code}")
 
-                        # Add jump to transition code
-                        transition_code += f"{_get_lmd_name(sym)} += RegLambda * {reg_jump_code} * (SpikeCountBackBatch - RegNuUpperBatch);"
+                        lmd_name = _get_lmd_name(sym)
+                        # Add the Limit var if not yet in the list of vars
+                        if not genn_model.has_var(f"{lmd_name}Limit"):
+                            genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
+                            genn_model.add_var(f"{lmd_name}Limit", "scalar", 1.0, reset=False) # 1.0 as arbitrary guess for initial limit
+                            compile_state.adjoint_limit_pops_vars.append((pop,lmd_name))
+                            dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
 
+                        # Add jump to transition code
+                        transition_code += f"""{lmd_name} += RegLambda * {reg_jump_code} * (SpikeCountBackBatch - RegNuUpperBatch);
+                        {lmd_name} = fmax(fmin({lmd_name},{lmd_name}Limit),-{lmd_name}Limit);
+                        """
                     
                 # Add population to list of those that 
                 # require a spike count reduction
@@ -1586,8 +1643,7 @@ class EventPropCompiler(Compiler):
                                   for v in saved_vars)
 
             # Solve ODE and generate dynamics code
-            dynamics_code = solve_ode(dl_dt, self.solver)
-            
+            dynamics_code += solve_ode(dl_dt, self.solver)
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
         genn_model.prepend_sim_code(
