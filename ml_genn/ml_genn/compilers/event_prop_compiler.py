@@ -146,6 +146,14 @@ abs_sum_assign = {
     Limit = 10.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
     """}
 
+abs_sum_reduce_neuron_model_assign  = {
+    "params": [("timesteps","int"),("batch_size","int"),("num_neurons","int")],
+    "var_refs": [("BRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
+                 ("Limit", "scalar", VarAccessMode.REDUCE_SUM)],
+    "update_code": """
+    Limit = 10.0*BRedAbsSum/timesteps/batch_size/num_neurons;
+    """}
+
 # Template used to generate backward passes for neurons
 neuron_backward_pass = Template(
     """
@@ -307,17 +315,12 @@ def _add_abs_sum_reduce_custom_update(compiler, genn_model, genn_pop, var,
     )
     genn_reduce_batch = compiler.add_custom_update(genn_model, reduce_batch, custom_update_group_prefix+"AbsSumReduceBatch", "AbsSumReduceBatch"+genn_pop.name+var)
 
-    reduce_neuron = CustomUpdateModel(
-        abs_sum_reduce_neuron_model, {}, {"NBRedAbsSum": 0.0},
-        {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum")}
-    )
-    genn_reduce_nb = compiler.add_custom_update(genn_model, reduce_neuron, custom_update_group_prefix+"AbsSumReduceNeuron", "AbsSumReduceNeuron"+genn_pop.name+var)
-    assign_neuron = CustomUpdateModel(
-        abs_sum_assign, {"timesteps": compiler.example_timesteps,"batch_size": compiler.batch_size,"num_neurons": genn_pop.num_neurons}, {},
-        {"NBRedAbsSum": create_var_ref(genn_reduce_nb, "NBRedAbsSum"),
+    reduce_assign = CustomUpdateModel(
+        abs_sum_reduce_neuron_model_assign, {"timesteps": compiler.example_timesteps,"batch_size": compiler.batch_size,"num_neurons": genn_pop.num_neurons}, {},
+        {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum"),
          "Limit": create_var_ref(genn_pop, f"{var}Limit")}
     )
-    genn_assign = compiler.add_custom_update(genn_model, assign_neuron, custom_update_group_prefix+"LimitAssign", "LimitAssign"+genn_pop.name+var)
+    genn_reduce_assign = compiler.add_custom_update(genn_model, reduce_assign, custom_update_group_prefix+"ReduceAssign", "ReduceAssign"+genn_pop.name+var)
 
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
@@ -1235,6 +1238,11 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
         
+        # Add custom uopdate for adjoint limit calculation if required
+        if len(compile_state.adjoint_limit_pops_vars) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchAbsSumReduceBatch"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("BatchReduceAssign"))
+
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
@@ -1243,7 +1251,7 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
-        
+
         # Build list of optimisers and their custom updates
         optimisers = []
         if len(weight_optimiser_cus) > 0:
@@ -1532,7 +1540,7 @@ class EventPropCompiler(Compiler):
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
             for jump_sym in adjoint_jumps.keys():
                 genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
-                genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0, reset=False) # 1.0 as arbitrary guess for initial limit
+                genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0, reset=False, access_mode= VarAccess.READ_ONLY_SHARED_NEURON) # 1.0 as arbitrary guess for initial limit
                 compile_state.adjoint_limit_pops_vars.append((pop,jump_sym.name))
                 dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});"
             # Generate transition code
