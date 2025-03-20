@@ -143,7 +143,7 @@ abs_sum_assign = {
     "var_refs": [("NBRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
                  ("Limit", "scalar")],
     "update_code": """
-    Limit = 10.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
+    Limit = 100.0*NBRedAbsSum/timesteps/batch_size/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
@@ -1234,7 +1234,12 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax1"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
-        
+
+        if len(compile_state.adjoint_limit_pops_vars) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchAbsSumReduceBatch"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchAbsSumReduceNeuron"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchLimitAssign"))
+
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
