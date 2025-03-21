@@ -30,7 +30,8 @@ from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
 from pygenn import create_egp_ref, create_var_ref, create_wu_var_ref
-from .compiler import create_reset_custom_update, get_delay_type
+from .compiler import (create_reset_custom_update, get_conn_max_delay,
+                       get_delay_type)
 from ..utils.module import get_object, get_object_mapping
 from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_array, is_value_constant
@@ -263,22 +264,6 @@ def _get_tau_syn(pop):
                                       "different time constants")
     assert tau_syn is not None
     return tau_syn
-
-def _get_conn_max_delay(conn, delay):
-    # If maximum delay steps is specified
-    if conn.max_delay_steps is not None:
-        return conn.max_delay_steps
-    # Otherwise, if delay is constant
-    elif is_value_constant(delay):
-        return 1 + delay
-    # Otherwise, if delays are specified as an array,
-    # calculate maximum delay steps from array
-    elif is_value_array(delay):
-        return np.amax(delay) + 1
-    else:
-        raise RuntimeError(f"Maximum delay associated with Connection "
-                          f"{conn.name} cannot be determined "
-                          f"automatically, please set max_delay_steps")
 
 
 class CompileState:
@@ -576,7 +561,7 @@ class EventPropCompiler(Compiler):
     def apply_delay(self, genn_pop, conn: Connection,
                     delay, compile_state):
         # Get max delay
-        max_delay_steps = _get_conn_max_delay(conn, delay)
+        max_delay_steps = get_conn_max_delay(conn, delay)
         
         # If maximum delay steps is within 16-bit limit, set max delay steps
         if max_delay_steps > 65535:
@@ -1176,7 +1161,7 @@ class EventPropCompiler(Compiler):
 
         # Get delay type to use for this connection
         delay_type = get_delay_type(
-            _get_conn_max_delay(conn, connect_snippet.delay))
+            get_conn_max_delay(conn, connect_snippet.delay))
 
         # If this is some form of trainable connectivity
         if connect_snippet.trainable:
@@ -1245,7 +1230,13 @@ class EventPropCompiler(Compiler):
         # If connection has non-learnable delay, set parameter value
         # **NOTE** delay is a state variable for learnable connections
         if not has_learnable_delay and has_delay:
-            wum.param_vals["d"] = connect_snippet.delay
+            # If delays are specified as array, round
+            # **NOTE** this is to prevent floating point delays e.g. those
+            # obtained by Eventprop training being truncated later
+            if is_value_array(connect_snippet.delay):
+                wum.param_vals["d"] = np.round(connect_snippet.delay)
+            else:
+                wum.param_vals["d"] = connect_snippet.delay
 
         # If source neuron isn't an input neuron
         source_neuron = conn.source().neuron
