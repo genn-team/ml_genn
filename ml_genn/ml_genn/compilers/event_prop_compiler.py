@@ -631,6 +631,19 @@ class EventPropCompiler(Compiler):
         genn_model = super(EventPropCompiler, self).build_neuron_model(
                            pop, model, compile_state)
 
+        # Add regularisation variable only after the forward pass is built; this way it is not actually included
+        # into the genn_model as its forward pass is not actually needed for anything
+        if self.reg_lambda != 0.0 and pop.neuron.readout is None and isinstance(model, AutoNeuronModel) and model.threshold != 0:
+            logger.debug("\tInjecting regulariser variable")
+            model.param_vals["tau_A_reg"] = 50.0 # consider what tau_A_reg is appropriate; not hard-coded?
+            model.var_vals["A_reg"] = 0.0
+            model.symbols["tau_A_reg"] = sympy.Symbol("tau_A_reg")
+            model.symbols["A_reg"] = sympy.Symbol("A_reg")
+            model.dx_dt[model.symbols["A_reg"]] = sympy.parse_expr("-A_reg/tau_A_reg", local_dict=model.symbols)
+            model.jumps[model.symbols["A_reg"]] = sympy.parse_expr("A_reg + 1.0/tau_A_reg", local_dict=model.symbols)
+            # Should the value of tau_A_reg be a parameter of the compiler?
+            genn_model.add_param("tau_A_reg", "scalar", 50.0)
+
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             return self._build_out_neuron_model(pop, model, genn_model,
@@ -707,99 +720,6 @@ class EventPropCompiler(Compiler):
 
         logger.debug(f"\t\tAdjoint ODEs: {dl_dt}")
         logger.debug(f"\t\tReset variables: {genn_model.reset_vars}")
-
-        if self.reg_lambda != 0.0 and trg_neuron_model.threshold != 0:
-            logger.debug("\tBuilding regulariser")
-            # Get threshold derivative
-            d_thr_dt = _get_threshold_derivative(trg_neuron_model.threshold,
-                                                 trg_neuron_model.dx_dt)
-
-            # Substitute Isyn for whatever expression this synapse is injecting
-            d_thr_dt = d_thr_dt.subs(isyn_sym, model.inject_current)
-
-            logger.debug(f"\t\td_threshold_dt: {d_thr_dt}")
-
-            # Add read-only neuron variable references
-            # to variables required for regulariser
-            genn_model.add_neuron_var_ref("SpikeCount", "int", "SpikeCount")
-            genn_model.set_neuron_var_ref_access_mode("SpikeCount", 
-                                                      VarAccessMode.READ_ONLY)
-            genn_model.add_neuron_var_ref("SpikeCountBackBatch", "int",
-                                          "SpikeCountBackBatch")
-            genn_model.set_neuron_var_ref_access_mode("SpikeCountBackBatch",
-                                                      VarAccessMode.READ_ONLY)
-            genn_model.add_neuron_var_ref("RingReadOffset", "int", "RingReadOffset")
-            genn_model.set_neuron_var_ref_access_mode("RingReadOffset", 
-                                                      VarAccessMode.READ_ONLY)
-            genn_model.add_neuron_var_ref("BackSpike", "uint8_t", "BackSpike")
-            genn_model.set_neuron_var_ref_access_mode("BackSpike",
-                                                      VarAccessMode.READ_ONLY)
-            # Add parameters for regulariser
-            # **NOTE** this is multiplied by batch_size so it
-            # can be compared directly to SpikeCountBackBatch
-            genn_model.add_param("RegNuUpperBatch", "int",
-                                 self.reg_nu_upper * self.full_batch_size)
-
-            # **NOTE** these are divided by batch size once to
-            # make these batch-size-agnostic and again to take 
-            # into account that we're operating on batch sums of spike counts
-            genn_model.add_param(
-                "RegLambda", "scalar",
-                self.reg_lambda / (self.full_batch_size
-                                    * self.full_batch_size))
-
-            # Loop through synapse state variables
-            all_referenced_trg_var_names = set()
-            reg_back_spike_jumps = []
-            for sym in model.dx_dt.keys():
-                # Calculate jump expression
-                reg_jump = d_thr_dt.diff(sym) / d_thr_dt
-                logger.debug(f"\t\t{_get_lmd_name(sym)} Reg jump: {reg_jump}")
-
-                # Attempt to simplify using threshold
-                reg_jump = _simplify_using_threshold(
-                    trg_neuron_model.var_vals.keys(), 
-                    trg_neuron_model.threshold, reg_jump)
-
-                # Substitute inject current expression back for Isyn                
-                reg_jump = reg_jump.subs(model.inject_current, isyn_sym)
-
-                # If any jump expression remains
-                if reg_jump != 0:
-                    # Template any neuron variable names or Isyn
-                    referenced_trg_var_names = set()
-                    reg_jump = _template_symbols(
-                        reg_jump, chain(trg_neuron_model.var_vals.keys(), ["Isyn"]),
-                        referenced_trg_var_names)
-
-                    # If any target population parameters are 
-                    # referenced, duplicate in synapse model
-                    _add_required_parameters(trg_neuron_model, genn_model, reg_jump)
-
-                    # Generate code
-                    reg_jump_code = sympy.ccode(reg_jump)
-
-                    # Substitute neuron variables for those in the ring buffer
-                    reg_jump_code = Template(reg_jump_code).substitute(
-                        {s: f"Ring{s}[ringOffset + RingReadOffset]" 
-                         for s in referenced_trg_var_names})
-                    logger.debug(f"\t\t{_get_lmd_name(sym)} jump: {reg_jump_code}")
-
-                    reg_back_spike_jumps.append(f"{_get_lmd_name(sym)} += RegLambda * {reg_jump_code} * (SpikeCountBackBatch - RegNuUpperBatch);")
-                    all_referenced_trg_var_names.update(referenced_trg_var_names)
-
-            if len(reg_back_spike_jumps) > 0:
-                reg_back_spike_jumps = "\n".join(reg_back_spike_jumps)
-                genn_model.prepend_sim_code(
-                    f"""
-                    if(BackSpike) {{
-                        const int ringOffset = (batch * num_neurons * {self.max_spikes}) + (id * {self.max_spikes});
-                        {reg_back_spike_jumps}
-                    }}
-                    """)
-            # Add EGP references to all referenced ring buffers
-            for e in all_referenced_trg_var_names:
-                genn_model.add_neuron_egp_ref(f"Ring{e}", "scalar*", f"Ring{e}")
 
         # Build sim code
         genn_model.prepend_sim_code(
@@ -1352,9 +1272,9 @@ class EventPropCompiler(Compiler):
         # therefore, we can do these independent of synapse equations
         saved_vars = set()
         dl_dt = {}
-        for sym, expr in model.dx_dt.items():
-            o = sum(sympy.diff(expr, sym) * _get_lmd_sym(sym2)
-                    for sym2 in model.dx_dt.keys())
+        for sym in model.dx_dt.keys():
+            o = sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
+                    for sym2, expr2 in model.dx_dt.items())
             
             # collect variables they might need to go into a ring buffer:
             # **TODO** helper
@@ -1435,6 +1355,9 @@ class EventPropCompiler(Compiler):
                 # that are combined with l_V loss types
                 # This is at the moment categorically excluded
                 drive = sympy.Symbol("drive_p" if output else "RevISyn")
+                # add l^- - l^+ jump for neurons with A_reg regularisation
+                if sympy.Symbol("A_reg") in model.dx_dt.keys():
+                    drive += sympy.Symbol("drive_reg")/sympy.Symbol("tau_A_reg")
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
@@ -1481,6 +1404,7 @@ class EventPropCompiler(Compiler):
         genn_model.add_egp("RingSpikeTime", "scalar*", 
                            np.empty(spike_ring_size, dtype=np.float32))
 
+        regularisation_code = ""
         # If neuron is an input
         if isinstance(pop.neuron, Input):
             # Add reset logic to reset any state 
@@ -1507,6 +1431,10 @@ class EventPropCompiler(Compiler):
             dl_dt, adjoint_jumps, saved_vars =\
                 self._build_adjoint_system(model, False)
 
+            # Add drive to A_reg regularisation variable
+            if self.reg_lambda != 0.0 and model.threshold != 0:
+                dl_dt[_get_lmd_sym("A_reg")] -= sympy.Symbol("drive_reg")
+
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
             for jump_sym in adjoint_jumps.keys():
                 genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
@@ -1515,7 +1443,7 @@ class EventPropCompiler(Compiler):
                 dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
             # Generate transition code
             transition_code = "\n".join(
-                f"{jump_sym.name} = fmax(fmin({sympy.ccode(jump_expr)},{jump_sym.name}Limit),-{jump_sym.name}Limit);"
+                f"{jump_sym.name} = max(min({sympy.ccode(jump_expr)},{jump_sym.name}Limit),-{jump_sym.name}Limit);"
                 for jump_sym, jump_expr in adjoint_jumps.items())
             
             # Substitute saved variables for those in the ring buffer
@@ -1532,13 +1460,8 @@ class EventPropCompiler(Compiler):
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
             additional_reset_vars = []
-            if self.reg_lambda != 0.0:
+            if self.reg_lambda != 0.0 and model.threshold != 0:
                 logger.debug("\tBuilding regulariser")
-                # Get threshold derivative
-                d_thr_dt = _get_threshold_derivative(model.threshold,
-                                                     model.dx_dt)
-                logger.debug(f"\t\td_threshold_dt: {d_thr_dt}")
-                
                 # Add state variables to hold spike count
                 # during forward and backward pass. 
                 # **NOTE** SpikeCountBackSum is shared across
@@ -1555,14 +1478,6 @@ class EventPropCompiler(Compiler):
                 # can be compared directly to SpikeCountBackBatch
                 genn_model.add_param("RegNuUpperBatch", "int",
                                      self.reg_nu_upper * self.full_batch_size)
-                    
-                # **NOTE** these are divided by batch size once to
-                # make these batch-size-agnostic and again to take 
-                # into account that we're operating on batch sums of spike counts
-                genn_model.add_param(
-                    "RegLambda", "scalar",
-                    self.reg_lambda / (self.full_batch_size
-                                       * self.full_batch_size))
 
                 # If batch size is 1, add reset variables to copy SpikeCount
                 # into SpikeCountBackBatch and zero SpikeCount
@@ -1571,39 +1486,9 @@ class EventPropCompiler(Compiler):
                         ("SpikeCountBackBatch", "int", "SpikeCount"))
 
                 # Loop through neuron state variables
-                for sym in model.dx_dt.keys():
-                    # Calculate jump expression
-                    reg_jump = d_thr_dt.diff(sym) / d_thr_dt
-
-                    # Attempt to simplify using threshold
-                    reg_jump = _simplify_using_threshold(
-                        model.var_vals.keys(), model.threshold, reg_jump)
-                    
-                    # Template any neuron variable names or Isyn
-                    reg_jump = _template_symbols(
-                        reg_jump, chain(model.var_vals.keys(), ["Isyn"]),
-                        saved_vars)
-                    
-                    if reg_jump != 0:
-                        reg_jump_code = sympy.ccode(reg_jump)
-                        # Substitute saved variables for those in the ring buffer
-                        reg_jump_code = Template(reg_jump_code).substitute(
-                            {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
-                        logger.debug(f"\t\t{_get_lmd_name(sym)} jump: {reg_jump_code}")
-
-                        lmd_name = _get_lmd_name(sym)
-                        # Add the Limit var if not yet in the list of vars
-                        if not genn_model.has_var(f"{lmd_name}Limit"):
-                            genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
-                            genn_model.add_var(f"{lmd_name}Limit", "scalar", 1.0, reset=False) # 1.0 as arbitrary guess for initial limit
-                            compile_state.adjoint_limit_pops_vars.append((pop,lmd_name))
-                            dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
-
-                        # Add jump to transition code
-                        transition_code += f"""{lmd_name} += RegLambda * {reg_jump_code} * (SpikeCountBackBatch - RegNuUpperBatch);
-                        {lmd_name} = fmax(fmin({lmd_name},{lmd_name}Limit),-{lmd_name}Limit);
-                        """
-                    
+                regularisation_code = f"""
+                const scalar drive_reg = -{self.reg_lambda}*(SpikeCountBackBatch - RegNuUpperBatch);
+                """
                 # Add population to list of those that 
                 # require a spike count reduction
                 compile_state.spike_count_populations.append(pop)
@@ -1635,7 +1520,7 @@ class EventPropCompiler(Compiler):
             neuron_backward_pass.substitute(
                 max_spikes=self.max_spikes,
                 example_time=(self.example_timesteps * self.dt),
-                dynamics=dynamics_code,
+                dynamics="\n".join([regularisation_code, dynamics_code]),
                 transition=transition_code))
 
         # Prepend code to reset to write spike time to ring buffer
@@ -1646,6 +1531,7 @@ class EventPropCompiler(Compiler):
                 strict_check=(neuron_reset_strict_check
                                 if self.strict_buffer_checking
                                 else "")))
+        #print(genn_model.model["sim_code"])
         return genn_model
         
     def _build_out_neuron_model(self, pop: Population, 
@@ -1681,12 +1567,16 @@ class EventPropCompiler(Compiler):
 
         # Add continous drive term to LambdaV
         dl_dt[_get_lmd_sym(model.output_var_name)] += sympy.Symbol("drive")
+        # Add drive to A_reg regularisation variable
+        if self.reg_lambda != 0.0 and model.threshold != 0:
+            dl_dt[_get_lmd_sym("A_reg")] += sympy.Symbol("drive_reg")
 
         # Add adjoint state variables
         # **THINK** what about reset
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
-        
+
+        regularisation_code = ""
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, self.solver)
         
@@ -1937,7 +1827,7 @@ class EventPropCompiler(Compiler):
             # Add parameters with synaptic decay and scale constants
             #model_copy.add_param("IsynScale", "scalar",
             #    self.dt / (tau_syn  * (1.0 - beta)))
-        
+
             # Readout has to be FirstSpikeTime
             if isinstance(pop.neuron.readout, FirstSpikeTime):
                 if not sce_loss:
@@ -1991,10 +1881,12 @@ class EventPropCompiler(Compiler):
                         example_time=example_time,
                         dynamics=f"""
                             const scalar drive = 0.0;
+                            {regularisation_code}
                             {dynamics_code}
                             """,
                         transition=transition_code))
 
+                print(genn_model.model.items())
                 # Generate ring-buffer write code
                 write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                     for v in saved_vars)
