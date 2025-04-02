@@ -259,24 +259,6 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
         if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
             genn_model.add_param(n, "scalar", v)
 
-def _get_threshold_derivative(threshold, dx_dt):
-    # Loop through neuron dx_dt
-    threshold_sub = threshold
-    t_sym = sympy.Symbol("t")
-    for sym, expr in dx_dt.items():
-        # Create local class which return variable derivative as 
-        class X(sympy.Function):
-            def fdiff(self, arg_index):
-                assert arg_index == 1
-                return expr
-        
-        # Replace symbol in threshold condition with 
-        # object which provides derivative wrt t
-        threshold_sub = threshold_sub.subs(sym, X(t_sym))
-    
-    # Return derivate of threshold wrt t
-    return threshold_sub.diff(t_sym)
-
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
         self.losses = get_object_mapping(losses, readouts,
