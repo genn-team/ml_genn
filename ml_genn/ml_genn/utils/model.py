@@ -304,34 +304,22 @@ class NeuronModel(Model):
 
 class SynapseModel(Model):
     def __init__(self, model, param_vals=None, var_vals=None,
-                 egp_vals=None, neuron_var_refs=None, neuron_egp_refs=None):
+                 egp_vals=None, neuron_var_refs=None):
         super(SynapseModel, self).__init__(model, param_vals, 
                                            var_vals, egp_vals)
 
         self.neuron_var_refs = neuron_var_refs or {}
-        self.neuron_egp_refs = neuron_egp_refs or {}
 
     def process(self):
         return (super(SynapseModel, self).process() 
-                + (self.neuron_var_refs,) + (self.neuron_egp_refs,))
+                + (self.neuron_var_refs,))
     
     def has_neuron_var_ref(self, name):
         return self._is_in_list("neuron_var_refs", name)
 
-    def has_neuron_egp_ref(self, name):
-        return self._is_in_list("neuron_extra_global_param_refs", name)
-    
     def add_neuron_var_ref(self, name, type, target):
         self._add_to_list("neuron_var_refs", (name, type))
         self.neuron_var_refs[name] = target
-
-    def set_neuron_var_ref_access_mode(self, name, access_mode):
-        self._set_access_model("neuron_var_refs", name, access_mode)
-   
-    def add_neuron_egp_ref(self, name, type, value):
-        assert not self.has_neuron_egp_ref(name)
-        self._add_to_list("neuron_extra_global_param_refs", (name, type))
-        self.neuron_egp_refs[name] = value
 
     def append_sim_code(self, code):
         self._append_code("sim_code", code)

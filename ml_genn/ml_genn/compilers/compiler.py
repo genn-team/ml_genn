@@ -19,10 +19,9 @@ from ..utils.value import InitValue
 
 from copy import copy, deepcopy
 from pygenn import (create_custom_update_model, create_den_delay_var_ref,
-                    create_egp_ref, create_neuron_model,
-                    create_out_post_var_ref, create_postsynaptic_model,
-                    create_weight_update_model, create_var_ref,
-                    init_postsynaptic, init_weight_update)
+                    create_neuron_model, create_out_post_var_ref,
+                    create_postsynaptic_model, create_weight_update_model,
+                    create_var_ref, init_postsynaptic, init_weight_update)
 from string import digits
 from .weight_update_models import (get_static_pulse_delay_model, 
                                    get_signed_static_pulse_delay_model)
@@ -126,9 +125,6 @@ def create_reset_custom_update(reset_vars, var_ref_creator):
 
 def create_local_var_refs(refs, genn_group):
     return {n: create_var_ref(genn_group, v) for n, v in refs.items()}
-
-def create_local_egp_refs(refs, genn_group):
-    return {n: create_egp_ref(genn_group, v) for n, v in refs.items()}
 
 def get_delay_type(max_delay):
     if max_delay < 256:
@@ -599,8 +595,7 @@ class Compiler:
             # Build postsynaptic model
             syn = conn.synapse
             (psm, psm_param_vals, psm_dynamic_param_names, psm_var_vals,
-             psm_egp_vals, psm_var_egp_vals, psm_neuron_var_refs,
-             psm_neuron_egp_refs) =\
+             psm_egp_vals, psm_var_egp_vals, psm_neuron_var_refs) =\
                 self.build_synapse_model(conn,
                                          syn.get_model(conn, self.dt,
                                                        self.batch_size),
@@ -629,10 +624,8 @@ class Compiler:
             pre_genn_group = neuron_populations[conn.source()]
             post_genn_group = neuron_populations[conn.target()]
 
-            # Use to create local variable and EGP references
+            # Use to create local variable references
             psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
-                                                        post_genn_group)
-            psm_neuron_egp_refs = create_local_egp_refs(psm_neuron_egp_refs,
                                                         post_genn_group)
             wum_pre_neuron_var_refs = create_local_var_refs(
                 wum_pre_neuron_var_refs, pre_genn_group)
@@ -649,7 +642,7 @@ class Compiler:
                                    wum_post_neuron_var_refs,
                                    wum_psm_var_refs),
                 init_postsynaptic(genn_psm, psm_param_vals, psm_var_vals,
-                                  psm_neuron_var_refs, psm_neuron_egp_refs),
+                                  psm_neuron_var_refs),
                 connect_snippet.snippet)
             
             # Apply delay
