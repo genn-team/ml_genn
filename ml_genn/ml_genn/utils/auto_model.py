@@ -20,31 +20,37 @@ class AutoModel:
         self.param_vals = param_vals or {}
         self.var_vals = var_vals or {}
 
-        # Create sympy symbols for variable and parameter names
-        # **NOTE** model doesn't explicitly list parameters
-        self.symbols = {n: sympy.Symbol(n) 
-                        for n in chain(self.var_vals.keys(),
-                                       self.param_vals.keys())}
-        
         # If model has any variables
         if "vars" in self.model:
             # Parse ODEs
             self.dx_dt =\
-                {sympy.Symbol(n): sympy.parse_expr(v[0], 
-                                                   local_dict=self.symbols)
+                {sympy.Symbol(n): sympy.parse_expr(v[0])
                  for n, v in self.model["vars"].items()
                  if v[0] is not None}
             
             # Parse jumps
             self.jumps =\
-                {sympy.Symbol(n): sympy.parse_expr(v[1], 
-                                                   local_dict=self.symbols)
+                {sympy.Symbol(n): sympy.parse_expr(v[1])
                  for n, v in self.model["vars"].items()
                  if v[1] is not None}
         else:
             self.dx_dt = {}
 
+    def add_var(self, name: str, dynamics: Optional[str], 
+                jump: Optional[str], value: Value = 0.0):
+        sym = sympy.Symbol(name)
+        if sym in self.dx_dt or sym in self.var_vals or sym in self.jumps:
+            raise RuntimeError(f"AutoModel has existing variable: {name}")
+        
+        # If provided, parse dynamics and jump and add to dicts
+        if dynamics is not None:
+            self.dx_dt[sym] = sympy.parse_expr(dynamics)
+        if jump is not None:
+            self.jumps[sym] = sympy.parse_expr(jump)
 
+        # Add value to dictionary
+        self.var_vals[name] = value
+    
     def get_vars(self, var_type: str = "scalar"):
         return [(n, var_type) for n in self.var_vals.keys()]
     
@@ -60,8 +66,7 @@ class AutoNeuronModel(AutoModel):
         self.output_var_name = output_var_name
         
         if "threshold" in self.model and self.model["threshold"] is not None:
-            self.threshold = sympy.parse_expr(self.model["threshold"],
-                                              local_dict=self.symbols)
+            self.threshold = sympy.parse_expr(self.model["threshold"])
         else:
             self.threshold = 0
 
@@ -93,7 +98,7 @@ class AutoSynapseModel(AutoModel):
 
         if "inject_current" in self.model:
             self.inject_current = sympy.parse_expr(
-                self.model["inject_current"], local_dict=self.symbols)
+                self.model["inject_current"])
         else:
             raise RuntimeError("AutoSynapseModel requires an "
                                "'inject_current' expression.")
