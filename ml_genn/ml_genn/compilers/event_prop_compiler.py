@@ -133,11 +133,11 @@ abs_sum_reduce_batch_model = {
     """}
 
 abs_sum_reduce_neuron_model_assign  = {
-    "params": [("timesteps","int"),("batch_size","int"),("num_neurons","int")],
-    "var_refs": [("BRedAbsSum", "scalar",VarAccessMode.READ_ONLY),
+    "params": [("timesteps", "int")],
+    "var_refs": [("BRedAbsSum", "scalar", VarAccessMode.READ_ONLY),
                  ("Limit", "scalar", VarAccessMode.REDUCE_SUM)],
     "update_code": """
-    Limit = 100.0*BRedAbsSum/timesteps/batch_size/num_neurons;
+    Limit = 100.0*BRedAbsSum/timesteps/num_batch/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
@@ -276,21 +276,6 @@ def _get_threshold_derivative(threshold, dx_dt):
     
     # Return derivate of threshold wrt t
     return threshold_sub.diff(t_sym)
-
-def _add_abs_sum_reduce_custom_update(compiler, genn_model, genn_pop, var,
-                                      custom_update_group_prefix):
-    reduce_batch = CustomUpdateModel(
-        abs_sum_reduce_batch_model, {}, {"BRedAbsSum": 0.0},
-        {"AbsSum": create_var_ref(genn_pop, f"{var}AbsSum")}
-    )
-    genn_reduce_batch = compiler.add_custom_update(genn_model, reduce_batch, custom_update_group_prefix+"AbsSumReduceBatch", "AbsSumReduceBatch"+genn_pop.name+var)
-
-    reduce_assign = CustomUpdateModel(
-        abs_sum_reduce_neuron_model_assign, {"timesteps": compiler.example_timesteps,"batch_size": compiler.batch_size,"num_neurons": genn_pop.num_neurons}, {},
-        {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum"),
-         "Limit": create_var_ref(genn_pop, f"{var}Limit")}
-    )
-    genn_reduce_assign = compiler.add_custom_update(genn_model, reduce_assign, custom_update_group_prefix+"ReduceAssign", "ReduceAssign"+genn_pop.name+var)
 
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
@@ -1079,8 +1064,7 @@ class EventPropCompiler(Compiler):
         # Add per-batch adjoint limit custom updates for each population and adjoint var that requires them
         for p, var in compile_state.adjoint_limit_pops_vars:
             genn_pop = neuron_populations[p]
-            _add_abs_sum_reduce_custom_update(self,genn_model,genn_pop,
-                                              var, "Batch")
+            self._add_abs_sum_reduce_custom_update(genn_model, genn_pop, var)
 
         # Build list of base callbacks
         base_train_callbacks = []
@@ -1119,8 +1103,8 @@ class EventPropCompiler(Compiler):
         
         # Add custom uopdate for adjoint limit calculation if required
         if len(compile_state.adjoint_limit_pops_vars) > 0:
-            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchAbsSumReduceBatch"))
-            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("BatchReduceAssign"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("AbsSumReduceBatch"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("ReduceAssign"))
 
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
@@ -1198,7 +1182,22 @@ class EventPropCompiler(Compiler):
             "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
 
-    
+    def _add_abs_sum_reduce_custom_update(self, genn_model, genn_pop, var):
+        reduce_batch = CustomUpdateModel(
+            abs_sum_reduce_batch_model, {}, {"BRedAbsSum": 0.0},
+            {"AbsSum": create_var_ref(genn_pop, f"{var}AbsSum")})
+        genn_reduce_batch = self.add_custom_update(
+            genn_model, reduce_batch, "AbsSumReduceBatch", 
+            "AbsSumReduceBatch" + genn_pop.name + var)
+
+        reduce_assign = CustomUpdateModel(
+            abs_sum_reduce_neuron_model_assign, 
+            {"timesteps": self.example_timesteps}, {},
+            {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum"),
+             "Limit": create_var_ref(genn_pop, f"{var}Limit")})
+        self.add_custom_update(genn_model, reduce_assign, "ReduceAssign",
+                               "ReduceAssign" + genn_pop.name + var)
+
     def _create_optimiser_custom_update(self, name_suffix, var_ref, 
                                         gradient_ref, optimiser, genn_model,
                                         clamp_var=None):
