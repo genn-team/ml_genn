@@ -1374,7 +1374,6 @@ class EventPropCompiler(Compiler):
         genn_model.add_egp("RingSpikeTime", "scalar*", 
                            np.empty(spike_ring_size, dtype=np.float32))
 
-        regularisation_code = ""
         # If neuron is an input
         if isinstance(pop.neuron, Input):
             # Add reset logic to reset any state 
@@ -1407,7 +1406,7 @@ class EventPropCompiler(Compiler):
                 model.add_var("A_reg", "-A_reg/tau_A_reg",
                               "A_reg + 1.0/tau_A_reg")
 
-                # Should the value of tau_A_reg be a parameter of the compiler?
+                # Add parameter to pass through tau A
                 genn_model.add_param("tau_A_reg", "scalar", self.tau_a_reg)
 
             # Build adjoint system from model
@@ -1422,7 +1421,8 @@ class EventPropCompiler(Compiler):
             dynamics_code = ""
             for jump_sym in adjoint_jumps.keys():
                 genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
-                genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0, reset=False, access_mode= VarAccess.READ_ONLY_SHARED_NEURON) # 1.0 as arbitrary guess for initial limit
+                genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0,
+                                   VarAccess.READ_ONLY_SHARED_NEURON, False)
                 compile_state.adjoint_limit_pops_vars.append((pop, jump_sym.name))
                 dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
 
@@ -1437,6 +1437,12 @@ class EventPropCompiler(Compiler):
 
             # Add additional input variable to receive add_to_pre feedback
             genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
+
+            # Add EGP for stored vars ring variables
+            spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
+            for var in saved_vars:
+                genn_model.add_egp(f"Ring{var}", "scalar*", 
+                                   np.empty(spike_ring_size, dtype=np.float32))
 
             # Add state variables and reset for lambda variables
             for lambda_sym in dl_dt.keys():
@@ -1470,22 +1476,17 @@ class EventPropCompiler(Compiler):
                     additional_reset_vars.append(
                         ("SpikeCountBackBatch", "int", "SpikeCount"))
 
-                # Loop through neuron state variables
-                regularisation_code = f"""
+                # Calculate regularisation drive
+                dynamics_code += f"""
                 const scalar drive_reg = -{self.reg_lambda / self.tau_a_reg} * (SpikeCountBackBatch - RegNuUpperBatch);
                 """
+
                 # Add population to list of those that 
                 # require a spike count reduction
                 compile_state.spike_count_populations.append(pop)
 
                 # Add code to update SpikeCount in forward reset code
                 genn_model.append_reset_code("SpikeCount++;")
-
-            # Add EGP for stored vars ring variables
-            spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-            for var in saved_vars:
-                genn_model.add_egp(f"Ring{var}", "scalar*", 
-                                   np.empty(spike_ring_size, dtype=np.float32))
 
             # Add reset logic to reset state variables (including adjoint)
             all_reset_vars = genn_model.reset_vars + additional_reset_vars
@@ -1505,7 +1506,7 @@ class EventPropCompiler(Compiler):
             neuron_backward_pass.substitute(
                 max_spikes=self.max_spikes,
                 example_time=(self.example_timesteps * self.dt),
-                dynamics="\n".join([regularisation_code, dynamics_code]),
+                dynamics=dynamics_code,
                 transition=transition_code))
 
         # Prepend code to reset to write spike time to ring buffer
@@ -1558,7 +1559,6 @@ class EventPropCompiler(Compiler):
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
 
-        regularisation_code = ""
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, self.solver)
         
@@ -1863,12 +1863,10 @@ class EventPropCompiler(Compiler):
                         example_time=example_time,
                         dynamics=f"""
                             const scalar drive = 0.0;
-                            {regularisation_code}
                             {dynamics_code}
                             """,
                         transition=transition_code))
 
-                print(genn_model.model.items())
                 # Generate ring-buffer write code
                 write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                     for v in saved_vars)
