@@ -133,11 +133,11 @@ abs_sum_reduce_batch_model = {
     """}
 
 abs_sum_reduce_neuron_model_assign  = {
-    "params": [("timesteps", "int")],
+    "params": [("timesteps", "int"),("gradLimit","scalar")],
     "var_refs": [("BRedAbsSum", "scalar", VarAccessMode.READ_ONLY),
                  ("Limit", "scalar", VarAccessMode.REDUCE_SUM)],
     "update_code": """
-    Limit = 100.0*BRedAbsSum/timesteps/num_batch/num_neurons;
+    Limit = gradLimit*BRedAbsSum/timesteps/num_batch/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
@@ -517,7 +517,8 @@ class EventPropCompiler(Compiler):
 
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda: float = 0.0, reg_nu_upper: float = 0.0,
-                 tau_a_reg: float = 50.0, max_spikes: int = 500, 
+                 tau_a_reg: float = 50.0, grad_limit: float = 100.0,
+                 max_spikes: int = 500, 
                  strict_buffer_checking: bool = False, 
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
@@ -542,6 +543,7 @@ class EventPropCompiler(Compiler):
         self.reg_lambda = reg_lambda
         self.reg_nu_upper = reg_nu_upper
         self.tau_a_reg = tau_a_reg
+        self.grad_limit = grad_limit
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
@@ -1174,7 +1176,7 @@ class EventPropCompiler(Compiler):
 
         reduce_assign = CustomUpdateModel(
             abs_sum_reduce_neuron_model_assign, 
-            {"timesteps": self.example_timesteps}, {},
+            {"timesteps": self.example_timesteps,"gradLimit": self.grad_limit}, {},
             {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum"),
              "Limit": create_var_ref(genn_pop, f"{var}Limit")})
         self.add_custom_update(genn_model, reduce_assign, "ReduceAssign",
