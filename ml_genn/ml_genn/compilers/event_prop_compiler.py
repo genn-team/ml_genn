@@ -153,11 +153,10 @@ gradient_batch_reduce_model = {
     """}
 
 spike_count_batch_reduce_model = {
-    "var_refs": [("SpikeCount", "int"),
+    "var_refs": [("SpikeCount", "int", VarAccessMode.READ_ONLY),
                  ("SpikeCountBatch", "int", VarAccessMode.REDUCE_SUM)],
     "update_code": """
     SpikeCountBatch = SpikeCount;
-    SpikeCount = 0;
     """}
 
 # Template used to generate backward passes for neurons
@@ -1076,14 +1075,18 @@ class EventPropCompiler(Compiler):
                             self.reg_lambda_lower / (self.full_batch_size
                                                      * self.full_batch_size))
 
-                        # If batch size is 1, add reset variables to copy SpikeCount
-                        # into SpikeCountBackBatch and zero SpikeCount
-                        # **NOTE** if batch size > 1, SpikeCountBackBatch is
-                        # calculated with a reduction which zeroes SpikeCount
+                        # If batch size is 1, add reset variables
+                        # to copy SpikeCount into SpikeCountBackBatch
+                        # **NOTE** if batch size > 1, SpikeCountBackBatch
+                        # is calculated with a reduction
                         if self.full_batch_size == 1:
-                            additional_reset_vars.extend(
-                                [("SpikeCountBackBatch", "int", "SpikeCount"),
-                                ("SpikeCount", "int", 0)])
+                            additional_reset_vars.append(
+                                ("SpikeCountBackBatch", "int", "SpikeCount"))
+
+                        # Always zero spike count used for regularisation in reset
+                        # **NOTE** zeroing this in the reduction meant that it
+                        # wasn't getting reset after validation examples
+                        additional_reset_vars.append(("SpikeCount", "int", 0))
 
                         # Add additional transition code to apply regularisation
                         transition_code += """
