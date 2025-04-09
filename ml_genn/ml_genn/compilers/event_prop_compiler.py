@@ -118,11 +118,10 @@ gradient_batch_reduce_model = {
     """}
 
 spike_count_batch_reduce_model = {
-    "var_refs": [("SpikeCount", "int"),
+    "var_refs": [("SpikeCount", "int", VarAccessMode.READ_ONLY),
                  ("SpikeCountBatch", "int", VarAccessMode.REDUCE_SUM)],
     "update_code": """
     SpikeCountBatch = SpikeCount;
-    SpikeCount = 0;
     """}
 
 abs_sum_reduce_batch_model = {
@@ -1458,9 +1457,10 @@ class EventPropCompiler(Compiler):
                 # **NOTE** SpikeCountBackSum is shared across
                 # batches as it is the result of a reduction
                 # **NOTE** if batch size > 1, SpikeCountBackBatch is
-                # calculated with a reduction which zeroes SpikeCount
-                genn_model.add_var("SpikeCount", "int", 0, 
-                                   reset=(self.full_batch_size == 1))
+                # calculated with a reduction
+                # **NOTE** SpikeCount was previously zeroed in the reduction
+                # meaning it wasn't getting reset after validation examples
+                genn_model.add_var("SpikeCount", "int", 0, reset=True)
                 genn_model.add_var("SpikeCountBackBatch", "int", 0,
                                    VarAccess.READ_ONLY, reset=False)
 
@@ -1489,7 +1489,8 @@ class EventPropCompiler(Compiler):
                 genn_model.append_reset_code("SpikeCount++;")
 
             # Add reset logic to reset state variables (including adjoint)
-            all_reset_vars = genn_model.reset_vars + additional_reset_vars
+            # **NOTE** additional reset vars first so reset happens in correct order
+            all_reset_vars = additional_reset_vars + genn_model.reset_vars
             logger.debug(f"\tReset variables: {all_reset_vars}")
             compile_state.add_neuron_reset_vars(
                 pop, all_reset_vars, True, False)
