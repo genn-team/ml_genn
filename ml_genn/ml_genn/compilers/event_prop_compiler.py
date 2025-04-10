@@ -1327,7 +1327,7 @@ class EventPropCompiler(Compiler):
                 drive = sympy.Symbol("drive_p" if output else "RevISyn")
                 # add l^- - l^+ jump for neurons with regularisation
                 if regularise:
-                    drive += ((self.dt * self.example_timesteps)-sympy.Symbol("t"))*sympy.Symbol("drive_reg")
+                    drive += sympy.Symbol("drive_reg")/((self.dt * self.example_timesteps)-sympy.Symbol("t"))
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
