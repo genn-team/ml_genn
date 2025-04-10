@@ -1416,7 +1416,7 @@ class EventPropCompiler(Compiler):
 
             # Add drive to A_reg regularisation variable
             if self.reg_lambda != 0.0 and model.threshold != 0:
-                dl_dt[_get_lmd_sym("A_reg")] -= sympy.Symbol("drive_reg") * sympy.Symbol("tau_A_reg")
+                dl_dt[_get_lmd_sym("A_reg")] += sympy.Symbol("drive_reg") * sympy.Symbol("tau_A_reg")
 
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
             dynamics_code = ""
