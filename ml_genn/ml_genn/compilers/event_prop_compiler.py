@@ -516,7 +516,7 @@ class EventPropCompiler(Compiler):
 
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  reg_lambda: float = 0.0, reg_nu_upper: float = 0.0,
-                 tau_a_reg: float = 50.0, grad_limit: float = 100.0,
+                 grad_limit: float = 100.0,
                  max_spikes: int = 500, 
                  strict_buffer_checking: bool = False, 
                  per_timestep_loss: bool = False, dt: float = 1.0,
@@ -541,7 +541,6 @@ class EventPropCompiler(Compiler):
         self.losses = losses
         self.reg_lambda = reg_lambda
         self.reg_nu_upper = reg_nu_upper
-        self.tau_a_reg = tau_a_reg
         self.grad_limit = grad_limit
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
@@ -1326,9 +1325,9 @@ class EventPropCompiler(Compiler):
                 # that are combined with l_V loss types
                 # This is at the moment categorically excluded
                 drive = sympy.Symbol("drive_p" if output else "RevISyn")
-                # add l^- - l^+ jump for neurons with A_reg regularisation
+                # add l^- - l^+ jump for neurons with regularisation
                 if regularise:
-                    drive += sympy.Symbol("drive_reg")
+                    drive += ((self.dt * self.example_timesteps)-sympy.Symbol("t"))*sympy.Symbol("drive_reg")
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
@@ -1396,27 +1395,9 @@ class EventPropCompiler(Compiler):
                     "EventProp compiler only supports hidden "
                     "neurons defined in terms of AutoSynapseModel")
             
-            # Add regularisation variable only after the forward pass is built; this way it is not actually included
-            # into the genn_model as its forward pass is not actually needed for anything
-            if self.reg_lambda != 0.0:
-                logger.debug("\tInjecting regulariser variable")
-
-                # Make a copy of the AutoNeuronModel and 
-                # add regularisation variable dynamics and jumps
-                model = deepcopy(model)
-                model.add_var("A_reg", "-A_reg/tau_A_reg",
-                              "A_reg + 1.0/tau_A_reg")
-
-                # Add parameter to pass through tau A
-                genn_model.add_param("tau_A_reg", "scalar", self.tau_a_reg)
-
             # Build adjoint system from model
             dl_dt, adjoint_jumps, saved_vars =\
                 self._build_adjoint_system(model, False, self.reg_lambda != 0.0)
-
-            # Add drive to A_reg regularisation variable
-            if self.reg_lambda != 0.0 and model.threshold != 0:
-                dl_dt[_get_lmd_sym("A_reg")] += sympy.Symbol("drive_reg") * sympy.Symbol("tau_A_reg")
 
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
             dynamics_code = ""
@@ -1480,7 +1461,7 @@ class EventPropCompiler(Compiler):
 
                 # Calculate regularisation drive
                 dynamics_code += f"""
-                const scalar drive_reg = -{self.reg_lambda / self.tau_a_reg} * (SpikeCountBackBatch - RegNuUpperBatch);
+                const scalar drive_reg = -{self.reg_lambda} * (SpikeCountBackBatch - RegNuUpperBatch);
                 """
 
                 # Add population to list of those that 
