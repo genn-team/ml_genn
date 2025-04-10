@@ -69,8 +69,7 @@ max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 reg_lambda_upper=100e-9, reg_lambda_lower=100e-9, 
-                                 reg_nu_upper=14, max_spikes=1500, 
+                                 reg_lambda=1e-10, reg_nu_upper=14, max_spikes=1500, 
                                  optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)

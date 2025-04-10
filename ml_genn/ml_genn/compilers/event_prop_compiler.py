@@ -30,6 +30,7 @@ from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
 from itertools import chain
+from warnings import warn
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
 from .compiler import (create_reset_custom_update, get_delay_type,
@@ -117,11 +118,25 @@ gradient_batch_reduce_model = {
     """}
 
 spike_count_batch_reduce_model = {
-    "var_refs": [("SpikeCount", "int"),
+    "var_refs": [("SpikeCount", "int", VarAccessMode.READ_ONLY),
                  ("SpikeCountBatch", "int", VarAccessMode.REDUCE_SUM)],
     "update_code": """
     SpikeCountBatch = SpikeCount;
-    SpikeCount = 0;
+    """}
+
+abs_sum_reduce_batch_model = {
+    "vars": [("BRedAbsSum", "scalar", CustomUpdateVarAccess.REDUCE_BATCH_SUM)],
+    "var_refs": [("AbsSum", "scalar",VarAccessMode.READ_ONLY)],
+    "update_code": """
+    BRedAbsSum = AbsSum;
+    """}
+
+abs_sum_reduce_neuron_model_assign  = {
+    "params": [("timesteps", "int"),("gradLimit","scalar")],
+    "var_refs": [("BRedAbsSum", "scalar", VarAccessMode.READ_ONLY),
+                 ("Limit", "scalar", VarAccessMode.REDUCE_SUM)],
+    "update_code": """
+    Limit = gradLimit*BRedAbsSum/timesteps/num_batch/num_neurons;
     """}
 
 # Template used to generate backward passes for neurons
@@ -191,6 +206,18 @@ def _get_delay_weight_update_model(delay_type):
 def _template_symbol(expression, symbol: sympy.Symbol):
     return expression.subs(symbol, sympy.Symbol(f"${symbol.name}"))
 
+def _template_symbols(expression, sym_names, referenced_names: set):
+    for n in sym_names:
+        sym = sympy.Symbol(n)
+
+        # If there're referenced in jump, add $ to name so we can 
+        # go through with template engine and replace them all
+        # **THOMAS** are any previous points where things are added to saved_vars required?
+        if expression.has(sym):
+            referenced_names.add(n)
+            expression = _template_symbol(expression, sym)
+    return expression
+
 def _get_lmd_name(symbol: Union[str, sympy.Symbol]):
     symbol_name = (symbol.name if isinstance(symbol, sympy.Symbol)
                    else symbol)
@@ -246,6 +273,7 @@ class CompileState:
         self.timestep_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
+        self.adjoint_limit_pops_vars = []
 
     def add_optimiser_connection(self, conn, weight: bool, delay: bool):
         self._optimiser_connections.append((conn, weight, delay))
@@ -445,10 +473,7 @@ class EventPropCompiler(Compiler):
                                     to output populations or a single loss
                                     function to apply to all outputs
         optimiser:                  Optimiser to use when applying weights
-        reg_lambda_upper:           Regularisation strength, should typically
-                                    be the same as ``reg_lambda_lower``.
-        reg_lambda_lower:           Regularisation strength, should typically
-                                    be the same as ``reg_lambda_upper``.
+        reg_lambda:                 Regularisation strength
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
         max_spikes:                 What is the maximum number of spikes each
@@ -490,9 +515,10 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
-                 reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
-                 reg_nu_upper: float = 0.0, max_spikes: int = 500,
-                 strict_buffer_checking: bool = False,
+                 reg_lambda: float = 0.0, reg_nu_upper: float = 0.0,
+                 grad_limit: float = 100.0,
+                 max_spikes: int = 500, 
+                 strict_buffer_checking: bool = False, 
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
@@ -513,9 +539,9 @@ class EventPropCompiler(Compiler):
                                                 **genn_kwargs)
         self.example_timesteps = example_timesteps
         self.losses = losses
-        self.reg_lambda_upper = reg_lambda_upper
-        self.reg_lambda_lower = reg_lambda_lower
+        self.reg_lambda = reg_lambda
         self.reg_nu_upper = reg_nu_upper
+        self.grad_limit = grad_limit
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
         self.per_timestep_loss = per_timestep_loss
@@ -528,6 +554,23 @@ class EventPropCompiler(Compiler):
             Optimiser, "Optimiser", default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
+
+        # If legacy upper and lower regularisation strength is specified
+        reg_lambda_upper = genn_kwargs.get("reg_lambda_upper")
+        reg_lambda_lower = genn_kwargs.get("reg_lambda_lower")
+        if reg_lambda_upper is not None or reg_lambda_lower is not None:
+            # If they match, use as regularisation strength
+            if reg_lambda_upper == reg_lambda_lower:
+                self.reg_lambda = reg_lambda_upper
+                warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
+                     "arguments for EventPropCompiler are no longer "
+                     "supported, please use 'reg_lambda'", FutureWarning)
+            # Otherwise, give error
+            else:
+                raise NotImplemented("Seperate 'reg_lambda_upper' and "
+                                     "'reg_lambda_lower' arguments for "
+                                     "EventPropCompiler are no longer "
+                                     "supported, please use 'reg_lambda'")
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -576,7 +619,7 @@ class EventPropCompiler(Compiler):
                 "EventProp compiler only supports "
                 "synapses defined in terms of AutoSynapseModel")
 
-        # Get target neuron mdeol
+        # Get target neuron model
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
                                                     self.batch_size)
@@ -1000,6 +1043,11 @@ class EventPropCompiler(Compiler):
                                                   neuron_populations,
                                                   connection_populations)
 
+        # Add per-batch adjoint limit custom updates for each population and adjoint var that requires them
+        for p, var in compile_state.adjoint_limit_pops_vars:
+            genn_pop = neuron_populations[p]
+            self._add_abs_sum_reduce_custom_update(genn_model, genn_pop, var)
+
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
@@ -1035,6 +1083,11 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax2"))
             base_train_callbacks.append(CustomUpdateOnTimestepEnd("Softmax3"))
         
+        # Add custom uopdate for adjoint limit calculation if required
+        if len(compile_state.adjoint_limit_pops_vars) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("AbsSumReduceBatch"))
+            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("ReduceAssign"))
+
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
@@ -1043,7 +1096,7 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
-        
+
         # Build list of optimisers and their custom updates
         optimisers = []
         if len(weight_optimiser_cus) > 0:
@@ -1058,11 +1111,6 @@ class EventPropCompiler(Compiler):
             base_validate_callbacks, optimisers,
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, True)
-
-    @property
-    def regulariser_enabled(self):
-        return (self.reg_lambda_lower != 0.0 
-                or self.reg_lambda_upper != 0.0)
 
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
@@ -1116,7 +1164,22 @@ class EventPropCompiler(Compiler):
             "Softmax3", 
             "CUSoftmax3" + genn_pop.name)
 
-    
+    def _add_abs_sum_reduce_custom_update(self, genn_model, genn_pop, var):
+        reduce_batch = CustomUpdateModel(
+            abs_sum_reduce_batch_model, {}, {"BRedAbsSum": 0.0},
+            {"AbsSum": create_var_ref(genn_pop, f"{var}AbsSum")})
+        genn_reduce_batch = self.add_custom_update(
+            genn_model, reduce_batch, "AbsSumReduceBatch", 
+            "AbsSumReduceBatch" + genn_pop.name + var)
+
+        reduce_assign = CustomUpdateModel(
+            abs_sum_reduce_neuron_model_assign, 
+            {"timesteps": self.example_timesteps,"gradLimit": self.grad_limit}, {},
+            {"BRedAbsSum": create_var_ref(genn_reduce_batch, "BRedAbsSum"),
+             "Limit": create_var_ref(genn_pop, f"{var}Limit")})
+        self.add_custom_update(genn_model, reduce_assign, "ReduceAssign",
+                               "ReduceAssign" + genn_pop.name + var)
+
     def _create_optimiser_custom_update(self, name_suffix, var_ref, 
                                         gradient_ref, optimiser, genn_model,
                                         clamp_var=None):
@@ -1167,7 +1230,7 @@ class EventPropCompiler(Compiler):
                 "SpikeCountReduce", name)
     
     def _build_adjoint_system(self, model: AutoNeuronModel,
-                              output: bool):
+                              output: bool, regularise: bool):
         logger.debug("\tBuilding adjoint system for AutoNeuronModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
         logger.debug(f"\t\tParameters: {model.param_vals.keys()}")
@@ -1179,9 +1242,9 @@ class EventPropCompiler(Compiler):
         # therefore, we can do these independent of synapse equations
         saved_vars = set()
         dl_dt = {}
-        for sym, expr in model.dx_dt.items():
-            o = sum(sympy.diff(expr, sym) * _get_lmd_sym(sym2)
-                    for sym2 in model.dx_dt.keys())
+        for sym in model.dx_dt.keys():
+            o = sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
+                    for sym2, expr2 in model.dx_dt.items())
             
             # collect variables they might need to go into a ring buffer:
             # **TODO** helper
@@ -1190,14 +1253,6 @@ class EventPropCompiler(Compiler):
             dl_dt[_get_lmd_sym(sym)] = o
             
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
-
-        # threshold condition
-        thresold_expr = (sympy.parse_expr(model.model["threshold"],
-                                          local_dict=model.symbols)
-                         if ("threshold" in model.model 
-                             and model.model["threshold"] is not None)
-                         else 0)
-
 
         # Substitute jumps into ODEs to get post-jump dynamics "\dot{x}^+"
         dx_dt_plus_n = {}
@@ -1223,15 +1278,15 @@ class EventPropCompiler(Compiler):
             saved_vars.update({var_name2 for var_name2 in model.var_vals.keys()
                                if a[var_sym].has(sympy.Symbol(var_name2))})
 
-            if thresold_expr != 0:
+            if model.threshold != 0:
                 ex = sympy.simplify(
-                    sum(sympy.diff(thresold_expr, var_sym2) * var_expr2
+                    sum(sympy.diff(model.threshold, var_sym2) * var_expr2
                         for var_sym2, var_expr2 in model.dx_dt.items()))
                 if ex != 0:
-                    ex = sympy.diff(thresold_expr, var_sym) / ex
+                    ex = sympy.diff(model.threshold, var_sym) / ex
                     if ex != 0:
                         b[var_sym] = _simplify_using_threshold(
-                            model.var_vals.keys(), thresold_expr, ex)
+                            model.var_vals.keys(), model.threshold, ex)
 
                         # **TODO** helper
                         saved_vars.update(
@@ -1249,7 +1304,7 @@ class EventPropCompiler(Compiler):
                     ex = sympy.simplify(ex)
                     if ex != 0:
                         c[var_sym] = _simplify_using_threshold(
-                            model.var_vals.keys(), thresold_expr, ex)
+                            model.var_vals.keys(), model.threshold, ex)
                         saved_vars.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
@@ -1270,24 +1325,23 @@ class EventPropCompiler(Compiler):
                 # that are combined with l_V loss types
                 # This is at the moment categorically excluded
                 drive = sympy.Symbol("drive_p" if output else "RevISyn")
+                # add l^- - l^+ jump for neurons with regularisation
+                if regularise:
+                    # scaling factor is made so that jumps lead to an area of size 1
+                    # to be added to the integral of the "invisible trace variable"
+                    # underlying the regularisation loss
+                    drive += sympy.Symbol("drive_reg")/((self.dt * self.example_timesteps)-sympy.Symbol("t")) 
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
             jump =  _simplify_using_threshold(model.var_vals.keys(),
-                                              thresold_expr, jump)
+                                              model.threshold, jump)
             
             # If any jumping remains
             if jump != 0:
-                # Loop through all forward variables (and Isyn)
-                for var_name in chain(model.var_vals.keys(), ["Isyn"]):
-                    var_sym = sympy.Symbol(var_name)
-
-                    # If there're referenced in jump, add $ to name so we can 
-                    # go through with template engine and replace them all
-                    # **THOMAS** are any previous points where things are added to saved_vars required?
-                    if jump.has(var_sym):
-                        saved_vars.add(var_name)
-                        jump = _template_symbol(jump, var_sym)
+                # Template any neuron variable names or Isyn
+                jump = _template_symbols(
+                    jump, chain(model.var_vals.keys(), ["Isyn"]), saved_vars)
                 
                 # Add to dictionary as jump for adjoint variable
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
@@ -1346,11 +1400,20 @@ class EventPropCompiler(Compiler):
             
             # Build adjoint system from model
             dl_dt, adjoint_jumps, saved_vars =\
-                self._build_adjoint_system(model, False)
-            
+                self._build_adjoint_system(model, False, self.reg_lambda != 0.0)
+
+            # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
+            dynamics_code = ""
+            for jump_sym in adjoint_jumps.keys():
+                genn_model.add_var(f"{jump_sym.name}AbsSum", "scalar", 0.0) 
+                genn_model.add_var(f"{jump_sym.name}Limit", "scalar", 1.0,
+                                   VarAccess.READ_ONLY_SHARED_NEURON, False)
+                compile_state.adjoint_limit_pops_vars.append((pop, jump_sym.name))
+                dynamics_code += f"{jump_sym.name}AbsSum += fabs({jump_sym.name});\n"
+
             # Generate transition code
             transition_code = "\n".join(
-                f"{sympy.ccode(jump_expr, assign_to=jump_sym.name)};"
+                f"{jump_sym.name} = max(min({sympy.ccode(jump_expr)},{jump_sym.name}Limit),-{jump_sym.name}Limit);"
                 for jump_sym, jump_expr in adjoint_jumps.items())
             
             # Substitute saved variables for those in the ring buffer
@@ -1373,15 +1436,17 @@ class EventPropCompiler(Compiler):
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
             additional_reset_vars = []
-            if self.regulariser_enabled:
+            if self.reg_lambda != 0.0 and model.threshold != 0:
+                logger.debug("\tBuilding regulariser")
                 # Add state variables to hold spike count
                 # during forward and backward pass. 
                 # **NOTE** SpikeCountBackSum is shared across
                 # batches as it is the result of a reduction
                 # **NOTE** if batch size > 1, SpikeCountBackBatch is
-                # calculated with a reduction which zeroes SpikeCount
-                genn_model.add_var("SpikeCount", "int", 0, 
-                                   reset=(self.full_batch_size == 1))
+                # calculated with a reduction
+                # **NOTE** SpikeCount was previously zeroed in the reduction
+                # meaning it wasn't getting reset after validation examples
+                genn_model.add_var("SpikeCount", "int", 0, reset=True)
                 genn_model.add_var("SpikeCountBackBatch", "int", 0,
                                    VarAccess.READ_ONLY, reset=False)
 
@@ -1390,18 +1455,6 @@ class EventPropCompiler(Compiler):
                 # can be compared directly to SpikeCountBackBatch
                 genn_model.add_param("RegNuUpperBatch", "int",
                                      self.reg_nu_upper * self.full_batch_size)
-                    
-                # **NOTE** these are divided by batch size once to
-                # make these batch-size-agnostic and again to take 
-                # into account that we're operating on batch sums of spike counts
-                genn_model.add_param(
-                    "RegLambdaUpper", "scalar",
-                    self.reg_lambda_upper / (self.full_batch_size
-                                             * self.full_batch_size))
-                genn_model.add_param(
-                    "RegLambdaLower", "scalar",
-                    self.reg_lambda_lower / (self.full_batch_size
-                                             * self.full_batch_size))
 
                 # If batch size is 1, add reset variables to copy SpikeCount
                 # into SpikeCountBackBatch and zero SpikeCount
@@ -1409,17 +1462,11 @@ class EventPropCompiler(Compiler):
                     additional_reset_vars.append(
                         ("SpikeCountBackBatch", "int", "SpikeCount"))
 
-                # Add additional transition code to apply regularisation
-                transition_code = f"""
-                    {transition_code}
-                    if (SpikeCountBackBatch > RegNuUpperBatch) {{
-                        {_get_lmd_name(model.output_var_name)} -= RegLambdaUpper * (SpikeCountBackBatch - RegNuUpperBatch);
-                    }}
-                    else {{
-                        {_get_lmd_name(model.output_var_name)} -= RegLambdaLower * (SpikeCountBackBatch - RegNuUpperBatch);
-                    }}
-                    """
-                    
+                # Calculate regularisation drive
+                dynamics_code += f"""
+                const scalar drive_reg = -{self.reg_lambda} * (SpikeCountBackBatch - RegNuUpperBatch);
+                """
+
                 # Add population to list of those that 
                 # require a spike count reduction
                 compile_state.spike_count_populations.append(pop)
@@ -1428,7 +1475,8 @@ class EventPropCompiler(Compiler):
                 genn_model.append_reset_code("SpikeCount++;")
 
             # Add reset logic to reset state variables (including adjoint)
-            all_reset_vars = genn_model.reset_vars + additional_reset_vars
+            # **NOTE** additional reset vars first so reset happens in correct order
+            all_reset_vars = additional_reset_vars + genn_model.reset_vars
             logger.debug(f"\tReset variables: {all_reset_vars}")
             compile_state.add_neuron_reset_vars(
                 pop, all_reset_vars, True, False)
@@ -1438,8 +1486,7 @@ class EventPropCompiler(Compiler):
                                   for v in saved_vars)
 
             # Solve ODE and generate dynamics code
-            dynamics_code = solve_ode(dl_dt, self.solver)
-            
+            dynamics_code += solve_ode(dl_dt, self.solver)
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
         genn_model.prepend_sim_code(
@@ -1457,6 +1504,7 @@ class EventPropCompiler(Compiler):
                 strict_check=(neuron_reset_strict_check
                                 if self.strict_buffer_checking
                                 else "")))
+        #print(genn_model.model["sim_code"])
         return genn_model
         
     def _build_out_neuron_model(self, pop: Population, 
@@ -1488,7 +1536,7 @@ class EventPropCompiler(Compiler):
 
         # Build adjoint system from model
         dl_dt, adjoint_jumps, saved_vars =\
-            self._build_adjoint_system(model, True)
+            self._build_adjoint_system(model, True, False)
 
         # Add continous drive term to LambdaV
         dl_dt[_get_lmd_sym(model.output_var_name)] += sympy.Symbol("drive")
@@ -1497,7 +1545,7 @@ class EventPropCompiler(Compiler):
         # **THINK** what about reset
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
-        
+
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, self.solver)
         
@@ -1748,7 +1796,7 @@ class EventPropCompiler(Compiler):
             # Add parameters with synaptic decay and scale constants
             #model_copy.add_param("IsynScale", "scalar",
             #    self.dt / (tau_syn  * (1.0 - beta)))
-        
+
             # Readout has to be FirstSpikeTime
             if isinstance(pop.neuron.readout, FirstSpikeTime):
                 if not sce_loss:
