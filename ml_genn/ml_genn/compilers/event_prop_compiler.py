@@ -1330,7 +1330,7 @@ class EventPropCompiler(Compiler):
                     # scaling factor is made so that jumps lead to an area of size 1
                     # to be added to the integral of the "invisible trace variable"
                     # underlying the regularisation loss
-                    drive += sympy.Symbol("drive_reg")/((self.dt * self.example_timesteps)-sympy.Symbol("t")) 
+                    drive += sympy.Symbol("drive_reg")/(sympy.Symbol("t")+self.dt) 
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
