@@ -56,7 +56,7 @@ if TRAIN:
                                  deep_r_conns=[hidden],
                                  deep_r_l1_strength=0.00000001,
                                  deep_r_record_rewirings=({} if not PLOT_REWIRING 
-                                                          else {"in_hid_rewiring": hidden}),
+                                                          else {hidden: "in_hid_rewiring"}),
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -83,7 +83,7 @@ if TRAIN:
             print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax2')}")
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
         
-        # Loop through deep-r connections and plot rewiring curves
+        # Plot rewiring curves
         if PLOT_REWIRING:
             fig, axis = plt.subplots()
             transpose = list(zip(*cb_data["in_hid_rewiring"]))
