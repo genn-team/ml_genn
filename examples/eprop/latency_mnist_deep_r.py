@@ -21,7 +21,7 @@ NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 128
-NUM_EPOCHS = 10
+NUM_EPOCHS = 2
 SPARSITY = 0.1
 TRAIN = True
 KERNEL_PROFILING = False
@@ -55,7 +55,7 @@ if TRAIN:
                              deep_r_conns=[hidden],
                              deep_r_l1_strength=0.00000001,
                              deep_r_record_rewirings=({} if not PLOT_REWIRING 
-                                                      else {"in_hid_rewiring": hidden}),
+                                                      else {hidden: "in_hid_rewiring"}),
                              kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -63,10 +63,10 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-        metrics, _  = compiled_net.train({input: spikes},
-                                         {output: labels},
-                                         num_epochs=NUM_EPOCHS, shuffle=True,
-                                         callbacks=callbacks)
+        metrics, cb_data  = compiled_net.train({input: spikes},
+                                               {output: labels},
+                                               num_epochs=NUM_EPOCHS, shuffle=True,
+                                               callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
         
         end_time = perf_counter()

@@ -328,7 +328,8 @@ class EPropCompiler(Compiler):
         self.reset_time_between_batches = reset_time_between_batches
         self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
         self.deep_r_l1_strength = deep_r_l1_strength
-        self.deep_r_record_rewirings = deep_r_record_rewirings
+        self.deep_r_record_rewirings = {get_underlying_conn(c): k
+                                        for c, k in deep_r_record_rewirings.items()}
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
