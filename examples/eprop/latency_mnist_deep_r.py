@@ -52,8 +52,7 @@ if TRAIN:
     compiler = EPropCompiler(example_timesteps=max_example_timesteps,
                              losses="sparse_categorical_crossentropy",
                              optimiser="adam", batch_size=BATCH_SIZE,
-                             deep_r_conns=[hidden],
-                             deep_r_l1_strength=0.00000001,
+                             deep_r_conns=[hidden], deep_r_l1_strength=1E-8,
                              deep_r_record_rewirings=({} if not PLOT_REWIRING 
                                                       else {hidden: "in_hid_rewiring"}),
                              kernel_profiling=KERNEL_PROFILING)
