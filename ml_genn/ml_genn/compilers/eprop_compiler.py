@@ -8,7 +8,8 @@ from .compiled_training_network import CompiledTrainingNetwork
 from .deep_r import RewiringRecord
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochBegin,
+                         CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..metrics import MetricsType
@@ -600,8 +601,8 @@ class EPropCompiler(Compiler):
 
         # If Deep-R is required, trigger Deep-R callbacks at end of batch
         if deep_r_required:
-            base_train_callbacks.append(CustomUpdateOnEpoch("DeepRInit",
-                                                            lambda e: e == 0))
+            base_train_callbacks.append(CustomUpdateOnEpochBegin("DeepRInit",
+                                                                 lambda e: e == 0))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
 
