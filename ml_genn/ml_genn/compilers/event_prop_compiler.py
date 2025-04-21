@@ -1435,8 +1435,10 @@ class EventPropCompiler(Compiler):
         if deep_r_required:
             base_train_callbacks.append(CustomUpdateOnEpochBegin("DeepRInit",
                                                                  lambda e: e == 0))
-            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
-            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1",
+                                                               lambda batch: batch > 0))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2",
+                                                               lambda batch: batch > 0))
         
         # Add callbacks to record number of rewirings
         for c, k in deep_r_record_rewirings_ccus:
