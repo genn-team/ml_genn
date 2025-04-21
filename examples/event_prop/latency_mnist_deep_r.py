@@ -87,8 +87,7 @@ if TRAIN:
         if PLOT_REWIRING:
             fig, axis = plt.subplots()
             transpose = list(zip(*cb_data["in_hid_rewiring"]))
-            axis.plot(transpose[0], label=c.name)
-            axis.legend()
+            axis.plot(transpose[0])
             axis.set_ylabel("Num rewirings")
             axis.set_xlabel("Batch")
             plt.show()

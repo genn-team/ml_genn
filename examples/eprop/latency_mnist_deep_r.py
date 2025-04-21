@@ -52,10 +52,10 @@ if TRAIN:
     compiler = EPropCompiler(example_timesteps=max_example_timesteps,
                              losses="sparse_categorical_crossentropy",
                              optimiser="adam", batch_size=BATCH_SIZE,
-                             deep_r_conns=[hidden],
-                             deep_r_l1_strength=0.00000001,
-                             deep_r_record_rewirings=({} if not PLOT_REWIRING 
-                                                      else {hidden: "in_hid_rewiring"}),
+                             #deep_r_conns=[hidden],
+                             #deep_r_l1_strength=0.00000001,
+                             #deep_r_record_rewirings=({} if not PLOT_REWIRING 
+                             #                         else {hidden: "in_hid_rewiring"}),
                              kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -88,8 +88,7 @@ if TRAIN:
         if PLOT_REWIRING:
             fig, axis = plt.subplots()
             transpose = list(zip(*cb_data["in_hid_rewiring"]))
-            axis.plot(transpose[0], label=c.name)
-            axis.legend()
+            axis.plot(transpose[0])
             axis.set_ylabel("Num rewirings")
             axis.set_xlabel("Batch")
             plt.show()
