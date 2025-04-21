@@ -1,6 +1,5 @@
 import numpy as np
 
-from string import Template
 from pygenn import VarAccessMode
 from ..callbacks import Callback
 from ..utils.model import CustomConnectivityUpdateModel, CustomUpdateModel
@@ -8,46 +7,79 @@ from ..utils.model import CustomConnectivityUpdateModel, CustomUpdateModel
 from copy import deepcopy
 from pygenn import create_egp_ref, create_pre_var_ref
 
-deep_r_l1_model_template = {
-    "params": [("C", "scalar")],
+# **THINK** could this be written in a less "branchy" manner?
+deep_r_l1_model = {
+    "params": [("C", "scalar"), ("NumRowWords", "unsigned int")],
     "var_refs": [("Variable", "scalar")],
-    "update_code": Template("""
-    Variable $assign C;
-    """)}
+    "extra_global_param_refs": [("Inhibitory", "uint32_t*")],
+    "update_code": """
+    const uint32_t inhibitoryWord = Inhibitory[(NumRowWords * id_pre) + (id_post / 32)];
+    
+    // **NOTE** regularization is applied to GRADIENTS which are
+    // SUBTRACTED from weight by optimizer so we want to subtract
+    // from excitatory gradients to push weights towards zero and
+    // add to inhibitory gradients to push weights towards zero
+    if(inhibitoryWord & (1 << (id_post % 32))) {
+        Variable -= C;
+    }
+    else {
+        Variable += C;
+    }
+    """}
     
 deep_r_init_model = {
     "params": [("NumRowWords", "unsigned int")],
-    "extra_global_param_refs": [("Connectivity", "uint32_t*")],
+    "var_refs": [("g", "scalar", VarAccessMode.READ_ONLY)],
+    "extra_global_param_refs": [("Connectivity", "uint32_t*"),
+                                ("Inhibitory", "uint32_t*")],
     "row_update_code": """
     // Get pointer to start of this row of connectivity
     uint32_t *rowConnectivity = Connectivity + (NumRowWords * id_pre);
+    uint32_t *rowInhibitory = Inhibitory + (NumRowWords * id_pre);
     
-    // Zero it
+    // Zero connectivity and randomize inhibitoryness
     for(int i = 0; i < NumRowWords; i++) {
         rowConnectivity[i] = 0;
+        rowInhibitory[i] = gennrand();
     }
-    
-    // Set connectivity where there are synapse
+
+    // Loop through synapses in row
     for_each_synapse {
+        // Set connectivity where there are synapse
         rowConnectivity[id_post / 32] |= (1 << (id_post % 32));
+
+        // If weight is negative, set inhibitory
+        // **NOTE** this matches behaviour of signbit function
+        if(g < 0.0) {
+            rowInhibitory[id_post / 32] |= (1 << (id_post % 32));
+        }
+        // Otherwise, clear it
+        else {
+            rowInhibitory[id_post / 32] &= ~(1 << (id_post % 32));
+        }
     }
     """}
 
-deep_r_1_model_template = {
+deep_r_1_model = {
     "params": [("NumRowWords", "unsigned int")],
     "var_refs": [("g", "scalar", VarAccessMode.READ_ONLY)],
     "pre_var_refs": [("NumDormant", "unsigned int")],
+    "extra_global_params": [("Inhibitory", "uint32_t*")],
     "extra_global_param_refs": [("Connectivity", "uint32_t*")],
 
-    "row_update_code": Template("""
+    "row_update_code": """
     // Zero dormant counter
     NumDormant = 0;
 
     // Loop through synapses
     uint32_t *rowConnectivity = Connectivity + (NumRowWords * id_pre);
+    const uint32_t *rowInhibitory = Inhibitory + (NumRowWords * id_pre);
     for_each_synapse {
-        // If synapse sign changed
-        if(g $comp 0.0) {
+        // Is synapse inhibitory
+        const bool inhibitory = ((rowInhibitory[id_post / 32] & (1 << (id_post % 32))) != 0);
+        
+        // If weight sign doesn't match inhibitoryness
+        if(signbit(g) != inhibitory) {
             // Increment dormant counter
             NumDormant++;
             
@@ -58,7 +90,7 @@ deep_r_1_model_template = {
             remove_synapse();
         }
     }
-    """)}
+    """}
 
 deep_r_2_model = {
     "params": [("NumRowWords", "unsigned int")],
@@ -140,38 +172,10 @@ class RewiringRecord(Callback):
 
 
 def add_deep_r(synapse_group, genn_model, compiler, l1_strength, 
-               delta_weight_var_ref, weight_var_ref, excitatory):
+               delta_weight_var_ref, weight_var_ref):
     # Calculate bitmask sizes 
     num_row_words = (synapse_group.trg.num_neurons + 31) // 32
     num_words = synapse_group.src.num_neurons * num_row_words
-
-    # If L1 regularization is enabled
-    if l1_strength > 0.0:
-        # Make copy of L1 model with correct assignment operator
-        # **NOTE** regularization is applied to GRADIENTS which are
-        # SUBTRACTED from weight by optimizer so we want to subtract
-        # positive values to push excitatory weights towards zero and
-        # negative values to push inhibitory weights towards zero
-        assign = "+=" if excitatory else "-="
-        deep_r_l1_model = deepcopy(deep_r_l1_model_template)
-        deep_r_l1_model["update_code"] =\
-            deep_r_l1_model["update_code"].substitute(assign=assign)
-
-        # Create custom update model to apply L1 regularisation in correct direction
-        deep_r_l1 = CustomUpdateModel(
-            deep_r_l1_model,
-            param_vals={"C": l1_strength},
-            var_refs={"Variable": delta_weight_var_ref})
-
-        compiler.add_custom_update(
-            genn_model, deep_r_l1,
-            "DeepRL1", "DeepRL1" + synapse_group.name)
-
-    # Make copy of first pass model with correct comparison operator
-    comp = "<" if excitatory else ">"
-    deep_r_1_model = deepcopy(deep_r_1_model_template)
-    deep_r_1_model["row_update_code"] =\
-        deep_r_1_model["row_update_code"].substitute(comp=comp)
 
     # Create custom connectivity update model to
     # implement second deep-r pass and add to model
@@ -192,19 +196,35 @@ def add_deep_r(synapse_group, genn_model, compiler, l1_strength,
     # implement first deep-r pass and add to model
     deep_r_1 = CustomConnectivityUpdateModel(
         deep_r_1_model, param_vals={"NumRowWords": num_row_words}, 
+        egp_vals={"Inhibitory": np.zeros(num_words, dtype=np.uint32)},
         pre_var_refs={"NumDormant": create_pre_var_ref(genn_deep_r_2, "NumDormant")},
         var_refs={"g": weight_var_ref},
         egp_refs={"Connectivity": create_egp_ref(genn_deep_r_2, "Connectivity")})
 
-    compiler.add_custom_connectivity_update(
+    genn_deep_r_1 = compiler.add_custom_connectivity_update(
         genn_model, deep_r_1, synapse_group, 
         "DeepR1", "DeepR1" + synapse_group.name)
+
+    # If L1 regularization is enabled
+    if l1_strength > 0.0:
+        # Create custom update model to apply L1 regularisation
+        deep_r_l1 = CustomUpdateModel(
+            deep_r_l1_model,
+            param_vals={"C": l1_strength, "NumRowWords": num_row_words},
+            var_refs={"Variable": delta_weight_var_ref},
+            egp_refs={"Inhibitory": create_egp_ref(genn_deep_r_1, "Inhibitory")})
+
+        compiler.add_custom_update(
+            genn_model, deep_r_l1,
+            "DeepRL1", "DeepRL1" + synapse_group.name)
 
     # Create custom connectivity update model to  
     # implement deep-r initialisation and add to model
     deep_r_init = CustomConnectivityUpdateModel(
-        deep_r_init_model, param_vals={"NumRowWords": num_row_words}, 
-        egp_refs={"Connectivity": create_egp_ref(genn_deep_r_2, "Connectivity")})
+        deep_r_init_model, param_vals={"NumRowWords": num_row_words},
+        var_refs={"g": weight_var_ref},
+        egp_refs={"Connectivity": create_egp_ref(genn_deep_r_2, "Connectivity"),
+                  "Inhibitory": create_egp_ref(genn_deep_r_1, "Inhibitory")})
 
     compiler.add_custom_connectivity_update(
         genn_model, deep_r_init, synapse_group, 
