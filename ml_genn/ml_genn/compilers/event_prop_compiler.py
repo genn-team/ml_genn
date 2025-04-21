@@ -522,8 +522,7 @@ class EventPropCompiler(Compiler):
                  communicator: Communicator = None,
                  delay_optimiser=None,
                  delay_learn_conns: Sequence = [],
-                 deep_r_exc_conns: Sequence = [],
-                 deep_r_inh_conns: Sequence = [],
+                 deep_r_conns: Sequence = [],
                  deep_r_l1_strength: float = 0.01,
                  deep_r_record_rewirings = {},
                  **genn_kwargs):
@@ -553,10 +552,7 @@ class EventPropCompiler(Compiler):
             Optimiser, "Optimiser", default_optimisers)
         self.delay_learn_conns = set(get_underlying_conn(c)
                                      for c in delay_learn_conns)
-        self.deep_r_exc_conns = set(get_underlying_conn(c)
-                                    for c in deep_r_exc_conns)
-        self.deep_r_inh_conns = set(get_underlying_conn(c)
-                                    for c in deep_r_inh_conns)
+        self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
         self.deep_r_l1_strength = deep_r_l1_strength
         self.deep_r_record_rewirings = deep_r_record_rewirings
 
@@ -1298,14 +1294,12 @@ class EventPropCompiler(Compiler):
                 # If connection is in list of those to use Deep-R on
                 gradient_var_ref = create_wu_var_ref(genn_pop, "Gradient")
                 weight_var_ref = create_wu_var_ref(genn_pop, "g")
-                if c in self.deep_r_inh_conns or c in self.deep_r_exc_conns:
+                if c in self.deep_r_conns:
                     # Add infrastructure
-                    excitatory = (c in self.deep_r_exc_conns)
                     deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
                                               self.deep_r_l1_strength, 
                                               gradient_var_ref, 
-                                              weight_var_ref,
-                                              excitatory)
+                                              weight_var_ref)
                     
                     # If we should record rewirings from
                     # this connection, add to list with key
@@ -1382,8 +1376,7 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        deep_r_required = (len(self.deep_r_exc_conns) > 0 
-                           or len(self.deep_r_inh_conns) > 0)
+        deep_r_required = (len(self.deep_r_conns) > 0)
 
         # If Deep-R and L1 regularisation are required, add callback
         if deep_r_required and self.deep_r_l1_strength > 0.0:
