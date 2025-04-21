@@ -41,7 +41,7 @@ with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
                                   NUM_INPUT)
-    hidden = Layer(FixedProbability(SPARSITY, Normal(mean=0.078, sd=0.045)), 
+    hidden = Layer(FixedProbability(SPARSITY, Normal(mean=0.0, sd=0.5)), 
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0, tau_refrac=None),
                    NUM_HIDDEN, Exponential(5.0))
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
@@ -53,8 +53,7 @@ if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
                                  optimiser=Adam(1e-2), batch_size=BATCH_SIZE, dt=DT,
-                                 deep_r_conns=[hidden],
-                                 deep_r_l1_strength=0.00000001,
+                                 deep_r_conns=[hidden], deep_r_l1_strength=1E-12,
                                  deep_r_record_rewirings=({} if not PLOT_REWIRING 
                                                           else {hidden: "in_hid_rewiring"}),
                                  kernel_profiling=KERNEL_PROFILING)
