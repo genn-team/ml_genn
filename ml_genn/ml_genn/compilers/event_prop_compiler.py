@@ -1330,7 +1330,7 @@ class EventPropCompiler(Compiler):
                     # scaling factor is made so that jumps lead to an area of size 1
                     # to be added to the integral of the "invisible trace variable"
                     # underlying the regularisation loss
-                    drive += sympy.Symbol("drive_reg")/((self.dt * self.example_timesteps)-sympy.Symbol("t")) 
+                    drive += sympy.Symbol("drive_reg")/(sympy.Symbol("t")+self.dt)
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
@@ -1455,7 +1455,6 @@ class EventPropCompiler(Compiler):
                 # can be compared directly to SpikeCountBackBatch
                 genn_model.add_param("RegNuUpperBatch", "int",
                                      self.reg_nu_upper * self.full_batch_size)
-
                 # If batch size is 1, add reset variables to copy SpikeCount
                 # into SpikeCountBackBatch and zero SpikeCount
                 if self.full_batch_size == 1:
@@ -1463,8 +1462,14 @@ class EventPropCompiler(Compiler):
                         ("SpikeCountBackBatch", "int", "SpikeCount"))
 
                 # Calculate regularisation drive
+                # We divide by batch size by formulation of the loss function and then again to take into consideration that
+                # SpikeCountBackBatch is collected across a batch; but then we multiply by reg_nu_upper times batch size
+                # to normalise the effect of dividing by SpikeCountBackBatch.
+                # The division by SpikeCountBackBatch is motivated by the observation that the drive_reg is applied
+                # number of spike times, which biases regularisation towards suppressing too many spikes over enhancing to few
                 dynamics_code += f"""
-                const scalar drive_reg = -{self.reg_lambda} * (SpikeCountBackBatch - RegNuUpperBatch);
+                scalar drive_reg;
+                drive_reg = -{self.reg_lambda*self.reg_nu_upper/self.full_batch_size} * (SpikeCountBackBatch - RegNuUpperBatch)/SpikeCountBackBatch;
                 """
 
                 # Add population to list of those that 
