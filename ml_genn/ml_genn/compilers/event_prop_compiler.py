@@ -1100,9 +1100,9 @@ class EventPropCompiler(Compiler):
         # Build list of optimisers and their custom updates
         optimisers = []
         if len(weight_optimiser_cus) > 0:
-            optimisers.append((self._optimiser, weight_optimiser_cus))
+            optimisers.append((deepcopy(self._optimiser), weight_optimiser_cus))
         if len(delay_optimiser_cus) > 0:
-            optimisers.append((self._delay_optimiser, delay_optimiser_cus))
+            optimisers.append((deepcopy(self._delay_optimiser), delay_optimiser_cus))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
