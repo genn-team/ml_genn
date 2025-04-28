@@ -3,20 +3,22 @@ import numpy as np
 import os
 
 from collections import defaultdict, namedtuple
-from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
+from pygenn import (CustomUpdateVarAccess, GeNNModel,
+                    SynapseGroup, VarAccess, VarAccessMode)
 
 from typing import List, Optional
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
 from ..callbacks import Callback
 from ..communicators import Communicator
-from ..utils.model import (CustomUpdateModel, NeuronModel,
-                           SynapseModel, WeightUpdateModel)
+from ..utils.model import (CustomConnectivityUpdateModel, CustomUpdateModel,
+                           NeuronModel, SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 from copy import copy, deepcopy
-from pygenn import (create_custom_update_model, create_den_delay_var_ref,
+from pygenn import (create_custom_connectivity_update_model,
+                    create_custom_update_model, create_den_delay_var_ref,
                     create_neuron_model, create_out_post_var_ref,
                     create_postsynaptic_model, create_weight_update_model,
                     create_var_ref, init_postsynaptic, init_weight_update)
@@ -344,11 +346,43 @@ class Compiler:
 
         # Configure dynamic parameters
         set_dynamic_param(cu_dynamic_param_names, genn_cu.set_param_dynamic)
+        
+        # Configure EGPs
+        set_egp(cu_egp_vals, genn_cu.extra_global_params)
 
         # Configure var init EGPs
         set_var_egps(cu_var_egp_vals, genn_cu.vars)
         return genn_cu
+
+    def add_custom_connectivity_update(self, genn_model: GeNNModel,
+                                       model: CustomConnectivityUpdateModel,
+                                       synapse_group: SynapseGroup, 
+                                       group: str, name: str):
+        (ccu_model, ccu_param_vals, ccu_dynamic_param_names,
+         ccu_var_vals, ccu_egp_vals, ccu_var_egp_vals, ccu_pre_var_vals,
+         ccu_post_var_vals, ccu_var_refs, ccu_pre_var_refs, ccu_post_var_refs, 
+         ccu_egp_refs) = model.process()
+
+        # Create custom conenctivity update model
+        genn_ccum = create_custom_connectivity_update_model(
+            "CustomConnectivityUpdate", **ccu_model)
+
+        # Add custom connectivity update
+        genn_ccu = genn_model.add_custom_connectivity_update(
+            name, group, synapse_group, genn_ccum, 
+            ccu_param_vals, ccu_var_vals, ccu_pre_var_vals, ccu_post_var_vals,
+            ccu_var_refs, ccu_pre_var_refs, ccu_post_var_refs, ccu_egp_refs)
+
+        # Configure dynamic parameters
+        set_dynamic_param(ccu_dynamic_param_names, genn_ccu.set_param_dynamic)
+        
+        # Configure EGPs
+        set_egp(ccu_egp_vals, genn_ccu.extra_global_params)
     
+        # Configure var init EGPs
+        set_var_egps(ccu_var_egp_vals, genn_ccu.vars)
+        return genn_ccu
+
     def add_out_post_zero_custom_update(self, genn_model, genn_syn_pop,
                                         group: str, name: str):
         # Build list of variables to reset

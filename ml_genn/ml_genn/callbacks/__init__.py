@@ -16,6 +16,6 @@ default_callbacks = get_module_classes(globals(), Callback)
 
 __all__ = ["Callback", "Checkpoint", "ConnVarRecorder", 
            "CustomUpdateOnBatchBegin", "CustomUpdateOnBatchEnd", 
-           "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd", 
+           "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd",
            "OptimiserParamSchedule", "BatchProgressBar", "SpikeRecorder",
            "VarRecorder", "default_callbacks"]

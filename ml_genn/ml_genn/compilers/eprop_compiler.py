@@ -5,9 +5,11 @@ from typing import Iterator, Sequence
 from pygenn import CustomUpdateVarAccess, SynapseMatrixType, VarAccess
 from . import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .deep_r import RewiringRecord
 from .. import Connection, Population, Network
 from ..callbacks import (BatchProgressBar, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochBegin,
+                         CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..losses import Loss, SparseCategoricalCrossentropy
 from ..metrics import MetricsType
@@ -24,7 +26,9 @@ from ..utils.snippet import ConnectivitySnippet
 from copy import deepcopy
 from pygenn import create_var_ref, create_wu_var_ref
 from .compiler import create_reset_custom_update
+from .deep_r import add_deep_r
 from ..utils.module import get_object, get_object_mapping
+from ..utils.network import get_underlying_conn
 from ..utils.value import is_value_constant
 
 from ml_genn.optimisers import default_optimisers
@@ -301,7 +305,11 @@ class EPropCompiler(Compiler):
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
-                 communicator: Communicator = None, **genn_kwargs):
+                 communicator: Communicator = None, 
+                 deep_r_conns: Sequence = [],
+                 deep_r_l1_strength: float = 0.01,
+                 deep_r_record_rewirings = {},
+                 **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
                                   SynapseMatrixType.DENSE]
         super(EPropCompiler, self).__init__(supported_matrix_types, dt,
@@ -318,6 +326,10 @@ class EPropCompiler(Compiler):
         self.f_target = f_target
         self.train_output_bias = train_output_bias
         self.reset_time_between_batches = reset_time_between_batches
+        self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
+        self.deep_r_l1_strength = deep_r_l1_strength
+        self.deep_r_record_rewirings = {get_underlying_conn(c): k
+                                        for c, k in deep_r_record_rewirings.items()}
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -526,21 +538,39 @@ class EPropCompiler(Compiler):
             connection_populations[c].pre_target_var = "ISynFeedback"
 
         # Add optimisers to connection weights that require them
-        optimiser_cus = []
+        optimiser_custom_updates = []
+        deep_r_record_rewirings_ccus = []
         for i, c in enumerate(compile_state.weight_optimiser_connections):
             genn_pop = connection_populations[c]
-            cu = self._create_optimiser_custom_update(
-                f"Weight{i}", create_wu_var_ref(genn_pop, "g"),
-                create_wu_var_ref(genn_pop, "DeltaG"), genn_model, True)
-            optimiser_cus.append(cu)
+
+            # If connection is in list of those to use Deep-R on
+            delta_g_var_ref = create_wu_var_ref(genn_pop, "DeltaG")
+            weight_var_ref = create_wu_var_ref(genn_pop, "g")
+            if c in self.deep_r_conns:
+                # Add infrastructure
+                deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
+                                          self.deep_r_l1_strength, 
+                                          delta_g_var_ref, weight_var_ref)
+                
+                # If we should record rewirings from
+                # this connection, add to list with key
+                if c in self.deep_r_record_rewirings:
+                    deep_r_record_rewirings_ccus.append(
+                        (deep_r_2_ccu, self.deep_r_record_rewirings[c]))
+            # Add optimiser
+            optimiser_custom_updates.append(
+                self._create_optimiser_custom_update(
+                    f"Weight{i}", weight_var_ref, delta_g_var_ref,
+                    genn_model, True))
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
             genn_pop = neuron_populations[p]
-            cu = self._create_optimiser_custom_update(
-                f"Bias{i}", create_var_ref(genn_pop, "Bias"),
-                create_var_ref(genn_pop, "DeltaBias"), genn_model, False)
-            optimiser_cus.append(cu)
+            optimiser_custom_updates.append(
+                self._create_optimiser_custom_update(
+                    f"Bias{i}", create_var_ref(genn_pop, "Bias"),
+                    create_var_ref(genn_pop, "DeltaBias"),
+                    genn_model, False))
 
         # Loop through populations requiring softmax
         # calculation and add requisite custom updates
@@ -556,13 +586,30 @@ class EPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(optimiser_cus) > 0:
+        deep_r_required = (len(self.deep_r_conns) > 0)
+
+        # If Deep-R and L1 regularisation are required, add callback
+        if deep_r_required and self.deep_r_l1_strength > 0.0:
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepRL1"))
+
+        if len(optimiser_custom_updates) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientBatchReduce"))
             base_train_callbacks.append(CustomUpdateOnBatchEnd("GradientLearn"))
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+
+        # If Deep-R is required, trigger Deep-R callbacks at end of batch
+        if deep_r_required:
+            base_train_callbacks.append(CustomUpdateOnEpochBegin("DeepRInit",
+                                                                 lambda e: e == 0))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
+
+        # Add callbacks to record number of rewirings
+        for c, k in deep_r_record_rewirings_ccus:
+            base_train_callbacks.append(RewiringRecord(c, k))
 
         # If softmax is required, add three stage reduction to callbacks
         # **NOTE** this is also required for validation because readout is configured this way
@@ -576,8 +623,8 @@ class EPropCompiler(Compiler):
         
         # Build list of optimisers and their custom updates
         optimisers = []
-        if len(optimiser_cus) > 0:
-            optimisers.append((self._optimiser, optimiser_cus))
+        if len(optimiser_custom_updates) > 0:
+            optimisers.append((self._optimiser, optimiser_custom_updates))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
@@ -606,14 +653,14 @@ class EPropCompiler(Compiler):
                                                     "ReducedGradient"))
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
-            optimiser_model = self._optimiser.get_model(reduced_gradient, 
+            optimiser_model = self._optimiser.get_model(reduced_gradient,
                                                         var_ref, False, None)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
-            optimiser_model = self._optimiser.get_model(
-                gradient_ref, var_ref, True, None)
+            optimiser_model = self._optimiser.get_model(gradient_ref, var_ref,
+                                                        True, None)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
