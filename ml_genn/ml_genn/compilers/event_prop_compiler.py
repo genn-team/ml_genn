@@ -148,22 +148,32 @@ neuron_backward_pass = Template(
 
     // Backward pass
     $write
-    $dynamics
-    if (BackSpike) {
-        $transition
-
-        // Decrease read pointer
-        RingReadOffset--;
-        if (RingReadOffset < 0) {
-            RingReadOffset = $max_spikes - 1;
+    tsRingWriteOffset++;
+    // Loop around if we've reached end of circular buffer
+    if (tsRingWriteOffset >= 2 * $example_timesteps) {
+        tsRingWriteOffset = 0;
+    }
+    if (Trial > 0) {
+        tsRingReadOffset--;
+        if (tsRingReadOffset < 0) {
+            tsRingReadOffset = $example_timesteps * 2;
         }
-        BackSpike = false;
-    }
-    // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if (RingReadOffset != RingReadEndOffset && (backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) <= 0.1*dt) {
-        BackSpike = true;
-    }
+        $dynamics
+        if (BackSpike) {
+            $transition
 
+            // Decrease read pointer
+            RingReadOffset--;
+            if (RingReadOffset < 0) {
+                RingReadOffset = $max_spikes - 1;
+            }
+            BackSpike = false;
+        }
+        // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
+        if (RingReadOffset != RingReadEndOffset && (backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) <= 0.1*dt) {
+            BackSpike = true;
+        }
+    }
     // Forward pass
     """)
 
@@ -1494,18 +1504,27 @@ class EventPropCompiler(Compiler):
             compile_state.add_neuron_reset_vars(
                 pop, all_reset_vars, True, False)
 
+            # add read and write pointer for timestep-wise ring buffers
+            # TODO: make and update tsRingPointers only when needed
+            genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
+            genn_model.add_var("tsRingReadOffset", "int", self.timesteps, reset=False)
+
             # Generate ring-buffer write code
-            # CORRECT INDEXING
-            write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + timestep] = {v};"
+            write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
                                   for v in saved_vars_timestep)
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                   for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
             dynamics_code += solve_ode(dl_dt, self.solver)
-            # CORRECT INDEXING
             dynamics_code = Template(dynamics_code).substitute(
-                {s: f"tsRing{s}[tsRingOffset + timestep]" for s in saved_vars_timestep})
+                {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
+
+            # add "Trial" global parameter and add the population to list of those who need it
+            genn_model.add_param("Trial", "unsigned int", 0)
+            genn_model.set_param_dynamic("Trial")
+            compile_state.update_trial_pops.append(pop)
+
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
         genn_model.prepend_sim_code(
@@ -1515,7 +1534,7 @@ class EventPropCompiler(Compiler):
                 dynamics=dynamics_code,
                 transition=transition_code,
                 example_timesteps=self.example_timesteps,
-                write=write_code_timestep))
+                ))
 
         # Prepend code to reset to write spike time to ring buffer
         genn_model.prepend_reset_code(
@@ -1556,7 +1575,7 @@ class EventPropCompiler(Compiler):
             example_timesteps=self.example_timesteps)
 
         # Build adjoint system from model
-        dl_dt, adjoint_jumps, saved_vars =\
+        dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
             self._build_adjoint_system(model, True, False)
 
         # Add continous drive term to LambdaV
@@ -1567,8 +1586,24 @@ class EventPropCompiler(Compiler):
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
 
+        # Add EGP for stored vars ring variables
+        timestep_ring_size = self.num_timesteps * 2
+        for var in saved_vars_timestep:
+            genn_model.add_egp(f"tsRing{var}", "scalar*", 
+                               np.empty(timestep_ring_size, dtype=np.float32))
+
+        # add read and write pointer for timestep-wise ring buffers
+        genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
+        genn_model.add_var("tsRingReadOffset", "int", self.timesteps, reset=False)
+
+        # Generate ring-buffer write code
+        write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
+                                        for v in saved_vars_timestep)
+
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, self.solver)
+        dynamics_code = Template(dynamics_code).substitute(
+            {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
         
         # **TODO** move logic into loss classes
         # **HACK** we don't want to call add_to_neuron on loss function as
@@ -1606,6 +1641,7 @@ class EventPropCompiler(Compiler):
                 # Add variables to hold offsets for 
                 # reading and writing ring variables
                 genn_model.add_var("RingWriteOffset", "int", 0, reset=False)
+                # JAMIE: SHOULD this be initialised to self.timesteps???
                 genn_model.add_var("RingReadOffset", "int", 0, reset=False)
 
                 # Add EGP for softmax V (SCE) or regression difference (MSE) ring variable
@@ -1873,7 +1909,9 @@ class EventPropCompiler(Compiler):
                             const scalar drive = 0.0;
                             {dynamics_code}
                             """,
-                        transition=transition_code))
+                        transition=transition_code,
+                        example_timesteps=self.example_timesteps,
+                        write=write_code_timestep))
 
                 # Generate ring-buffer write code
                 write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
