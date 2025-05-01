@@ -143,9 +143,11 @@ abs_sum_reduce_neuron_model_assign  = {
 neuron_backward_pass = Template(
     """
     const int ringOffset = (batch * num_neurons * $max_spikes) + (id * $max_spikes);
+    const int tsRingOffset = (batch * num_neurons * $example_timesteps * 2) + (id * $example_timesteps * 2)
     const scalar backT = $example_time - t - dt;
 
     // Backward pass
+    $write
     $dynamics
     if (BackSpike) {
         $transition
@@ -1240,7 +1242,8 @@ class EventPropCompiler(Compiler):
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
         # therefore, we can do these independent of synapse equations
-        saved_vars = set()
+        saved_vars_timestep = set()
+        saved_vars_spike = set()
         dl_dt = {}
         for sym in model.dx_dt.keys():
             o = sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
@@ -1248,7 +1251,7 @@ class EventPropCompiler(Compiler):
             
             # collect variables they might need to go into a ring buffer:
             # **TODO** helper
-            saved_vars.update({sym2.name for sym2 in model.dx_dt.keys()
+            saved_vars_timestep.update({sym2.name for sym2 in model.dx_dt.keys()
                                if o.has(sym2)})
             dl_dt[_get_lmd_sym(sym)] = o
             
@@ -1275,7 +1278,7 @@ class EventPropCompiler(Compiler):
                     for jump_sym, jump_expr in model.jumps.items()))
 
             # **TODO** helper
-            saved_vars.update({var_name2 for var_name2 in model.var_vals.keys()
+            saved_vars_spike.update({var_name2 for var_name2 in model.var_vals.keys()
                                if a[var_sym].has(sympy.Symbol(var_name2))})
 
             if model.threshold != 0:
@@ -1289,7 +1292,7 @@ class EventPropCompiler(Compiler):
                             model.var_vals.keys(), model.threshold, ex)
 
                         # **TODO** helper
-                        saved_vars.update(
+                        saved_vars_spike.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if b[var_sym].has(sympy.Symbol(var_name2))})
                 if var_sym in b:
@@ -1305,7 +1308,7 @@ class EventPropCompiler(Compiler):
                     if ex != 0:
                         c[var_sym] = _simplify_using_threshold(
                             model.var_vals.keys(), model.threshold, ex)
-                        saved_vars.update(
+                        saved_vars_spike.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
 
@@ -1341,15 +1344,16 @@ class EventPropCompiler(Compiler):
             if jump != 0:
                 # Template any neuron variable names or Isyn
                 jump = _template_symbols(
-                    jump, chain(model.var_vals.keys(), ["Isyn"]), saved_vars)
+                    jump, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_spike)
                 
                 # Add to dictionary as jump for adjoint variable
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
 
         logger.debug(f"\t\tAdjoint Jumps: {adjoint_jumps}")
-        logger.debug(f"\t\tSaved variables: {saved_vars}")
+        logger.debug(f"\t\tSaved variables per timestep: {saved_vars_timestep}")
+        logger.devug(f"\t\tSaved variables per spike: {saved_vars_spike}")
         
-        return dl_dt, adjoint_jumps, saved_vars
+        return dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike
     
     def _build_in_hid_neuron_model(self, pop: Population,
                                    model: Union[AutoNeuronModel, NeuronModel],
@@ -1399,7 +1403,7 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
-            dl_dt, adjoint_jumps, saved_vars =\
+            dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
                 self._build_adjoint_system(model, False, self.reg_lambda != 0.0)
 
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
@@ -1418,14 +1422,18 @@ class EventPropCompiler(Compiler):
             
             # Substitute saved variables for those in the ring buffer
             transition_code = Template(transition_code).substitute(
-                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
+                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars_spike})
 
             # Add additional input variable to receive add_to_pre feedback
             genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
 
             # Add EGP for stored vars ring variables
+            timestep_ring_size = self.num_timesteps * 2
+            for var in saved_vars_timestep:
+                genn_model.add_egp(f"tsRing{var}", "scalar*", 
+                                   np.empty(timestep_ring_size, dtype=np.float32))
             spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-            for var in saved_vars:
+            for var in saved_vars_spike:
                 genn_model.add_egp(f"Ring{var}", "scalar*", 
                                    np.empty(spike_ring_size, dtype=np.float32))
 
@@ -1487,11 +1495,17 @@ class EventPropCompiler(Compiler):
                 pop, all_reset_vars, True, False)
 
             # Generate ring-buffer write code
+            # CORRECT INDEXING
+            write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + timestep] = {v};"
+                                  for v in saved_vars_timestep)
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
-                                  for v in saved_vars)
+                                  for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
             dynamics_code += solve_ode(dl_dt, self.solver)
+            # CORRECT INDEXING
+            dynamics_code = Template(dynamics_code).substitute(
+                {s: f"tsRing{s}[tsRingOffset + timestep]" for s in saved_vars_timestep})
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
         genn_model.prepend_sim_code(
@@ -1499,7 +1513,9 @@ class EventPropCompiler(Compiler):
                 max_spikes=self.max_spikes,
                 example_time=(self.example_timesteps * self.dt),
                 dynamics=dynamics_code,
-                transition=transition_code))
+                transition=transition_code,
+                example_timesteps=self.example_timesteps,
+                write=write_code_timestep))
 
         # Prepend code to reset to write spike time to ring buffer
         genn_model.prepend_reset_code(
