@@ -1396,7 +1396,7 @@ class EventPropCompiler(Compiler):
             if not isinstance(model, AutoNeuronModel):
                 raise NotImplementedError(
                     "EventProp compiler only supports hidden "
-                    "neurons defined in terms of AutoSynapseModel")
+                    "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
             dl_dt, adjoint_jumps, saved_vars =\
