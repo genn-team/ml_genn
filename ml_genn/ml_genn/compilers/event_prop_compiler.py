@@ -1546,7 +1546,7 @@ class EventPropCompiler(Compiler):
                 dynamics=dynamics_code,
                 transition=transition_code,
                 example_timesteps=self.example_timesteps,
-                write="\n".join([write_code, write_code_timestep]),
+                write=write_code_timestep,
                 tsringoffset=tsringoffset
             ))
 
