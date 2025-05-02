@@ -1402,6 +1402,7 @@ class EventPropCompiler(Compiler):
             transition_code = ""
             write_code_timestep = ""
             write_code = ""
+            tsringoffset = ""
         # Otherwise i.e. it's hidden
         else:
             logger.debug(f"Building hidden neuron model for '{pop.name}'")
@@ -1547,7 +1548,7 @@ class EventPropCompiler(Compiler):
                 dynamics=dynamics_code,
                 transition=transition_code,
                 example_timesteps=self.example_timesteps,
-                write="\n".join([write_code, write_code_timestep])
+                write="\n".join([write_code, write_code_timestep]),
                 tsringoffset=tsringoffset
             ))
 
@@ -1615,9 +1616,11 @@ class EventPropCompiler(Compiler):
             genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
             read_pointer_code= "tsRingReadOffset--;"
             write_pointer_code= "tsRingWriteOffset++;"
+            tsringoffset = "    const int tsRingOffset = (batch * num_neurons * $example_timesteps * 2) + (id * $example_timesteps * 2);"
         else:
             read_pointer_code= ""
             write_pointer_code= ""
+            tsringoffset = ""
             
         # Generate ring-buffer write code
         write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
