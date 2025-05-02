@@ -1251,9 +1251,10 @@ class EventPropCompiler(Compiler):
                     for sym2, expr2 in model.dx_dt.items())
             
             # collect variables they might need to go into a ring buffer:
-            # **TODO** helper
-            saved_vars_timestep.update({sym2.name for sym2 in model.dx_dt.keys()
-                               if o.has(sym2)})
+            # JAMIE - I feel uneasy for this to go through the solvers but it works
+            # as the decorated $xxx vars are not the dynamic vars of this backward system
+            o = _template_symbols(
+                o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
             dl_dt[_get_lmd_sym(sym)] = o
             
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
@@ -1515,29 +1516,22 @@ class EventPropCompiler(Compiler):
             if (tsRingWriteOffset >= {2 * self.example_timesteps}) {{
                 tsRingWriteOffset = 0;
             }}
+            printf("Writing to %d next \\n", tsRingOffset + tsRingWriteOffset);
             """
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                   for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
             # JAMIE: All the template substitutions need "$" markup???
-            dl_dt_new= {}
-            for var, expr in dl_dt.items():
-                for s in saved_vars_timestep:
-                    expr = expr.subs(sympy.Symbol(s),sympy.Symbol("$"+s))
-                    print(f"expression: {expr}")
-                dl_dt_new[var] = expr
-            dynamics_code += solve_ode(dl_dt_new, self.solver)
-            print(dynamics_code)
-            print(saved_vars_timestep)
+            dynamics_code += solve_ode(dl_dt, self.solver)
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
-            print(dynamics_code)
             dynamics_code = f"""
             tsRingReadOffset--;
             if (tsRingReadOffset < 0) {{
-                tsRingReadOffset = {self.example_timesteps * 2}-1;
+                tsRingReadOffset = {self.example_timesteps * 2} - 2;
             }}
+            printf("Reading from %d \\n", tsRingOffset + tsRingReadOffset);
             """ + dynamics_code
 
         # Add code to start of sim code to run 
