@@ -1509,7 +1509,7 @@ class EventPropCompiler(Compiler):
 
             # Generate ring-buffer write code
             write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
-                                  for v in saved_vars_timestep)
+                                            for v in saved_vars_timestep)
             write_code_timestep += f"""
             tsRingWriteOffset++;
             // Loop around if we've reached end of circular buffer
