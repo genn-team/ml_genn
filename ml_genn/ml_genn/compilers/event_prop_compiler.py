@@ -1522,14 +1522,13 @@ class EventPropCompiler(Compiler):
                                   for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
-            # JAMIE: All the template substitutions need "$" markup???
             dynamics_code += solve_ode(dl_dt, self.solver)
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
             dynamics_code = f"""
             tsRingReadOffset--;
             if (tsRingReadOffset < 0) {{
-                tsRingReadOffset = {self.example_timesteps * 2} - 2;
+                tsRingReadOffset = {self.example_timesteps * 2} - 1;
             }}
             printf("Reading from %d \\n", tsRingOffset + tsRingReadOffset);
             """ + dynamics_code
