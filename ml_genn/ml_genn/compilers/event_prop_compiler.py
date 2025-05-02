@@ -1512,16 +1512,14 @@ class EventPropCompiler(Compiler):
             if dyn_ts_reset_needed:
                 write_code_timestep += f"""
                 tsRingWriteOffset++;
-                printf("Writing to %d next \\n", tsRingOffset + tsRingWriteOffset);
                 """
                 # add read and write pointer for timestep-wise ring buffers
                 genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
                 genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
                 read_pointer_code= """
                     tsRingReadOffset--;
-                    printf("Reading from %d \\n", tsRingOffset + tsRingReadOffset);
                 """
-                tsringoffset = "    const int tsRingOffset = (batch * num_neurons * $example_timesteps * 2) + (id * $example_timesteps * 2);"
+                tsringoffset = f"    const int tsRingOffset = (batch * num_neurons * {self.example_timesteps * 2}) + (id * {self.example_timesteps} * 2);"
 
             else:
                 read_pointer_code= ""
@@ -1616,7 +1614,7 @@ class EventPropCompiler(Compiler):
             genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
             read_pointer_code= "tsRingReadOffset--;"
             write_pointer_code= "tsRingWriteOffset++;"
-            tsringoffset = "    const int tsRingOffset = (batch * num_neurons * $example_timesteps * 2) + (id * $example_timesteps * 2);"
+            tsringoffset = f"    const int tsRingOffset = (batch * num_neurons * {self.example_timesteps * 2}) + (id * {self.example_timesteps} * 2);"
         else:
             read_pointer_code= ""
             write_pointer_code= ""
