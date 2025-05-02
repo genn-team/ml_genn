@@ -143,7 +143,7 @@ abs_sum_reduce_neuron_model_assign  = {
 neuron_backward_pass = Template(
     """
     const int ringOffset = (batch * num_neurons * $max_spikes) + (id * $max_spikes);
-    const int tsRingOffset = (batch * num_neurons * $example_timesteps * 2) + (id * $example_timesteps * 2);
+    $tsringoffset
     const scalar backT = $example_time - t - dt;
 
     // Backward pass
@@ -1504,18 +1504,28 @@ class EventPropCompiler(Compiler):
             compile_state.add_neuron_reset_vars(
                 pop, all_reset_vars, True, dyn_ts_reset_needed)
 
-            # add read and write pointer for timestep-wise ring buffers
-            # TODO: make and update tsRingPointers only when needed
-            genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
-            genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
-
             # Generate ring-buffer write code
             write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
                                             for v in saved_vars_timestep)
-            write_code_timestep += f"""
-            tsRingWriteOffset++;
-            printf("Writing to %d next \\n", tsRingOffset + tsRingWriteOffset);
-            """
+
+            if dyn_ts_reset_needed:
+                write_code_timestep += f"""
+                tsRingWriteOffset++;
+                printf("Writing to %d next \\n", tsRingOffset + tsRingWriteOffset);
+                """
+                # add read and write pointer for timestep-wise ring buffers
+                genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
+                genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
+                read_pointer_code= """
+                    tsRingReadOffset--;
+                    printf("Reading from %d \\n", tsRingOffset + tsRingReadOffset);
+                """
+                tsringoffset = "    const int tsRingOffset = (batch * num_neurons * $example_timesteps * 2) + (id * $example_timesteps * 2);"
+
+            else:
+                read_pointer_code= ""
+                tsringoffset = ""
+
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
                                   for v in saved_vars_spike)
 
@@ -1524,9 +1534,9 @@ class EventPropCompiler(Compiler):
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
             dynamics_code = f"""
-            tsRingReadOffset--;
-            printf("Reading from %d \\n", tsRingOffset + tsRingReadOffset);
-            """ + dynamics_code
+                {read_pointer_code}
+                {dynamics_code}
+            """
 
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
@@ -1538,7 +1548,8 @@ class EventPropCompiler(Compiler):
                 transition=transition_code,
                 example_timesteps=self.example_timesteps,
                 write="\n".join([write_code, write_code_timestep])
-                ))
+                tsringoffset=tsringoffset
+            ))
 
         # Prepend code to reset to write spike time to ring buffer
         genn_model.prepend_reset_code(
@@ -1928,7 +1939,9 @@ class EventPropCompiler(Compiler):
                              """,
                         transition=transition_code,
                         example_timesteps=self.example_timesteps,
-                        write=write_code_timestep))
+                        write=write_code_timestep,
+                        tsringoffset=tsringoffset
+                    ))
 
                 # Generate ring-buffer write code
                 write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
@@ -1964,4 +1977,5 @@ class EventPropCompiler(Compiler):
                     f"EventProp compiler with spiking output "
                     f"neurons only supports 'FirstSpikeTime' readouts")
 
+        print(genn_model.model["sim_code"])
         return genn_model
