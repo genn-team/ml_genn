@@ -143,25 +143,28 @@ abs_sum_reduce_neuron_model_assign  = {
 neuron_backward_pass = Template(
     """
     const int ringOffset = (batch * num_neurons * $max_spikes) + (id * $max_spikes);
+    $tsringoffset
     const scalar backT = $example_time - t - dt;
 
     // Backward pass
-    $dynamics
-    if (BackSpike) {
-        $transition
+    $write
+    if (Trial > 0) {
+        $dynamics
+        if (BackSpike) {
+            $transition
 
-        // Decrease read pointer
-        RingReadOffset--;
-        if (RingReadOffset < 0) {
-            RingReadOffset = $max_spikes - 1;
+            // Decrease read pointer
+            RingReadOffset--;
+            if (RingReadOffset < 0) {
+                RingReadOffset = $max_spikes - 1;
+            }
+            BackSpike = false;
         }
-        BackSpike = false;
+        // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
+        if (RingReadOffset != RingReadEndOffset && (backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) <= 0.1*dt) {
+            BackSpike = true;
+        }
     }
-    // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
-    if (RingReadOffset != RingReadEndOffset && (backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) <= 0.1*dt) {
-        BackSpike = true;
-    }
-
     // Forward pass
     """)
 
@@ -322,20 +325,20 @@ class CompileState:
                     RingWriteStartOffset = RingReadOffset;
                     """)
             # Otherwise, if we want to add code to reset a voltage ring buffer
-            elif r_v:
+            if r_v:
                 # Add references to ring buffer offsets
-                model.add_var_ref("RingReadOffset", "int",
+                model.add_var_ref("tsRingReadOffset", "int",
                                   create_var_ref(neuron_pops[pop],
-                                                 "RingReadOffset"))
-                model.add_var_ref("RingWriteOffset", "int", 
+                                                 "tsRingReadOffset"))
+                model.add_var_ref("tsRingWriteOffset", "int", 
                                   create_var_ref(neuron_pops[pop],
-                                                 "RingWriteOffset"))
+                                                 "tsRingWriteOffset"))
                 # Add additional update code to update ring buffer offsets
                 model.append_update_code(
                     f"""
-                    RingReadOffset = RingWriteOffset;
-                    if (RingWriteOffset >= {2 * compiler.example_timesteps}) {{
-                        RingWriteOffset = 0;
+                    tsRingReadOffset = tsRingWriteOffset;
+                    if (tsRingWriteOffset >= {2 * compiler.example_timesteps}) {{
+                        tsRingWriteOffset = 0;
                     }}
                     """)
             
@@ -1240,16 +1243,16 @@ class EventPropCompiler(Compiler):
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
         # therefore, we can do these independent of synapse equations
-        saved_vars = set()
+        saved_vars_timestep = set()
+        saved_vars_spike = set()
         dl_dt = {}
         for sym in model.dx_dt.keys():
             o = sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
                     for sym2, expr2 in model.dx_dt.items())
             
             # collect variables they might need to go into a ring buffer:
-            # **TODO** helper
-            saved_vars.update({sym2.name for sym2 in model.dx_dt.keys()
-                               if o.has(sym2)})
+            o = _template_symbols(
+                o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
             dl_dt[_get_lmd_sym(sym)] = o
             
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
@@ -1275,8 +1278,8 @@ class EventPropCompiler(Compiler):
                     for jump_sym, jump_expr in model.jumps.items()))
 
             # **TODO** helper
-            saved_vars.update({var_name2 for var_name2 in model.var_vals.keys()
-                               if a[var_sym].has(sympy.Symbol(var_name2))})
+            saved_vars_spike.update({var_name2 for var_name2 in model.var_vals.keys()
+                                     if a[var_sym].has(sympy.Symbol(var_name2))})
 
             if model.threshold != 0:
                 ex = sympy.simplify(
@@ -1289,7 +1292,7 @@ class EventPropCompiler(Compiler):
                             model.var_vals.keys(), model.threshold, ex)
 
                         # **TODO** helper
-                        saved_vars.update(
+                        saved_vars_spike.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if b[var_sym].has(sympy.Symbol(var_name2))})
                 if var_sym in b:
@@ -1305,7 +1308,7 @@ class EventPropCompiler(Compiler):
                     if ex != 0:
                         c[var_sym] = _simplify_using_threshold(
                             model.var_vals.keys(), model.threshold, ex)
-                        saved_vars.update(
+                        saved_vars_spike.update(
                             {var_name2 for var_name2 in model.var_vals.keys()
                              if c[var_sym].has(sympy.Symbol(var_name2))})
 
@@ -1341,15 +1344,16 @@ class EventPropCompiler(Compiler):
             if jump != 0:
                 # Template any neuron variable names or Isyn
                 jump = _template_symbols(
-                    jump, chain(model.var_vals.keys(), ["Isyn"]), saved_vars)
+                    jump, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_spike)
                 
                 # Add to dictionary as jump for adjoint variable
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
 
         logger.debug(f"\t\tAdjoint Jumps: {adjoint_jumps}")
-        logger.debug(f"\t\tSaved variables: {saved_vars}")
+        logger.debug(f"\t\tSaved variables per timestep: {saved_vars_timestep}")
+        logger.debug(f"\t\tSaved variables per spike: {saved_vars_spike}")
         
-        return dl_dt, adjoint_jumps, saved_vars
+        return dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike
     
     def _build_in_hid_neuron_model(self, pop: Population,
                                    model: Union[AutoNeuronModel, NeuronModel],
@@ -1377,6 +1381,11 @@ class EventPropCompiler(Compiler):
         genn_model.add_egp("RingSpikeTime", "scalar*", 
                            np.empty(spike_ring_size, dtype=np.float32))
 
+        # add "Trial" global parameter and add the population to list of those who need it
+        genn_model.add_param("Trial", "unsigned int", 0)
+        genn_model.set_param_dynamic("Trial")
+        compile_state.update_trial_pops.append(pop)
+
         # If neuron is an input
         if isinstance(pop.neuron, Input):
             # Add reset logic to reset any state 
@@ -1389,7 +1398,9 @@ class EventPropCompiler(Compiler):
             # No additional dynamics, transition or writing code is required
             dynamics_code = ""
             transition_code = ""
+            write_code_timestep = ""
             write_code = ""
+            tsringoffset = ""
         # Otherwise i.e. it's hidden
         else:
             logger.debug(f"Building hidden neuron model for '{pop.name}'")
@@ -1399,7 +1410,7 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
-            dl_dt, adjoint_jumps, saved_vars =\
+            dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
                 self._build_adjoint_system(model, False, self.reg_lambda != 0.0)
 
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
@@ -1418,14 +1429,20 @@ class EventPropCompiler(Compiler):
             
             # Substitute saved variables for those in the ring buffer
             transition_code = Template(transition_code).substitute(
-                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
+                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars_spike})
 
             # Add additional input variable to receive add_to_pre feedback
             genn_model.add_additional_input_var("RevISyn", "scalar", 0.0)
 
             # Add EGP for stored vars ring variables
+            dyn_ts_reset_needed = False
+            timestep_ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
+            for var in saved_vars_timestep:
+                genn_model.add_egp(f"tsRing{var}", "scalar*", 
+                                   np.empty(timestep_ring_size, dtype=np.float32))
+                dyn_ts_reset_needed = True
             spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
-            for var in saved_vars:
+            for var in saved_vars_spike:
                 genn_model.add_egp(f"Ring{var}", "scalar*", 
                                    np.empty(spike_ring_size, dtype=np.float32))
 
@@ -1484,14 +1501,38 @@ class EventPropCompiler(Compiler):
             all_reset_vars = additional_reset_vars + genn_model.reset_vars
             logger.debug(f"\tReset variables: {all_reset_vars}")
             compile_state.add_neuron_reset_vars(
-                pop, all_reset_vars, True, False)
+                pop, all_reset_vars, True, dyn_ts_reset_needed)
 
             # Generate ring-buffer write code
+            write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
+                                            for v in saved_vars_timestep)
+
+            if dyn_ts_reset_needed:
+                write_code_timestep += f"""
+                tsRingWriteOffset++;
+                """
+                # add read and write pointer for timestep-wise ring buffers
+                genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
+                genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
+                read_pointer_code= "tsRingReadOffset--;"
+                tsringoffset = f"const int tsRingOffset = (batch * num_neurons * {self.example_timesteps * 2}) + (id * {self.example_timesteps} * 2);"
+
+            else:
+                read_pointer_code= ""
+                tsringoffset = ""
+
             write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
-                                  for v in saved_vars)
+                                  for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
             dynamics_code += solve_ode(dl_dt, self.solver)
+            dynamics_code = Template(dynamics_code).substitute(
+                {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
+            dynamics_code = f"""
+                {read_pointer_code}
+                {dynamics_code}
+            """
+
         # Add code to start of sim code to run 
         # backwards pass and handle back spikes
         genn_model.prepend_sim_code(
@@ -1499,7 +1540,11 @@ class EventPropCompiler(Compiler):
                 max_spikes=self.max_spikes,
                 example_time=(self.example_timesteps * self.dt),
                 dynamics=dynamics_code,
-                transition=transition_code))
+                transition=transition_code,
+                example_timesteps=self.example_timesteps,
+                write=write_code_timestep,
+                tsringoffset=tsringoffset
+            ))
 
         # Prepend code to reset to write spike time to ring buffer
         genn_model.prepend_reset_code(
@@ -1509,7 +1554,6 @@ class EventPropCompiler(Compiler):
                 strict_check=(neuron_reset_strict_check
                                 if self.strict_buffer_checking
                                 else "")))
-        #print(genn_model.model["sim_code"])
         return genn_model
         
     def _build_out_neuron_model(self, pop: Population, 
@@ -1540,7 +1584,7 @@ class EventPropCompiler(Compiler):
             example_timesteps=self.example_timesteps)
 
         # Build adjoint system from model
-        dl_dt, adjoint_jumps, saved_vars =\
+        dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
             self._build_adjoint_system(model, True, False)
 
         # Add continous drive term to LambdaV
@@ -1551,9 +1595,35 @@ class EventPropCompiler(Compiler):
         for lambda_sym in dl_dt.keys():
             genn_model.add_var(lambda_sym.name, "scalar", 0.0)
 
+        # Add EGP for stored vars ring variables
+        dyn_ts_reset_needed = False
+        timestep_ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
+        for var in saved_vars_timestep:
+            genn_model.add_egp(f"tsRing{var}", "scalar*", 
+                               np.empty(timestep_ring_size, dtype=np.float32))
+            dyn_ts_reset_needed = True
+
+        # add read and write pointer for timestep-wise ring buffers
+        if dyn_ts_reset_needed:
+            genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
+            genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
+            read_pointer_code= "tsRingReadOffset--;"
+            write_pointer_code= "tsRingWriteOffset++;"
+            tsringoffset = f"const int tsRingOffset = (batch * num_neurons * {self.example_timesteps * 2}) + (id * {self.example_timesteps} * 2);"
+        else:
+            read_pointer_code= ""
+            write_pointer_code= ""
+            tsringoffset = ""
+            
+        # Generate ring-buffer write code
+        write_code_timestep = "\n".join(f"tsRing{v}[tsRingOffset + tsRingWriteOffset] = {v};"
+                                        for v in saved_vars_timestep)
+
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, self.solver)
-        
+        dynamics_code = Template(dynamics_code).substitute(
+            {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
+
         # **TODO** move logic into loss classes
         # **HACK** we don't want to call add_to_neuron on loss function as
         # it will add unwanted code to end of neuron but we do want this
@@ -1581,16 +1651,17 @@ class EventPropCompiler(Compiler):
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         if "threshold" not in model.model or model.model["threshold"] is None:
             # Check adjoint system is also jump-less
-            assert len(saved_vars) == 0
+            assert len(saved_vars_spike) == 0
             assert len(adjoint_jumps) == 0
 
             # If we want to calculate mean-squared error or per-timestep loss
             out_var_name = model.output_var_name
             if self.per_timestep_loss or mse_loss:
                 # Add variables to hold offsets for 
-                # reading and writing ring variables
-                genn_model.add_var("RingWriteOffset", "int", 0, reset=False)
-                genn_model.add_var("RingReadOffset", "int", 0, reset=False)
+                # reading and writing ring variables if not yet done for dynamics
+                if not dyn_ts_reset_needed:
+                    genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
+                    genn_model.add_var("tsRingReadOffset", "int", 0, reset=False)
 
                 # Add EGP for softmax V (SCE) or regression difference (MSE) ring variable
                 ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
@@ -1604,10 +1675,10 @@ class EventPropCompiler(Compiler):
                         genn_model.prepend_sim_code(
                             f"""
                             scalar drive = 0.0;
-                            const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                            const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
-                                RingReadOffset--;
-                                const scalar softmax = RingOutputLossTerm[ringOffset + RingReadOffset];
+                                tsRingReadOffset--;
+                                const scalar softmax = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
                                 const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
                             }}
@@ -1635,10 +1706,10 @@ class EventPropCompiler(Compiler):
                         genn_model.prepend_sim_code(
                             f"""
                             scalar drive = 0.0;
-                            const int ringOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                            const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
-                                RingReadOffset--;
-                                const scalar error = RingOutputLossTerm[ringOffset + RingReadOffset];
+                                tsRingReadOffset--;
+                                const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
                                 drive = error / (num_batch * {self.dt * self.example_timesteps});
                             }}
                             
@@ -1655,8 +1726,8 @@ class EventPropCompiler(Compiler):
                             const unsigned int timestep = (int)round(t / dt);
                             const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
                             + (timestep * num_neurons) + id;
-                            RingOutputLossTerm[ringOffset + RingWriteOffset] = YTrue[index] - {out_var_name};
-                            RingWriteOffset++;
+                            RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
+                            tsRingWriteOffset++;
                             """)
                     # Otherwise, unsupported readout type
                     else:
@@ -1680,8 +1751,9 @@ class EventPropCompiler(Compiler):
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
                             }}
-                            
+                            {read_pointer_code}
                             {dynamics_code}
+                            {write_pointer_code}
                             """)
                     
                         # Add custom updates to calculate 
@@ -1693,7 +1765,7 @@ class EventPropCompiler(Compiler):
 
                         # Add custom update to reset state
                         compile_state.add_neuron_reset_vars(
-                            pop, genn_model.reset_vars, False, False)
+                            pop, genn_model.reset_vars, False, dyn_ts_reset_needed)
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
                         local_t_scale = 1.0 / (self.dt * self.example_timesteps)
@@ -1705,8 +1777,9 @@ class EventPropCompiler(Compiler):
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
                             }}
-                            
+                            {read_pointer_code}
                             {dynamics_code}
+                            {write_pointer_code}
                             """)
                     
                         # Add custom updates to calculate softmax from VAvg
@@ -1729,8 +1802,9 @@ class EventPropCompiler(Compiler):
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                                 drive = g / (num_batch * {self.dt * self.example_timesteps});
                             }}
-                        
+                            {read_pointer_code}
                             {dynamics_code}
+                            {write_pointer_code}
                             """)
                     
                         # Add custom updates to calculate softmax from VMax
@@ -1768,7 +1842,7 @@ class EventPropCompiler(Compiler):
             
             # Substitute saved variables for those in the ring buffer
             transition_code = Template(transition_code).substitute(
-                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars})
+                {s: f"Ring{s}[ringOffset + RingReadOffset]" for s in saved_vars_spike})
 
             # Add variables to hold offsets for 
             # reading and writing ring variables
@@ -1794,7 +1868,7 @@ class EventPropCompiler(Compiler):
             
             # Add EGP for stored vars ring variables
             ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
-            for var in saved_vars:
+            for var in saved_vars_spike:
                 genn_model.add_egp(f"Ring{var}", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
 
@@ -1840,7 +1914,7 @@ class EventPropCompiler(Compiler):
                 # as well as any state variables from the original model
                 compile_state.add_neuron_reset_vars(
                     pop, [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars,
-                    True, False)
+                    True, dyn_ts_reset_needed)
                 
                 # Add second reset custom update to reset YTrueBack to YTrue
                 # **NOTE** seperate as these are SHARED_NEURON variables
@@ -1855,13 +1929,19 @@ class EventPropCompiler(Compiler):
                         example_time=example_time,
                         dynamics=f"""
                             const scalar drive = 0.0;
+                            {read_pointer_code}
                             {dynamics_code}
-                            """,
-                        transition=transition_code))
+                            {write_pointer_code}
+                             """,
+                        transition=transition_code,
+                        example_timesteps=self.example_timesteps,
+                        write=write_code_timestep,
+                        tsringoffset=tsringoffset
+                    ))
 
                 # Generate ring-buffer write code
                 write_code ="\n".join(f"Ring{v}[ringOffset + RingWriteOffset] = {v};"
-                                    for v in saved_vars)
+                                      for v in saved_vars_spike)
 
                 # Prepend (as it accesses the pre-reset value of V) 
                 # code to reset to write spike time and saved vars to ring buffer
