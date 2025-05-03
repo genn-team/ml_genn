@@ -1251,8 +1251,6 @@ class EventPropCompiler(Compiler):
                     for sym2, expr2 in model.dx_dt.items())
             
             # collect variables they might need to go into a ring buffer:
-            # JAMIE - I feel uneasy for this to go through the solvers but it works
-            # as the decorated $xxx vars are not the dynamic vars of this backward system
             o = _template_symbols(
                 o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
             dl_dt[_get_lmd_sym(sym)] = o
