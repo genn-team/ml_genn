@@ -1279,7 +1279,7 @@ class EventPropCompiler(Compiler):
 
             # **TODO** helper
             saved_vars_spike.update({var_name2 for var_name2 in model.var_vals.keys()
-                               if a[var_sym].has(sympy.Symbol(var_name2))})
+                                     if a[var_sym].has(sympy.Symbol(var_name2))})
 
             if model.threshold != 0:
                 ex = sympy.simplify(
