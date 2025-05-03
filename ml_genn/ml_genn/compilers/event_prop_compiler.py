@@ -1974,5 +1974,4 @@ class EventPropCompiler(Compiler):
                     f"EventProp compiler with spiking output "
                     f"neurons only supports 'FirstSpikeTime' readouts")
 
-        print(genn_model.model["sim_code"])
         return genn_model
