@@ -125,7 +125,10 @@ class AutoSynapseModel(AutoModel):
 
             # Remove from var_vals 
             # **NOTE** this prevents it getting implemented as a variable
-            self.var_vals.pop(rep_sym.name)
+            # **YUCK** we don't just pop because self.var_vals might well be
+            # a reference to a dictionary owned by something else
+            self.var_vals = {n: v for n, v in self.var_vals.items()
+                             if n != rep_sym.name}
 
     # **TODO** property
     def get_jump_code(self):
