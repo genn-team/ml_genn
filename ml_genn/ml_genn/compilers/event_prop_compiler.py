@@ -1610,7 +1610,7 @@ class EventPropCompiler(Compiler):
             genn_model.add_var("tsRingReadOffset", "int", self.example_timesteps, reset=False)
             read_pointer_code= "tsRingReadOffset--;"
             write_pointer_code= "tsRingWriteOffset++;"
-            tsringoffset = f"    const int tsRingOffset = (batch * num_neurons * {self.example_timesteps * 2}) + (id * {self.example_timesteps} * 2);"
+            tsringoffset = f"const int tsRingOffset = (batch * num_neurons * {self.example_timesteps * 2}) + (id * {self.example_timesteps} * 2);"
         else:
             read_pointer_code= ""
             write_pointer_code= ""
