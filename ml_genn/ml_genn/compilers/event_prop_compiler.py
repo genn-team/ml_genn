@@ -1554,7 +1554,6 @@ class EventPropCompiler(Compiler):
                 strict_check=(neuron_reset_strict_check
                                 if self.strict_buffer_checking
                                 else "")))
-        print(genn_model.model["sim_code"])
         return genn_model
         
     def _build_out_neuron_model(self, pop: Population, 
