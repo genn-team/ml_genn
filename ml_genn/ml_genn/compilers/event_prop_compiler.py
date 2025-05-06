@@ -1636,12 +1636,17 @@ class EventPropCompiler(Compiler):
             genn_model.add_var("YTrueBack", "uint8_t", 0, 
                                VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
         elif mse_loss:
-            # The true label is the desired voltage output over time
-            flat_shape = np.prod(pop.shape)
-            egp_size = (self.example_timesteps * self.batch_size * flat_shape)
-            genn_model.add_egp("YTrue", "scalar*",
-                               np.empty(egp_size, dtype=np.float32))
-
+            if isinstance(pop.readout, Var):
+                # The true label is the desired voltage output over time
+                flat_shape = np.prod(pop.shape)
+                egp_size = (self.example_timesteps * self.batch_size * flat_shape)
+                genn_model.add_egp("YTrue", "scalar*",
+                                   np.empty(egp_size, dtype=np.float32))
+            elif isinstance(pop.readout, TimeFirstSpike):
+                # The true label is a vector of desired spike times (one per neuron)
+                genn_model.add_var("YTrue", "scalar", 0.0, reset=False)
+                genn_model.add_var("YTrueBack", "scalar", 0.0, reset=False)
+                
         # Add dynamic parameter to contain trial index and add 
         # population to list of those which require it updating
         genn_model.add_param("Trial", "unsigned int", 0)
@@ -1729,6 +1734,9 @@ class EventPropCompiler(Compiler):
                             RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
                             tsRingWriteOffset++;
                             """)
+                    # Do nothing if time to first spike readout
+                    elif isinstance(pop.neuron.readout, TimeFirstSpike):
+                        pass
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(
@@ -1878,15 +1886,18 @@ class EventPropCompiler(Compiler):
 
             # Readout has to be FirstSpikeTime
             if isinstance(pop.neuron.readout, FirstSpikeTime):
-                if not sce_loss:
+                if not (sce_loss or mse_loss):
                     raise NotImplementedError(
                         f"EventProp compiler only supports calculating "
-                        f"cross-entropy loss with 'FirstSpikeTime' readouts.")
+                        f"cross-entropy or ttfs mean square error loss with 'FirstSpikeTime' readouts.")
 
                 # Add state variable to hold softmax of output
-                genn_model.add_var("Softmax", "scalar", 0.0,
-                                   VarAccess.READ_ONLY_DUPLICATE, reset=False)
-                
+                if sce_loss:
+                    genn_model.add_var("Softmax", "scalar", 0.0,
+                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
+                if mse_loss:
+                    genn_model.add_var("YTrueBack", "scalar", 0.0,
+                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
                 # Add state variable to hold TFirstSpike from previous trial
                 # **YUCK** REALLY should be timepoint but then you can't softmax
                 genn_model.add_var("TFirstSpikeBack", "scalar", 0.0,
