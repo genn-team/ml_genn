@@ -1486,7 +1486,7 @@ class EventPropCompiler(Compiler):
                 # number of spike times, which biases regularisation towards suppressing too many spikes over enhancing to few
                 dynamics_code += f"""
                 scalar drive_reg;
-                drive_reg = -{self.reg_lambda*self.reg_nu_upper/self.full_batch_size} * (SpikeCountBackBatch - RegNuUpperBatch)/SpikeCountBackBatch;
+                drive_reg = -{self.reg_lambda/self.full_batch_size/self.full_batch_size} * (SpikeCountBackBatch - RegNuUpperBatch);
                 """
 
                 # Add population to list of those that 
