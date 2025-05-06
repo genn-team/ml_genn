@@ -15,7 +15,8 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
-from ..losses import Loss, SparseCategoricalCrossentropy, MeanSquareError
+from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
+                      SparseCategoricalCrossentropy)
 from ..metrics import MetricsType
 from ..neurons import Input
 from ..optimisers import Optimiser
@@ -1567,16 +1568,6 @@ class EventPropCompiler(Compiler):
             raise NotImplementedError(
                 "EventProp compiler only supports output neurons "
                 "defined in terms of AutoSynapseModel")
-                
-        # Check loss function is compatible
-        # **TODO** categorical crossentropy i.e. one-hot encoded
-        pop_loss = compile_state.losses[pop]
-        sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
-        mse_loss = isinstance(pop_loss, MeanSquareError)
-        if not (sce_loss or mse_loss):
-            raise NotImplementedError(
-                f"EventProp compiler doesn't support "
-                f"{type(pop_loss).__name__} loss")
 
         # Add output logic to model
         pop.neuron.readout.add_readout_logic(
@@ -1627,6 +1618,12 @@ class EventPropCompiler(Compiler):
         # **TODO** move logic into loss classes
         # **HACK** we don't want to call add_to_neuron on loss function as
         # it will add unwanted code to end of neuron but we do want this
+         # Check loss function is compatible
+        # **TODO** categorical crossentropy i.e. one-hot encoded
+        pop_loss = compile_state.losses[pop]
+        sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
+        mse_loss = isinstance(pop_loss, MeanSquareError)
+        per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
         if sce_loss:
             # Add variable, shared across neurons to hold true label for batch
             genn_model.add_var("YTrue", "uint8_t", 0, 
@@ -1635,17 +1632,19 @@ class EventPropCompiler(Compiler):
             # Add second variable to hold the true label for the backward pass
             genn_model.add_var("YTrueBack", "uint8_t", 0, 
                                VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
-        elif mse_loss:
-            if isinstance(pop.readout, Var):
-                # The true label is the desired voltage output over time
-                flat_shape = np.prod(pop.shape)
-                egp_size = (self.example_timesteps * self.batch_size * flat_shape)
-                genn_model.add_egp("YTrue", "scalar*",
-                                   np.empty(egp_size, dtype=np.float32))
-            elif isinstance(pop.readout, TimeFirstSpike):
-                # The true label is a vector of desired spike times (one per neuron)
-                genn_model.add_var("YTrue", "scalar", 0.0, reset=False)
-                
+        elif mse_loss and isinstance(pop.neuron.readout, Var):
+            # The true label is the desired voltage output over time
+            flat_shape = np.prod(pop.shape)
+            egp_size = (self.example_timesteps * self.batch_size * flat_shape)
+            genn_model.add_egp("YTrue", "scalar*",
+                               np.empty(egp_size, dtype=np.float32))
+        elif per_neuron_mse_loss and isinstance(pop.neuron.readout, FirstSpikeTime):
+            # The true label is a vector of desired spike times (one per neuron)
+            genn_model.add_var("YTrue", "scalar", 0.0, reset=False)
+        else:
+            raise RuntimeError(f"Unsupported combination of {pop.readout} "
+                               f"read out and {pop_loss} loss function")
+
         # Add dynamic parameter to contain trial index and add 
         # population to list of those which require it updating
         genn_model.add_param("Trial", "unsigned int", 0)
@@ -1838,6 +1837,7 @@ class EventPropCompiler(Compiler):
             if sce_loss:
                 compile_state.add_neuron_reset_vars(
                     pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+        # Otherwise, output neuron is spiking
         else:
             # Generate transition code
             transition_code = "\n".join(
@@ -1882,28 +1882,24 @@ class EventPropCompiler(Compiler):
 
             # Readout has to be FirstSpikeTime
             if isinstance(pop.neuron.readout, FirstSpikeTime):
-                if not (sce_loss or mse_loss):
-                    raise NotImplementedError(
-                        f"EventProp compiler only supports calculating "
-                        f"cross-entropy or ttfs mean square error loss with 'FirstSpikeTime' readouts.")
-
-                # Add state variable to hold softmax of output
-                if sce_loss:
-                    genn_model.add_var("Softmax", "scalar", 0.0,
-                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
-                if mse_loss:
-                    genn_model.add_var("YTrueBack", "scalar", 0.0,
-                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
                 # Add state variable to hold TFirstSpike from previous trial
                 # **YUCK** REALLY should be timepoint but then you can't softmax
                 genn_model.add_var("TFirstSpikeBack", "scalar", 0.0,
                                     VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
+                # Add reset logic to reset adjoint state variables 
+                # as well as any state variables from the original model
+                reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars
+
+                example_time = self.dt * self.example_timesteps
                 if sce_loss:
+                    # Add state variable to hold softmax of output
+                    genn_model.add_var("Softmax", "scalar", 0.0,
+                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
+
                     # On backward pass transition, update LambdaV if this is the first spike
                     # **THOMAS** why are we dividing by what looks like softmax temperature?
                     # **TODO** build transition_code from adjoint_jumps here
-                    example_time = self.dt * self.example_timesteps
                     transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
@@ -1917,30 +1913,28 @@ class EventPropCompiler(Compiler):
                         }}
                         {transition_code}
                         """
-                if mse_loss:
-                     transition_code = f"""
+                    # Add second reset custom update to reset YTrueBack to YTrue
+                    # **NOTE** seperate as these are SHARED_NEURON variables
+                    compile_state.add_neuron_reset_vars(
+                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+                elif per_neuron_mse_loss:
+                    genn_model.add_var("YTrueBack", "scalar", 0.0,
+                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
+
+                    reset_vars += [("YTrueBack", "scalar", "YTrue")]
+
+                    transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             drive_p = (-TFirstSpikeBack-YTrueBack);
                         }}
                         {transition_code}
                         """
-                # Add reset logic to reset adjoint state variables 
-                # as well as any state variables from the original model
-                reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars
-                if mse_loss:
-                    reset_var = [("YTrueBack", "scalar", "YTrue")] + reset_vars
+
                 compile_state.add_neuron_reset_vars(
                     pop, reset_vars,
                     True, dyn_ts_reset_needed)
-                
-                if sce_loss:
-                    # Add second reset custom update to reset YTrueBack to YTrue
-                    # **NOTE** seperate as these are SHARED_NEURON variables
-                    compile_state.add_neuron_reset_vars(
-                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
 
-                    
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
                 genn_model.prepend_sim_code(
@@ -1977,6 +1971,7 @@ class EventPropCompiler(Compiler):
                     # If it's last timestep, neuron hasn't spiked, 
                     # isn't just about to and is correct output, update 
                     # TFirstSpike and insert event into ring-buffer
+                    # **THINK** fmax totally uneccessary?
                     phantom_code = f"""
                     if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
                         TFirstSpike = fmax(-t, TFirstSpike);
@@ -1988,6 +1983,18 @@ class EventPropCompiler(Compiler):
                     # Add custom updates to calculate softmax from TFirstSpike
                     compile_state.batch_softmax_populations.append(
                         (pop, "TFirstSpike", "Softmax"))
+                elif per_neuron_mse_loss:
+                    # If it's last timestep, neuron hasn't spiked, 
+                    # isn't just about to and SHOULD spike in this trial,
+                    # update TFirstSpike and insert event into ring-buffer
+                    # **THINK** fmax totally uneccessary?
+                    phantom_code = f"""
+                    if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && YTrue < {example_time}) {{
+                        TFirstSpike = fmax(-t, TFirstSpike);
+                        {reset_code}
+                    }}
+                    """
+                    genn_model.append_sim_code(phantom_code)
             # Otherwise, unsupported readout type
             else:
                 raise NotImplementedError(
