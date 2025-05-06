@@ -1645,7 +1645,6 @@ class EventPropCompiler(Compiler):
             elif isinstance(pop.readout, TimeFirstSpike):
                 # The true label is a vector of desired spike times (one per neuron)
                 genn_model.add_var("YTrue", "scalar", 0.0, reset=False)
-                genn_model.add_var("YTrueBack", "scalar", 0.0, reset=False)
                 
         # Add dynamic parameter to contain trial index and add 
         # population to list of those which require it updating
@@ -1734,14 +1733,11 @@ class EventPropCompiler(Compiler):
                             RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
                             tsRingWriteOffset++;
                             """)
-                    # Do nothing if time to first spike readout
-                    elif isinstance(pop.neuron.readout, TimeFirstSpike):
-                        pass
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(
                             f"EventProp compiler with MeanSqareError loss only supports "
-                            f"'Var' readouts") 
+                            f"'Var' readouts for non-spiking neurons") 
             # Otherwise, we want to calculate loss over each trial
             else:
                 if sce_loss:
@@ -1903,35 +1899,48 @@ class EventPropCompiler(Compiler):
                 genn_model.add_var("TFirstSpikeBack", "scalar", 0.0,
                                     VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
-                # On backward pass transition, update LambdaV if this is the first spike
-                # **THOMAS** why are we dividing by what looks like softmax temperature?
-                # **TODO** build transition_code from adjoint_jumps here
-                example_time = self.dt * self.example_timesteps
-                transition_code = f"""
-                    scalar drive_p = 0.0;
-                    if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
-                        if (id == YTrueBack) {{
-                            const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
-                            drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
+                if sce_loss:
+                    # On backward pass transition, update LambdaV if this is the first spike
+                    # **THOMAS** why are we dividing by what looks like softmax temperature?
+                    # **TODO** build transition_code from adjoint_jumps here
+                    example_time = self.dt * self.example_timesteps
+                    transition_code = f"""
+                        scalar drive_p = 0.0;
+                        if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                            if (id == YTrueBack) {{
+                                const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
+                                drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
+                            }}
+                            else {{
+                                drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
+                            }}
                         }}
-                        else {{
-                            drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
+                        {transition_code}
+                        """
+                if mse_loss:
+                     transition_code = f"""
+                        scalar drive_p = 0.0;
+                        if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                            drive_p = (TFirstSpikeBack-YTrueBack);
                         }}
-                    }}
-                    {transition_code}
-                    """
-
+                        {transition_code}
+                        """
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
+                reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars
+                if mse_loss:
+                    reset_var = [("YTrueBack", "scalar", "YTrue")] + reset_vars
                 compile_state.add_neuron_reset_vars(
-                    pop, [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars,
+                    pop, reset_vars,
                     True, dyn_ts_reset_needed)
                 
-                # Add second reset custom update to reset YTrueBack to YTrue
-                # **NOTE** seperate as these are SHARED_NEURON variables
-                compile_state.add_neuron_reset_vars(
-                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
-        
+                if sce_loss:
+                    # Add second reset custom update to reset YTrueBack to YTrue
+                    # **NOTE** seperate as these are SHARED_NEURON variables
+                    compile_state.add_neuron_reset_vars(
+                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+
+                    
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
                 genn_model.prepend_sim_code(
@@ -1964,20 +1973,21 @@ class EventPropCompiler(Compiler):
                                   else ""))
                 genn_model.prepend_reset_code(reset_code)
 
-                # If it's last timestep, neuron hasn't spiked, 
-                # isn't just about to and is correct output, update 
-                # TFirstSpike and insert event into ring-buffer
-                phantom_code = f"""
-                if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
-                    TFirstSpike = fmax(-t, TFirstSpike);
-                    {reset_code}
-                }}
-                """
-                genn_model.append_sim_code(phantom_code)
-                
-                # Add custom updates to calculate softmax from TFirstSpike
-                compile_state.batch_softmax_populations.append(
-                    (pop, "TFirstSpike", "Softmax"))
+                if sce_loss:
+                    # If it's last timestep, neuron hasn't spiked, 
+                    # isn't just about to and is correct output, update 
+                    # TFirstSpike and insert event into ring-buffer
+                    phantom_code = f"""
+                    if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
+                        TFirstSpike = fmax(-t, TFirstSpike);
+                        {reset_code}
+                    }}
+                    """
+                    genn_model.append_sim_code(phantom_code)
+
+                    # Add custom updates to calculate softmax from TFirstSpike
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "TFirstSpike", "Softmax"))
             # Otherwise, unsupported readout type
             else:
                 raise NotImplementedError(
