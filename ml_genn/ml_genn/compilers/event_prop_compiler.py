@@ -1921,7 +1921,7 @@ class EventPropCompiler(Compiler):
                      transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
-                            drive_p = (TFirstSpikeBack-YTrueBack);
+                            drive_p = (-TFirstSpikeBack-YTrueBack);
                         }}
                         {transition_code}
                         """
