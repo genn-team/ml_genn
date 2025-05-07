@@ -1865,10 +1865,10 @@ class EventPropCompiler(Compiler):
                                 np.empty(spike_ring_size, dtype=np.float32))
             
             # Add EGP for stored vars ring variables
-            ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
+            spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
             for var in saved_vars_spike:
                 genn_model.add_egp(f"Ring{var}", "scalar*", 
-                                   np.empty(ring_size, dtype=np.float32))
+                                   np.empty(spike_ring_size, dtype=np.float32))
 
             # Add parameters with synaptic decay and scale constants
             #model_copy.add_param("IsynScale", "scalar",
