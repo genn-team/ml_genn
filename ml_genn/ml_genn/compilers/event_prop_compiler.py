@@ -1704,39 +1704,33 @@ class EventPropCompiler(Compiler):
                             f"EventProp compiler with CategoricalCrossEntropy loss doesn't support "
                             f"{type(pop.neuron.readout).__name__} readouts")
                 elif mse_loss:
-                    # Readout has to be Var
-                    if isinstance(pop.neuron.readout, Var):
-                        genn_model.prepend_sim_code(
-                            f"""
-                            scalar drive = 0.0;
-                            const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
-                            if (Trial > 0) {{
-                                tsRingReadOffset--;
-                                const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                                drive = error / (num_batch * {self.dt * self.example_timesteps});
-                            }}
-                            
-                            {dynamics_code}
-                            """)
+                    assert isinstance(pop.neuron.readout, Var)
+                    genn_model.prepend_sim_code(
+                        f"""
+                        scalar drive = 0.0;
+                        const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                        if (Trial > 0) {{
+                            tsRingReadOffset--;
+                            const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+                            drive = error / (num_batch * {self.dt * self.example_timesteps});
+                        }}
+                        
+                        {dynamics_code}
+                        """)
 
-                        # Add custom update to reset state JAMIE_CHECK
-                        compile_state.add_neuron_reset_vars(
-                            pop, genn_model.reset_vars, False, True)
+                    # Add custom update to reset state JAMIE_CHECK
+                    compile_state.add_neuron_reset_vars(
+                        pop, genn_model.reset_vars, False, True)
 
-                        # Add code to fill errors into RingBuffer
-                        genn_model.append_sim_code(
-                            f"""
-                            const unsigned int timestep = (int)round(t / dt);
-                            const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
-                            + (timestep * num_neurons) + id;
-                            RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
-                            tsRingWriteOffset++;
-                            """)
-                    # Otherwise, unsupported readout type
-                    else:
-                        raise NotImplementedError(
-                            f"EventProp compiler with MeanSqareError loss only supports "
-                            f"'Var' readouts for non-spiking neurons") 
+                    # Add code to fill errors into RingBuffer
+                    genn_model.append_sim_code(
+                        f"""
+                        const unsigned int timestep = (int)round(t / dt);
+                        const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
+                        + (timestep * num_neurons) + id;
+                        RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
+                        tsRingWriteOffset++;
+                        """) 
             # Otherwise, we want to calculate loss over each trial
             else:
                 if sce_loss:
@@ -1972,13 +1966,13 @@ class EventPropCompiler(Compiler):
                     # isn't just about to and is correct output, update 
                     # TFirstSpike and insert event into ring-buffer
                     # **THINK** fmax totally uneccessary?
-                    phantom_code = f"""
-                    if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
-                        TFirstSpike = fmax(-t, TFirstSpike);
-                        {reset_code}
-                    }}
-                    """
-                    genn_model.append_sim_code(phantom_code)
+                    genn_model.append_sim_code(
+                        f"""
+                        if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
+                            TFirstSpike = fmax(-t, TFirstSpike);
+                            {reset_code}
+                        }}
+                        """)
 
                     # Add custom updates to calculate softmax from TFirstSpike
                     compile_state.batch_softmax_populations.append(
@@ -1988,13 +1982,13 @@ class EventPropCompiler(Compiler):
                     # isn't just about to and SHOULD spike in this trial,
                     # update TFirstSpike and insert event into ring-buffer
                     # **THINK** fmax totally uneccessary?
-                    phantom_code = f"""
-                    if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && YTrue < {example_time}) {{
-                        TFirstSpike = fmax(-t, TFirstSpike);
-                        {reset_code}
-                    }}
-                    """
-                    genn_model.append_sim_code(phantom_code)
+                    genn_model.append_sim_code(
+                        f"""
+                        if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && YTrue < {example_time}) {{
+                            TFirstSpike = fmax(-t, TFirstSpike);
+                            {reset_code}
+                        }}
+                        """)
             # Otherwise, unsupported readout type
             else:
                 raise NotImplementedError(
