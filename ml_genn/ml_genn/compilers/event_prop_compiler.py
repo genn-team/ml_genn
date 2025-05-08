@@ -1642,7 +1642,7 @@ class EventPropCompiler(Compiler):
             # The true label is a vector of desired spike times (one per neuron)
             genn_model.add_var("YTrue", "scalar", 0.0, reset=False)
         else:
-            raise RuntimeError(f"Unsupported combination of {pop.readout} "
+            raise RuntimeError(f"Unsupported combination of {pop.neuron.readout} "
                                f"read out and {pop_loss} loss function")
 
         # Add dynamic parameter to contain trial index and add 
