@@ -33,10 +33,10 @@ def test_var_recorder(batch_size, neuron_filter, example_filter, request):
         # Evaluate ML GeNN model
         _, cb_data = compiled_net.evaluate(
             {input: x}, {output: y_true}, "mean_square_error",
-            callbacks=[VarRecorder(input, genn_var="Input", key="in",
+            callbacks=[VarRecorder(input, "Input", key="in",
                                    neuron_filter=neuron_filter,
                                    example_filter=example_filter),
-                       VarRecorder(output, genn_var="Vthresh", key="out",
+                       VarRecorder(output, "v_thresh", key="out",
                                    neuron_filter=neuron_filter,
                                    example_filter=example_filter)])
 

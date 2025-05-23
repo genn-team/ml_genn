@@ -23,18 +23,16 @@ def test_get_values():
     var_vals = get_values(x, vars)
     
     assert var_vals["x"] == approx(1.0)
-    assert var_vals["z"] == approx(0.3)
+    assert var_vals["z"] == approx(3.0)
     assert len(var_vals) == 3
 
 def test_get_auto_values():
     x = Model(1.0, 2.0, 3.0)
     
-    var_names = ["x", "y"]
-    var_vals, param_vals = get_auto_values(x, vars)
-    
+    param_vals, var_vals = get_auto_values(x, ["x", "y"])
     assert var_vals["x"] == approx(1.0)
     assert var_vals["y"] == approx(2.0)
     assert len(var_vals) == 2
     
-    assert param_vals["z"] == approx(0.3)
+    assert param_vals["z"] == approx(3.0)
     assert len(param_vals) == 1
