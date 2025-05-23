@@ -1,8 +1,7 @@
 from ml_genn.utils.value import ValueDescriptor
 
 from pytest import approx, raises
-from ml_genn.utils.value import (get_auto_values, get_genn_var_name,
-                                 get_values)
+from ml_genn.utils.value import get_auto_values, get_values
 
 class Model:
     x = ValueDescriptor()
