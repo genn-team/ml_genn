@@ -554,6 +554,10 @@ class EventPropCompiler(Compiler):
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
 
+        if not readouts:
+            raise RuntimeError("EventPropCompiler needs an output - "
+                               "No readout populations found in the network.")
+
         return CompileState(self.losses, readouts,
                             genn_model.backend_name)
 
