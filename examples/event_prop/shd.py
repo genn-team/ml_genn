@@ -17,8 +17,6 @@ from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
-from ml_genn.compilers.event_prop_compiler import default_params
-
 NUM_HIDDEN = 256
 BATCH_SIZE = 32
 NUM_EPOCHS = 100
@@ -49,13 +47,12 @@ num_input = int(np.prod(dataset.sensor_size))
 num_output = len(dataset.classes)
 
 serialiser = Numpy("shd_checkpoints")
-network = Network(default_params)
+network = Network()
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=BATCH_SIZE * max_spikes),
                        num_input)
-    hidden = Population(LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                           tau_refrac=None),
+    hidden = Population(LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
                         NUM_HIDDEN)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="avg_var_exp_weight"),
                         num_output)
@@ -72,8 +69,7 @@ max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 reg_lambda_upper=2.5e-10, reg_lambda_lower=2.5e-10, 
-                                 reg_nu_upper=14, max_spikes=1500, 
+                                 reg_lambda=1e-10, reg_nu_upper=14, max_spikes=1500, 
                                  optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)

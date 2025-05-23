@@ -1,30 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Union, TYPE_CHECKING
 from .neuron import Neuron
+from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
 if TYPE_CHECKING:
     from .. import Population
-
-
-genn_model = {
-    "vars": [("V", "scalar")],
-    "params": [("Vthresh", "scalar"), ("Vreset", "scalar")],
-    "sim_code":
-        """
-        V += Isyn;
-        """,
-    "threshold_condition_code":
-        """
-        V >= Vthresh
-        """,
-    "reset_code":
-        """
-        V = Vreset;
-        """}
-
 
 class IntegrateFire(Neuron):
     """An integrate and fire neuron.
@@ -37,9 +20,9 @@ class IntegrateFire(Neuron):
         readout:    Type of readout to attach to this
                     neuron's output variable
     """
-    v_thresh = ValueDescriptor("Vthresh")
-    v_reset = ValueDescriptor("Vreset")
-    v = ValueDescriptor("V")
+    v_thresh = ValueDescriptor()
+    v_reset = ValueDescriptor()
+    v = ValueDescriptor()
 
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, readout=None, **kwargs):
@@ -49,6 +32,10 @@ class IntegrateFire(Neuron):
         self.v_reset = v_reset
         self.v = v
 
-    def get_model(self, population: Population,
-                  dt: float, batch_size: int) -> NeuronModel:
-        return NeuronModel.from_val_descriptors(genn_model, "V", self, dt)
+    def get_model(self, population: Population, dt: float,
+                  batch_size: int) -> Union[AutoNeuronModel, NeuronModel]:
+        genn_model = {
+            "vars": {"v": ("Isyn", "v_reset")},
+            "threshold": "v - v_thresh"}
+
+        return AutoNeuronModel.from_val_descriptors(genn_model, "v", self)

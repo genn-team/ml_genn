@@ -3,12 +3,13 @@ from __future__ import annotations
 import numpy as np
 
 from abc import ABC
+from pygenn import VarAccess
+from ..utils.auto_model import AutoNeuronModel
+from ..utils.model import NeuronModel
 
 from abc import abstractmethod
-from copy import deepcopy
-
-from pygenn import VarAccess
-
+from copy import copy, deepcopy
+from ..utils.auto_tools import solve_ode
 
 def _replace_neuron_code(nm, source, target):
     nm.replace_sim_code(source, target)
@@ -60,8 +61,8 @@ class InputBase(Input):
         self.input_frames = input_frames
         self.input_frame_timesteps = input_frame_timesteps
 
-    def create_input_model(self, base_model, batch_size: int, shape,
-                           replace_input: str = None):
+    def create_input_model(self, base_model, batch_size: int, 
+                           shape, replace_input: str = None):
         """Convert standard neuron model into input neuron model.
         
         Args:
@@ -71,8 +72,30 @@ class InputBase(Input):
             replace_input:  Name of variable in neuron model code 
                             to replace with input (typically Isyn)
         """
-        # Make copy of model
-        nm_copy = deepcopy(base_model)
+        if isinstance(base_model, AutoNeuronModel):
+            # **YUCK** this duplicates Compiler.build_neuron_model somewhat
+            print(base_model.model)
+            # Build GeNNCode model
+            # **TODO** solver
+            solver = "exponential_euler"
+            genn_model = {
+                "vars": base_model.get_vars("scalar"),
+                "params": base_model.get_params("scalar"),
+                "sim_code":
+                    solve_ode(base_model.dx_dt, solver),
+                "threshold_condition_code":
+                    base_model.get_threshold_condition_code(),
+                "reset_code":
+                    base_model.get_reset_code()}
+            
+            # Wrap in NeuronModel and return
+            nm_copy =  NeuronModel(genn_model, base_model.output_var_name, 
+                                   copy(base_model.param_vals), 
+                                   copy(base_model.var_vals))
+        # Otherwise, just make copy of model
+        else:
+            assert isinstance(base_model, NeuronModel)
+            nm_copy = deepcopy(base_model)
 
         # If input isn't time-varying
         if self.input_frames == 1:

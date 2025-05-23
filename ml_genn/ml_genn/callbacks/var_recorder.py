@@ -12,7 +12,6 @@ from ..utils.network import PopulationType
 from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
-from ..utils.value import get_genn_var_name
 
 
 logger = logging.getLogger(__name__)
@@ -40,24 +39,14 @@ class VarRecorder(Callback):
                         for more information).
         genn_var:       Internal name of variable to record
     """
-    def __init__(self, pop: PopulationType, var: Optional[str] = None,
+    def __init__(self, pop: PopulationType, var: str,
                  key=None, example_filter: ExampleFilterType = None,
-                 neuron_filter: NeuronFilterType = None,
-                 genn_var: Optional[str] = None):
+                 neuron_filter: NeuronFilterType = None):
         # Get underlying population
         self._pop = get_underlying_pop(pop)
 
-        # Get the name of the GeNN variable corresponding to var
-        if var is not None:
-            self._var = get_genn_var_name(self._pop.neuron, var)
-        elif genn_var is not None:
-            self._var = genn_var
-        else:
-            raise RuntimeError("VarRecorder callback requires a "
-                               "variable to be specified, either "
-                               "via 'var' or 'genn_var' argument")
-
-        # Stash key
+        # Stash var name and key
+        self.var = var
         self.key = key
 
         # Create example filter
@@ -82,10 +71,10 @@ class VarRecorder(Callback):
 
         try:
             # Find variable
-            var = next(v for v in pop_vars if v.name == self._var)
+            var = next(v for v in pop_vars if v.name == self.var)
         except StopIteration:
             raise RuntimeError(f"Model does not have variable "
-                               f"{self._var} to record")
+                               f"{self.var} to record")
 
         # Determine if var is shared or batched
         self.shared = not (get_var_access_dim(var.access)
@@ -96,7 +85,7 @@ class VarRecorder(Callback):
         # If variable is shared and neuron mask was set, give warning
         if self.shared and not np.all(self._neuron_mask):
             logger.warn(f"VarRecorder ignoring neuron mask applied "
-                        f"to SHARED_NEURON variable f{self._var}")
+                        f"to SHARED_NEURON variable f{self.var}")
 
         # Create empty list to hold recorded data
         data[self.key] = []
@@ -107,10 +96,10 @@ class VarRecorder(Callback):
         if self._batch_count > 0:
             # Copy variable from device
             pop = self._compiled_network.neuron_populations[self._pop]
-            pop.vars[self._var].pull_from_device()
+            pop.vars[self.var].pull_from_device()
 
             # If simulation and variable is batched
-            var_view = pop.vars[self._var].current_view
+            var_view = pop.vars[self.var].current_view
             if self._batch_size > 1 and self.batched:
                 # Apply neuron mask
                 if self.shared:

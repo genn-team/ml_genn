@@ -13,19 +13,8 @@ Value = Union[Number, Sequence[Number], np.ndarray, Initializer]
 InitValue = Union[Value, str]
 
 class ValueDescriptor:
-    def __init__(self, *args):
-        # Args are either strings specifying the names of GeNN variables
-        # without transforms or tuples specifying names and transforms
-        self.genn_transforms = [(a, None) if isinstance(a, str)
-                                else a for a in args]
-
-    def get_transformed(self, instance, dt):
-        # Get value
-        val = self.__get__(instance, None)
-
-        # Apply transforms to get dictionary of GeNN variables
-        return {g[0]: (val if g[1] is None else g[1](val, dt))
-                for g in self.genn_transforms}
+    def get_value(self, instance):
+        return self.__get__(instance, None)
 
     def __set_name__(self, owner, name: str, *args):
         self.name = name
@@ -41,11 +30,6 @@ class ValueDescriptor:
     def __set__(self, instance, value):
         # **NOTE** strings are checked first as strings ARE sequences
         name_internal = f"_{self.name}"
-        if (any(g[1] is not None for g in self.genn_transforms)
-                and isinstance(value, (str, Initializer))):
-            raise NotImplementedError(f"{self.name} variable has a "
-                                      f"transformation and cannot be "
-                                      f"initialised using an initializer ")
         if isinstance(value, str):
             if value in default_initializers:
                 setattr(instance, name_internal, default_initializers[value])
@@ -75,60 +59,43 @@ def is_value_initializer(value):
     return isinstance(value, Initializer)
 
 
-# **THINK** should maybe a method in a base class for Neuron/Synapse etc
-def get_genn_var_name(inst, name):
-    # Get attribute from instance type
-    d = getattr(type(inst), name)
-
-    # If attribute is a value descriptor
-    if isinstance(d, ValueDescriptor):
-        # Find all untransformed GeNN variables it is responsible for
-        t = [g[0] for g in d.genn_transforms
-             if g[1] is None]
-        
-        # If there aren't any, give error
-        if len(t) == 0:
-            raise RuntimeError(f"There are no GenN variables which "
-                               f"directly map to varaible'{name}'")
-        # Otherwise, return first
-        else:
-            return t[0]
-    else:
-        raise RuntimeError(f"'{name}' is not a ValueDescriptor")
-
-
-# **THINK** should maybe a method in a base class for Neuron/Synapse etc
-def get_values(inst, name_types, dt, vals={}):
+def get_values(inst, name_types, vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
     # Build set of names we care about
     names = set(n[0] for n in name_types)
-
-    # Loop through descriptors
-    for n, d in descriptors:
-        # If this is a value descriptor, update values with
-        # transformed values for variables we care about
-        if isinstance(d, ValueDescriptor):
-            vals.update({g: v for g, v in d.get_transformed(inst, dt).items()
-                         if g in names})
-
+    
+    # Update vals with value descriptor values
+    vals.update({n: d.get_value(inst) for n, d in descriptors
+                 if isinstance(d, ValueDescriptor) and n in names})
     return vals
 
+def get_auto_values(inst, var_names, param_vals={}, var_vals={}):
+    # Get descriptors
+    descriptors = getmembers(type(inst), isdatadescriptor)
+
+    # Build set of variable names
+    var_names = set(var_names)
+    
+    # Update dictionaries of var and parameter values from value descriptors
+    param_vals.update(
+        {n: d.get_value(inst) for n, d in descriptors
+         if isinstance(d, ValueDescriptor) and n not in var_names})
+    var_vals.update(
+        {n: d.get_value(inst) for n, d in descriptors
+         if isinstance(d, ValueDescriptor) and n in var_names})
+    return param_vals, var_vals
 
 # **THINK** should maybe a method in a base class for Neuron/Synapse etc
 def set_values(inst, vals):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
-    # Loop through descriptors
-    genn_descriptors = {}
-    for n, d in descriptors:
-        # If this is a value descriptor, build mapping from
-        # GeNN names it is responsible for to descriptor
-        if isinstance(d, ValueDescriptor):
-            genn_descriptors.update({g[0]: d for g in d.genn_transforms})
-
+    # Build dictionary of names to GeNN descriptors
+    genn_descriptors = {n: d for n, d in descriptors
+                        if isinstance(d, ValueDescriptor)}
+    
     # Loop through values
     for n, v in vals.items():
         # If there is a descriptor matching

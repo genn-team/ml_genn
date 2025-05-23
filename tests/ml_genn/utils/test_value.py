@@ -1,12 +1,12 @@
 from ml_genn.utils.value import ValueDescriptor
 
 from pytest import approx, raises
-from ml_genn.utils.value import get_genn_var_name, get_values
+from ml_genn.utils.value import get_auto_values, get_values
 
 class Model:
-    x = ValueDescriptor("X")
-    y = ValueDescriptor("Y")
-    z = ValueDescriptor(("Z", lambda val, dt: val * dt))
+    x = ValueDescriptor()
+    y = ValueDescriptor()
+    z = ValueDescriptor()
 
     def __init__(self, x, y, z):
         self.x = x
@@ -15,21 +15,24 @@ class Model:
 
 def test_invalid_values():
     pass
-
-def test_get_genn_name():
-    x = Model(1.0, 2.0, 3.0)
-    
-    assert get_genn_var_name(x, "x") == "X"
-
-    with raises(AttributeError):
-        get_genn_var_name(x, "n")
-
+   
 def test_get_values():
     x = Model(1.0, 2.0, 3.0)
     
-    vars = [("X", "int"), ("Y", "scalar"), ("Z", "scalar")]
-    var_vals = get_values(x, vars, 0.1)
+    vars = [("x", "int"), ("y", "scalar"), ("z", "scalar")]
+    var_vals = get_values(x, vars)
     
-    assert var_vals["X"] == approx(1.0)
-    assert var_vals["Z"] == approx(0.3)
+    assert var_vals["x"] == approx(1.0)
+    assert var_vals["z"] == approx(3.0)
     assert len(var_vals) == 3
+
+def test_get_auto_values():
+    x = Model(1.0, 2.0, 3.0)
+    
+    param_vals, var_vals = get_auto_values(x, ["x", "y"])
+    assert var_vals["x"] == approx(1.0)
+    assert var_vals["y"] == approx(2.0)
+    assert len(var_vals) == 2
+    
+    assert param_vals["z"] == approx(3.0)
+    assert len(param_vals) == 1

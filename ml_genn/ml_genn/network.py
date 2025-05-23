@@ -21,16 +21,10 @@ class Network:
     Attributes:
         populations:    List of all populations in network
         connections:    List of all connections in network
-    
-    Args:
-        default_params: Default parameters to use for neuron and synapse
-                        models created within the scope of this network.
-                        These are typically provided by the compiler.
     """
     _context = None
 
-    def __init__(self, default_params: dict = {}):
-        self.default_params = default_params
+    def __init__(self):
         self.populations = []
         self.connections = []
 
@@ -80,13 +74,6 @@ class Network:
             raise RuntimeError("Connection must be created "
                                "inside a ``with network:`` block")
         Network._context.connections.append(conn)
-
-    @staticmethod
-    def get_default_params(type):
-        if Network._context is None:
-            return {}
-        else:
-            return Network._context.default_params.get(type, {})
 
     def __enter__(self):
         if Network._context is not None:
