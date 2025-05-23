@@ -59,7 +59,7 @@ def is_value_initializer(value):
     return isinstance(value, Initializer)
 
 
-def get_values(inst, name_types, dt, vals={}):
+def get_values(inst, name_types, vals={}):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
