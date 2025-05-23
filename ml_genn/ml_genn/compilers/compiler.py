@@ -625,12 +625,12 @@ class Compiler:
             post_genn_group = neuron_populations[conn.target()]
 
             # Use to create local variable references
-            #psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
-            #                                            post_genn_group)
-            #wum_pre_neuron_var_refs = create_local_var_refs(
-            #    wum_pre_neuron_var_refs, pre_genn_group)
-            #wum_post_neuron_var_refs = create_local_var_refs(
-            #    wum_post_neuron_var_refs, post_genn_group)
+            psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
+                                                        post_genn_group)
+            wum_pre_neuron_var_refs = create_local_var_refs(
+                wum_pre_neuron_var_refs, pre_genn_group)
+            wum_post_neuron_var_refs = create_local_var_refs(
+                wum_post_neuron_var_refs, post_genn_group)
     
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
