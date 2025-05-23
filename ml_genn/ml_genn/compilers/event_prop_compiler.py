@@ -555,7 +555,7 @@ class EventPropCompiler(Compiler):
                     if p.neuron.readout is not None]
 
         if not readouts:
-            raise ValueError("EventPropCompiler needs an output - "
+            raise RuntimeError("EventPropCompiler needs an output - "
                              "No readout populations found in the network.")
 
         return CompileState(self.losses, readouts,
