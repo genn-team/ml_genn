@@ -134,14 +134,17 @@ def get_delay_type(max_delay):
     else:
         return "uint16_t"
 
-def _get_conn_max_delay(conn, delay):
-    # if maximum delay steps is specified
+def get_conn_max_delay(conn, delay):
+    # If maximum delay steps is specified
     if conn.max_delay_steps is not None:
-        return conn.max_delay_steps
-    # Otherwise, if delays are specified as an array, 
-    # calculate maximum delay steps from array 
+        return 1 + conn.max_delay_steps
+    # Otherwise, if delay is constant
+    elif is_value_constant(delay):
+        return 1 + round(delay)
+    # Otherwise, if delays are specified as an array,
+    # calculate maximum delay steps from array
     elif is_value_array(delay):
-        return np.rint(np.amax(delay)).astype(int) + 1
+        return 1 + np.round(np.amax(delay)).astype(int)
     else:
         raise RuntimeError(f"Maximum delay associated with Connection "
                            f"{conn.name} cannot be determined "
@@ -223,7 +226,7 @@ class Compiler:
         # Otherwise
         else:
             # Get maximum delay
-            max_delay_steps = _get_conn_max_delay(conn, delay)
+            max_delay_steps = get_conn_max_delay(conn, delay)
 
             # Check delay fits in 16-bit limit
             if max_delay_steps > 65535:
@@ -322,8 +325,16 @@ class Compiler:
         if het_delay:
             # Get delay type to use for this connection
             delay_type = get_delay_type(
-                _get_conn_max_delay(connection, connect_snippet.delay))
-            param_vals["d"] = connect_snippet.delay
+                get_conn_max_delay(connection, connect_snippet.delay))
+
+            # If delays are specified as array, round
+            # **NOTE** this is to prevent floating point delays e.g. those
+            # obtained by Eventprop training being truncated later
+            if is_value_array(connect_snippet.delay):
+                param_vals["d"] = np.round(connect_snippet.delay)
+            else:
+                param_vals["d"] = connect_snippet.delay
+
 
         # If source neuron model defines a negative threshold condition
         src_pop = connection.source()
@@ -614,12 +625,12 @@ class Compiler:
             post_genn_group = neuron_populations[conn.target()]
 
             # Use to create local variable references
-            #psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
-            #                                            post_genn_group)
-            #wum_pre_neuron_var_refs = create_local_var_refs(
-            #    wum_pre_neuron_var_refs, pre_genn_group)
-            #wum_post_neuron_var_refs = create_local_var_refs(
-            #    wum_post_neuron_var_refs, post_genn_group)
+            psm_neuron_var_refs = create_local_var_refs(psm_neuron_var_refs,
+                                                        post_genn_group)
+            wum_pre_neuron_var_refs = create_local_var_refs(
+                wum_pre_neuron_var_refs, pre_genn_group)
+            wum_post_neuron_var_refs = create_local_var_refs(
+                wum_post_neuron_var_refs, post_genn_group)
     
             # Add synapse population
             genn_pop = genn_model.add_synapse_population(
