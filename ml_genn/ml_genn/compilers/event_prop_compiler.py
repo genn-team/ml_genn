@@ -556,7 +556,7 @@ class EventPropCompiler(Compiler):
 
         if not readouts:
             raise RuntimeError("EventPropCompiler needs an output - "
-                             "No readout populations found in the network.")
+                               "No readout populations found in the network.")
 
         return CompileState(self.losses, readouts,
                             genn_model.backend_name)
