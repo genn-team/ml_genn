@@ -1526,9 +1526,10 @@ class EventPropCompiler(Compiler):
                                   for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
-            dynamics_code += solve_ode(dl_dt, self.solver)
+            dynamics_code += solve_ode(dl_dt, self.solver, model.sub_steps)
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
+
             dynamics_code = f"""
                 {read_pointer_code}
                 {dynamics_code}
@@ -1611,7 +1612,7 @@ class EventPropCompiler(Compiler):
                                         for v in saved_vars_timestep)
 
         # Prepend continous adjoint system update
-        dynamics_code = solve_ode(dl_dt, self.solver)
+        dynamics_code = solve_ode(dl_dt, self.solver, model.sub_steps)
         dynamics_code = Template(dynamics_code).substitute(
             {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 

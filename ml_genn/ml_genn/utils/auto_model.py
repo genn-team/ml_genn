@@ -60,7 +60,8 @@ class AutoModel:
 class AutoNeuronModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any], output_var_name: str,
                  param_vals: Optional[MutableMapping[str, Value]] = None,
-                 var_vals: Optional[MutableMapping[str, Value]] = None):
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 sub_steps: int = 1):
         super(AutoNeuronModel, self).__init__(model, param_vals, var_vals)
 
         self.output_var_name = output_var_name
@@ -69,6 +70,8 @@ class AutoNeuronModel(AutoModel):
             self.threshold = sympy.parse_expr(self.model["threshold"])
         else:
             self.threshold = 0
+
+        self.sub_steps = sub_steps
 
     # **TODO** property
     def get_threshold_condition_code(self):
@@ -157,4 +160,3 @@ class AutoSynapseModel(AutoModel):
                                                model.get("vars", {}).keys(),
                                                param_vals, var_vals)
         return AutoSynapseModel(model, param_vals, var_vals)
-        

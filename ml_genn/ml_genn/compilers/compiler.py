@@ -6,6 +6,7 @@ import sympy
 from collections import defaultdict, namedtuple
 from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
 
+from string import Template
 from typing import List, Optional, Union
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
@@ -250,11 +251,13 @@ class Compiler:
         """
         if isinstance(model, AutoNeuronModel):
             # Build GeNNCode model
+            dynamics_code = solve_ode(model.dx_dt, self.solver,model.sub_steps)
+
             genn_model = {
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
                 "sim_code":
-                    solve_ode(model.dx_dt, self.solver),
+                    dynamics_code,
                 "threshold_condition_code":
                     model.get_threshold_condition_code(),
                 "reset_code":
