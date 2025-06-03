@@ -61,7 +61,7 @@ def _get_conditionally_linear_system(dx_dt):
     return coefficients
 
 
-def _exponential_euler(dx_dt):
+def _exponential_euler(dx_dt, sub_steps):
     # Try whether the equations are conditionally linear
     try:
         system = _get_conditionally_linear_system(dx_dt)
