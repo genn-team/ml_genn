@@ -14,11 +14,13 @@ Variables = MutableMapping[str, Tuple[Optional[str], Optional[str]]]
 class AutoModel:
     def __init__(self, model: MutableMapping[str, Any],
                  param_vals: Optional[MutableMapping[str, Value]] = None,
-                 var_vals: Optional[MutableMapping[str, Value]] = None):
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 solver: str = "exponential_euler"):
         self.model = model
 
         self.param_vals = param_vals or {}
         self.var_vals = var_vals or {}
+        self.solver = solver
 
         # If model has any variables
         if "vars" in self.model:
@@ -61,8 +63,9 @@ class AutoNeuronModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any], output_var_name: str,
                  param_vals: Optional[MutableMapping[str, Value]] = None,
                  var_vals: Optional[MutableMapping[str, Value]] = None,
+                 solver: str = "exponential_euler",
                  sub_steps: int = 1):
-        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals)
+        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals, solver)
 
         self.output_var_name = output_var_name
         
@@ -96,8 +99,9 @@ class AutoNeuronModel(AutoModel):
 class AutoSynapseModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any],
                  param_vals: Optional[MutableMapping[str, Value]] = None,
-                 var_vals: Optional[MutableMapping[str, Value]] = None):
-        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals)
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 solver: str = "exponential_euler"):
+        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver)
 
         if "inject_current" in self.model:
             self.inject_current = sympy.parse_expr(

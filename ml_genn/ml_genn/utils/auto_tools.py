@@ -131,5 +131,4 @@ def solve_ode(dx_dt, solver, sub_steps: int = 1):
             f"EventProp compiler doesn't support "
             f"{solver} solver")
     code = "\n".join(clines)
-    print(code)
     return code

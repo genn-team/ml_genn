@@ -527,7 +527,6 @@ class EventPropCompiler(Compiler):
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
-                 solver: str = "exponential_euler",
                  communicator: Communicator = None,
                  delay_optimiser=None,
                  delay_learn_conns: Sequence = [],
@@ -538,7 +537,7 @@ class EventPropCompiler(Compiler):
                                   SynapseMatrixType.SPARSE]
         super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
                                                 batch_size, rng_seed,
-                                                kernel_profiling, solver,
+                                                kernel_profiling,
                                                 communicator,
                                                 **genn_kwargs)
         self.example_timesteps = example_timesteps
@@ -685,7 +684,7 @@ class EventPropCompiler(Compiler):
         genn_model.prepend_sim_code(
             f"""
             // Backward pass
-            {solve_ode(dl_dt, self.solver)}
+            {solve_ode(dl_dt, model.solver)}
             """)
 
         # Add reset logic to reset adjoint state variables 
@@ -1526,7 +1525,7 @@ class EventPropCompiler(Compiler):
                                   for v in saved_vars_spike)
 
             # Solve ODE and generate dynamics code
-            dynamics_code += solve_ode(dl_dt, self.solver, model.sub_steps)
+            dynamics_code += solve_ode(dl_dt, model.solver, model.sub_steps)
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
@@ -1612,7 +1611,7 @@ class EventPropCompiler(Compiler):
                                         for v in saved_vars_timestep)
 
         # Prepend continous adjoint system update
-        dynamics_code = solve_ode(dl_dt, self.solver, model.sub_steps)
+        dynamics_code = solve_ode(dl_dt, model.solver, model.sub_steps)
         dynamics_code = Template(dynamics_code).substitute(
             {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 

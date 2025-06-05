@@ -29,6 +29,7 @@ class UserNeuron(Neuron):
                  threshold: Optional[str] = None,
                  param_vals: MutableMapping[str, InitValue] = {},
                  var_vals: MutableMapping[str, InitValue] = {},
+                 solver: str = "exponential_euler",
                  sub_steps: int = 1,
                  readout=None, **kwargs):
         super(UserNeuron, self).__init__(readout, **kwargs)
@@ -38,6 +39,7 @@ class UserNeuron(Neuron):
         self.threshold = threshold
         self.param_vals = param_vals
         self.var_vals = var_vals
+        self.solver = solver
         self.sub_steps = sub_steps
 
     def get_model(self, population: Population, dt: float,
@@ -45,4 +47,4 @@ class UserNeuron(Neuron):
         return AutoNeuronModel({"vars": copy(self.vars), 
                                 "threshold": self.threshold},
                                self.output_var_name, self.param_vals,
-                               self.var_vals, self.sub_steps)
+                               self.var_vals, self.solver, self.sub_steps)
