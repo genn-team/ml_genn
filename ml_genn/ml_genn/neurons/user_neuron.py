@@ -45,4 +45,4 @@ class UserNeuron(Neuron):
         return AutoNeuronModel({"vars": copy(self.vars), 
                                 "threshold": self.threshold},
                                self.output_var_name, self.param_vals,
-                               self.var_vals,self.sub_steps)
+                               self.var_vals, self.sub_steps)
