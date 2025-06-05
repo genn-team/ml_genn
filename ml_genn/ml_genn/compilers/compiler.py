@@ -6,7 +6,6 @@ import sympy
 from collections import defaultdict, namedtuple
 from pygenn import CustomUpdateVarAccess, GeNNModel, VarAccess, VarAccessMode
 
-from string import Template
 from typing import List, Optional, Union
 from .compiled_network import CompiledNetwork
 from .. import Connection, Population, Network
