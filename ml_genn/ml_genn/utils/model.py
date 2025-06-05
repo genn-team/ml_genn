@@ -242,6 +242,28 @@ class CustomUpdateModel(Model):
                 + (self.var_refs,) + (self.egp_refs,))
 
 
+class CustomConnectivityUpdateModel(Model):
+    def __init__(self, model, param_vals={}, var_vals={}, pre_var_vals={},
+                 post_var_vals={}, var_refs={}, pre_var_refs={}, 
+                 post_var_refs={}, egp_vals={}, egp_refs={}):
+        super(CustomConnectivityUpdateModel, self).__init__(model, param_vals,
+                                                            var_vals, 
+                                                            egp_vals)
+
+        self.pre_var_vals = pre_var_vals
+        self.post_var_vals = post_var_vals
+        self.var_refs = var_refs
+        self.pre_var_refs = pre_var_refs
+        self.post_var_refs = post_var_refs
+        self.egp_refs = egp_refs
+
+    def process(self):
+        return (super(CustomConnectivityUpdateModel, self).process() 
+                + (self.pre_var_vals,) + (self.post_var_vals,)
+                + (self.var_refs,) + (self.pre_var_refs,) 
+                + (self.post_var_refs,) + (self.egp_refs,))
+
+                
 class NeuronModel(Model):
     def __init__(self, model, output_var_name,
                  param_vals={}, var_vals={}, egp_vals={}):
