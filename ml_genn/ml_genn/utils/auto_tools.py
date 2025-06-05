@@ -107,7 +107,7 @@ def solve_ode(dx_dt, solver, sub_steps: int = 1):
     if solver == "exponential_euler":
         clines = _exponential_euler(dx_dt, sub_steps)
     elif solver == "linear_euler":
-        clines = _linear_euler(dx_dt,sub_steps)
+        clines = _linear_euler(dx_dt, sub_steps)
     else:
         raise NotImplementedError(
             f"EventProp compiler doesn't support "
