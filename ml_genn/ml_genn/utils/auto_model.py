@@ -14,11 +14,15 @@ Variables = MutableMapping[str, Tuple[Optional[str], Optional[str]]]
 class AutoModel:
     def __init__(self, model: MutableMapping[str, Any],
                  param_vals: Optional[MutableMapping[str, Value]] = None,
-                 var_vals: Optional[MutableMapping[str, Value]] = None):
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 solver: str = "exponential_euler",
+                 sub_steps: int = 1):
         self.model = model
 
         self.param_vals = param_vals or {}
         self.var_vals = var_vals or {}
+        self.solver = solver
+        self.sub_steps = sub_steps
 
         # If model has any variables
         if "vars" in self.model:
@@ -60,8 +64,10 @@ class AutoModel:
 class AutoNeuronModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any], output_var_name: str,
                  param_vals: Optional[MutableMapping[str, Value]] = None,
-                 var_vals: Optional[MutableMapping[str, Value]] = None):
-        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals)
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 solver: str = "exponential_euler",
+                 sub_steps: int = 1):
+        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
 
         self.output_var_name = output_var_name
         
@@ -93,8 +99,10 @@ class AutoNeuronModel(AutoModel):
 class AutoSynapseModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any],
                  param_vals: Optional[MutableMapping[str, Value]] = None,
-                 var_vals: Optional[MutableMapping[str, Value]] = None):
-        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals)
+                 var_vals: Optional[MutableMapping[str, Value]] = None,
+                 solver: str = "exponential_euler",
+                 sub_steps: int = 1):
+        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
 
         if "inject_current" in self.model:
             self.inject_current = sympy.parse_expr(
@@ -157,4 +165,3 @@ class AutoSynapseModel(AutoModel):
                                                model.get("vars", {}).keys(),
                                                param_vals, var_vals)
         return AutoSynapseModel(model, param_vals, var_vals)
-        
