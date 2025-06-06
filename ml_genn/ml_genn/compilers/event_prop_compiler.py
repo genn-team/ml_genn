@@ -684,7 +684,7 @@ class EventPropCompiler(Compiler):
         genn_model.prepend_sim_code(
             f"""
             // Backward pass
-            {solve_ode(dl_dt, model.solver)}
+            {solve_ode(dl_dt, model.solver, model.sub_steps)}
             """)
 
         # Add reset logic to reset adjoint state variables 

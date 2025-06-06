@@ -298,7 +298,7 @@ class Compiler:
                     f"""
                     {model.get_jump_code()}
                     injectCurrent({model.get_inject_current_code()});
-                    {solve_ode(model.dx_dt, model.solver)}
+                    {solve_ode(model.dx_dt, model.solver, model.sub_steps)}
                     """}
 
             return SynapseModel(genn_model, copy(model.param_vals),

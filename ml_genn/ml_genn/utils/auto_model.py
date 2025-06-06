@@ -15,12 +15,14 @@ class AutoModel:
     def __init__(self, model: MutableMapping[str, Any],
                  param_vals: Optional[MutableMapping[str, Value]] = None,
                  var_vals: Optional[MutableMapping[str, Value]] = None,
-                 solver: str = "exponential_euler"):
+                 solver: str = "exponential_euler",
+                 sub_steps: int = 1):
         self.model = model
 
         self.param_vals = param_vals or {}
         self.var_vals = var_vals or {}
         self.solver = solver
+        self.sub_steps = sub_steps
 
         # If model has any variables
         if "vars" in self.model:
@@ -65,7 +67,7 @@ class AutoNeuronModel(AutoModel):
                  var_vals: Optional[MutableMapping[str, Value]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1):
-        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals, solver)
+        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
 
         self.output_var_name = output_var_name
         
@@ -73,8 +75,6 @@ class AutoNeuronModel(AutoModel):
             self.threshold = sympy.parse_expr(self.model["threshold"])
         else:
             self.threshold = 0
-
-        self.sub_steps = sub_steps
 
     # **TODO** property
     def get_threshold_condition_code(self):
@@ -100,8 +100,9 @@ class AutoSynapseModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any],
                  param_vals: Optional[MutableMapping[str, Value]] = None,
                  var_vals: Optional[MutableMapping[str, Value]] = None,
-                 solver: str = "exponential_euler"):
-        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver)
+                 solver: str = "exponential_euler",
+                 sub_steps: int = 1):
+        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
 
         if "inject_current" in self.model:
             self.inject_current = sympy.parse_expr(
