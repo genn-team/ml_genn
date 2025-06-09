@@ -5,6 +5,7 @@ from ml_genn.callbacks import Checkpoint, OptimiserParamSchedule, SpikeRecorder,
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
+from ml_genn.losses import RelativeMeanSquareError
 from ml_genn.neurons import LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
@@ -17,7 +18,7 @@ from ml_genn.compilers.event_prop_compiler import default_params
 
 import matplotlib.pyplot as plt
 
-NUM_INPUT = 5
+NUM_INPUT = 4
 NUM_HIDDEN = 100
 NUM_OUTPUT = 3
 BATCH_SIZE = 512
@@ -31,7 +32,8 @@ KERNEL_PROFILING = True
 
 # Generate Yin-Yang dataset
 spikes, labels = generate_yin_yang_dataset(NUM_TRAIN if TRAIN else NUM_TEST, 
-                                           EXAMPLE_TIME - (4 * DT), 2 * DT)
+                                           EXAMPLE_TIME - (4 * DT), 2 * DT,
+                                           bias=False)
 
 
 serialiser = Numpy("yin_yang_checkpoints")
@@ -47,13 +49,13 @@ with network:
     output = Layer(Dense(Normal(mean=0.93, sd=0.1)),
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
                                       tau_refrac=None,
-                                      readout="first_spike_time"),
+                                      readout="first_spike_time_e_g_p"),
                    NUM_OUTPUT, Exponential(5.0), record_spikes=True)
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
-                                 losses="sparse_categorical_crossentropy",
+                                 losses=RelativeMeanSquareError(10.0),
                                  optimiser=Adam(0.003, 0.9, 0.99), batch_size=BATCH_SIZE,
                                  softmax_temperature=0.5, ttfs_alpha=0.1, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)

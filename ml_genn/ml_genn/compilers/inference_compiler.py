@@ -406,7 +406,7 @@ class InferenceCompiler(Compiler):
         if pop.neuron.readout is not None:
             model = pop.neuron.readout.add_readout_logic(
                 model, example_timesteps=self.evaluate_timesteps,
-                dt=self.dt)
+                dt=self.dt, shape=pop.shape, batch_size=self.batch_size)
 
         # Add any neuron reset variables to compile state
         compile_state.add_neuron_reset_vars(model, pop,

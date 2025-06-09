@@ -6,6 +6,7 @@ state over time or the spike times.
 from .avg_var import AvgVar
 from .avg_var_exp_weight import AvgVarExpWeight
 from .first_spike_time import FirstSpikeTime
+from .first_spike_time_egp import FirstSpikeTimeEGP
 from .max_var import MaxVar
 from .readout import Readout
 from .spike_count import SpikeCount
@@ -16,5 +17,6 @@ from ..utils.module import get_module_classes
 
 default_readouts = get_module_classes(globals(), Readout)
 
-__all__ = ["AvgVar", "AvgVarExpWeight", "FirstSpikeTime", "MaxVar", "Readout",
-           "SpikeCount", "SumVar", "Var", "default_readouts"]
+__all__ = ["AvgVar", "AvgVarExpWeight", "FirstSpikeTime", "FirstSpikeTimeEGP",
+           "MaxVar", "Readout", "SpikeCount", "SumVar", "Var",
+           "default_readouts"]
