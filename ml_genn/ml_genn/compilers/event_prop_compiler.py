@@ -1402,7 +1402,7 @@ class EventPropCompiler(Compiler):
         for i, p in enumerate(compile_state.ttfs_reduce_populations):
             genn_pop = neuron_populations[p]
             self._create_ttfs_reduce_custom_update(
-                genn_model, genn_pop, i)
+                genn_model, genn_pop, i, self.dt * self.example_timesteps)
         
         # Build list of base callbacks
         base_train_callbacks = []
@@ -1575,16 +1575,17 @@ class EventPropCompiler(Compiler):
                 "SpikeCountReduce", name)
 
     def _create_ttfs_reduce_custom_update(self, genn_model,
-                                          genn_pop, index: int):
+                                          genn_pop, index: int,
+                                          example_time: float):
         # Create model which:
         reduce_model = CustomUpdateModel(
             model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
                                 ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
                                 ("TFirstSpikeSumBack", "scalar", VarAccessMode.REDUCE_SUM),
                                 ("TFirstSpikeTrueBack", "scalar", VarAccessMode.REDUCE_SUM)],
-                   "update_code": """
-                       TFirstSpikeTrueBack = (id == YTrue) ? TFirstSpike : 0.0;
-                       TFirstSpikeSumBack = TFirstSpike;
+                   "update_code": f"""
+                       TFirstSpikeTrueBack = (id == YTrue && TFirstSpike >= -{example_time}) ? TFirstSpike : 0.0;
+                       TFirstSpikeSumBack = (TFirstSpike >= -{example_time}) ? TFirstSpike : 0.0;
                        """},
             var_refs={"YTrue": create_var_ref(genn_pop, "YTrue"),
                       "TFirstSpike": create_var_ref(genn_pop, "TFirstSpike"),
