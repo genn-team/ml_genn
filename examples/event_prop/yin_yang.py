@@ -5,6 +5,7 @@ from ml_genn.callbacks import Checkpoint, OptimiserParamSchedule, SpikeRecorder,
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
+from ml_genn.losses import RelativeMeanSquareError
 from ml_genn.neurons import LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
@@ -17,7 +18,7 @@ from ml_genn.compilers.event_prop_compiler import default_params
 
 import matplotlib.pyplot as plt
 
-NUM_INPUT = 5
+NUM_INPUT = 4
 NUM_HIDDEN = 100
 NUM_OUTPUT = 3
 BATCH_SIZE = 512
@@ -31,7 +32,8 @@ KERNEL_PROFILING = True
 
 # Generate Yin-Yang dataset
 spikes, labels = generate_yin_yang_dataset(NUM_TRAIN if TRAIN else NUM_TEST, 
-                                           EXAMPLE_TIME - (4 * DT), 2 * DT)
+                                           EXAMPLE_TIME - (4 * DT), 2 * DT,
+                                           bias=False)
 
 
 serialiser = Numpy("yin_yang_checkpoints")
@@ -53,7 +55,7 @@ with network:
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
-                                 losses="sparse_categorical_crossentropy",
+                                 losses=RelativeMeanSquareError(5.0 * 0.2),
                                  optimiser=Adam(0.003, 0.9, 0.99), batch_size=BATCH_SIZE,
                                  softmax_temperature=0.5, ttfs_alpha=0.1, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
@@ -82,9 +84,7 @@ if TRAIN:
             print(f"Gradient batch reduce time = {compiled_net.genn_model.get_custom_update_time('GradientBatchReduce')}")
             print(f"Gradient learn time = {compiled_net.genn_model.get_custom_update_time('GradientLearn')}")
             print(f"Reset time = {compiled_net.genn_model.get_custom_update_time('Reset')}")
-            print(f"Softmax1 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax1')}")
-            print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax2')}")
-            print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
+            print(f"TTFS reduce time = {compiled_net.genn_model.get_custom_update_time('TTFSReduce')}")
 else:
     # Load network state from final checkpoint
     network.load((NUM_EPOCHS - 1,), serialiser)
