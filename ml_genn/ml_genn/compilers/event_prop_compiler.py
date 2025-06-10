@@ -20,8 +20,8 @@ from ..metrics import MetricsType
 from ..neurons import (Input, LeakyIntegrate, LeakyIntegrateFire,
                        LeakyIntegrateFireInput)
 from ..optimisers import Optimiser
-from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
-                        FirstSpikeTimeEGP, MaxVar, SumVar, Var)
+from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime, MaxVar,
+                        SumVar, Var)
 from ..synapses import Exponential
 from ..utils.callback_list import CallbackList
 from ..utils.model import (CustomUpdateModel, NeuronModel, 
@@ -832,6 +832,11 @@ class EventPropCompiler(Compiler):
                                     "with LIF neurons with an "
                                     "absolute reset mechanism")
 
+                if not isinstance(pop.neuron.readout, FirstSpikeTime):
+                    raise NotImplementedError(
+                        "EventProp compiler with LeakyIntegrateFire output "
+                        "neurons only supports 'FirstSpikeTime' readouts")
+
                 # Get reset vars before we add ring-buffer variables
                 reset_vars = model_copy.reset_vars
                     
@@ -863,28 +868,26 @@ class EventPropCompiler(Compiler):
                 # Add parameters with synaptic decay and scale constants
                 model_copy.add_param("IsynScale", "scalar",
                     self.dt / (tau_syn  * (1.0 - beta)))
-            
+
+                # Add state variable to hold TFirstSpike from previous trial
+                # **YUCK** REALLY should be timepoint but then you can't softmax
+                model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
+                                   VarAccess.READ_ONLY_DUPLICATE)
+                
+                # Prepend reset of TFirstSpikeBack to TFirstSpike to list
+                # **NOTE** prepended so it is reset before TFirstSpike
+                reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + reset_vars
+
                 # If sparse-categorical crossentropy loss
                 # readout must be first spike time
                 if sce_loss:
-                    if not isinstance(pop.neuron.readout, FirstSpikeTime):
-                        raise NotImplementedError(
-                            "EventProp compiler with LeakyIntegrateFire "
-                            "output neurons and SparseCategoricalCrossentropy"
-                            "loss only supports 'FirstSpikeTime' readouts")
-                
                     # **THOMAS** where does this madness come from?
                     example_time = self.dt * self.example_timesteps
                     phantom_scale = self.ttfs_alpha / (0.0001 * example_time * example_time)
                     
                     # Add state variable to hold softmax of output
                     model_copy.add_var("Softmax", "scalar", 0.0,
-                                        VarAccess.READ_ONLY_DUPLICATE)
-                    
-                    # Add state variable to hold TFirstSpike from previous trial
-                    # **YUCK** REALLY should be timepoint but then you can't softmax
-                    model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
-                                        VarAccess.READ_ONLY_DUPLICATE)
+                                       VarAccess.READ_ONLY_DUPLICATE)
 
                     # In backward pass, update lambdas and apply phantom spike if:
                     # 1) This is first timestep of backward pass
@@ -915,42 +918,25 @@ class EventPropCompiler(Compiler):
                         }}
                         
                         """
-                    
-                    # Prepend reset of TFirstSpikeBack to TFirstSpike to list
-                    # **NOTE** prepended so it is reset before TFirstSpike
-                    reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + reset_vars
 
                     # Add custom updates to calculate softmax from TFirstSpike
                     compile_state.batch_softmax_populations.append(
                         (pop, "TFirstSpike", "Softmax"))
                 elif rmse_loss:
-                    if not isinstance(pop.neuron.readout, FirstSpikeTimeEGP):
-                        raise NotImplementedError(
-                            "EventProp compiler with LeakyIntegrateFire "
-                            "output neurons and RelativeMeanSquareError"
-                            "loss only supports 'FirstSpikeTimeEGP' readouts")
-    
                     # Add parameters to model to hold delta
                     model_copy.add_param("Delta", "scalar", 
                                          compile_state.losses[pop].delta)
                     
-                    # Add state variable to hold TFirstSpike from previous trial
-                    # **YUCK** REALLY should be timepoint but then you can't softmax
-                    model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
-                                        VarAccess.READ_ONLY_DUPLICATE)
-
                     # Add state variable to hold sum of TFirstSpike from previous trial
                     # **YUCK** REALLY should be timepoint but then you can't softmax
                     model_copy.add_var("TFirstSpikeSumBack", "scalar", 0.0,
-                                        VarAccess.READ_ONLY_SHARED_NEURON)
+                                       VarAccess.READ_ONLY_SHARED_NEURON)
                     
                     # Add another variable to hold TFirstSpike for the correct 
                     # output neuron from the previous trial at which
                     # **YUCK** REALLY should be timepoint but then you can't softmax
-                    # **YUCK2** there is no need for this to be duplicated but 
-                    # it just means horror of custom reset is a bit nicer
                     model_copy.add_var("TFirstSpikeTrueBack", "scalar", 0.0, 
-                                        VarAccess.READ_ONLY_DUPLICATE)
+                                       VarAccess.READ_ONLY_SHARED_NEURON)
 
                     # Add population to list requiring bespoke TTFS reset
                     compile_state.ttfs_reset_populations.append(pop)
@@ -973,17 +959,13 @@ class EventPropCompiler(Compiler):
                             }}
                         }}
                         """
-
-                    # Reset YTrueBack to YTrue in reset so needs handling differently
-                    # **NOTE** TFirstSpike is an EGP 
-                    #reset_vars = [("YTrueBack", "uint8_t", "YTrue")] + reset_vars
                 # Otherwise, unsupported readout type
                 else:
                     raise NotImplementedError(
-                        "EventProp compiler with LeakyIntegrateFire "
-                        "output neurons only supports 'FirstSpikeTime' "
-                        "and 'FirstSpikeTimeEGP' readouts") 
-        
+                        "EventProp compiler with LeakyIntegrateFire output "
+                        "neurons only supports 'SparseCategoricalCrossentropy' "
+                        "and 'RelativeMeanSquareError' loss functions") 
+
                 # Add reset logic to reset adjoint state variables 
                 # as well as any state variables from the original model
                 compile_state.add_neuron_reset_vars(
@@ -1462,14 +1444,14 @@ class EventPropCompiler(Compiler):
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
 
+        # If TTFS needs reducing, add reduction callback before reset
+        if len(compile_state.ttfs_reset_populations) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
+
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
-        
-        # If TTFS needs resetting and reducing, add reduction callback after reset
-        if len(compile_state.ttfs_reset_populations) > 0:
-            base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
 
         # Build list of optimisers and their custom updates
         optimisers = []
@@ -1596,40 +1578,21 @@ class EventPropCompiler(Compiler):
     def _create_ttfs_reset_custom_update(self, genn_model,
                                         genn_pop, index: int):
         # Create model which:
-        # 1. Copies TTFS of each neuron from EGP into var for backward pass
-        # 2. Copies TTFS of correct neuron from EGP into var for backward pass
-        # 3. Resets TTFS
-        reset_model = CustomUpdateModel(
-            model={"params": [("ResetTime", "scalar")],
-                   "var_refs": [("TFirstSpikeBack", "scalar"),
-                                ("TFirstSpikeTrueBack", "scalar"),
-                                ("YTrue", "uint8_t", VarAccessMode.READ_ONLY)],
-                   "extra_global_param_refs": [("TFirstSpike", "scalar*")],
-                   "update_code": """;
-                       TFirstSpikeBack = TFirstSpike[id + (batch * num_neurons)];
-                       TFirstSpikeTrueBack = TFirstSpike[YTrue + (batch * num_neurons)];
-                       TFirstSpike[id + (batch * num_neurons)] = ResetTime;
-                       """},
-            param_vals={"ResetTime": np.finfo(np.float32).min},
-            var_refs={"TFirstSpikeBack": create_var_ref(genn_pop, "TFirstSpikeBack"),
-                      "TFirstSpikeTrueBack": create_var_ref(genn_pop, "TFirstSpikeTrueBack"),
-                      "YTrue": create_var_ref(genn_pop, "YTrue")}, 
-            egp_refs={"TFirstSpike": create_egp_ref(genn_pop, "TFirstSpike")})
-        
-        # Create second model which sums spike timestamps
-        # **NOTE** this operates on back versions as TFirstSpike has:
-        # a) Been zeroed by reset_model and b) Is an EGP
         reduce_model = CustomUpdateModel(
-            model={"var_refs": [("TFirstSpikeBack", "scalar", VarAccessMode.READ_ONLY),
-                                ("TFirstSpikeSumBack", "scalar", VarAccessMode.REDUCE_SUM)],
-                   "update_code": "TFirstSpikeSumBack = TFirstSpikeBack;"},
-            var_refs={"TFirstSpikeBack": create_var_ref(genn_pop, "TFirstSpikeBack"),
-                      "TFirstSpikeSumBack": create_var_ref(genn_pop, "TFirstSpikeSumBack")})
+            model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
+                                ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
+                                ("TFirstSpikeSumBack", "scalar", VarAccessMode.REDUCE_SUM),
+                                ("TFirstSpikeTrueBack", "scalar", VarAccessMode.REDUCE_SUM)],
+                   "update_code": """
+                       TFirstSpikeTrueBack = (id == YTrue) ? TFirstSpike : 0.0;
+                       TFirstSpikeSumBack = TFirstSpike;
+                       """},
+            var_refs={"YTrue": create_var_ref(genn_pop, "YTrue"),
+                      "TFirstSpike": create_var_ref(genn_pop, "TFirstSpike"),
+                      "TFirstSpikeSumBack": create_var_ref(genn_pop, "TFirstSpikeSumBack"),
+                      "TFirstSpikeTrueBack": create_var_ref(genn_pop, "TFirstSpikeTrueBack")})
 
-        # Add GeNN custom updates to model
-        self.add_custom_update(
-            genn_model, reset_model, 
-            "Reset", f"CUTTFSReset{index}")
+        # Add GeNN custom update to model
         self.add_custom_update(
             genn_model, reduce_model, 
             "TTFSReduce", f"CUTTFSReduce{index}")
