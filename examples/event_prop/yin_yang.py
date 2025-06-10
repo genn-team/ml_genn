@@ -55,7 +55,7 @@ with network:
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
-                                 losses=RelativeMeanSquareError(10.0),
+                                 losses=RelativeMeanSquareError(5.0 * 0.2),
                                  optimiser=Adam(0.003, 0.9, 0.99), batch_size=BATCH_SIZE,
                                  softmax_temperature=0.5, ttfs_alpha=0.1, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
