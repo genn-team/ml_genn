@@ -357,7 +357,7 @@ class EPropCompiler(Compiler):
             # Add output logic to model
             model_copy = pop.neuron.readout.add_readout_logic(
                 model_copy, example_timesteps=self.example_timesteps,
-                dt=self.dt, shape=pop.shape, batch_size=self.batch_size)
+                dt=self.dt)
 
             # Add any output reset variables to compile state
             compile_state.add_neuron_readout_reset_vars(pop)
