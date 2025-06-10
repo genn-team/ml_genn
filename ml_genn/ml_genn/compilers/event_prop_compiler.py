@@ -885,7 +885,7 @@ class EventPropCompiler(Compiler):
                     # **YUCK** REALLY should be timepoint but then you can't softmax
                     model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
                                         VarAccess.READ_ONLY_DUPLICATE)
-                    
+
                     # In backward pass, update lambdas and apply phantom spike if:
                     # 1) This is first timestep of backward pass
                     # 2) No spike occurred in preceding forward pass
@@ -916,10 +916,13 @@ class EventPropCompiler(Compiler):
                         
                         """
                     
-                    # Reset YTrueBack to YTrue and TFirstSpikeBack
-                    # to TFirstSpike in reset
-                    reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike"),
-                                  ("YTrueBack", "uint8_t", "YTrue")] + reset_vars
+                    # Prepend reset of TFirstSpikeBack to TFirstSpike to list
+                    # **NOTE** prepended so it is reset before TFirstSpike
+                    reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + reset_vars
+
+                    # Add custom updates to calculate softmax from TFirstSpike
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "TFirstSpike", "Softmax"))
                 elif rmse_loss:
                     if not isinstance(pop.neuron.readout, FirstSpikeTimeEGP):
                         raise NotImplementedError(
@@ -973,7 +976,7 @@ class EventPropCompiler(Compiler):
 
                     # Reset YTrueBack to YTrue in reset so needs handling differently
                     # **NOTE** TFirstSpike is an EGP 
-                    reset_vars = [("YTrueBack", "uint8_t", "YTrue")] + reset_vars
+                    #reset_vars = [("YTrueBack", "uint8_t", "YTrue")] + reset_vars
                 # Otherwise, unsupported readout type
                 else:
                     raise NotImplementedError(
@@ -986,7 +989,12 @@ class EventPropCompiler(Compiler):
                 compile_state.add_neuron_reset_vars(
                     pop, reset_vars,
                     True, False)
-        
+
+                # Add second reset custom update to reset YTrueBack to YTrue
+                # **NOTE** seperate as these are SHARED_NEURON variables
+                compile_state.add_neuron_reset_vars(
+                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
                 model_copy.prepend_sim_code(
@@ -1006,11 +1014,6 @@ class EventPropCompiler(Compiler):
                                     if self.strict_buffer_checking
                                     else "")))
 
-                # Add second reset custom update to reset YTrueBack to YTrue
-                # **NOTE** seperate as these are SHARED_NEURON variables
-                compile_state.add_neuron_reset_vars(
-                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
-                
             # Otherwise, neuron type is unsupported
             else:
                 raise NotImplementedError(
