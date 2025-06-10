@@ -946,19 +946,23 @@ class EventPropCompiler(Compiler):
                         LambdaV *= Alpha;
                         """
                 
-                    # On backward pass transition, update LambdaV if this is the first spike on an incorrect neuron
+                    # On backward pass transition, update LambdaV if this is the first spike
+                    # **NOTE** Strange term in id == YTrueBack case comes from re-arranging
+                    # -(TFirstSpikeBack[n] - TFirstSpikeTrueBack - delta),
+                    # summed over all output neurons n and negating spike
+                    # times due to design of FirstSpikeTime readout
                     transition_code = f"""
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
                             if(id == YTrueBack) {{
-                                LambdaV += (TFirstSpikeSumBack - (num_neurons * TFirstSpikeBack) + ((num_neurons - 1) * Delta)) * iMinusVRecip;
+                                LambdaV += (TFirstSpikeSumBack - (num_neurons * TFirstSpikeTrueBack) + ((num_neurons - 1) * Delta)) * iMinusVRecip;
                             }}
                             else {{
                                 LambdaV += ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta) * iMinusVRecip;
                             }}
                         }}
                         """
-                # Otherwise, unsupported readout type
+                # Otherwise, unsupported loss type
                 else:
                     raise NotImplementedError(
                         "EventProp compiler with LeakyIntegrateFire output "
