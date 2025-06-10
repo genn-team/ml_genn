@@ -49,7 +49,7 @@ with network:
     output = Layer(Dense(Normal(mean=0.93, sd=0.1)),
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
                                       tau_refrac=None,
-                                      readout="first_spike_time_e_g_p"),
+                                      readout="first_spike_time"),
                    NUM_OUTPUT, Exponential(5.0), record_spikes=True)
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
