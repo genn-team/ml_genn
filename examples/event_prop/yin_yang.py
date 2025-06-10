@@ -84,9 +84,7 @@ if TRAIN:
             print(f"Gradient batch reduce time = {compiled_net.genn_model.get_custom_update_time('GradientBatchReduce')}")
             print(f"Gradient learn time = {compiled_net.genn_model.get_custom_update_time('GradientLearn')}")
             print(f"Reset time = {compiled_net.genn_model.get_custom_update_time('Reset')}")
-            print(f"Softmax1 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax1')}")
-            print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax2')}")
-            print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
+            print(f"TTFS reduce time = {compiled_net.genn_model.get_custom_update_time('TTFSReduce')}")
 else:
     # Load network state from final checkpoint
     network.load((NUM_EPOCHS - 1,), serialiser)
