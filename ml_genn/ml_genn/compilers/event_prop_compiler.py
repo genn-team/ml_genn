@@ -934,7 +934,12 @@ class EventPropCompiler(Compiler):
                     # Add state variable to hold TFirstSpike from previous trial
                     # **YUCK** REALLY should be timepoint but then you can't softmax
                     model_copy.add_var("TFirstSpikeBack", "scalar", 0.0,
-                                        VarAccess.READ_ONLY_DUPLICATE)         
+                                        VarAccess.READ_ONLY_DUPLICATE)
+
+                    # Add state variable to hold sum of TFirstSpike from previous trial
+                    # **YUCK** REALLY should be timepoint but then you can't softmax
+                    model_copy.add_var("TFirstSpikeSumBack", "scalar", 0.0,
+                                        VarAccess.READ_ONLY_SHARED_NEURON)
                     
                     # Add another variable to hold TFirstSpike for the correct 
                     # output neuron from the previous trial at which
@@ -955,10 +960,14 @@ class EventPropCompiler(Compiler):
                 
                     # On backward pass transition, update LambdaV if this is the first spike on an incorrect neuron
                     transition_code = f"""
-                        //const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
-                        //LambdaV += iMinusVRecip * (Vthresh * LambdaV);
-                        if (fabs(backT + TFirstSpikeBack) < 1e-3*dt && id != YTrueBack) {{
-                            LambdaV += ((-TFirstSpikeBack - TFirstSpikeTrueBack) - Delta);
+                        if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                            const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
+                            if(id == YTrueBack) {{
+                                LambdaV += (TFirstSpikeSumBack + ((num_neurons - 2) * TFirstSpikeBack) - ((num_neurons - 1) * Delta)) * iMinusVRecip;
+                            }}
+                            else {{
+                                LambdaV += ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta) * iMinusVRecip;
+                            }}
                         }}
                         """
 
@@ -1409,7 +1418,7 @@ class EventPropCompiler(Compiler):
         for i, p in enumerate(compile_state.ttfs_reset_populations):
             genn_pop = neuron_populations[p]
             self._create_ttfs_reset_custom_update(
-                genn_model, genn_pop, f"CUTTFSReset{i}")
+                genn_model, genn_pop, i)
         
         # Build list of base callbacks
         base_train_callbacks = []
@@ -1455,6 +1464,10 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
         
+        # If TTFS needs resetting and reducing, add reduction callback after reset
+        if len(compile_state.ttfs_reset_populations) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
+
         # Build list of optimisers and their custom updates
         optimisers = []
         if len(weight_optimiser_cus) > 0:
@@ -1578,7 +1591,7 @@ class EventPropCompiler(Compiler):
                 "SpikeCountReduce", name)
 
     def _create_ttfs_reset_custom_update(self, genn_model,
-                                        genn_pop, name: str):
+                                        genn_pop, index: int):
         # Create model which:
         # 1. Copies TTFS of each neuron from EGP into var for backward pass
         # 2. Copies TTFS of correct neuron from EGP into var for backward pass
@@ -1600,8 +1613,20 @@ class EventPropCompiler(Compiler):
                       "YTrue": create_var_ref(genn_pop, "YTrue")}, 
             egp_refs={"TFirstSpike": create_egp_ref(genn_pop, "TFirstSpike")})
         
-        # Add GeNN custom update to model
+        # Create second model which sums spike timestamps
+        # **NOTE** this operates on back versions as TFirstSpike has:
+        # a) Been zeroed by reset_model and b) Is an EGP
+        reduce_model = CustomUpdateModel(
+            model={"var_refs": [("TFirstSpikeBack", "scalar", VarAccessMode.READ_ONLY),
+                                ("TFirstSpikeSumBack", "scalar", VarAccessMode.REDUCE_SUM)],
+                   "update_code": "TFirstSpikeSumBack = TFirstSpikeBack;"},
+            var_refs={"TFirstSpikeBack": create_var_ref(genn_pop, "TFirstSpikeBack"),
+                      "TFirstSpikeSumBack": create_var_ref(genn_pop, "TFirstSpikeSumBack")})
+
+        # Add GeNN custom updates to model
         self.add_custom_update(
             genn_model, reset_model, 
-            "Reset", name)
-            
+            "Reset", f"CUTTFSReset{index}")
+        self.add_custom_update(
+            genn_model, reduce_model, 
+            "TTFSReduce", f"CUTTFSReduce{index}")
