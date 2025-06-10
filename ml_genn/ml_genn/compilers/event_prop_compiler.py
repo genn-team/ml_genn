@@ -273,7 +273,7 @@ class CompileState:
         self.backend_name = backend_name
         self._optimiser_connections = []
         self._neuron_reset_vars = []
-        self.ttfs_reset_populations = []
+        self.ttfs_reduce_populations = []
         self.checkpoint_connection_vars = []
         self.checkpoint_population_vars = []
         self.spike_count_populations = []
@@ -596,8 +596,7 @@ class EventPropCompiler(Compiler):
             # Add output logic to model
             model_copy = pop.neuron.readout.add_readout_logic(
                 model_copy, max_time_required=True, dt=self.dt,
-                example_timesteps=self.example_timesteps, shape=pop.shape,
-                batch_size=self.batch_size)
+                example_timesteps=self.example_timesteps)
 
             # **HACK** we don't want to call add_to_neuron on loss function as
             # it will add unwanted code to end of neuron but we do want this
@@ -938,8 +937,8 @@ class EventPropCompiler(Compiler):
                     model_copy.add_var("TFirstSpikeTrueBack", "scalar", 0.0, 
                                        VarAccess.READ_ONLY_SHARED_NEURON)
 
-                    # Add population to list requiring bespoke TTFS reset
-                    compile_state.ttfs_reset_populations.append(pop)
+                    # Add population to list requiring bespoke TTFS reduction
+                    compile_state.ttfs_reduce_populations.append(pop)
                     
                     # In backward pass, update lambdas 
                     dynamics_code = f"""
@@ -952,7 +951,7 @@ class EventPropCompiler(Compiler):
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             const scalar iMinusVRecip = 1.0 / RingIMinusV[ringOffset + RingReadOffset];
                             if(id == YTrueBack) {{
-                                LambdaV += (TFirstSpikeSumBack + ((num_neurons - 2) * TFirstSpikeBack) - ((num_neurons - 1) * Delta)) * iMinusVRecip;
+                                LambdaV += (TFirstSpikeSumBack - (num_neurons * TFirstSpikeBack) + ((num_neurons - 1) * Delta)) * iMinusVRecip;
                             }}
                             else {{
                                 LambdaV += ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta) * iMinusVRecip;
@@ -1398,11 +1397,11 @@ class EventPropCompiler(Compiler):
         compile_state.create_reset_custom_updates(self, genn_model,
                                                   neuron_populations)
         
-        # Create bespoke custom updates to handle 
+        # Create bespoke custom updates to handle reduction for
         # relative mean-squared error loss
-        for i, p in enumerate(compile_state.ttfs_reset_populations):
+        for i, p in enumerate(compile_state.ttfs_reduce_populations):
             genn_pop = neuron_populations[p]
-            self._create_ttfs_reset_custom_update(
+            self._create_ttfs_reduce_custom_update(
                 genn_model, genn_pop, i)
         
         # Build list of base callbacks
@@ -1445,7 +1444,7 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
 
         # If TTFS needs reducing, add reduction callback before reset
-        if len(compile_state.ttfs_reset_populations) > 0:
+        if len(compile_state.ttfs_reduce_populations) > 0:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
 
         # Add reset custom updates
@@ -1575,8 +1574,8 @@ class EventPropCompiler(Compiler):
                 genn_model, reduction_optimiser_model, 
                 "SpikeCountReduce", name)
 
-    def _create_ttfs_reset_custom_update(self, genn_model,
-                                        genn_pop, index: int):
+    def _create_ttfs_reduce_custom_update(self, genn_model,
+                                          genn_pop, index: int):
         # Create model which:
         reduce_model = CustomUpdateModel(
             model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
