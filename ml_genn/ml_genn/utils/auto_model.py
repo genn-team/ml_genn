@@ -90,11 +90,13 @@ class AutoNeuronModel(AutoModel):
     
     @staticmethod
     def from_val_descriptors(model, output_var_name: str,inst, 
-                             param_vals={}, var_vals={}):
+                             param_vals={}, var_vals={},
+                             solver: str = "exponential_euler",
+                             sub_steps: int = 1):
         param_vals, var_vals = get_auto_values(inst, 
                                                model.get("vars", {}).keys(),
                                                param_vals, var_vals)
-        return AutoNeuronModel(model, output_var_name, param_vals, var_vals)
+        return AutoNeuronModel(model, output_var_name, param_vals, var_vals, solver, sub_steps)
         
 class AutoSynapseModel(AutoModel):
     def __init__(self, model: MutableMapping[str, Any],
@@ -160,8 +162,10 @@ class AutoSynapseModel(AutoModel):
 
     @staticmethod
     def from_val_descriptors(model, inst, 
-                             param_vals={}, var_vals={}):
+                             param_vals={}, var_vals={},
+                             solver: str = "exponential_euler",
+                             sub_steps: int = 1):
         param_vals, var_vals = get_auto_values(inst, 
                                                model.get("vars", {}).keys(),
                                                param_vals, var_vals)
-        return AutoSynapseModel(model, param_vals, var_vals)
+        return AutoSynapseModel(model, param_vals, var_vals, solver, sub_steps)
