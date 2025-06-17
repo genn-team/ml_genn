@@ -24,16 +24,21 @@ class UserSynapse(Synapse):
 
     def __init__(self, vars: Variable, inject_current: str,
                  param_vals: MutableMapping[str, InitValue] = {},
-                 var_vals: MutableMapping[str, InitValue] = {}):
+                 var_vals: MutableMapping[str, InitValue] = {},
+                 solver: str = "exponential_euler",
+                 sub_steps: int = 1):
         super(UserSynapse, self).__init__()
 
         self.vars = vars
         self.inject_current = inject_current
         self.param_vals = param_vals
         self.var_vals = var_vals
+        self.solver = solver
+        self.sub_steps = sub_steps
 
     def get_model(self, connection: Connection, dt: float,
                   batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
         return AutoSynapseModel({"vars": copy(self.vars), 
                                  "inject_current": self.inject_current},
-                                self.param_vals, self.var_vals)
+                                self.param_vals, self.var_vals, self.solver,
+                                self.sub_steps)
