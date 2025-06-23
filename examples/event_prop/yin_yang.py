@@ -82,7 +82,7 @@ if TRAIN:
             print(f"TTFS reduce time = {compiled_net.genn_model.get_custom_update_time('TTFSReduce')}")
 else:
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,), serialiser)
+    network.load(NUM_EPOCHS - 1, serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,

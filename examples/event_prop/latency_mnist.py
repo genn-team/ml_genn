@@ -23,7 +23,7 @@ NUM_EPOCHS = 10
 EXAMPLE_TIME = 20.0
 DT = 1.0
 SPARSITY = 1.0
-TRAIN = True
+TRAIN = False
 KERNEL_PROFILING = True
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
@@ -64,7 +64,7 @@ if TRAIN:
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
-        compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
+        compiled_net.save_connectivity(NUM_EPOCHS - 1, serialiser)
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
@@ -80,7 +80,7 @@ if TRAIN:
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
 else:
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,), serialiser)
+    network.load(NUM_EPOCHS - 1, serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,

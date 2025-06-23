@@ -83,7 +83,7 @@ if TRAIN:
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
-        compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
+        compiled_net.save_connectivity(NUM_EPOCHS - 1, serialiser)
         """
         fig, axes = plt.subplots(9, len(visualise_examples), sharex="col", sharey="row")
         axes[0, 0].set_ylabel("Input spikes")
@@ -128,7 +128,7 @@ if TRAIN:
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
 else:
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,), serialiser)
+    network.load(NUM_EPOCHS - 1, serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,

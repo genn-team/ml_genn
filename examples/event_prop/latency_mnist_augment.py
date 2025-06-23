@@ -79,7 +79,7 @@ if TRAIN:
                                              {output: labels},
                                              start_epoch=e, num_epochs=1,
                                              shuffle=True, callbacks=callbacks)
-        compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
+        compiled_net.save_connectivity(NUM_EPOCHS - 1, serialiser)
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
@@ -97,7 +97,7 @@ else:
     spikes = linear_latency_encode_data(images, EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
     
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,), serialiser)
+    network.load(NUM_EPOCHS - 1, serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,

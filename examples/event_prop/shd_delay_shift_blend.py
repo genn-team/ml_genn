@@ -250,7 +250,7 @@ with compiled_net:
 
 
 # Load network state from final checkpoint
-network.load((best_e,), serialiser)
+network.load(best_e, serialiser)
 
 compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                             reset_in_syn_between_batches=True,

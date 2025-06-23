@@ -147,7 +147,7 @@ if TRAIN:
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
 else:
     # Load network state from final checkpoint
-    network.load((NUM_EPOCHS - 1,), serialiser)
+    network.load(NUM_EPOCHS - 1, serialiser)
 
     compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
                                  reset_in_syn_between_batches=True,
