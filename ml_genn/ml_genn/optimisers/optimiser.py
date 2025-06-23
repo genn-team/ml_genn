@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from ..utils.model import CustomUpdateModel
 
 from abc import abstractmethod
@@ -45,4 +45,10 @@ class Optimiser(ABC):
             clamp_var:      Should value of variable being updated be clamped
                             after update?
         """
+        pass
+
+    @property
+    @abstractmethod
+    def checkpoint_var_names(self) -> List[str]:
+        """Names of optimiser variables which should be checkpointed"""
         pass

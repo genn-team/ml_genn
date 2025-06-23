@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from pygenn import VarAccessMode
 from .optimiser import Optimiser
 from ..utils.model import CustomUpdateModel
@@ -113,3 +113,8 @@ class Adam(Optimiser):
                 """)
         # Return model
         return model
+    
+    @property
+    def checkpoint_var_names(self) -> List[str]:
+        """Names of optimiser variables which should be checkpointed"""
+        return ["M", "V"]
