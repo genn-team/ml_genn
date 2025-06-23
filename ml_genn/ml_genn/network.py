@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from typing import Sequence, Tuple, Union
+from typing import Sequence
 from .serialisers import Serialiser
 
 from .utils.module import get_object
 from .utils.value import set_values
 
-from .serialisers import default_serialisers
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from . import Connection, Population
-
-SerialiserInitializer = Union[Serialiser, str]
 
 
 class Network:
@@ -27,44 +24,6 @@ class Network:
     def __init__(self):
         self.populations = []
         self.connections = []
-
-    def load(self, keys = (),
-             serialiser: SerialiserInitializer = "numpy"):
-        """Load network state from checkpoints
-
-        Args:
-            keys:       used to select correct checkpoint. Typically
-                        might contain epoch number or configuration.
-            serialiser: Serialiser to load checkpoints with (should be the 
-                        same type of serialiser which was used to create them)
-        """
-        # If keys aren't are already a non-string sequence, wrap in tuple
-        keys = (keys 
-                if isinstance(keys, Sequence) and not isinstance(keys, str)
-                else (keys,))
-
-        # Create serialiser
-        serialiser = get_object(serialiser, Serialiser, "Serialiser",
-                                default_serialisers)
-
-        # Loop through connections
-        for c in self.connections:
-            # Deserialize everthing relating to connection
-            state = serialiser.deserialise_all(keys + (c,))
-            
-            # Set any variables in connectivity
-            # **TODO** synapse
-            # **TODO** give error/warning if variable not found
-            set_values(c.connectivity, state)
-        
-        # Loop through populations
-        for p in self.populations:
-            # Deserialize everthing relating to population
-            state = serialiser.deserialise_all(keys + (p,))
-
-            # Set any variables in neuron
-            # **TODO** give error if variable was not found
-            set_values(p.neuron, state)
 
     @staticmethod
     def _add_population(pop: Population):

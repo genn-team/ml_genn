@@ -26,25 +26,6 @@ class Numpy(Serialiser):
 
     def deserialise(self, keys):
         return np.load(self._get_filename(keys, ".npy"))
-    
-    def deserialise_all(self, keys):
-        title = self._get_file_title(keys)
-        logger.info(f"Deserialising {title}")
-
-        # Loop through files under keys
-        data = {}
-        for f in glob(self._get_filename(keys, "-*.npy")):
-            # Extract file title without path or extension from filename
-            title = os.path.splitext(os.path.split(f)[1])[0]
-            logger.info(f"\tLoading from {f}")
-
-            # Split title into keys and slice out those that we seperated
-            file_keys = title.split("-")[len(keys):]
-
-            # Add file to dictionary with this key
-            assert len(file_keys) == 1
-            data[file_keys[0]] = np.load(f)
-        return data
 
     def _get_file_title(self, keys):
         return "-".join(str(x) for x in keys)

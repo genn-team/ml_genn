@@ -85,7 +85,34 @@ class CompiledNetwork:
         self.genn_model.timestep = 0
         self.genn_model.t = 0.0
 
-     def save_connectivity(self, keys=(), 
+    def load(self, keys=(), 
+             serialiser: SerialiserInitializer = "numpy"):
+        """Load network state from checkpoints
+
+        Args:
+            keys:       used to select correct checkpoint. Typically
+                        might contain epoch number or configuration.
+            serialiser: Serialiser to load checkpoints with (should be the 
+                        same type of serialiser which was used to create them)
+        """
+        # If keys aren't are already a non-string sequence, wrap in tuple
+        keys = (keys 
+                if isinstance(keys, Sequence) and not isinstance(keys, str)
+                else (keys,))
+        
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through variables to checkpoint
+        for v in self.checkpoint_vars:
+            # Deserialise values
+            v.values = serialiser.deserialise(keys + (v.group.name, v.name))
+
+            # Push to device
+            v.push_to_device()
+
+    def save_connectivity(self, keys=(),
                           serialiser: SerialiserInitializer = "numpy"):
         """Save network connectivity to checkpoints
 

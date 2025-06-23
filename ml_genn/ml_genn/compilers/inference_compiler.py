@@ -26,10 +26,13 @@ class CompiledInferenceNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
                  evaluate_timesteps: int, base_callbacks: list,
+                 checkpoint_connection_vars: list,
+                 checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
         super().__init__(genn_model, neuron_populations,
                          connection_populations, communicator,
-                         evaluate_timesteps)
+                         evaluate_timesteps, checkpoint_connection_vars,
+                         checkpoint_population_vars)
 
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
@@ -468,5 +471,5 @@ class InferenceCompiler(Compiler):
                                         connection_populations,
                                         self.communicator,
                                         self.evaluate_timesteps,
-                                        base_callbacks,
+                                        base_callbacks, [], [],
                                         self.reset_time_between_batches)
