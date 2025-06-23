@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 
 from numbers import Number
@@ -8,6 +9,8 @@ from copy import deepcopy
 from inspect import getmembers, isdatadescriptor
 
 from ..initializers import default_initializers
+
+logger = logging.getLogger(__name__)
 
 Value = Union[Number, Sequence[Number], np.ndarray, Initializer]
 InitValue = Union[Value, str]
@@ -105,3 +108,5 @@ def set_values(inst, vals):
         # this name, use it to set variable
         if n in genn_descriptors:
             genn_descriptors[n].__set__(inst, v)
+        else:
+            logger.warning(f"No variable {n} to set values of")
