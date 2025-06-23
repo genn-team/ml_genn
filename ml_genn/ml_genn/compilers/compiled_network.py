@@ -1,13 +1,19 @@
 import numpy as np
 
-from typing import List, Mapping, Optional, Sequence, Union
+from pygenn import SynapseMatrixConnectivity
+from pygenn.model_preprocessor import SynapseVariable
+from typing import List, Optional, Sequence, Union
+from ..serialisers import Serialiser
 from ..utils.callback_list import CallbackList
 from ..utils.network import PopulationType
 
+from ..utils.module import get_object
 from ..utils.network import get_underlying_pop
 
-OutputType = Union[np.ndarray, List[np.ndarray]]
+from ..serialisers import default_serialisers
 
+OutputType = Union[np.ndarray, List[np.ndarray]]
+SerialiserInitializer = Union[Serialiser, str]
 
 class CompiledNetwork:
     """Base class for all compiled networks."""
@@ -15,12 +21,21 @@ class CompiledNetwork:
 
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
-                 num_recording_timesteps=None):
+                 num_recording_timesteps=None,
+                 checkpoint_connection_vars: list = [],
+                 checkpoint_population_vars: list = []):
         self.genn_model = genn_model
         self.neuron_populations = neuron_populations
         self.connection_populations = connection_populations
         self.communicator = communicator
         self.num_recording_timesteps = num_recording_timesteps
+        self.checkpoint_connnection_vars = checkpoint_connection_vars
+        self.checkpoint_population_vars = checkpoint_population_vars
+
+        # Build set of synapse groups with checkpoint variables
+        self.checkpoint_synapse_groups = set(
+            connection_populations[c] 
+            for c, _ in self.checkpoint_connection_vars)
 
     def set_input(self, inputs: dict):
         """Copy input data to GPU
@@ -69,6 +84,73 @@ class CompiledNetwork:
         """Reset the GeNN models internal timestep to 0."""
         self.genn_model.timestep = 0
         self.genn_model.t = 0.0
+
+     def save_connectivity(self, keys=(), 
+                          serialiser: SerialiserInitializer = "numpy"):
+        """Save network connectivity to checkpoints
+
+        Args:
+            keys:       used to select correct checkpoint. Typically
+                        might contain epoch number or configuration.
+            serialiser: Serialiser to save connectivity to (should be the 
+                        same type of serialiser which was used to create them)
+        """
+        # If keys aren't are already a non-string sequence, wrap in tuple
+        keys = (keys 
+                if isinstance(keys, Sequence) and not isinstance(keys, str)
+                else (keys,))
+
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through connections and their corresponding synapse groups
+        for c, genn_pop in self.connection_populations.items():
+            # If synapse group has sparse connectivity, download  
+            # connectivity and save pre and postsynaptic indices
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
+                genn_pop.pull_connectivity_from_device()
+                serialiser.serialise(keys + (c, "pre_ind"),
+                                     genn_pop.get_sparse_pre_inds())
+                serialiser.serialise(keys + (c, "post_ind"),
+                                     genn_pop.get_sparse_post_inds())
+
+    def save(self, keys=(), serialiser: SerialiserInitializer = "numpy"):
+        """Save network state to checkpoints
+
+        Args:
+            keys:       used to select correct checkpoint. Typically
+                        might contain epoch number or configuration.
+            serialiser: Serialiser to save state to (should be the 
+                        same type of serialiser which was used to create them)
+        """
+        # If keys aren't are already a non-string sequence, wrap in tuple
+        keys = (keys 
+                if isinstance(keys, Sequence) and not isinstance(keys, str)
+                else (keys,))
+
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through synapse groups with variables to be checkpointed
+        for genn_pop in self.checkpoint_synapse_groups:
+            # If synapse group has sparse connectivity, download  
+            # connectivity so variables can be accessed correctly
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
+                genn_pop.pull_connectivity_from_device()
+
+        # Loop through connection variables to checkpoint
+        for c, v in self.checkpoint_connection_vars:
+            genn_var = self.connection_populations[c].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (c, v), genn_var.values)
+
+        # Loop through population variables to checkpoint
+        for p, v in self.checkpoint_population_vars:
+            genn_var = self.neuron_populations[p].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (p, v), genn_var.values)
 
     def __enter__(self):
         if CompiledNetwork._context is not None:
