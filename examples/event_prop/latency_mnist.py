@@ -23,7 +23,7 @@ NUM_EPOCHS = 10
 EXAMPLE_TIME = 20.0
 DT = 1.0
 SPARSITY = 1.0
-TRAIN = False
+TRAIN = True
 KERNEL_PROFILING = True
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
