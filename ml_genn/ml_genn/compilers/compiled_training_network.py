@@ -1,6 +1,6 @@
 import numpy as np
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple, Union
 from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -16,6 +16,9 @@ from ..utils.network import get_underlying_pop
 
 from ..metrics import default_metrics
 from ..serialisers import default_serialisers
+
+SerialiserInitializer = Union[Serialiser, str]
+
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
@@ -222,7 +225,21 @@ class CompiledTrainingNetwork(CompiledNetwork):
         else:
             return train_metric_state, train_callback_list.get_data()
 
-    def save_connectivity(self, keys=(), serialiser="numpy"):
+    def save_connectivity(self, keys=(), 
+                          serialiser: SerialiserInitializer = "numpy"):
+        """Save network connectivity to checkpoints
+
+        Args:
+            keys:       used to select correct checkpoint. Typically
+                        might contain epoch number or configuration.
+            serialiser: Serialiser to save connectivity to (should be the 
+                        same type of serialiser which was used to create them)
+        """
+        # If keys aren't are already a non-string sequence, wrap in tuple
+        keys = (keys 
+                if isinstance(keys, Sequence) and not isinstance(keys, str)
+                else (keys,))
+
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)
@@ -238,7 +255,20 @@ class CompiledTrainingNetwork(CompiledNetwork):
                 serialiser.serialise(keys + (c, "post_ind"),
                                      genn_pop.get_sparse_post_inds())
 
-    def save(self, keys=(), serialiser="numpy"):
+    def save(self, keys=(), serialiser: SerialiserInitializer = "numpy"):
+        """Save network state to checkpoints
+
+        Args:
+            keys:       used to select correct checkpoint. Typically
+                        might contain epoch number or configuration.
+            serialiser: Serialiser to save state to (should be the 
+                        same type of serialiser which was used to create them)
+        """
+        # If keys aren't are already a non-string sequence, wrap in tuple
+        keys = (keys 
+                if isinstance(keys, Sequence) and not isinstance(keys, str)
+                else (keys,))
+
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)

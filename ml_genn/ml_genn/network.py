@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Tuple, Union
+from typing import Sequence, Tuple, Union
 from .serialisers import Serialiser
 
 from .utils.module import get_object
@@ -28,16 +28,21 @@ class Network:
         self.populations = []
         self.connections = []
 
-    def load(self, keys: Tuple = (),
+    def load(self, keys = (),
              serialiser: SerialiserInitializer = "numpy"):
         """Load network state from checkpoints
 
         Args:
-            keys:       tuple of keys used to select correct checkpoint.
-                        Typically might contain epoch number or configuration.
+            keys:       used to select correct checkpoint. Typically
+                        might contain epoch number or configuration.
             serialiser: Serialiser to load checkpoints with (should be the 
                         same type of serialiser which was used to create them)
         """
+        # If keys aren't are already a non-string sequence, wrap in tuple
+        keys = (keys 
+                if isinstance(keys, Sequence) and not isinstance(keys, str)
+                else (keys,))
+
         # Create serialiser
         serialiser = get_object(serialiser, Serialiser, "Serialiser",
                                 default_serialisers)
@@ -47,7 +52,7 @@ class Network:
             # Deserialize everthing relating to connection
             state = serialiser.deserialise_all(keys + (c,))
             
-            # Set any variables in copnnectivity
+            # Set any variables in connectivity
             # **TODO** synapse
             # **TODO** give error/warning if variable not found
             set_values(c.connectivity, state)

@@ -22,4 +22,4 @@ class Checkpoint(Callback):
     def on_epoch_end(self, state, epoch, metric_state):
         # If we should checkpoint this epoch
         if (epoch % self.epoch_interval) == 0:
-            state.save((epoch,), self.serialiser)
+            state.save(epoch, self.serialiser)
