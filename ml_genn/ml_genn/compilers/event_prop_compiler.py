@@ -512,6 +512,7 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
+                 frozen_conns: Sequence = [],
                  reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
@@ -544,6 +545,8 @@ class EventPropCompiler(Compiler):
         self.softmax_temperature = softmax_temperature
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
+        self.frozen_conns = set(get_underlying_conn(c)
+                                     for c in frozen_conns)
         self._delay_optimiser = get_object(
             optimiser if delay_optimiser is None else delay_optimiser, 
             Optimiser, "Optimiser", default_optimisers)
@@ -552,6 +555,9 @@ class EventPropCompiler(Compiler):
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
+
+        # Build list of weight trainable connections
+        
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
@@ -1211,18 +1217,21 @@ class EventPropCompiler(Compiler):
     def build_weight_update_model(self, conn: Connection,
                                   connect_snippet: ConnectivitySnippet,
                                   compile_state: CompileState) -> WeightUpdateModel:
+
+        has_frozen_weight = conn in self.frozen_conns
+        
         # Does this connection have a delay?
         has_delay = (not is_value_constant(connect_snippet.delay)
                      or connect_snippet.delay > 0)
         
         # Does this connection have learnable delays
         has_learnable_delay = conn in self.delay_learn_conns
-
+        
         # Get delay type to use for this connection
         delay_type = get_delay_type(
             get_conn_max_delay(conn, connect_snippet.delay))
 
-        # If this is some form of trainable connectivity
+        # If this is some form of trainable connectivity and should be trained
         if connect_snippet.trainable:
             # **NOTE** this is probably not necessary as 
             # it's also checked in build_neuron_model
@@ -1245,7 +1254,7 @@ class EventPropCompiler(Compiler):
                     raise RuntimeError(f"Maximum delay steps must be specified for "
                                        f"Connection {conn.name} with delay learning")
 
-                # Create weight update model with learable delays
+                # Create weight update model with learnable delays
                 wum = WeightUpdateModel(
                     model=deepcopy(learnable_delay_weight_update_model),
                     param_vals={"TauSyn": tau_syn, "MaxDelay": conn.max_delay_steps},
@@ -1258,7 +1267,10 @@ class EventPropCompiler(Compiler):
                 compile_state.checkpoint_connection_vars.append((conn, "d"))
 
                 # Mark connection as requiring delay and weight optimisation
-                compile_state.add_optimiser_connection(conn, True, True)
+                if has_frozen_weight:
+                    compile_state.add_optimiser_connection(conn, False, True)
+                else:
+                    compile_state.add_optimiser_connection(conn, True, True)
             # Otherwise
             else:
                 # Create basic weight update model
@@ -1272,12 +1284,15 @@ class EventPropCompiler(Compiler):
                     post_neuron_var_refs={"LambdaI_post": "LambdaI"})
 
                 # Mark connection as requiring weight optimisation
-                compile_state.add_optimiser_connection(conn, True, False)
+                if has_frozen_weight:
+                    compile_state.add_optimiser_connection(conn, False, False)
+                else:
+                    compile_state.add_optimiser_connection(conn, True, False)
 
             # Add weights to list of checkpoint vars
             compile_state.checkpoint_connection_vars.append((conn, "g"))
 
-        # Otherwise, e.g. it's a pooling layer
+        # Otherwise, e.g. it's a pooling layer or not indicated for weight learning
         else:
             wum = WeightUpdateModel(
                 model=(_get_static_delay_weight_update_model(delay_type)
@@ -1362,14 +1377,14 @@ class EventPropCompiler(Compiler):
                 gradient_vars.append(("DelayGradient", "scalar", 0.0))
 
             # Create reset model for gradient variables
-            assert len(gradient_vars) > 0
-            zero_grad_model = create_reset_custom_update(
-                gradient_vars,
-                lambda name: create_wu_var_ref(genn_pop, name))
+            if len(gradient_vars) > 0:
+                zero_grad_model = create_reset_custom_update(
+                    gradient_vars,
+                    lambda name: create_wu_var_ref(genn_pop, name))
 
-            # Add custom update
-            self.add_custom_update(genn_model, zero_grad_model, 
-                                   "ZeroGradient", f"CUZeroConnGradient{i}")
+                # Add custom update
+                self.add_custom_update(genn_model, zero_grad_model, 
+                                       "ZeroGradient", f"CUZeroConnGradient{i}")
 
         # Add per-batch softmax custom updates for each population that requires them
         for p, i, o in compile_state.batch_softmax_populations:
