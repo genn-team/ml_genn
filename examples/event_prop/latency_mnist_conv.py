@@ -12,6 +12,7 @@ from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
+from itertools import chain, repeat
 from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 linear_latency_encode_data)
@@ -57,7 +58,7 @@ max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 optimiser=Adam(1e-2), batch_size=BATCH_SIZE,
+                                 optimiser=Adam(0.5e-3), batch_size=BATCH_SIZE,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network)
 
@@ -76,13 +77,16 @@ if TRAIN:
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
+        
         """
-        fig, axes = plt.subplots(3, len(visualise_examples), sharex="col", sharey="row")
+        epoch_examples = list(chain.from_iterable(repeat(visualise_examples,
+                                                         NUM_EPOCHS)))
+        fig, axes = plt.subplots(3, len(epoch_examples), sharex="col", sharey="row")
         axes[0, 0].set_ylabel("Input spikes")
         axes[1, 0].set_ylabel("Hidden1 spikes")
         axes[2, 0].set_ylabel("Hidden2 spikes")
         
-        for j, e in enumerate(visualise_examples):
+        for j, e in enumerate(epoch_examples):
             axes[0, j].set_title(f"Example {e}")
             axes[0, j].scatter(cb_data["in_spikes"][0][j], cb_data["in_spikes"][1][j], s=2)
             axes[1, j].scatter(cb_data["hid1_spikes"][0][j], cb_data["hid1_spikes"][1][j], s=2)
