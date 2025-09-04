@@ -262,6 +262,7 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
         if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
             genn_model.add_param(n, "scalar", v)
 
+            
 class CompileState:
     def __init__(self, losses, readouts, backend_name):
         self.losses = get_object_mapping(losses, readouts,
@@ -278,6 +279,7 @@ class CompileState:
         self.feedback_connections = []
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
+        self.optimisers = {}
 
     def add_optimiser_connection(self, conn, weight: bool, delay: bool):
         self._optimiser_connections.append((conn, weight, delay))
@@ -476,7 +478,9 @@ class EventPropCompiler(Compiler):
         losses:                     Either a dictionary mapping loss functions
                                     to output populations or a single loss
                                     function to apply to all outputs
-        optimiser:                  Optimiser to use when applying weights
+        optimiser:                  global optimiser to be used for learnable
+                                    parameters - only used if not overriden
+                                    during compile()
         reg_lambda:                 Regularisation strength
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
@@ -511,10 +515,6 @@ class EventPropCompiler(Compiler):
         communicator:               Communicator used for inter-process
                                     communications when training across
                                     multiple GPUs.
-        delay_optimiser:            Optimiser to use when applying delays. If 
-                                    None, ``optimiser`` will be used for delays
-        delay_learn_conns:          Connection for which delays should be 
-                                    learned as well as weight
         
     """
 
@@ -528,8 +528,6 @@ class EventPropCompiler(Compiler):
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None,
-                 delay_optimiser=None,
-                 delay_learn_conns: Sequence = [],
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
@@ -552,11 +550,6 @@ class EventPropCompiler(Compiler):
         self.softmax_temperature = softmax_temperature
         self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
                                      default_optimisers)
-        self._delay_optimiser = get_object(
-            optimiser if delay_optimiser is None else delay_optimiser, 
-            Optimiser, "Optimiser", default_optimisers)
-        self.delay_learn_conns = set(get_underlying_conn(c)
-                                     for c in delay_learn_conns)
 
         # If legacy upper and lower regularisation strength is specified
         reg_lambda_upper = genn_kwargs.get("reg_lambda_upper")
@@ -580,9 +573,21 @@ class EventPropCompiler(Compiler):
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
-
-        return CompileState(self.losses, readouts,
+        compile_state = CompileState(self.losses, readouts,
                             genn_model.backend_name)
+        # use explicit dictionary of optimisers if provided
+        if "optimisers" in kwargs.keys():
+            compile_state.optimisers = kwargs["optimisers"]
+        else:   # learn weights with compiler's default optimiser
+            optim = {}
+            for conn in network.connections:
+                connect_snippet =\
+                conn.connectivity.get_snippet(conn,
+                                              self.supported_matrix_type)
+                if connect_snippet.trainable:
+                    optim[conn] = {"weight": self._optimiser}
+            compile_state.optimisers = optim
+        return compile_state
 
     def apply_delay(self, genn_pop, conn: Connection,
                     delay, compile_state):
@@ -704,16 +709,13 @@ class EventPropCompiler(Compiler):
                      or connect_snippet.delay > 0)
         
         # Does this connection have learnable delays
-        has_learnable_delay = conn in self.delay_learn_conns
+        has_learnable_delay = conn in compile_state.optimisers.keys()\
+            and "delay" in compile_state.optimisers[conn].keys() 
 
         # Get name of variable containing integer delay for indexing
         int_delay_name = "delayInt" if has_learnable_delay else "delay"
 
-        # Mark which sorts of optimiser connection will require
-        compile_state.add_optimiser_connection(conn, connect_snippet.trainable,
-                                               has_learnable_delay)
-
-        # Get synapse mdeol
+        # Get synapse model
         synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
         assert isinstance(synapse_model, AutoSynapseModel)
     
@@ -749,7 +751,7 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\tSynapse inject_plusm: {inject_plus_m_expr}")
         logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
         
-        # Get target neuron mdeol
+        # Get target neuron model
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
                                                     self.batch_size)
@@ -970,40 +972,48 @@ class EventPropCompiler(Compiler):
             connection_populations[c].pre_target_var = "RevISyn"
 
         # Loop through connections that require optimisers
-        weight_optimiser_cus = []
-        delay_optimiser_cus = []
-        for i, (c, w, d) in enumerate(compile_state.optimiser_connections):
-            genn_pop = connection_populations[c]
+        optimisers = []
+        i = 0
+        for c, optim in compile_state.optimisers.items():
+            print(c)
+            print(connection_populations)
+            if c in connection_populations:
+                print("yes")
+                genn_pop = connection_populations[c]
             
-            # If weight optimisation is required
-            gradient_vars = []
-            if w:
-                # Create weight optimiser custom update
-                cu_weight = self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
-                    create_wu_var_ref(genn_pop, "weightGradient"), 
-                    self._optimiser, genn_model)
+                gradient_vars = []
+                for var, o in optim.items():
+                    # If weight optimisation is required
+                    if var == "weight":
+                        # Create weight optimiser custom update
+                        # TODO: Should this be more general for any var in wum?
+                        cu_weight = self._create_optimiser_custom_update(
+                            f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
+                            create_wu_var_ref(genn_pop, "weightGradient"), 
+                            o, genn_model)
                 
-                # Add custom update to list of optimisers
-                weight_optimiser_cus.append(cu_weight)
+                        # Add custom update to list of optimisers
+                        optimisers.append((deepcopy(o), cu_weight))
 
-                # Add gradient to list of gradient vars to zero
-                gradient_vars.append(("weightGradient", "scalar", 0.0))
+                        # Add gradient to list of gradient vars to zero
+                        gradient_vars.append(("weightGradient", "scalar", 0.0))
+                        i = i+1
             
-            # If delay optimiser is required
-            if d:
-                # Create delay optimiser custom update
-                cu_delay = self._create_optimiser_custom_update(
-                    f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
-                    create_wu_var_ref(genn_pop, "delayGradient"),
-                    self._delay_optimiser, genn_model,
-                    (0.0, c.max_delay_steps))
+                    # If delay optimiser is required
+                    if var == "delay":
+                        # Create delay optimiser custom update
+                        cu_delay = self._create_optimiser_custom_update(
+                            f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
+                            create_wu_var_ref(genn_pop, "delayGradient"),
+                            o, genn_model,
+                            (0.0, c.max_delay_steps))
 
-                # Add custom update to list of optimisers
-                delay_optimiser_cus.append(cu_delay)
+                        # Add custom update to list of optimisers
+                        optimisers.append((deepcopy(o), cu_delay))
                 
-                # Add gradient to list of gradient vars to zero
-                gradient_vars.append(("delayGradient", "scalar", 0.0))
+                        # Add gradient to list of gradient vars to zero
+                        gradient_vars.append(("delayGradient", "scalar", 0.0))
+                        i = i+1
 
             # Create reset model for gradient variables
             assert len(gradient_vars) > 0
@@ -1054,7 +1064,7 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(weight_optimiser_cus) > 0 or len(delay_optimiser_cus) > 0:
+        if len(optimisers) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
@@ -1099,13 +1109,6 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
-
-        # Build list of optimisers and their custom updates
-        optimisers = []
-        if len(weight_optimiser_cus) > 0:
-            optimisers.append((deepcopy(self._optimiser), weight_optimiser_cus))
-        if len(delay_optimiser_cus) > 0:
-            optimisers.append((deepcopy(self._delay_optimiser), delay_optimiser_cus))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,

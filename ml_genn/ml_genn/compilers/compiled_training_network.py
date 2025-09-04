@@ -318,10 +318,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
                               self.communicator)
 
         # Loop through optimisers
-        for o, custom_updates in self.optimisers:
+        for o, c in self.optimisers:
             # Set step on all custom updates
-            for c in custom_updates:
-                o.set_step(c, step)
+            o.set_step(c, step)
 
         # End batch
         callback_list.on_batch_end(batch, metrics)
