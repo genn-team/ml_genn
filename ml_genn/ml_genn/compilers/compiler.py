@@ -399,6 +399,7 @@ class Compiler:
             out_post_vars.append(("DenDelay", "scalar", 0.0))
 
         # Create reset model
+        print(dir(genn_syn_pop))
         zero_out_post_model = create_reset_custom_update(
             out_post_vars,
             lambda name: (create_out_post_var_ref(genn_syn_pop) 

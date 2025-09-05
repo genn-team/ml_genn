@@ -707,7 +707,6 @@ class EventPropCompiler(Compiler):
         # Does this connection have a delay?
         has_delay = (not is_value_constant(connect_snippet.delay)
                      or connect_snippet.delay > 0)
-        
         # Does this connection have learnable delays
         has_learnable_delay = conn in compile_state.optimisers.keys()\
             and "delay" in compile_state.optimisers[conn].keys() 
