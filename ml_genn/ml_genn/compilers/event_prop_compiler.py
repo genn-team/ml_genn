@@ -34,6 +34,7 @@ from itertools import chain
 from warnings import warn
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
+from pygenn._genn import WUVarReference
 from .compiler import (create_reset_custom_update, get_delay_type,
                        get_conn_max_delay)
 from ..utils.auto_tools import solve_ode
@@ -993,7 +994,6 @@ class EventPropCompiler(Compiler):
 
                         # Add gradient to list of gradient vars to zero
                         gradient_vars.append(("weightGradient", "scalar", 0.0))
-                        i = i+1
             
                     # If delay optimiser is required
                     if var == "delay":
@@ -1009,17 +1009,47 @@ class EventPropCompiler(Compiler):
                 
                         # Add gradient to list of gradient vars to zero
                         gradient_vars.append(("delayGradient", "scalar", 0.0))
-                        i = i+1
 
-            # Create reset model for gradient variables
-            assert len(gradient_vars) > 0
-            zero_grad_model = create_reset_custom_update(
-                gradient_vars,
-                lambda name: create_wu_var_ref(genn_pop, name))
+                # Create reset model for gradient variables
+                assert len(gradient_vars) > 0
+                zero_grad_model = create_reset_custom_update(
+                    gradient_vars,
+                    lambda name: create_wu_var_ref(genn_pop, name))
 
-            # Add custom update
-            self.add_custom_update(genn_model, zero_grad_model, 
-                                   "ZeroGradient", f"CUZeroConnGradient{i}")
+                # Add custom update
+                self.add_custom_update(genn_model, zero_grad_model,
+                                       "ZeroGradient", f"CUZeroConnGradient{i}")
+                i = i+1
+
+        # Loop through populations that require optimisers
+        i = 0
+        for c, optim in compile_state.optimisers.items():
+            if c in neuron_populations:
+                genn_pop = neuron_populations[c]
+                gradient_vars = []
+                for p, o in optim.items():
+                    # Create parameter optimiser custom update
+                    cu_param = self._create_optimiser_custom_update(
+                        f"{p}{i}", create_var_ref(genn_pop, p),
+                            create_var_ref(genn_pop, f"{p}Gradient"),
+                            o, genn_model)
+
+                    # Add custom update to list of optimisers
+                    optimisers.append((deepcopy(o), cu_param))
+
+                    # Add gradient to list of gradient vars to zero
+                    # JAMIE: is this necessary or am I duplicating reset_vars
+                    gradient_vars.append((f"{p}Gradient", "scalar", 0.0))
+                # Create reset model for gradient variables
+                assert len(gradient_vars) > 0
+                zero_grad_model = create_reset_custom_update(
+                    gradient_vars,
+                    lambda name: create_var_ref(genn_pop, name))
+
+                # Add custom update
+                self.add_custom_update(genn_model, zero_grad_model,
+                                       "ZeroGradient", f"CUZeroPopGradient{i}")
+                i = i+1
 
         # Add per-batch softmax custom updates for each population that requires them
         for p, i, o in compile_state.batch_softmax_populations:
@@ -1199,8 +1229,12 @@ class EventPropCompiler(Compiler):
 
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
-            reduced_gradient = create_wu_var_ref(genn_reduction,
-                                                 "ReducedGradient")
+            if isinstance(var_ref, WUVarReference):
+                reduced_gradient = create_wu_var_ref(genn_reduction,
+                                                     "ReducedGradient")
+            else:
+                reduced_gradient = create_var_ref(genn_reduction,
+                                                  "ReducedGradient")
             optimiser_model = optimiser.get_model(reduced_gradient, var_ref,
                                                   False, clamp_var)
         # Otherwise
@@ -1231,7 +1265,7 @@ class EventPropCompiler(Compiler):
                 genn_model, reduction_optimiser_model, 
                 "SpikeCountReduce", name)
     
-    def _build_adjoint_system(self, model: AutoNeuronModel,
+    def _build_adjoint_system(self, model: AutoNeuronModel, learn_params,
                               output: bool, regularise: bool):
         logger.debug("\tBuilding adjoint system for AutoNeuronModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
@@ -1253,8 +1287,19 @@ class EventPropCompiler(Compiler):
             o = _template_symbols(
                 o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
             dl_dt[_get_lmd_sym(sym)] = o
-            
+
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
+
+        # create expressions for learned neuron parameters
+        grad_terms = {}
+        for p in learn_params:
+            sym = sympy.Symbol(p)
+            o = sum(sympy.diff(expr2, sym) + _get_lmd_sym(sym2)
+                    for sym2, expr2 in model.dx_dt.items())
+            # collect variables they might need to go into a ring buffer:
+            o = _template_symbols(
+                o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
+            grad_terms[sym] = o
 
         # Substitute jumps into ODEs to get post-jump dynamics "\dot{x}^+"
         dx_dt_plus_n = {}
@@ -1352,7 +1397,7 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\t\tSaved variables per timestep: {saved_vars_timestep}")
         logger.debug(f"\t\tSaved variables per spike: {saved_vars_spike}")
         
-        return dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike
+        return dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike
     
     def _build_in_hid_neuron_model(self, pop: Population,
                                    model: Union[AutoNeuronModel, NeuronModel],
@@ -1409,8 +1454,16 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
-            dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
-                self._build_adjoint_system(model, False, self.reg_lambda != 0.0)
+            learn_params= [] if pop not in compile_state.optimisers \
+                else compile_state.optimisers[pop]
+            dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
+                self._build_adjoint_system(model, learn_params, False, self.reg_lambda != 0.0)
+
+            additional_reset_vars = []
+            # Add variables for parameter gradients
+            for p in learn_params:
+                genn_model.add_var(f"{p}Gradient", "scalar", 0.0)
+                genn_model.make_param_var(p)
 
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
             dynamics_code = ""
@@ -1451,7 +1504,6 @@ class EventPropCompiler(Compiler):
 
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
-            additional_reset_vars = []
             if self.reg_lambda != 0.0 and model.threshold != 0:
                 logger.debug("\tBuilding regulariser")
                 # Add state variables to hold spike count
@@ -1525,6 +1577,9 @@ class EventPropCompiler(Compiler):
 
             # Solve ODE and generate dynamics code
             dynamics_code += solve_ode(dl_dt, model.solver, model.sub_steps)
+            # Add gradient accumulation code
+            for p, expr in grad_terms.items():
+                dynamics_code += f"{p}Gradient += {sympy.ccode(expr)};\n"
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
@@ -1574,8 +1629,14 @@ class EventPropCompiler(Compiler):
             example_timesteps=self.example_timesteps)
 
         # Build adjoint system from model
-        dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
-            self._build_adjoint_system(model, True, False)
+        learn_params= [] if pop not in compile_state.optimisers \
+            else compile_state.optimisers[pop]
+        dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
+            self._build_adjoint_system(model, learn_params, True, False)
+
+        # Add variables for parameter gradients
+        for p in learn_params:
+            genn_model.add_var(f"{p}Gradient", "scalar", 0.0)
 
         # Add continous drive term to LambdaV
         dl_dt[_get_lmd_sym(model.output_var_name)] += sympy.Symbol("drive")
@@ -1593,6 +1654,9 @@ class EventPropCompiler(Compiler):
                                np.empty(timestep_ring_size, dtype=np.float32))
             dyn_ts_reset_needed = True
 
+        logger.debug(f"\tReset variables: {genn_model.reset_vars}")
+        compile_state.add_neuron_reset_vars(
+            pop, genn_model.reset_vars, False, dyn_ts_reset_needed)
         # add read and write pointer for timestep-wise ring buffers
         if dyn_ts_reset_needed:
             genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
@@ -1611,6 +1675,9 @@ class EventPropCompiler(Compiler):
 
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, model.solver, model.sub_steps)
+        # Add gradient accumulation code
+        for p_grad, expr in grad_terms.items():
+            dynamics_code += f"{p_grad} += {sympy.ccode(expr)};\n"
         dynamics_code = Template(dynamics_code).substitute(
             {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
