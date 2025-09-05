@@ -974,10 +974,7 @@ class EventPropCompiler(Compiler):
         optimisers = []
         i = 0
         for c, optim in compile_state.optimisers.items():
-            print(c)
-            print(connection_populations)
             if c in connection_populations:
-                print("yes")
                 genn_pop = connection_populations[c]
             
                 gradient_vars = []
