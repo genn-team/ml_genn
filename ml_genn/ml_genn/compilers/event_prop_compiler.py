@@ -1026,7 +1026,7 @@ class EventPropCompiler(Compiler):
         for c, optim in compile_state.optimisers.items():
             if c in neuron_populations:
                 genn_pop = neuron_populations[c]
-                gradient_vars = []
+                #gradient_vars = []
                 for p, o in optim.items():
                     # Create parameter optimiser custom update
                     cu_param = self._create_optimiser_custom_update(
@@ -1039,16 +1039,16 @@ class EventPropCompiler(Compiler):
 
                     # Add gradient to list of gradient vars to zero
                     # JAMIE: is this necessary or am I duplicating reset_vars
-                    gradient_vars.append((f"{p}Gradient", "scalar", 0.0))
+                    #gradient_vars.append((f"{p}Gradient", "scalar", 0.0))
                 # Create reset model for gradient variables
-                assert len(gradient_vars) > 0
-                zero_grad_model = create_reset_custom_update(
-                    gradient_vars,
-                    lambda name: create_var_ref(genn_pop, name))
+                #assert len(gradient_vars) > 0
+                #zero_grad_model = create_reset_custom_update(
+                #    gradient_vars,
+                #    lambda name: create_var_ref(genn_pop, name))
 
                 # Add custom update
-                self.add_custom_update(genn_model, zero_grad_model,
-                                       "ZeroGradient", f"CUZeroPopGradient{i}")
+                #self.add_custom_update(genn_model, zero_grad_model,
+                #                       "ZeroGradient", f"CUZeroPopGradient{i}")
                 i = i+1
 
         # Add per-batch softmax custom updates for each population that requires them
@@ -1294,7 +1294,7 @@ class EventPropCompiler(Compiler):
         grad_terms = {}
         for p in learn_params:
             sym = sympy.Symbol(p)
-            o = sum(sympy.diff(expr2, sym) + _get_lmd_sym(sym2)
+            o = - sum(sympy.diff(expr2, sym) + _get_lmd_sym(sym2)
                     for sym2, expr2 in model.dx_dt.items())
             # collect variables they might need to go into a ring buffer:
             o = _template_symbols(
