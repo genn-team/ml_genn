@@ -19,7 +19,7 @@ NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
-NUM_EPOCHS = 10
+NUM_EPOCHS = 20
 EXAMPLE_TIME = 30.0
 DT = 1.0
 SPARSITY = 1.0
@@ -67,10 +67,11 @@ if TRAIN:
                                  losses="sparse_categorical_crossentropy",
                                  optimiser=Adam(1e-2), batch_size=BATCH_SIZE, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
-    compiled_net = compiler.compile(network,optimisers={hidden.connection(): {"weight": Adam(1e-2),
-                                                                              "delay": Adam(1e-3)},
-                                                        output.connection(): {"weight": Adam(1e-2)},
-                                                        hidden.population(): {"tau_mem": Adam(1e-2)}})
+    compiled_net = compiler.compile(network,optimisers={#hidden.connection(): {"weight": Adam(1e-2)},
+                                                        #                      "delay": Adam(1e-3)},
+                                                        #output.connection(): {"weight": Adam(1e-2)},
+                                                        hidden.population(): {"tau_mem": Adam(2e-3)}
+    })
 
     with compiled_net:
         visualise_examples = [0, 32, 64, 96]

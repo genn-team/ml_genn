@@ -973,6 +973,7 @@ class EventPropCompiler(Compiler):
 
         # Loop through connections that require optimisers
         optimisers = []
+        need_zero_gradient_update_group = False
         i = 0
         for c, optim in compile_state.optimisers.items():
             if c in connection_populations:
@@ -1019,6 +1020,7 @@ class EventPropCompiler(Compiler):
                 # Add custom update
                 self.add_custom_update(genn_model, zero_grad_model,
                                        "ZeroGradient", f"CUZeroConnGradient{i}")
+                need_zero_gradient_update_group = True
                 i = i+1
 
         # Loop through populations that require optimisers
@@ -1096,8 +1098,9 @@ class EventPropCompiler(Compiler):
                     CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
             base_train_callbacks.append(
                 CustomUpdateOnBatchEndNotFirst("GradientLearn"))
-            base_train_callbacks.append(
-                CustomUpdateOnFirstBatchEnd("ZeroGradient"))
+            if need_zero_gradient_update_group:
+                base_train_callbacks.append(
+                    CustomUpdateOnFirstBatchEnd("ZeroGradient"))
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
