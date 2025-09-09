@@ -1863,6 +1863,7 @@ class EventPropCompiler(Compiler):
 
                         genn_model.prepend_sim_code(
                             f"""
+                            const scalar backT = {self.example_timesteps * self.dt} - t - dt;
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
