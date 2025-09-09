@@ -3,13 +3,14 @@ import numpy as np
 import sympy
 
 from string import Template
-from typing import Iterator, Sequence, Union
+from typing import Iterator, Mapping, Sequence, Union
 from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
                     SynapseMatrixType, SynapseMatrixWeight)
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
-from .. import Connection, Population, Network
+from .. import (AllConnections, AllPopulations, Connection, 
+                InputLayer, Layer, Population, Network)
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
                          CustomUpdateOnTimestepEnd)
@@ -263,9 +264,9 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
         if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
             genn_model.add_param(n, "scalar", v)
 
-            
+
 class CompileState:
-    def __init__(self, losses, readouts, backend_name):
+    def __init__(self, losses, readouts, optimisers, backend_name):
         self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
         self.backend_name = backend_name
@@ -280,7 +281,7 @@ class CompileState:
         self.feedback_connections = []
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
-        self.optimisers = {}
+        self.optimisers = optimisers
 
     def add_optimiser_connection(self, conn, weight: bool, delay: bool):
         self._optimiser_connections.append((conn, weight, delay))
@@ -574,21 +575,64 @@ class EventPropCompiler(Compiler):
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
-        compile_state = CompileState(self.losses, readouts,
-                            genn_model.backend_name)
+        
         # use explicit dictionary of optimisers if provided
         if "optimisers" in kwargs:
-            compile_state.optimisers = kwargs["optimisers"]
+            if not isinstance(kwargs["optimisers"], Mapping):
+                raise RuntimeError("Optimisers should be "
+                                   "specified as a dictionary")
+
+            # Loop through optimisers to build pre-processed dictionary
+            optimisers = {}
+            for k, vars in kwargs["optimisers"].items():
+                # If key is a Connection, Population or InputLayer,
+                # what variables relate to is unambiguous
+                if isinstance(k, (Connection, Population, InputLayer)):
+                    # Create optimisers
+                    vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()}
+                    
+                    # If key is InputLayer, de-sugar to population
+                    if isinstance(k, InputLayer):
+                        optimisers[k.population()] = vars
+                    # Otherwise, use key directly
+                    else:
+                        optimisers[k] = vars
+                # Otherwise, if it's a layer, variable might be related
+                # to connection OR population contained within layer
+                elif isinstance(k, Layer):
+                    # Split variable dictionary into connection and
+                    # population variables and create optimisers
+                    con_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                              default_optimisers)
+                                for n, o in vars.items()
+                                if n == "weight" or n == "delay"}
+                    pop_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                              default_optimisers)
+                                for n, o in vars.items()
+                                if n != "weight" and n != "delay"}
+
+                    # If any of either type of variable exist, add to
+                    # dictionary with appropriately de-sugared key
+                    if len(con_vars) > 0:
+                        optimisers[k.connection()] = con_vars
+                    if len(pop_vars) > 0:
+                        optimisers[k.population()] = pop_vars
+                # **TODO** sentinel
+                else:
+                    raise RuntimeError("Optimisers dictionary "
+                                       "specified as a dictionary")
         else:   # learn weights with compiler's default optimiser
-            optim = {}
+            optimisers = {}
             for conn in network.connections:
-                connect_snippet =\
-                conn.connectivity.get_snippet(conn,
-                                              self.supported_matrix_type)
+                connect_snippet = conn.connectivity.get_snippet(
+                    conn, self.supported_matrix_type)
                 if connect_snippet.trainable:
                     optim[conn] = {"weight": self._optimiser}
-            compile_state.optimisers = optim
-        return compile_state
+
+        return CompileState(self.losses, readouts, optimisers,
+                            genn_model.backend_name)
 
     def apply_delay(self, genn_pop, conn: Connection,
                     delay, compile_state):

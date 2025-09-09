@@ -70,7 +70,7 @@ if TRAIN:
     compiled_net = compiler.compile(network,optimisers={#hidden.connection(): {"weight": Adam(1e-2)},
                                                         #                      "delay": Adam(1e-3)},
                                                         #output.connection(): {"weight": Adam(1e-2)},
-                                                        hidden.population(): {"tau_mem": Adam(2e-3)}
+                                                        hidden: {"tau_mem": "adam"}
     })
 
     with compiled_net:
