@@ -523,11 +523,7 @@ class EventPropCompiler(Compiler):
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
                                   SynapseMatrixType.DENSE,
                                   SynapseMatrixType.SPARSE]
-        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
-                                                batch_size, rng_seed,
-                                                kernel_profiling,
-                                                communicator,
-                                                **genn_kwargs)
+        
         if "optimiser" in genn_kwargs or "delay_optimiser" in genn_kwargs:
             raise RuntimeError("The 'optimiser' and 'delay_optimiser' "
                                "parameters have been removed from the "
@@ -537,7 +533,32 @@ class EventPropCompiler(Compiler):
                                "e.g. optimisers={\"all_connections\": "
                                "{\"weight\": \"adam\"} to optimise all "
                                "weights with the adam optimiser")
-    
+        
+        # If legacy upper and lower regularisation strength are specified
+        # **NOTE** needs to be before superclass call so these get removed 
+        # from genn_kwargs as unknown arguments now causes an error
+        reg_lambda_upper = genn_kwargs.pop("reg_lambda_upper", None)
+        reg_lambda_lower = genn_kwargs.pop("reg_lambda_lower", None)
+        if reg_lambda_upper is not None or reg_lambda_lower is not None:
+            # If they match, use as regularisation strength
+            if reg_lambda_upper == reg_lambda_lower:
+                reg_lambda = reg_lambda_upper
+                warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
+                     "arguments for EventPropCompiler are no longer "
+                     "supported, please use 'reg_lambda'", FutureWarning)
+            # Otherwise, give error
+            else:
+                raise NotImplemented("Seperate 'reg_lambda_upper' and "
+                                     "'reg_lambda_lower' arguments for "
+                                     "EventPropCompiler are no longer "
+                                     "supported, please use 'reg_lambda'")
+
+        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
+                                                batch_size, rng_seed,
+                                                kernel_profiling,
+                                                communicator,
+                                                **genn_kwargs)
+        
         self.example_timesteps = example_timesteps
         self.losses = losses
         self.reg_lambda = reg_lambda
@@ -549,22 +570,6 @@ class EventPropCompiler(Compiler):
         self.ttfs_alpha = ttfs_alpha
         self.softmax_temperature = softmax_temperature
         
-        # If legacy upper and lower regularisation strength is specified
-        reg_lambda_upper = genn_kwargs.get("reg_lambda_upper")
-        reg_lambda_lower = genn_kwargs.get("reg_lambda_lower")
-        if reg_lambda_upper is not None or reg_lambda_lower is not None:
-            # If they match, use as regularisation strength
-            if reg_lambda_upper == reg_lambda_lower:
-                self.reg_lambda = reg_lambda_upper
-                warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
-                     "arguments for EventPropCompiler are no longer "
-                     "supported, please use 'reg_lambda'", FutureWarning)
-            # Otherwise, give error
-            else:
-                raise NotImplemented("Seperate 'reg_lambda_upper' and "
-                                     "'reg_lambda_lower' arguments for "
-                                     "EventPropCompiler are no longer "
-                                     "supported, please use 'reg_lambda'")
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
