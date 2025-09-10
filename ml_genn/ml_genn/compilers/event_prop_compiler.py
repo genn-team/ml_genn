@@ -709,8 +709,8 @@ class EventPropCompiler(Compiler):
         has_delay = (not is_value_constant(connect_snippet.delay)
                      or connect_snippet.delay > 0)
         # Does this connection have learnable delays
-        has_learnable_delay = conn in compile_state.optimisers.keys()\
-            and "delay" in compile_state.optimisers[conn].keys() 
+        has_learnable_delay = (conn in compile_state.optimisers
+                               and "delay" in compile_state.optimisers[conn])
 
         # Get name of variable containing integer delay for indexing
         int_delay_name = "delayInt" if has_learnable_delay else "delay"
