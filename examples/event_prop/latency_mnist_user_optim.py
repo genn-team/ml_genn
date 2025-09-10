@@ -68,7 +68,7 @@ if TRAIN:
                                  batch_size=BATCH_SIZE, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": "adam"},
-                                                         hidden: {"tau_mem": "adam"}})
+                                                         hidden: {"tau_mem": Adam(2e-3)}})
 
 
     with compiled_net:

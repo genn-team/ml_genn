@@ -569,7 +569,7 @@ class EventPropCompiler(Compiler):
         # Get base dictionary of optimiser. If none is provided, default
         # to training all weights using the adam optimiser with default params
         base_optimisers = kwargs.get("optimisers", 
-                                     {"all_connections": {"weight", "adam"}})
+                                     {"all_connections": {"weight": "adam"}})
 
         # Check dictionary has been provided
         if not isinstance(base_optimisers, Mapping):
@@ -634,7 +634,7 @@ class EventPropCompiler(Compiler):
             elif k != "all_connections":
                 raise RuntimeError("Optimisers dictionary "
                                    "specified as a dictionary")
-        print(optimisers)
+
         return CompileState(self.losses, readouts, optimisers,
                             genn_model.backend_name)
 
