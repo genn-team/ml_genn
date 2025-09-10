@@ -1297,7 +1297,7 @@ class EventPropCompiler(Compiler):
         grad_terms = {}
         for p in learn_params:
             sym = sympy.Symbol(p)
-            o = - sum(sympy.diff(expr2, sym) + _get_lmd_sym(sym2)
+            o = - sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
                     for sym2, expr2 in model.dx_dt.items())
             # collect variables they might need to go into a ring buffer:
             o = _template_symbols(
