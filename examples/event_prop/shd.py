@@ -8,7 +8,6 @@ from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense,FixedProbability
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
-from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 from tonic.datasets import SHD
@@ -70,9 +69,8 @@ if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
                                  reg_lambda=1e-10, reg_nu_upper=14, max_spikes=1500, 
-                                 optimiser=Adam(0.001), batch_size=BATCH_SIZE, 
-                                 kernel_profiling=KERNEL_PROFILING)
-    compiled_net = compiler.compile(network)
+                                 batch_size=BATCH_SIZE, kernel_profiling=KERNEL_PROFILING)
+    compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": "adam"}})
 
     with compiled_net:
         # Evaluate model on numpy dataset
