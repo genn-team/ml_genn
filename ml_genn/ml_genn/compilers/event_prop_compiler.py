@@ -508,7 +508,7 @@ class EventPropCompiler(Compiler):
         
     """
 
-    def __init__(self, example_timesteps: int, losses, optimiser="adam",
+    def __init__(self, example_timesteps: int, losses,
                  reg_lambda: float = 0.0, reg_nu_upper: float = 0.0,
                  grad_limit: float = 100.0,
                  max_spikes: int = 500, 
@@ -528,9 +528,15 @@ class EventPropCompiler(Compiler):
                                                 kernel_profiling,
                                                 communicator,
                                                 **genn_kwargs)
-        if "optimiser" in genn_kwargs:
-            warn("The 'param_names' parameter has been renamed to 'params' "
-                "and will be removed in future", FutureWarning)
+        if "optimiser" in genn_kwargs or "delay_optimiser" in genn_kwargs:
+            raise RuntimeError("The 'optimiser' and 'delay_optimiser' "
+                               "parameters have been removed from the "
+                               "EventPropCompiler constructor. Optimisers "
+                               "are now specified by passing a 'optimisers' "
+                               "keyword argument to the ``compile`` method "
+                               "e.g. optimisers={\"all_connections\": "
+                               "{\"weight\": \"adam\"} to optimise all "
+                               "weights with the adam optimiser")
     
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -632,8 +638,10 @@ class EventPropCompiler(Compiler):
             # Otherwise, if key isn't one of the shortcut strings
             # which have already been processed, give error
             elif k != "all_connections":
-                raise RuntimeError("Optimisers dictionary "
-                                   "specified as a dictionary")
+                raise RuntimeError(f"Invalid key '{k}' used in 'optimisers' "
+                                   f"dictionary. Valid keys are Connection, "
+                                   f"Population, InputLayer or Layer objects "
+                                   f"Or strings such as 'all_connections'")
 
         return CompileState(self.losses, readouts, optimisers,
                             genn_model.backend_name)
