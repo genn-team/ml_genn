@@ -1028,7 +1028,6 @@ class EventPropCompiler(Compiler):
         for c, optim in compile_state.optimisers.items():
             if c in neuron_populations:
                 genn_pop = neuron_populations[c]
-                #gradient_vars = []
                 for p, o in optim.items():
                     # Create parameter optimiser custom update
                     cu_param = self._create_optimiser_custom_update(
