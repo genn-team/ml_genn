@@ -577,7 +577,7 @@ class EventPropCompiler(Compiler):
         compile_state = CompileState(self.losses, readouts,
                             genn_model.backend_name)
         # use explicit dictionary of optimisers if provided
-        if "optimisers" in kwargs.keys():
+        if "optimisers" in kwargs:
             compile_state.optimisers = kwargs["optimisers"]
         else:   # learn weights with compiler's default optimiser
             optim = {}
@@ -709,8 +709,8 @@ class EventPropCompiler(Compiler):
         has_delay = (not is_value_constant(connect_snippet.delay)
                      or connect_snippet.delay > 0)
         # Does this connection have learnable delays
-        has_learnable_delay = conn in compile_state.optimisers.keys()\
-            and "delay" in compile_state.optimisers[conn].keys() 
+        has_learnable_delay = (conn in compile_state.optimisers
+                               and "delay" in compile_state.optimisers[conn])
 
         # Get name of variable containing integer delay for indexing
         int_delay_name = "delayInt" if has_learnable_delay else "delay"
@@ -1028,7 +1028,6 @@ class EventPropCompiler(Compiler):
         for c, optim in compile_state.optimisers.items():
             if c in neuron_populations:
                 genn_pop = neuron_populations[c]
-                #gradient_vars = []
                 for p, o in optim.items():
                     # Create parameter optimiser custom update
                     cu_param = self._create_optimiser_custom_update(
@@ -1039,18 +1038,6 @@ class EventPropCompiler(Compiler):
                     # Add custom update to list of optimisers
                     optimisers.append((deepcopy(o), cu_param))
 
-                    # Add gradient to list of gradient vars to zero
-                    # JAMIE: is this necessary or am I duplicating reset_vars
-                    #gradient_vars.append((f"{p}Gradient", "scalar", 0.0))
-                # Create reset model for gradient variables
-                #assert len(gradient_vars) > 0
-                #zero_grad_model = create_reset_custom_update(
-                #    gradient_vars,
-                #    lambda name: create_var_ref(genn_pop, name))
-
-                # Add custom update
-                #self.add_custom_update(genn_model, zero_grad_model,
-                #                       "ZeroGradient", f"CUZeroPopGradient{i}")
                 i = i+1
 
         # Add per-batch softmax custom updates for each population that requires them
@@ -1457,8 +1444,7 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
-            learn_params= [] if pop not in compile_state.optimisers \
-                else compile_state.optimisers[pop]
+            learn_params = compile_state.optimisers.get(pop, {})
             dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
                 self._build_adjoint_system(model, learn_params, False, self.reg_lambda != 0.0)
 
@@ -1632,8 +1618,7 @@ class EventPropCompiler(Compiler):
             example_timesteps=self.example_timesteps)
 
         # Build adjoint system from model
-        learn_params= [] if pop not in compile_state.optimisers \
-            else compile_state.optimisers[pop]
+        learn_params = compile_state.optimisers.get(pop, {})
         dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
             self._build_adjoint_system(model, learn_params, True, False)
 
