@@ -265,9 +265,8 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
 
 
 class CompileState:
-    def __init__(self, losses, readouts, optimisers, backend_name):
-        self.losses = get_object_mapping(losses, readouts,
-                                         Loss, "Loss", default_losses)
+    def __init__(self, network: Network, losses, optimisers, 
+                 supported_matrix_type, backend_name):
         self.backend_name = backend_name
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
@@ -277,7 +276,76 @@ class CompileState:
         self.feedback_connections = []
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
-        self.optimisers = optimisers
+        self.optimisers = {}
+
+        # Build list of output populations
+        readouts = [p for p in network.populations
+                    if p.neuron.readout is not None]
+
+        # From these, create losses
+        self.losses = get_object_mapping(losses, readouts,
+                                         Loss, "Loss", default_losses)
+
+        # If default optimiser settings for all connections has been provided
+        if "all_connections" in optimisers:
+            # Loop through all connections
+            vars = optimisers["all_connections"]
+            for conn in network.connections:
+                # If connectivity is trainable, create 
+                # optimisers for specified variables
+                connect_snippet = conn.connectivity.get_snippet(
+                    conn, supported_matrix_type)
+                if connect_snippet.trainable:
+                    self.optimisers[conn] = {n: get_object(o, Optimiser, 
+                                                           "Optimiser",
+                                                           default_optimisers)
+                                             for n, o in vars.items()}
+
+        # Loop through optimisers to build pre-processed dictionary
+        # **NOTE** these will override any optimiser configured with shortcuts
+        for k, vars in optimisers.items():
+            # If key is a Connection, Population or InputLayer,
+            # what variables relate to is unambiguous
+            if isinstance(k, (Connection, Population, InputLayer)):
+                # Create optimisers
+                vars = {n: get_object(o, Optimiser, "Optimiser",
+                                      default_optimisers)
+                        for n, o in vars.items()}
+                
+                # If key is InputLayer, de-sugar to population
+                if isinstance(k, InputLayer):
+                    self.optimisers[k.population()] = vars
+                # Otherwise, use key directly
+                else:
+                    self.optimisers[k] = vars
+            # Otherwise, if it's a layer, variable might be related
+            # to connection OR population contained within layer
+            elif isinstance(k, Layer):
+                # Split variable dictionary into connection and
+                # population variables and create optimisers
+                con_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()
+                            if n == "weight" or n == "delay"}
+                pop_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()
+                            if n != "weight" and n != "delay"}
+
+                # If any of either type of variable exist, add to
+                # dictionary with appropriately de-sugared key
+                if len(con_vars) > 0:
+                    self.optimisers[k.connection()] = con_vars
+                if len(pop_vars) > 0:
+                    self.optimisers[k.population()] = pop_vars
+    
+            # Otherwise, if key isn't one of the shortcut strings
+            # which have already been processed, give error
+            elif k != "all_connections":
+                raise RuntimeError(f"Invalid key '{k}' used in 'optimisers' "
+                                   f"dictionary. Valid keys are Connection, "
+                                   f"Population, InputLayer or Layer objects "
+                                   f"Or strings such as 'all_connections'")
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -571,82 +639,19 @@ class EventPropCompiler(Compiler):
 
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
-        # Build list of output populations
-        readouts = [p for p in network.populations
-                    if p.neuron.readout is not None]
-        
         # Get base dictionary of optimiser. If none is provided, default
         # to training all weights using the adam optimiser with default params
-        base_optimisers = kwargs.get("optimisers", 
-                                     {"all_connections": {"weight": "adam"}})
+        optimisers = kwargs.get("optimisers", 
+                                {"all_connections": {"weight": "adam"}})
 
         # Check dictionary has been provided
-        if not isinstance(base_optimisers, Mapping):
+        if not isinstance(optimisers, Mapping):
             raise RuntimeError("optimisers should be "
                                "specified as a dictionary")
 
-        # If default optimiser settings for all connections has been provided
-        optimisers = {}
-        if "all_connections" in base_optimisers:
-            # Loop through all connections
-            vars = base_optimisers["all_connections"]
-            for conn in network.connections:
-                # If connectivity is trainable, create 
-                # optimisers for specified variables
-                connect_snippet = conn.connectivity.get_snippet(
-                    conn, self.supported_matrix_type)
-                if connect_snippet.trainable:
-                    optimisers[conn] = {n: get_object(o, Optimiser, 
-                                                      "Optimiser",
-                                                      default_optimisers)
-                                        for n, o in vars.items()}
 
-        # Loop through optimisers to build pre-processed dictionary
-        # **NOTE** these will override any optimiser configured with shortcuts
-        for k, vars in base_optimisers.items():
-            # If key is a Connection, Population or InputLayer,
-            # what variables relate to is unambiguous
-            if isinstance(k, (Connection, Population, InputLayer)):
-                # Create optimisers
-                vars = {n: get_object(o, Optimiser, "Optimiser",
-                                      default_optimisers)
-                        for n, o in vars.items()}
-                
-                # If key is InputLayer, de-sugar to population
-                if isinstance(k, InputLayer):
-                    optimisers[k.population()] = vars
-                # Otherwise, use key directly
-                else:
-                    optimisers[k] = vars
-            # Otherwise, if it's a layer, variable might be related
-            # to connection OR population contained within layer
-            elif isinstance(k, Layer):
-                # Split variable dictionary into connection and
-                # population variables and create optimisers
-                con_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
-                            for n, o in vars.items()
-                            if n == "weight" or n == "delay"}
-                pop_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
-                            for n, o in vars.items()
-                            if n != "weight" and n != "delay"}
-
-                # If any of either type of variable exist, add to
-                # dictionary with appropriately de-sugared key
-                if len(con_vars) > 0:
-                    optimisers[k.connection()] = con_vars
-                if len(pop_vars) > 0:
-                    optimisers[k.population()] = pop_vars
-            # Otherwise, if key isn't one of the shortcut strings
-            # which have already been processed, give error
-            elif k != "all_connections":
-                raise RuntimeError(f"Invalid key '{k}' used in 'optimisers' "
-                                   f"dictionary. Valid keys are Connection, "
-                                   f"Population, InputLayer or Layer objects "
-                                   f"Or strings such as 'all_connections'")
-
-        return CompileState(self.losses, readouts, optimisers,
+        return CompileState(network, self.losses, optimisers,
+                            self.supported_matrix_type, 
                             genn_model.backend_name)
 
     def apply_delay(self, genn_pop, conn: Connection,
