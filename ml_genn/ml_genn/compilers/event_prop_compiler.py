@@ -1039,18 +1039,6 @@ class EventPropCompiler(Compiler):
                     # Add custom update to list of optimisers
                     optimisers.append((deepcopy(o), cu_param))
 
-                    # Add gradient to list of gradient vars to zero
-                    # JAMIE: is this necessary or am I duplicating reset_vars
-                    #gradient_vars.append((f"{p}Gradient", "scalar", 0.0))
-                # Create reset model for gradient variables
-                #assert len(gradient_vars) > 0
-                #zero_grad_model = create_reset_custom_update(
-                #    gradient_vars,
-                #    lambda name: create_var_ref(genn_pop, name))
-
-                # Add custom update
-                #self.add_custom_update(genn_model, zero_grad_model,
-                #                       "ZeroGradient", f"CUZeroPopGradient{i}")
                 i = i+1
 
         # Add per-batch softmax custom updates for each population that requires them
