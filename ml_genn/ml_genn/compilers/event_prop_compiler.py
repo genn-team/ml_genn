@@ -9,8 +9,7 @@ from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
-from .. import (AllConnections, AllPopulations, Connection, 
-                InputLayer, Layer, Population, Network)
+from .. import Connection, InputLayer, Layer, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
                          CustomUpdateOnTimestepEnd)
@@ -270,7 +269,6 @@ class CompileState:
         self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
         self.backend_name = backend_name
-        self._optimiser_connections = []
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
         self.checkpoint_connection_vars = []
@@ -282,9 +280,6 @@ class CompileState:
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
         self.optimisers = optimisers
-
-    def add_optimiser_connection(self, conn, weight: bool, delay: bool):
-        self._optimiser_connections.append((conn, weight, delay))
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -361,10 +356,6 @@ class CompileState:
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetSynapse{i}")
-    
-    @property
-    def optimiser_connections(self):
-        return self._optimiser_connections
 
     @property
     def is_reset_custom_update_required(self):
@@ -480,9 +471,6 @@ class EventPropCompiler(Compiler):
         losses:                     Either a dictionary mapping loss functions
                                     to output populations or a single loss
                                     function to apply to all outputs
-        optimiser:                  global optimiser to be used for learnable
-                                    parameters - only used if not overriden
-                                    during compile()
         reg_lambda:                 Regularisation strength
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
@@ -540,6 +528,10 @@ class EventPropCompiler(Compiler):
                                                 kernel_profiling,
                                                 communicator,
                                                 **genn_kwargs)
+        if "optimiser" in genn_kwargs:
+            warn("The 'param_names' parameter has been renamed to 'params' "
+                "and will be removed in future", FutureWarning)
+    
         self.example_timesteps = example_timesteps
         self.losses = losses
         self.reg_lambda = reg_lambda
@@ -550,9 +542,7 @@ class EventPropCompiler(Compiler):
         self.per_timestep_loss = per_timestep_loss
         self.ttfs_alpha = ttfs_alpha
         self.softmax_temperature = softmax_temperature
-        self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
-                                     default_optimisers)
-
+        
         # If legacy upper and lower regularisation strength is specified
         reg_lambda_upper = genn_kwargs.get("reg_lambda_upper")
         reg_lambda_lower = genn_kwargs.get("reg_lambda_lower")
@@ -576,61 +566,75 @@ class EventPropCompiler(Compiler):
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
         
-        # use explicit dictionary of optimisers if provided
-        if "optimisers" in kwargs:
-            if not isinstance(kwargs["optimisers"], Mapping):
-                raise RuntimeError("Optimisers should be "
-                                   "specified as a dictionary")
+        # Get base dictionary of optimiser. If none is provided, default
+        # to training all weights using the adam optimiser with default params
+        base_optimisers = kwargs.get("optimisers", 
+                                     {"all_connections": {"weight", "adam"}})
 
-            # Loop through optimisers to build pre-processed dictionary
-            optimisers = {}
-            for k, vars in kwargs["optimisers"].items():
-                # If key is a Connection, Population or InputLayer,
-                # what variables relate to is unambiguous
-                if isinstance(k, (Connection, Population, InputLayer)):
-                    # Create optimisers
-                    vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
-                            for n, o in vars.items()}
-                    
-                    # If key is InputLayer, de-sugar to population
-                    if isinstance(k, InputLayer):
-                        optimisers[k.population()] = vars
-                    # Otherwise, use key directly
-                    else:
-                        optimisers[k] = vars
-                # Otherwise, if it's a layer, variable might be related
-                # to connection OR population contained within layer
-                elif isinstance(k, Layer):
-                    # Split variable dictionary into connection and
-                    # population variables and create optimisers
-                    con_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                              default_optimisers)
-                                for n, o in vars.items()
-                                if n == "weight" or n == "delay"}
-                    pop_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                              default_optimisers)
-                                for n, o in vars.items()
-                                if n != "weight" and n != "delay"}
+        # Check dictionary has been provided
+        if not isinstance(base_optimisers, Mapping):
+            raise RuntimeError("optimisers should be "
+                               "specified as a dictionary")
 
-                    # If any of either type of variable exist, add to
-                    # dictionary with appropriately de-sugared key
-                    if len(con_vars) > 0:
-                        optimisers[k.connection()] = con_vars
-                    if len(pop_vars) > 0:
-                        optimisers[k.population()] = pop_vars
-                # **TODO** sentinel
-                else:
-                    raise RuntimeError("Optimisers dictionary "
-                                       "specified as a dictionary")
-        else:   # learn weights with compiler's default optimiser
-            optimisers = {}
+        # If default optimiser settings for all connections has been provided
+        optimisers = {}
+        if "all_connections" in base_optimisers:
+            # Loop through all connections
+            vars = base_optimisers["all_connections"]
             for conn in network.connections:
+                # If connectivity is trainable, create 
+                # optimisers for specified variables
                 connect_snippet = conn.connectivity.get_snippet(
                     conn, self.supported_matrix_type)
                 if connect_snippet.trainable:
-                    optim[conn] = {"weight": self._optimiser}
+                    optimisers[conn] = {n: get_object(o, Optimiser, 
+                                                      "Optimiser",
+                                                      default_optimisers)
+                                        for n, o in vars.items()}
 
+        # Loop through optimisers to build pre-processed dictionary
+        # **NOTE** these will override any optimiser configured with shortcuts
+        for k, vars in base_optimisers.items():
+            # If key is a Connection, Population or InputLayer,
+            # what variables relate to is unambiguous
+            if isinstance(k, (Connection, Population, InputLayer)):
+                # Create optimisers
+                vars = {n: get_object(o, Optimiser, "Optimiser",
+                                      default_optimisers)
+                        for n, o in vars.items()}
+                
+                # If key is InputLayer, de-sugar to population
+                if isinstance(k, InputLayer):
+                    optimisers[k.population()] = vars
+                # Otherwise, use key directly
+                else:
+                    optimisers[k] = vars
+            # Otherwise, if it's a layer, variable might be related
+            # to connection OR population contained within layer
+            elif isinstance(k, Layer):
+                # Split variable dictionary into connection and
+                # population variables and create optimisers
+                con_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()
+                            if n == "weight" or n == "delay"}
+                pop_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()
+                            if n != "weight" and n != "delay"}
+
+                # If any of either type of variable exist, add to
+                # dictionary with appropriately de-sugared key
+                if len(con_vars) > 0:
+                    optimisers[k.connection()] = con_vars
+                if len(pop_vars) > 0:
+                    optimisers[k.population()] = pop_vars
+            # Otherwise, if key isn't one of the shortcut strings
+            # which have already been processed, give error
+            elif k != "all_connections":
+                raise RuntimeError("Optimisers dictionary "
+                                   "specified as a dictionary")
+        print(optimisers)
         return CompileState(self.losses, readouts, optimisers,
                             genn_model.backend_name)
 
