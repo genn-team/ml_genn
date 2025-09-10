@@ -271,8 +271,6 @@ class CompileState:
         self.backend_name = backend_name
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
-        self.checkpoint_connection_vars = []
-        self.checkpoint_population_vars = []
         self.spike_count_populations = []
         self.batch_softmax_populations = []
         self.timestep_softmax_populations = []
@@ -954,9 +952,6 @@ class EventPropCompiler(Compiler):
             # Add weight gradient
             genn_model.add_var("weightGradient", "scalar", 0.0)
 
-            # Add weights to list of checkpoint vars
-            compile_state.checkpoint_connection_vars.append((conn, "weight"))
-
             # If connection is delayed, add delay index calculation
             if has_learnable_delay:
                 genn_model.append_pre_event_syn_code(
@@ -999,10 +994,6 @@ class EventPropCompiler(Compiler):
                 # Add delay gradient
                 genn_model.add_var("delayGradient", "scalar", 0.0)
 
-                # Add delays to list of checkpoint vars
-                compile_state.checkpoint_connection_vars.append(
-                    (conn, "delay"))
-
                 # Add delay calculation
                 logger.debug(f"\tDelay gradient update: {dx_dt_diff_sum}")
                 genn_model.append_pre_event_syn_code(
@@ -1032,45 +1023,51 @@ class EventPropCompiler(Compiler):
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"
 
-        # Loop through connections that require optimisers
+        # Loop through connections and populations that require optimisers
         optimisers = []
+        checkpoint_connection_vars = []
+        checkpoint_population_vars = []
         need_zero_gradient_update_group = False
         i = 0
-        for c, optim in compile_state.optimisers.items():
-            if c in connection_populations:
-                genn_pop = connection_populations[c]
-            
+        for k, vars in compile_state.optimisers.items():
+            # If key is a connection
+            if k in connection_populations:
+                # If weight optimisation is required
+                genn_pop = connection_populations[k]
                 gradient_vars = []
-                for var, o in optim.items():
-                    # If weight optimisation is required
-                    if var == "weight":
-                        # Create weight optimiser custom update
-                        # TODO: Should this be more general for any var in wum?
-                        cu_weight = self._create_optimiser_custom_update(
-                            f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
-                            create_wu_var_ref(genn_pop, "weightGradient"), 
-                            o, genn_model)
-                
-                        # Add custom update to list of optimisers
-                        optimisers.append((deepcopy(o), cu_weight))
-
-                        # Add gradient to list of gradient vars to zero
-                        gradient_vars.append(("weightGradient", "scalar", 0.0))
+                if "weight" in vars:
+                    # Create weight optimiser custom update
+                    cu_weight = self._create_optimiser_custom_update(
+                        f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
+                        create_wu_var_ref(genn_pop, "weightGradient"), 
+                        vars["weight"], genn_model)
             
-                    # If delay optimiser is required
-                    if var == "delay":
-                        # Create delay optimiser custom update
-                        cu_delay = self._create_optimiser_custom_update(
-                            f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
-                            create_wu_var_ref(genn_pop, "delayGradient"),
-                            o, genn_model,
-                            (0.0, c.max_delay_steps))
-
-                        # Add custom update to list of optimisers
-                        optimisers.append((deepcopy(o), cu_delay))
+                    # Add custom update to list of optimisers
+                    optimisers.append((deepcopy(vars["weight"]), cu_weight))
+                    
+                    # Add variable to list of those to checkpoint
+                    checkpoint_connection_vars.append((k, "weight"))
+                    
+                    # Add gradient to list of gradient vars to zero
+                    gradient_vars.append(("weightGradient", "scalar", 0.0))
                 
-                        # Add gradient to list of gradient vars to zero
-                        gradient_vars.append(("delayGradient", "scalar", 0.0))
+                # If delay optimiser is required
+                if "delay" in vars:
+                    # Create delay optimiser custom update
+                    cu_delay = self._create_optimiser_custom_update(
+                        f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
+                        create_wu_var_ref(genn_pop, "delayGradient"),
+                        vars["delay"], genn_model,
+                        (0.0, c.max_delay_steps))
+
+                    # Add custom update to list of optimisers
+                    optimisers.append((deepcopy(vars["delay"]), cu_delay))
+
+                    # Add variable to list of those to checkpoint
+                    checkpoint_connection_vars.append((k, "delay"))
+
+                    # Add gradient to list of gradient vars to zero
+                    gradient_vars.append(("delayGradient", "scalar", 0.0))
 
                 # Create reset model for gradient variables
                 assert len(gradient_vars) > 0
@@ -1082,24 +1079,24 @@ class EventPropCompiler(Compiler):
                 self.add_custom_update(genn_model, zero_grad_model,
                                        "ZeroGradient", f"CUZeroConnGradient{i}")
                 need_zero_gradient_update_group = True
-                i = i+1
-
-        # Loop through populations that require optimisers
-        i = 0
-        for c, optim in compile_state.optimisers.items():
-            if c in neuron_populations:
-                genn_pop = neuron_populations[c]
-                for p, o in optim.items():
+                i += 1
+            # Otherwise if key is a population
+            elif k in neuron_populations:
+                genn_pop = neuron_populations[k]
+                for n, o in vars.items():
                     # Create parameter optimiser custom update
                     cu_param = self._create_optimiser_custom_update(
-                        f"{p}{i}", create_var_ref(genn_pop, p),
-                            create_var_ref(genn_pop, f"{p}Gradient"),
+                        f"{n}{i}", create_var_ref(genn_pop, n),
+                            create_var_ref(genn_pop, f"{n}Gradient"),
                             o, genn_model)
 
                     # Add custom update to list of optimisers
                     optimisers.append((deepcopy(o), cu_param))
+                    checkpoint_population_vars.append((k, n))
 
-                i = i+1
+                i += 1
+            else:
+                assert False
 
         # Add per-batch softmax custom updates for each population that requires them
         for p, i, o in compile_state.batch_softmax_populations:
@@ -1192,8 +1189,7 @@ class EventPropCompiler(Compiler):
             self.communicator, compile_state.losses,
             self.example_timesteps, base_train_callbacks,
             base_validate_callbacks, optimisers,
-            compile_state.checkpoint_connection_vars,
-            compile_state.checkpoint_population_vars, True)
+            checkpoint_connection_vars, checkpoint_population_vars, True)
 
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
