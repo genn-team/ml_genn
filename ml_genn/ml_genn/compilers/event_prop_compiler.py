@@ -577,7 +577,7 @@ class EventPropCompiler(Compiler):
         compile_state = CompileState(self.losses, readouts,
                             genn_model.backend_name)
         # use explicit dictionary of optimisers if provided
-        if "optimisers" in kwargs.keys():
+        if "optimisers" in kwargs:
             compile_state.optimisers = kwargs["optimisers"]
         else:   # learn weights with compiler's default optimiser
             optim = {}
