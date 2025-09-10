@@ -1457,8 +1457,7 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
-            learn_params= [] if pop not in compile_state.optimisers \
-                else compile_state.optimisers[pop]
+            learn_params = compile_state.optimisers.get(pop, {})
             dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
                 self._build_adjoint_system(model, learn_params, False, self.reg_lambda != 0.0)
 
