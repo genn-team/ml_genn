@@ -50,10 +50,9 @@ max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 optimiser=Adam(0.003, 0.9, 0.99), batch_size=BATCH_SIZE,
-                                 softmax_temperature=0.5, ttfs_alpha=0.1, dt=DT,
-                                 kernel_profiling=KERNEL_PROFILING)
-    compiled_net = compiler.compile(network)
+                                 batch_size=BATCH_SIZE, softmax_temperature=0.5, 
+                                 ttfs_alpha=0.1, dt=DT, kernel_profiling=KERNEL_PROFILING)
+    compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(0.003, 0.9, 0.99)}})
 
     with compiled_net:
         def alpha_schedule(epoch, alpha):

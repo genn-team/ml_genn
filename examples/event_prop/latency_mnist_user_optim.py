@@ -65,13 +65,11 @@ max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 optimiser=Adam(1e-2), batch_size=BATCH_SIZE, dt=DT,
+                                 batch_size=BATCH_SIZE, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
-    compiled_net = compiler.compile(network,optimisers={#hidden.connection(): {"weight": Adam(1e-2)},
-                                                        #                      "delay": Adam(1e-3)},
-                                                        #output.connection(): {"weight": Adam(1e-2)},
-                                                        hidden.population(): {"tau_mem": Adam(2e-3)}
-    })
+    compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": "adam"},
+                                                         hidden: {"tau_mem": Adam(2e-3)}})
+
 
     with compiled_net:
         visualise_examples = [0, 32, 64, 96]
