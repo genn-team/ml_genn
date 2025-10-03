@@ -14,8 +14,6 @@ from ml_genn.optimisers import Adam
 from time import perf_counter
 from ml_genn.utils.data import preprocess_spikes
 
-from ml_genn.compilers.event_prop_compiler import default_params
-
 NUM_INPUT = 20
 NUM_HIDDEN = 256
 NUM_OUTPUT = 3
@@ -74,13 +72,12 @@ in_spikes = preprocess_spikes(in_spike_times.flatten(), in_spike_ids, NUM_INPUT)
 in_spikes = [in_spikes] * NUM_TRIALS
 y_star = [y_star] * NUM_TRIALS
 
-network = Network(default_params)
+network = Network()
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=len(in_spike_ids)),
                                   NUM_INPUT, record_spikes=True)
-    hidden = Population(LeakyIntegrateFire(v_thresh=0.61, tau_mem=TAU_MEM,
-                                           tau_refrac=None),
+    hidden = Population(LeakyIntegrateFire(v_thresh=0.61, tau_mem=TAU_MEM),
                         NUM_HIDDEN, record_spikes=True)
     output = Population(LeakyIntegrate(tau_mem=TAU_MEM, readout="var"),
                         NUM_OUTPUT)
@@ -91,9 +88,8 @@ with network:
     Connection(hidden, output, Dense(Normal(sd=2.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
-                         optimiser=Adam(LR), reg_lambda_upper=1e-8, reg_lambda_lower=1e-8, 
-                                 reg_nu_upper=10, max_spikes=1500)
-compiled_net = compiler.compile(network)
+                             reg_lambda=1e-8, reg_nu_upper=10, max_spikes=1500)
+compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(LR)}})
 
 with compiled_net:
     def alpha_schedule(epoch, alpha):

@@ -3,13 +3,13 @@ import numpy as np
 import sympy
 
 from string import Template
-from typing import Iterator, Sequence, Union
+from typing import Iterator, Mapping, Sequence, Union
 from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
                     SynapseMatrixType, SynapseMatrixWeight)
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
-from .. import Connection, Population, Network
+from .. import Connection, InputLayer, Layer, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
                          CustomUpdateOnTimestepEnd)
@@ -34,6 +34,7 @@ from itertools import chain
 from warnings import warn
 from pygenn import (create_egp_ref, create_psm_var_ref,
                     create_var_ref, create_wu_var_ref)
+from pygenn._genn import WUVarReference
 from .compiler import (create_reset_custom_update, get_delay_type,
                        get_conn_max_delay)
 from ..utils.auto_tools import solve_ode
@@ -262,25 +263,89 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
         if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
             genn_model.add_param(n, "scalar", v)
 
+
 class CompileState:
-    def __init__(self, losses, readouts, backend_name):
-        self.losses = get_object_mapping(losses, readouts,
-                                         Loss, "Loss", default_losses)
+    def __init__(self, network: Network, losses, optimisers, 
+                 supported_matrix_type, backend_name):
         self.backend_name = backend_name
-        self._optimiser_connections = []
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
-        self.checkpoint_connection_vars = []
-        self.checkpoint_population_vars = []
         self.spike_count_populations = []
         self.batch_softmax_populations = []
         self.timestep_softmax_populations = []
         self.feedback_connections = []
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
+        self.optimisers = {}
 
-    def add_optimiser_connection(self, conn, weight: bool, delay: bool):
-        self._optimiser_connections.append((conn, weight, delay))
+        # Build list of output populations
+        readouts = [p for p in network.populations
+                    if p.neuron.readout is not None]
+
+        # From these, create losses
+        self.losses = get_object_mapping(losses, readouts,
+                                         Loss, "Loss", default_losses)
+
+        # If default optimiser settings for all connections has been provided
+        if "all_connections" in optimisers:
+            # Loop through all connections
+            vars = optimisers["all_connections"]
+            for conn in network.connections:
+                # If connectivity is trainable, create 
+                # optimisers for specified variables
+                connect_snippet = conn.connectivity.get_snippet(
+                    conn, supported_matrix_type)
+                if connect_snippet.trainable:
+                    self.optimisers[conn] = {n: get_object(o, Optimiser, 
+                                                           "Optimiser",
+                                                           default_optimisers)
+                                             for n, o in vars.items()}
+
+        # Loop through optimisers to build pre-processed dictionary
+        # **NOTE** these will override any optimiser configured with shortcuts
+        for k, vars in optimisers.items():
+            # If key is a Connection, Population or InputLayer,
+            # what variables relate to is unambiguous
+            if isinstance(k, (Connection, Population, InputLayer)):
+                # Create optimisers
+                vars = {n: get_object(o, Optimiser, "Optimiser",
+                                      default_optimisers)
+                        for n, o in vars.items()}
+                
+                # If key is InputLayer, de-sugar to population
+                if isinstance(k, InputLayer):
+                    self.optimisers[k.population()] = vars
+                # Otherwise, use key directly
+                else:
+                    self.optimisers[k] = vars
+            # Otherwise, if it's a layer, variable might be related
+            # to connection OR population contained within layer
+            elif isinstance(k, Layer):
+                # Split variable dictionary into connection and
+                # population variables and create optimisers
+                con_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()
+                            if n == "weight" or n == "delay"}
+                pop_vars = {n: get_object(o, Optimiser, "Optimiser",
+                                          default_optimisers)
+                            for n, o in vars.items()
+                            if n != "weight" and n != "delay"}
+
+                # If any of either type of variable exist, add to
+                # dictionary with appropriately de-sugared key
+                if len(con_vars) > 0:
+                    self.optimisers[k.connection()] = con_vars
+                if len(pop_vars) > 0:
+                    self.optimisers[k.population()] = pop_vars
+    
+            # Otherwise, if key isn't one of the shortcut strings
+            # which have already been processed, give error
+            elif k != "all_connections":
+                raise RuntimeError(f"Invalid key '{k}' used in 'optimisers' "
+                                   f"dictionary. Valid keys are Connection, "
+                                   f"Population, InputLayer or Layer objects "
+                                   f"Or strings such as 'all_connections'")
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -357,10 +422,6 @@ class CompileState:
             # Add custom update
             compiler.add_custom_update(genn_model, model, 
                                        "Reset", f"CUResetSynapse{i}")
-    
-    @property
-    def optimiser_connections(self):
-        return self._optimiser_connections
 
     @property
     def is_reset_custom_update_required(self):
@@ -476,7 +537,6 @@ class EventPropCompiler(Compiler):
         losses:                     Either a dictionary mapping loss functions
                                     to output populations or a single loss
                                     function to apply to all outputs
-        optimiser:                  Optimiser to use when applying weights
         reg_lambda:                 Regularisation strength
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
@@ -511,14 +571,10 @@ class EventPropCompiler(Compiler):
         communicator:               Communicator used for inter-process
                                     communications when training across
                                     multiple GPUs.
-        delay_optimiser:            Optimiser to use when applying delays. If 
-                                    None, ``optimiser`` will be used for delays
-        delay_learn_conns:          Connection for which delays should be 
-                                    learned as well as weight
         
     """
 
-    def __init__(self, example_timesteps: int, losses, optimiser="adam",
+    def __init__(self, example_timesteps: int, losses,
                  reg_lambda: float = 0.0, reg_nu_upper: float = 0.0,
                  grad_limit: float = 100.0,
                  max_spikes: int = 500, 
@@ -528,43 +584,31 @@ class EventPropCompiler(Compiler):
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
                  communicator: Communicator = None,
-                 delay_optimiser=None,
-                 delay_learn_conns: Sequence = [],
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
                                   SynapseMatrixType.DENSE,
                                   SynapseMatrixType.SPARSE]
-        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
-                                                batch_size, rng_seed,
-                                                kernel_profiling,
-                                                communicator,
-                                                **genn_kwargs)
-        self.example_timesteps = example_timesteps
-        self.losses = losses
-        self.reg_lambda = reg_lambda
-        self.reg_nu_upper = reg_nu_upper
-        self.grad_limit = grad_limit
-        self.max_spikes = max_spikes
-        self.strict_buffer_checking = strict_buffer_checking
-        self.per_timestep_loss = per_timestep_loss
-        self.ttfs_alpha = ttfs_alpha
-        self.softmax_temperature = softmax_temperature
-        self._optimiser = get_object(optimiser, Optimiser, "Optimiser",
-                                     default_optimisers)
-        self._delay_optimiser = get_object(
-            optimiser if delay_optimiser is None else delay_optimiser, 
-            Optimiser, "Optimiser", default_optimisers)
-        self.delay_learn_conns = set(get_underlying_conn(c)
-                                     for c in delay_learn_conns)
-
-        # If legacy upper and lower regularisation strength is specified
-        reg_lambda_upper = genn_kwargs.get("reg_lambda_upper")
-        reg_lambda_lower = genn_kwargs.get("reg_lambda_lower")
+        
+        if "optimiser" in genn_kwargs or "delay_optimiser" in genn_kwargs:
+            raise RuntimeError("The 'optimiser' and 'delay_optimiser' "
+                               "parameters have been removed from the "
+                               "EventPropCompiler constructor. Optimisers "
+                               "are now specified by passing a 'optimisers' "
+                               "keyword argument to the ``compile`` method "
+                               "e.g. optimisers={\"all_connections\": "
+                               "{\"weight\": \"adam\"} to optimise all "
+                               "weights with the adam optimiser")
+        
+        # If legacy upper and lower regularisation strength are specified
+        # **NOTE** needs to be before superclass call so these get removed 
+        # from genn_kwargs as unknown arguments now causes an error
+        reg_lambda_upper = genn_kwargs.pop("reg_lambda_upper", None)
+        reg_lambda_lower = genn_kwargs.pop("reg_lambda_lower", None)
         if reg_lambda_upper is not None or reg_lambda_lower is not None:
             # If they match, use as regularisation strength
             if reg_lambda_upper == reg_lambda_lower:
-                self.reg_lambda = reg_lambda_upper
+                reg_lambda = reg_lambda_upper
                 warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
                      "arguments for EventPropCompiler are no longer "
                      "supported, please use 'reg_lambda'", FutureWarning)
@@ -575,13 +619,39 @@ class EventPropCompiler(Compiler):
                                      "EventPropCompiler are no longer "
                                      "supported, please use 'reg_lambda'")
 
+        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
+                                                batch_size, rng_seed,
+                                                kernel_profiling,
+                                                communicator,
+                                                **genn_kwargs)
+        
+        self.example_timesteps = example_timesteps
+        self.losses = losses
+        self.reg_lambda = reg_lambda
+        self.reg_nu_upper = reg_nu_upper
+        self.grad_limit = grad_limit
+        self.max_spikes = max_spikes
+        self.strict_buffer_checking = strict_buffer_checking
+        self.per_timestep_loss = per_timestep_loss
+        self.ttfs_alpha = ttfs_alpha
+        self.softmax_temperature = softmax_temperature
+        
+
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
-        # Build list of output populations
-        readouts = [p for p in network.populations
-                    if p.neuron.readout is not None]
+        # Get base dictionary of optimiser. If none is provided, default
+        # to training all weights using the adam optimiser with default params
+        optimisers = kwargs.get("optimisers", 
+                                {"all_connections": {"weight": "adam"}})
 
-        return CompileState(self.losses, readouts,
+        # Check dictionary has been provided
+        if not isinstance(optimisers, Mapping):
+            raise RuntimeError("optimisers should be "
+                               "specified as a dictionary")
+
+
+        return CompileState(network, self.losses, optimisers,
+                            self.supported_matrix_type, 
                             genn_model.backend_name)
 
     def apply_delay(self, genn_pop, conn: Connection,
@@ -702,18 +772,14 @@ class EventPropCompiler(Compiler):
         # Does this connection have a delay?
         has_delay = (not is_value_constant(connect_snippet.delay)
                      or connect_snippet.delay > 0)
-        
         # Does this connection have learnable delays
-        has_learnable_delay = conn in self.delay_learn_conns
+        has_learnable_delay = (conn in compile_state.optimisers
+                               and "delay" in compile_state.optimisers[conn])
 
         # Get name of variable containing integer delay for indexing
         int_delay_name = "delayInt" if has_learnable_delay else "delay"
 
-        # Mark which sorts of optimiser connection will require
-        compile_state.add_optimiser_connection(conn, connect_snippet.trainable,
-                                               has_learnable_delay)
-
-        # Get synapse mdeol
+        # Get synapse model
         synapse_model = conn.synapse.get_model(conn, self.dt, self.batch_size)
         assert isinstance(synapse_model, AutoSynapseModel)
     
@@ -749,7 +815,7 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\tSynapse inject_plusm: {inject_plus_m_expr}")
         logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
         
-        # Get target neuron mdeol
+        # Get target neuron model
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
                                                     self.batch_size)
@@ -891,9 +957,6 @@ class EventPropCompiler(Compiler):
             # Add weight gradient
             genn_model.add_var("weightGradient", "scalar", 0.0)
 
-            # Add weights to list of checkpoint vars
-            compile_state.checkpoint_connection_vars.append((conn, "weight"))
-
             # If connection is delayed, add delay index calculation
             if has_learnable_delay:
                 genn_model.append_pre_event_syn_code(
@@ -936,10 +999,6 @@ class EventPropCompiler(Compiler):
                 # Add delay gradient
                 genn_model.add_var("delayGradient", "scalar", 0.0)
 
-                # Add delays to list of checkpoint vars
-                compile_state.checkpoint_connection_vars.append(
-                    (conn, "delay"))
-
                 # Add delay calculation
                 logger.debug(f"\tDelay gradient update: {dx_dt_diff_sum}")
                 genn_model.append_pre_event_syn_code(
@@ -969,51 +1028,80 @@ class EventPropCompiler(Compiler):
         for c in compile_state.feedback_connections:
             connection_populations[c].pre_target_var = "RevISyn"
 
-        # Loop through connections that require optimisers
-        weight_optimiser_cus = []
-        delay_optimiser_cus = []
-        for i, (c, w, d) in enumerate(compile_state.optimiser_connections):
-            genn_pop = connection_populations[c]
+        # Loop through connections and populations that require optimisers
+        optimisers = []
+        checkpoint_connection_vars = []
+        checkpoint_population_vars = []
+        need_zero_gradient_update_group = False
+        i = 0
+        for k, vars in compile_state.optimisers.items():
+            # If key is a connection
+            if k in connection_populations:
+                # If weight optimisation is required
+                genn_pop = connection_populations[k]
+                gradient_vars = []
+                if "weight" in vars:
+                    # Create weight optimiser custom update
+                    cu_weight = self._create_optimiser_custom_update(
+                        f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
+                        create_wu_var_ref(genn_pop, "weightGradient"), 
+                        vars["weight"], genn_model)
             
-            # If weight optimisation is required
-            gradient_vars = []
-            if w:
-                # Create weight optimiser custom update
-                cu_weight = self._create_optimiser_custom_update(
-                    f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
-                    create_wu_var_ref(genn_pop, "weightGradient"), 
-                    self._optimiser, genn_model)
+                    # Add custom update to list of optimisers
+                    optimisers.append((deepcopy(vars["weight"]), cu_weight))
+                    
+                    # Add variable to list of those to checkpoint
+                    checkpoint_connection_vars.append((k, "weight"))
+                    
+                    # Add gradient to list of gradient vars to zero
+                    gradient_vars.append(("weightGradient", "scalar", 0.0))
                 
-                # Add custom update to list of optimisers
-                weight_optimiser_cus.append(cu_weight)
+                # If delay optimiser is required
+                if "delay" in vars:
+                    # Create delay optimiser custom update
+                    cu_delay = self._create_optimiser_custom_update(
+                        f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
+                        create_wu_var_ref(genn_pop, "delayGradient"),
+                        vars["delay"], genn_model,
+                        (0.0, c.max_delay_steps))
 
-                # Add gradient to list of gradient vars to zero
-                gradient_vars.append(("weightGradient", "scalar", 0.0))
-            
-            # If delay optimiser is required
-            if d:
-                # Create delay optimiser custom update
-                cu_delay = self._create_optimiser_custom_update(
-                    f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
-                    create_wu_var_ref(genn_pop, "delayGradient"),
-                    self._delay_optimiser, genn_model,
-                    (0.0, c.max_delay_steps))
+                    # Add custom update to list of optimisers
+                    optimisers.append((deepcopy(vars["delay"]), cu_delay))
 
-                # Add custom update to list of optimisers
-                delay_optimiser_cus.append(cu_delay)
-                
-                # Add gradient to list of gradient vars to zero
-                gradient_vars.append(("delayGradient", "scalar", 0.0))
+                    # Add variable to list of those to checkpoint
+                    checkpoint_connection_vars.append((k, "delay"))
 
-            # Create reset model for gradient variables
-            assert len(gradient_vars) > 0
-            zero_grad_model = create_reset_custom_update(
-                gradient_vars,
-                lambda name: create_wu_var_ref(genn_pop, name))
+                    # Add gradient to list of gradient vars to zero
+                    gradient_vars.append(("delayGradient", "scalar", 0.0))
 
-            # Add custom update
-            self.add_custom_update(genn_model, zero_grad_model, 
-                                   "ZeroGradient", f"CUZeroConnGradient{i}")
+                # Create reset model for gradient variables
+                assert len(gradient_vars) > 0
+                zero_grad_model = create_reset_custom_update(
+                    gradient_vars,
+                    lambda name: create_wu_var_ref(genn_pop, name))
+
+                # Add custom update
+                self.add_custom_update(genn_model, zero_grad_model,
+                                       "ZeroGradient", f"CUZeroConnGradient{i}")
+                need_zero_gradient_update_group = True
+                i += 1
+            # Otherwise if key is a population
+            elif k in neuron_populations:
+                genn_pop = neuron_populations[k]
+                for n, o in vars.items():
+                    # Create parameter optimiser custom update
+                    cu_param = self._create_optimiser_custom_update(
+                        f"{n}{i}", create_var_ref(genn_pop, n),
+                            create_var_ref(genn_pop, f"{n}Gradient"),
+                            o, genn_model)
+
+                    # Add custom update to list of optimisers
+                    optimisers.append((deepcopy(o), cu_param))
+                    checkpoint_population_vars.append((k, n))
+
+                i += 1
+            else:
+                assert False
 
         # Add per-batch softmax custom updates for each population that requires them
         for p, i, o in compile_state.batch_softmax_populations:
@@ -1054,14 +1142,15 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
-        if len(weight_optimiser_cus) > 0 or len(delay_optimiser_cus) > 0:
+        if len(optimisers) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
                     CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
             base_train_callbacks.append(
                 CustomUpdateOnBatchEndNotFirst("GradientLearn"))
-            base_train_callbacks.append(
-                CustomUpdateOnFirstBatchEnd("ZeroGradient"))
+            if need_zero_gradient_update_group:
+                base_train_callbacks.append(
+                    CustomUpdateOnFirstBatchEnd("ZeroGradient"))
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
@@ -1100,20 +1189,12 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
 
-        # Build list of optimisers and their custom updates
-        optimisers = []
-        if len(weight_optimiser_cus) > 0:
-            optimisers.append((deepcopy(self._optimiser), weight_optimiser_cus))
-        if len(delay_optimiser_cus) > 0:
-            optimisers.append((deepcopy(self._delay_optimiser), delay_optimiser_cus))
-
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
             self.communicator, compile_state.losses,
             self.example_timesteps, base_train_callbacks,
             base_validate_callbacks, optimisers,
-            compile_state.checkpoint_connection_vars,
-            compile_state.checkpoint_population_vars, True)
+            checkpoint_connection_vars, checkpoint_population_vars, True)
 
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
@@ -1200,8 +1281,12 @@ class EventPropCompiler(Compiler):
 
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
-            reduced_gradient = create_wu_var_ref(genn_reduction,
-                                                 "ReducedGradient")
+            if isinstance(var_ref, WUVarReference):
+                reduced_gradient = create_wu_var_ref(genn_reduction,
+                                                     "ReducedGradient")
+            else:
+                reduced_gradient = create_var_ref(genn_reduction,
+                                                  "ReducedGradient")
             optimiser_model = optimiser.get_model(reduced_gradient, var_ref,
                                                   False, clamp_var)
         # Otherwise
@@ -1232,7 +1317,7 @@ class EventPropCompiler(Compiler):
                 genn_model, reduction_optimiser_model, 
                 "SpikeCountReduce", name)
     
-    def _build_adjoint_system(self, model: AutoNeuronModel,
+    def _build_adjoint_system(self, model: AutoNeuronModel, learn_params,
                               output: bool, regularise: bool):
         logger.debug("\tBuilding adjoint system for AutoNeuronModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
@@ -1254,8 +1339,19 @@ class EventPropCompiler(Compiler):
             o = _template_symbols(
                 o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
             dl_dt[_get_lmd_sym(sym)] = o
-            
+
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
+
+        # create expressions for learned neuron parameters
+        grad_terms = {}
+        for p in learn_params:
+            sym = sympy.Symbol(p)
+            o = - sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
+                    for sym2, expr2 in model.dx_dt.items())
+            # collect variables they might need to go into a ring buffer:
+            o = _template_symbols(
+                o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
+            grad_terms[sym] = o
 
         # Substitute jumps into ODEs to get post-jump dynamics "\dot{x}^+"
         dx_dt_plus_n = {}
@@ -1353,7 +1449,7 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\t\tSaved variables per timestep: {saved_vars_timestep}")
         logger.debug(f"\t\tSaved variables per spike: {saved_vars_spike}")
         
-        return dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike
+        return dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike
     
     def _build_in_hid_neuron_model(self, pop: Population,
                                    model: Union[AutoNeuronModel, NeuronModel],
@@ -1410,8 +1506,15 @@ class EventPropCompiler(Compiler):
                     "neurons defined in terms of AutoNeuronModel")
             
             # Build adjoint system from model
-            dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
-                self._build_adjoint_system(model, False, self.reg_lambda != 0.0)
+            learn_params = compile_state.optimisers.get(pop, {})
+            dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
+                self._build_adjoint_system(model, learn_params, False, self.reg_lambda != 0.0)
+
+            additional_reset_vars = []
+            # Add variables for parameter gradients
+            for p in learn_params:
+                genn_model.add_var(f"{p}Gradient", "scalar", 0.0)
+                genn_model.make_param_var(p)
 
             # Add EGPs for adjoint variable value limits (to avoid pathological large jumps)
             dynamics_code = ""
@@ -1452,7 +1555,6 @@ class EventPropCompiler(Compiler):
 
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
-            additional_reset_vars = []
             if self.reg_lambda != 0.0 and model.threshold != 0:
                 logger.debug("\tBuilding regulariser")
                 # Add state variables to hold spike count
@@ -1526,6 +1628,9 @@ class EventPropCompiler(Compiler):
 
             # Solve ODE and generate dynamics code
             dynamics_code += solve_ode(dl_dt, model.solver, model.sub_steps)
+            # Add gradient accumulation code
+            for p, expr in grad_terms.items():
+                dynamics_code += f"{p}Gradient += {sympy.ccode(expr)};\n"
             dynamics_code = Template(dynamics_code).substitute(
                 {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
@@ -1575,8 +1680,13 @@ class EventPropCompiler(Compiler):
             example_timesteps=self.example_timesteps)
 
         # Build adjoint system from model
-        dl_dt, adjoint_jumps, saved_vars_timestep, saved_vars_spike =\
-            self._build_adjoint_system(model, True, False)
+        learn_params = compile_state.optimisers.get(pop, {})
+        dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
+            self._build_adjoint_system(model, learn_params, True, False)
+
+        # Add variables for parameter gradients
+        for p in learn_params:
+            genn_model.add_var(f"{p}Gradient", "scalar", 0.0)
 
         # Add continous drive term to LambdaV
         dl_dt[_get_lmd_sym(model.output_var_name)] += sympy.Symbol("drive")
@@ -1594,6 +1704,9 @@ class EventPropCompiler(Compiler):
                                np.empty(timestep_ring_size, dtype=np.float32))
             dyn_ts_reset_needed = True
 
+        logger.debug(f"\tReset variables: {genn_model.reset_vars}")
+        compile_state.add_neuron_reset_vars(
+            pop, genn_model.reset_vars, False, dyn_ts_reset_needed)
         # add read and write pointer for timestep-wise ring buffers
         if dyn_ts_reset_needed:
             genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
@@ -1612,6 +1725,9 @@ class EventPropCompiler(Compiler):
 
         # Prepend continous adjoint system update
         dynamics_code = solve_ode(dl_dt, model.solver, model.sub_steps)
+        # Add gradient accumulation code
+        for p_grad, expr in grad_terms.items():
+            dynamics_code += f"{p_grad} += {sympy.ccode(expr)};\n"
         dynamics_code = Template(dynamics_code).substitute(
             {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
@@ -1794,6 +1910,7 @@ class EventPropCompiler(Compiler):
 
                         genn_model.prepend_sim_code(
                             f"""
+                            const scalar backT = {self.example_timesteps * self.dt} - t - dt;
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
                                 const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;

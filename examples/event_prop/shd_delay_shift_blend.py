@@ -15,7 +15,6 @@ from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
-from ml_genn.compilers.event_prop_compiler import default_params
 import copy
 
 NUM_HIDDEN = 256
@@ -153,8 +152,8 @@ for i in idx[7644:]:
 
     spikes_val.append(preprocess_tonic_spikes(delay(events), dataset.ordering,
                                               (dataset.sensor_size[0]*N_DELAY,
-                                              dataset.sensor_size[1],
-                                              dataset.sensor_size[2])))
+                                               dataset.sensor_size[1],
+                                               dataset.sensor_size[2])))
     labels_val.append(label)
 
 max_spikes = max(max_spikes, calc_max_spikes(spikes_val))
@@ -168,9 +167,9 @@ for i in range(len(dataset)):
     events, label = dataset[i]
     events = np.delete(events, np.where(events["t"] >= 1000000))
     spikes_test.append(preprocess_tonic_spikes(delay(events), dataset.ordering,
-                                            (dataset.sensor_size[0]*N_DELAY,
-                                            dataset.sensor_size[1],
-                                            dataset.sensor_size[2])))
+                                               (dataset.sensor_size[0]*N_DELAY,
+                                                dataset.sensor_size[1],
+                                                dataset.sensor_size[2])))
     labels_test.append(label)
 
 max_spikes = max(max_spikes, calc_max_spikes(spikes_test))
@@ -181,13 +180,12 @@ print(f"Max spikes {max_spikes}, latest spike time {latest_spike_time}")
 
 
 serialiser = Numpy("shd_augment_checkpoints")
-network = Network(default_params)
+network = Network()
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=BATCH_SIZE * max_spikes * N_DELAY),
                        num_input *  N_DELAY)
-    hidden = Population(LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                           tau_refrac=None),
+    hidden = Population(LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
                         NUM_HIDDEN, record_spikes=True)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="avg_var_exp_weight"),
                         num_output)
@@ -203,11 +201,9 @@ with network:
 max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 
 compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
-                                losses="sparse_categorical_crossentropy",
-                                reg_lambda_upper=5e-11, reg_lambda_lower=5e-11,
-                                reg_nu_upper=14, max_spikes=1500,
-                                optimiser=Adam(0.001 * 0.01), batch_size=BATCH_SIZE)
-compiled_net = compiler.compile(network)
+                             losses="sparse_categorical_crossentropy",
+                             reg_lambda=5e-11, reg_nu_upper=14, max_spikes=1500, batch_size=BATCH_SIZE)
+compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(0.001 * 0.01)}})
 best_acc, best_e = 0, 0
 with compiled_net:
     # Loop through epochs
