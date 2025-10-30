@@ -1,18 +1,16 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import mnist
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
-from ml_genn.callbacks import Checkpoint, SpikeRecorder, VarRecorder
+from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
-from ml_genn.connectivity import Conv2D, Dense, FixedProbability
+from ml_genn.connectivity import Conv2D, Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
-from itertools import chain, repeat
 from time import perf_counter
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 linear_latency_encode_data)
@@ -67,34 +65,11 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-        """
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser), 
-                     SpikeRecorder(input, "in_spikes", visualise_examples),
-                     SpikeRecorder(hidden1, "hid1_spikes", visualise_examples),
-                     SpikeRecorder(hidden2, "hid2_spikes", visualise_examples)]
-        """
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         
-        """
-        epoch_examples = list(chain.from_iterable(repeat(visualise_examples,
-                                                         NUM_EPOCHS)))
-        fig, axes = plt.subplots(3, len(epoch_examples), sharex="col", sharey="row")
-        axes[0, 0].set_ylabel("Input spikes")
-        axes[1, 0].set_ylabel("Hidden1 spikes")
-        axes[2, 0].set_ylabel("Hidden2 spikes")
-        
-        for j, e in enumerate(epoch_examples):
-            axes[0, j].set_title(f"Example {e}")
-            axes[0, j].scatter(cb_data["in_spikes"][0][j], cb_data["in_spikes"][1][j], s=2)
-            axes[1, j].scatter(cb_data["hid1_spikes"][0][j], cb_data["hid1_spikes"][1][j], s=2)
-            axes[2, j].scatter(cb_data["hid2_spikes"][0][j], cb_data["hid2_spikes"][1][j], s=2)
-           
-            axes[2, j].set_xlabel("Time [ms]")
-        plt.show()
-        """
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
