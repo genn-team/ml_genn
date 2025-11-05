@@ -27,6 +27,7 @@ DT = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
 
+mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 spikes = linear_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
@@ -37,19 +38,14 @@ network = SequentialNetwork(default_params)
 with network:
     # Populations
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
-                                  (28, 28, 1), name="input", record_spikes=True)
-    initial_hidden1_weight = Normal(sd=2.0)
-    hidden1 = Layer(Conv2D(initial_hidden1_weight, 16, 3, True),
+                                  (28, 28, 1), name="input")
+    initial_hidden1_weight = Normal(sd=5.0)
+    hidden1 = Layer(Conv2D(initial_hidden1_weight, 32, 4, True),
                     LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
                                        tau_refrac=None),
-                    synapse=Exponential(5.0), name="hidden1", record_spikes=True)
-    initial_hidden2_weight = Normal(sd=0.5)
-    hidden2 = Layer(Dense(initial_hidden2_weight), 
-                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0,
-                                       tau_refrac=None),
-                    NUM_HIDDEN, Exponential(5.0), name="hidden2", record_spikes=True)
+                    synapse=Exponential(5.0), name="hidden1")
     output = Layer(Dense(Normal(mean=0.2, sd=0.37)),
-                   LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
+                   LeakyIntegrate(tau_mem=20.0, readout="avg_var_exp_weight"),
                    NUM_OUTPUT, Exponential(5.0), name="output")
 
 max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
@@ -61,8 +57,6 @@ if TRAIN:
     compiled_net = compiler.compile(network)
 
     with compiled_net:
-        visualise_examples = [0, 32, 64, 96]
-        # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         metrics, cb_data  = compiled_net.train({input: spikes},
