@@ -4,6 +4,7 @@ import numpy as np
 
 from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
+from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
