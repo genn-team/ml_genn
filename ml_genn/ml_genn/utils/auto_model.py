@@ -17,28 +17,27 @@ class AutoModel:
                  var_vals: Optional[MutableMapping[str, Value]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1):
-        self.model = model
-
         self.param_vals = param_vals or {}
         self.var_vals = var_vals or {}
         self.solver = solver
         self.sub_steps = sub_steps
 
         # If model has any variables
-        if "vars" in self.model:
+        if "vars" in model:
             # Parse ODEs
             self.dx_dt =\
                 {sympy.Symbol(n): sympy.parse_expr(v[0])
-                 for n, v in self.model["vars"].items()
+                 for n, v in model["vars"].items()
                  if v[0] is not None}
             
             # Parse jumps
             self.jumps =\
                 {sympy.Symbol(n): sympy.parse_expr(v[1])
-                 for n, v in self.model["vars"].items()
+                 for n, v in model["vars"].items()
                  if v[1] is not None}
         else:
             self.dx_dt = {}
+            self.jumps = {}
 
     def add_var(self, name: str, dynamics: Optional[str], 
                 jump: Optional[str], value: Value = 0.0):
@@ -71,8 +70,8 @@ class AutoNeuronModel(AutoModel):
 
         self.output_var_name = output_var_name
         
-        if "threshold" in self.model and self.model["threshold"] is not None:
-            self.threshold = sympy.parse_expr(self.model["threshold"])
+        if "threshold" in model and model["threshold"] is not None:
+            self.threshold = sympy.parse_expr(model["threshold"])
         else:
             self.threshold = 0
 
@@ -84,6 +83,8 @@ class AutoNeuronModel(AutoModel):
 
     # **TODO** property
     def get_reset_code(self):
+        assert False
+        # **TODO** do from self.jumps
         jumps = [f"{n} = {v[1]};" for n, v in self.model["vars"].items()
                  if v[1] is not None and v[1] != n]
         return "\n".join(jumps)
@@ -107,8 +108,7 @@ class AutoSynapseModel(AutoModel):
         super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
 
         if "inject_current" in self.model:
-            self.inject_current = sympy.parse_expr(
-                self.model["inject_current"])
+            self.inject_current = sympy.parse_expr(model["inject_current"])
         else:
             raise RuntimeError("AutoSynapseModel requires an "
                                "'inject_current' expression.")
