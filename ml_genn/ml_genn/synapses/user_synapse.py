@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union, TYPE_CHECKING
+from typing import MutableMapping, Union, TYPE_CHECKING
 from .synapse import Synapse
 from ..utils.auto_model import AutoSynapseModel, Variables
 from ..utils.model import SynapseModel
 from ..utils.value import InitValue
 
 if TYPE_CHECKING:
-    from .. import Population
+    from .. import Connection
 
 from copy import copy
 
@@ -22,7 +22,7 @@ class UserSynapse(Synapse):
         var_vals:       Initial values for all state variables
     """
 
-    def __init__(self, vars: Variable, inject_current: str,
+    def __init__(self, vars: Variables, inject_current: str,
                  param_vals: MutableMapping[str, InitValue] = {},
                  var_vals: MutableMapping[str, InitValue] = {},
                  solver: str = "exponential_euler",

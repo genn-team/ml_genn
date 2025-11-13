@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union, TYPE_CHECKING
+from typing import MutableMapping, Optional, Union, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.auto_model import AutoNeuronModel, Variables
 from ..utils.model import NeuronModel
@@ -25,7 +25,7 @@ class UserNeuron(Neuron):
         readout:            Type of readout to attach to this neuron's output variable
     """
 
-    def __init__(self, vars: Variable, output_var_name: str,
+    def __init__(self, vars: Variables, output_var_name: str,
                  threshold: Optional[str] = None,
                  param_vals: MutableMapping[str, InitValue] = {},
                  var_vals: MutableMapping[str, InitValue] = {},
