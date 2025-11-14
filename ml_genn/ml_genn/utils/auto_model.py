@@ -1,12 +1,11 @@
 import numpy as np
 import sympy
 
+from collections import namedtuple
+from collections.abc import Mapping
 from typing import Any, MutableMapping, Optional, Tuple
-from .model import NeuronModel, SynapseModel
 from .value import Value
 
-from copy import deepcopy
-from itertools import chain
 from ..utils.value import get_auto_values
 
 Variables = MutableMapping[str, Tuple[Optional[str], Optional[str]]]
@@ -24,23 +23,36 @@ class AutoModel:
 
         # If model has any variables
         if "vars" in model:
+            # Vars can be specified as either dictionaries or tuples,
+            # Handle this and correct defaults be converting to a namedtuple
+            Var = namedtuple("Var", ["dynamics", "jump", "reset"],
+                             defaults=[None, None, True])
+            vars = {n: (Var(**v) if isinstance(v, MutableMapping)
+                        else Var(*v))
+                    for n, v in model["vars"].items()}
+
             # Parse ODEs
             self.dx_dt =\
                 {sympy.Symbol(n): sympy.parse_expr(v[0])
-                 for n, v in model["vars"].items()
-                 if v[0] is not None}
+                 for n, v in vars.items()
+                 if v.dynamics is not None}
             
             # Parse jumps
             self.jumps =\
                 {sympy.Symbol(n): sympy.parse_expr(v[1])
-                 for n, v in model["vars"].items()
-                 if v[1] is not None}
+                 for n, v in vars.items()
+                 if v.jump is not None}
+            
+            # Build set of variables which don't get reset
+            self.non_reset_vars = set(n for n, v in vars.items()
+                                      if not v.reset)
         else:
             self.dx_dt = {}
             self.jumps = {}
+            self.non_reset_vars = set()
 
-    def add_var(self, name: str, dynamics: Optional[str], 
-                jump: Optional[str], value: Value = 0.0):
+    def add_var(self, name: str, dynamics: Optional[str], jump: Optional[str],
+                value: Value = 0.0, reset: bool = True):
         sym = sympy.Symbol(name)
         if sym in self.dx_dt or sym in self.var_vals or sym in self.jumps:
             raise RuntimeError(f"AutoModel has existing variable: {name}")
@@ -53,6 +65,10 @@ class AutoModel:
 
         # Add value to dictionary
         self.var_vals[name] = value
+
+        # If variable doesn't get reset, add to set
+        if not reset:
+            self.non_reset_vars.add(name)
     
     def get_vars(self, var_type: str = "scalar"):
         return [(n, var_type) for n in self.var_vals.keys()]
@@ -75,18 +91,17 @@ class AutoNeuronModel(AutoModel):
         else:
             self.threshold = 0
 
-    # **TODO** property
-    def get_threshold_condition_code(self):
+    @property
+    def threshold_condition_code(self):
         return (f"({sympy.ccode(self.threshold)}) >= 0" 
                 if self.threshold != 0
                 else "")
 
-    # **TODO** property
-    def get_reset_code(self):
-        assert False
-        # **TODO** do from self.jumps
-        jumps = [f"{n} = {v[1]};" for n, v in self.model["vars"].items()
-                 if v[1] is not None and v[1] != n]
+    @property
+    def reset_code(self):
+        jumps = [f"{v.name} = {sympy.ccode(j)};" 
+                 for v, j in self.jumps.items()
+                 if j != v]
         return "\n".join(jumps)
     
     @staticmethod
@@ -107,7 +122,7 @@ class AutoSynapseModel(AutoModel):
                  sub_steps: int = 1):
         super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
 
-        if "inject_current" in self.model:
+        if "inject_current" in model:
             self.inject_current = sympy.parse_expr(model["inject_current"])
         else:
             raise RuntimeError("AutoSynapseModel requires an "
@@ -140,8 +155,8 @@ class AutoSynapseModel(AutoModel):
             self.var_vals = {n: v for n, v in self.var_vals.items()
                              if n != rep_sym.name}
 
-    # **TODO** property
-    def get_jump_code(self):
+    @property
+    def jump_code(self):
         # Generate C code for forward jumps, 
         in_syn_sym = sympy.Symbol("inSyn")
         w_sym = sympy.Symbol("weight")
@@ -156,8 +171,8 @@ class AutoSynapseModel(AutoModel):
             clines.append("inSyn = 0;")
         return "\n".join(clines)
 
-    # **TODO** property
-    def get_inject_current_code(self):
+    @property
+    def inject_current_code(self):
         return sympy.ccode(self.inject_current)
 
     @staticmethod
