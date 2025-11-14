@@ -90,25 +90,16 @@ logger = logging.getLogger(__name__)
 # Basic weight-update model for connections without delay
 weight_update_model = {
     "params": [("weight", "scalar")], 
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
     "pre_spike_syn_code": """
     addToPost(weight);
-    """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
     """}
 
 learnable_delay_weight_update_model = {
     "params": [("weight", "scalar"), ("delay", "scalar"),
                ("MaxDelay", "int")],
-    "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-                             
     "pre_spike_syn_code": """
     const int delayInt = max(0, min(MaxDelay, (int)round(delay)));
     addToPostDelay(weight, delayInt);
-    """,
-    "pre_event_threshold_condition_code": """
-    BackSpike_pre
     """}
 
 gradient_batch_reduce_model = {
@@ -198,14 +189,9 @@ neuron_reset_strict_check = """
 
 # Build basic weight-update model for connections with delay
 def _get_delay_weight_update_model(delay_type):
-    return {"params": [("delay", delay_type), ("weight", "scalar")],
-            "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-                             
+    return {"params": [("delay", delay_type), ("weight", "scalar")],                             
             "pre_spike_syn_code": """
             addToPostDelay(weight, delay);
-            """,
-            "pre_event_threshold_condition_code": """
-            BackSpike_pre
             """}
 
 def _template_symbol(expression, symbol: sympy.Symbol):
@@ -776,6 +762,10 @@ class EventPropCompiler(Compiler):
         has_learnable_delay = (conn in compile_state.optimisers
                                and "delay" in compile_state.optimisers[conn])
 
+        # Does this connection have learnable weights
+        has_learnable_weights = (conn in compile_state.optimisers
+                                 and "weight" in compile_state.optimisers[conn])
+
         # Get name of variable containing integer delay for indexing
         int_delay_name = "delayInt" if has_learnable_delay else "delay"
 
@@ -851,8 +841,7 @@ class EventPropCompiler(Compiler):
                 model=deepcopy(learnable_delay_weight_update_model),
                 param_vals= {"weight": connect_snippet.weight,
                              "delay": connect_snippet.delay,
-                             "MaxDelay": conn.max_delay_steps},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+                             "MaxDelay": conn.max_delay_steps})
         # Otherwise, if connection has static delays
         elif has_delay:
             # Get delay type to use for this connection
@@ -863,20 +852,24 @@ class EventPropCompiler(Compiler):
             genn_model = WeightUpdateModel(
                 model=_get_delay_weight_update_model(delay_type),
                 param_vals= {"weight": connect_snippet.weight,
-                             "delay": connect_snippet.delay},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+                             "delay": connect_snippet.delay})
         # Otherwise, just create basic weight update model
         else:
             genn_model = WeightUpdateModel(
                 model=deepcopy(weight_update_model),
-                param_vals= {"weight": connect_snippet.weight},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+                param_vals= {"weight": connect_snippet.weight})
+
+        # If connection has learnable weights or delays; or propagates gradients, 
+        # add backward spike variable reference and triggering logic
+        source_neuron = conn.source().neuron
+        if has_learnable_delay or has_learnable_weights or not isinstance(source_neuron, Input):
+            genn_model.add_pre_neuron_var_ref("BackSpike_pre", "uint8_t", "BackSpike")
+            genn_model.model["pre_event_threshold_condition_code"] = "BackSpike_pre"
 
         #---------------------------------------------------------------------
         # Step 2: derive dx_dt_diff_sum 
         #---------------------------------------------------------------------
         # If connection has learnable delays or propagates gradients
-        source_neuron = conn.source().neuron
         if has_learnable_delay or not isinstance(source_neuron, Input):
             # Both add_to_pre and delay learning is based
             # on the difference of dx_dt and dx_dtplusm
@@ -951,46 +944,47 @@ class EventPropCompiler(Compiler):
         #---------------------------------------------------------------------
         # If connection is trainable
         if connect_snippet.trainable:
-            # Ensure weights are instantiated as a state variable
-            genn_model.make_param_var("weight")
+            if has_learnable_weights:
+                # Ensure weights are instantiated as a state variable
+                genn_model.make_param_var("weight")
 
-            # Add weight gradient
-            genn_model.add_var("weightGradient", "scalar", 0.0)
+                # Add weight gradient
+                genn_model.add_var("weightGradient", "scalar", 0.0)
 
-            # If connection is delayed, add delay index calculation
-            if has_learnable_delay:
-                genn_model.append_pre_event_syn_code(
-                    "const int delayInt = max(0, min(MaxDelay, (int)round(delay)));")
-    
-            # Assemble gradient update
-            weight_grad_update = 0
-            for jump_sym, jump_expr in synapse_model.jumps.items():
-                lambda_sym = _get_lmd_sym(jump_sym)
-                weight_grad_update -= (lambda_sym 
-                                       * sympy.diff(jump_expr, 
-                                                    sympy.Symbol("weight")))
-                if not genn_model.has_psm_var_ref(lambda_sym.name):
-                    genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
-
-                # If connection has delays, add $ to name so we 
-                # can use template engine to add delay indexing
-                if has_delay:
-                    weight_grad_update = _template_symbol(weight_grad_update,
-                                                          lambda_sym)
-
-            logger.debug(f"\tWeight gradient update: {weight_grad_update}")
-            weight_grad_update_code =\
-                Template(sympy.ccode(weight_grad_update)).substitute(
-                    {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
-                     for p in synapse_model.jumps.keys()})
-            genn_model.append_pre_event_syn_code(
-                f"weightGradient += {weight_grad_update_code};")
-            
-            # If any synapse parameters are referenced in gradient 
-            # update expression, duplicate in weight update model
-            _add_required_parameters(synapse_model, genn_model,
-                                     weight_grad_update)
+                # If connection is delayed, add delay index calculation
+                if has_learnable_delay:
+                    genn_model.append_pre_event_syn_code(
+                        "const int delayInt = max(0, min(MaxDelay, (int)round(delay)));")
         
+                # Assemble gradient update
+                weight_grad_update = 0
+                for jump_sym, jump_expr in synapse_model.jumps.items():
+                    lambda_sym = _get_lmd_sym(jump_sym)
+                    weight_grad_update -= (lambda_sym 
+                                        * sympy.diff(jump_expr, 
+                                                        sympy.Symbol("weight")))
+                    if not genn_model.has_psm_var_ref(lambda_sym.name):
+                        genn_model.add_psm_var_ref(lambda_sym.name, "scalar", lambda_sym.name)
+
+                    # If connection has delays, add $ to name so we 
+                    # can use template engine to add delay indexing
+                    if has_delay:
+                        weight_grad_update = _template_symbol(weight_grad_update,
+                                                            lambda_sym)
+
+                logger.debug(f"\tWeight gradient update: {weight_grad_update}")
+                weight_grad_update_code =\
+                    Template(sympy.ccode(weight_grad_update)).substitute(
+                        {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
+                        for p in synapse_model.jumps.keys()})
+                genn_model.append_pre_event_syn_code(
+                    f"weightGradient += {weight_grad_update_code};")
+                
+                # If any synapse parameters are referenced in gradient 
+                # update expression, duplicate in weight update model
+                _add_required_parameters(synapse_model, genn_model,
+                                        weight_grad_update)
+            
             # If delays can be learned
             if has_learnable_delay:
                 # Ensure delays are instantiated as a state variable
