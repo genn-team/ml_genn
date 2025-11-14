@@ -256,14 +256,16 @@ class Compiler:
                 "sim_code":
                     dynamics_code,
                 "threshold_condition_code":
-                    model.get_threshold_condition_code(),
+                    model.threshold_condition_code,
                 "reset_code":
-                    model.get_reset_code()}
+                    model.reset_code}
 
             # Wrap in NeuronModel and return
-            return NeuronModel(genn_model, model.output_var_name, 
-                               copy(model.param_vals),
-                               copy(model.var_vals))
+            return NeuronModel(model=genn_model, 
+                               output_var_name=model.output_var_name,
+                               param_vals=copy(model.param_vals),
+                               var_vals=copy(model.var_vals),
+                               non_reset_vars=copy(model.non_reset_vars))
         else:
             assert isinstance(model, NeuronModel)
             model_copy = deepcopy(model)
@@ -296,13 +298,15 @@ class Compiler:
                 "params": model.get_params("scalar"),
                 "sim_code":
                     f"""
-                    {model.get_jump_code()}
-                    injectCurrent({model.get_inject_current_code()});
+                    {model.jump_code}
+                    injectCurrent({model.inject_current_code});
                     {solve_ode(model.dx_dt, model.solver, model.sub_steps)}
                     """}
 
-            return SynapseModel(genn_model, copy(model.param_vals),
-                                copy(model.var_vals))
+            return SynapseModel(model=genn_model, 
+                                param_vals=copy(model.param_vals),
+                                var_vals=copy(model.var_vals),
+                                non_reset_vars=copy(model.non_reset_vars))
         else:
             assert isinstance(model, SynapseModel)
             return model
