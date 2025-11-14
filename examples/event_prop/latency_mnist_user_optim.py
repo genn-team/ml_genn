@@ -35,7 +35,7 @@ lif_neuron = UserNeuron(vars={"v": ("(-v + Isyn) / tau_mem", "0.0")},
                         output_var_name="v",
                         param_vals={"tau_mem": 20.0},
                         var_vals={"v": 0.0})
-li_neuron = UserNeuron(vars={"v": ("(-v + Isyn) / tau_mem", None)},
+li_neuron = UserNeuron(vars={"v": ("(-v + Isyn) / tau_mem",)},
                        output_var_name="v",
                        param_vals={"tau_mem": 20.0},
                        var_vals={"v": 0.0},
