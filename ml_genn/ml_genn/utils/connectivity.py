@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 
 from enum import Enum
@@ -55,7 +57,7 @@ def get_param_2d(name: str, param: Param2D,
     else:
         raise TypeError(f"{name}: incorrect type: {type(param)}")
 
-def update_target_shape(target: "Population", output_shape: Sequence[int],
+def update_target_shape(target: Population, output_shape: Sequence[int],
                         flatten_out: bool):
     # If no target shape is set, set to either flattened
     # or un-modified output shape depending on flag

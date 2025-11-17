@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, List, Sequence, Union
 from .network import Network
 from .neurons import Neuron
@@ -61,12 +63,12 @@ class Population:
     # **TODO** shape setter which validate shape with neuron parameters etc
 
     @property
-    def incoming_connections(self) -> List["Connection"]:
+    def incoming_connections(self) -> List[Connection]:
         """Incoming connections to this population"""
         return self._incoming_connections
 
     @property
-    def outgoing_connections(self) -> List["Connection"]:
+    def outgoing_connections(self) -> List[Connection]:
         """Outgoing connections fromt his population"""
         return self._outgoing_connections
 

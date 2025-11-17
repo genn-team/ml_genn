@@ -74,7 +74,6 @@ class InputBase(Input):
         """
         if isinstance(base_model, AutoNeuronModel):
             # **YUCK** this duplicates Compiler.build_neuron_model somewhat
-            print(base_model.model)
             # Build GeNNCode model
             # **TODO** solver
             solver = "exponential_euler"
