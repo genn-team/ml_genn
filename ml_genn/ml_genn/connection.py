@@ -61,7 +61,6 @@ class Connection:
         # Generate unique name if required
         self.name = Connection._unique_name(
             name, f"Conn_{source.name}_{target.name}")
-        print(f"Conn {self.name}")
 
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists

@@ -53,7 +53,6 @@ class Population:
 
         # Generate unique name if required
         self.name = Population._unique_name(name, "Pop")
-        print(f"Pop {self.name}")
 
         # Add population to model
         if add_to_model:
