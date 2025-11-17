@@ -3,8 +3,6 @@ import numpy as np
 from .readout import Readout
 from ..utils.model import NeuronModel
 
-from copy import deepcopy
-
 
 class MaxVar(Readout):
     """Read out per-neuron maximum value of neuron model's output variable"""

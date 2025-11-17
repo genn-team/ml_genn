@@ -1,13 +1,8 @@
 import numpy as np
 
 from collections import namedtuple
-from typing import (Any, Dict, List, Mapping, Optional, 
-                    Sequence, Sized, Tuple, Union)
-from ..metrics import Metric
-
-from copy import deepcopy
-
-from .module import get_object
+from typing import (Any, List, Mapping, Optional, 
+                    Sequence, Tuple, Union)
 
 DataDictType = Mapping[Any, Union[Sequence, np.ndarray]]
 

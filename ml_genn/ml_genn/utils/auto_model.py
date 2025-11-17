@@ -1,12 +1,8 @@
-import numpy as np
 import sympy
 
 from typing import Any, MutableMapping, Optional, Tuple
-from .model import NeuronModel, SynapseModel
 from .value import Value
 
-from copy import deepcopy
-from itertools import chain
 from ..utils.value import get_auto_values
 
 Variables = MutableMapping[str, Tuple[Optional[str], Optional[str]]]

@@ -3,8 +3,6 @@ import numpy as np
 from .readout import Readout
 from ..utils.model import NeuronModel
 
-from copy import deepcopy
-
 
 class FirstSpikeTime(Readout):
     """Read out time of first spike emitted by population.
