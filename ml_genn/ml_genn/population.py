@@ -1,7 +1,7 @@
-from itertools import count
 from typing import Optional, List, Sequence, Union
 from .network import Network
 from .neurons import Neuron
+from .utils.unique_name import UniqueName
 
 from .utils.module import get_object
 
@@ -38,7 +38,7 @@ class Population:
                         This is required to subsequently attach SpikeRecorder
                         callbacks to this population
     """
-    _new_id = count()
+    _unique_name = UniqueName()
 
     def __init__(self, neuron: NeuronInitializer, shape: Shape = None,
                  record_spikes: bool = False, 
@@ -52,8 +52,8 @@ class Population:
         self.record_spike_events = record_spike_events
 
         # Generate unique name if required
-        self.name = (f"Pop{next(Population._new_id)}" if name is None
-                     else name)
+        self.name = Population._unique_name(name, "Pop")
+        print(f"Pop {self.name}")
 
         # Add population to model
         if add_to_model:
