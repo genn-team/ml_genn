@@ -22,6 +22,16 @@ def test_manual():
     assert b == "B"
     assert c == "C"
 
+def test_bad_manual():
+    u = UniqueName()
+
+    a = u("A", "Name")
+    b = u("A", "Name")
+    c = u("A", "Name")
+
+    assert a == "A"
+    assert b == "A_1"
+    assert c == "A_2"
 
 def test_auto():
     u = UniqueName()
