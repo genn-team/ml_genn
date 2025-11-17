@@ -33,7 +33,7 @@ class UniqueName:
         # Increment counter
         self._counter[name] += 1
 
-        # If this isn't the first usage, add suffic
+        # If this isn't the first usage, add suffix
         if name_count > 0:
             name = f"{name}_{name_count}"
         
