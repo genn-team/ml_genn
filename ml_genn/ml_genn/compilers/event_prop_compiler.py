@@ -16,7 +16,7 @@ from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
-                      SparseCategoricalCrossentropy)
+                      RelativeMeanSquareError, SparseCategoricalCrossentropy)
 from ..metrics import MetricsType
 from ..neurons import Input
 from ..optimisers import Optimiser
@@ -271,6 +271,7 @@ class CompileState:
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
         self.spike_count_populations = []
+        self.ttfs_reduce_populations = []
         self.batch_softmax_populations = []
         self.timestep_softmax_populations = []
         self.feedback_connections = []
@@ -1138,6 +1139,14 @@ class EventPropCompiler(Compiler):
         for p, var in compile_state.adjoint_limit_pops_vars:
             genn_pop = neuron_populations[p]
             self._add_abs_sum_reduce_custom_update(genn_model, genn_pop, var)
+        
+        # Create bespoke custom updates to handle reduction for
+        # relative mean-squared error loss
+        for i, p in enumerate(compile_state.ttfs_reduce_populations):
+            genn_pop = neuron_populations[p]
+            self._create_ttfs_reduce_custom_update(
+                genn_model, genn_pop, self.dt * self.example_timesteps,
+                f"CUTTFSReduce{i}")
 
         # Build list of base callbacks
         base_train_callbacks = []
@@ -1183,6 +1192,10 @@ class EventPropCompiler(Compiler):
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
             base_train_callbacks.append(CustomUpdateOnBatchEnd("SpikeCountReduce"))
+
+        # If TTFS needs reducing, add reduction callback before reset
+        if len(compile_state.ttfs_reduce_populations) > 0:
+            base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
 
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
@@ -1313,10 +1326,30 @@ class EventPropCompiler(Compiler):
                                                   "SpikeCountBackBatch")})
 
             # Add GeNN custom update to model
-            self.add_custom_update(
-                genn_model, reduction_optimiser_model, 
-                "SpikeCountReduce", name)
-    
+            self.add_custom_update(genn_model, reduction_optimiser_model,
+                                   "SpikeCountReduce", name)
+
+    def _create_ttfs_reduce_custom_update(self, genn_model,
+                                          genn_pop, example_time: float,
+                                          name: str):
+        # Create model which:
+        reduce_model = CustomUpdateModel(
+            model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
+                                ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
+                                ("TFirstSpikeSumBack", "scalar", VarAccessMode.REDUCE_SUM),
+                                ("TFirstSpikeTrueBack", "scalar", VarAccessMode.REDUCE_SUM)],
+                   "update_code": f"""
+                       TFirstSpikeTrueBack = (id == YTrue && TFirstSpike >= -{example_time}) ? TFirstSpike : 0.0;
+                       TFirstSpikeSumBack = (TFirstSpike >= -{example_time}) ? TFirstSpike : 0.0;
+                       """},
+            var_refs={"YTrue": create_var_ref(genn_pop, "YTrue"),
+                      "TFirstSpike": create_var_ref(genn_pop, "TFirstSpike"),
+                      "TFirstSpikeSumBack": create_var_ref(genn_pop, "TFirstSpikeSumBack"),
+                      "TFirstSpikeTrueBack": create_var_ref(genn_pop, "TFirstSpikeTrueBack")})
+
+        # Add GeNN custom update to model
+        self.add_custom_update(genn_model, reduce_model, "TTFSReduce", name)
+
     def _build_adjoint_system(self, model: AutoNeuronModel, learn_params,
                               output: bool, regularise: bool):
         logger.debug("\tBuilding adjoint system for AutoNeuronModel:")
@@ -1740,7 +1773,8 @@ class EventPropCompiler(Compiler):
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
         mse_loss = isinstance(pop_loss, MeanSquareError)
         per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
-        if sce_loss:
+        rmse_loss = isinstance(pop_loss, RelativeMeanSquareError)
+        if sce_loss or rmse_loss:
             # Add variable, shared across neurons to hold true label for batch
             genn_model.add_var("YTrue", "uint8_t", 0, 
                                VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
@@ -2028,6 +2062,10 @@ class EventPropCompiler(Compiler):
                     # **NOTE** seperate as these are SHARED_NEURON variables
                     compile_state.add_neuron_reset_vars(
                         pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+                    
+                    # Add custom updates to calculate softmax from TFirstSpike
+                    compile_state.batch_softmax_populations.append(
+                        (pop, "TFirstSpike", "Softmax"))
                 elif per_neuron_mse_loss:
                     genn_model.add_var("YTrueBack", "scalar", 0.0,
                                        VarAccess.READ_ONLY_DUPLICATE, reset=False)
@@ -2041,6 +2079,47 @@ class EventPropCompiler(Compiler):
                         }}
                         {transition_code}
                         """
+                elif rmse_loss:
+                    # Add parameters to model to hold delta
+                    genn_model.add_param("Delta", "scalar", 
+                                         compile_state.losses[pop].delta)
+                    
+                    # Add state variable to hold sum of TFirstSpike from previous trial
+                    # **YUCK** REALLY should be timepoint but then you can't softmax
+                    genn_model.add_var("TFirstSpikeSumBack", "scalar", 0.0,
+                                       VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
+                    
+                    # Add another variable to hold TFirstSpike for the correct 
+                    # output neuron from the previous trial at which
+                    # **YUCK** REALLY should be timepoint but then you can't softmax
+                    genn_model.add_var("TFirstSpikeTrueBack", "scalar", 0.0, 
+                                       VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
+
+                    # On backward pass transition, update LambdaV if this is the first spike
+                    # **NOTE** Strange term in id == YTrueBack case comes from re-arranging
+                    # -(TFirstSpikeBack[n] - TFirstSpikeTrueBack - delta),
+                    # summed over all output neurons n and negating spike
+                    # times due to design of FirstSpikeTime readout
+                    transition_code = f"""
+                        scalar drive_p = 0.0;
+                        if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
+                            if(id == YTrueBack) {{
+                                drive_p = (TFirstSpikeSumBack - (num_neurons * TFirstSpikeTrueBack) + ((num_neurons - 1) * Delta));
+                            }}
+                            else {{
+                                drive_p = ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta);
+                            }}
+                        }}
+                        {transition_code}
+                        """
+
+                    # Add second reset custom update to reset YTrueBack to YTrue
+                    # **NOTE** seperate as these are SHARED_NEURON variables
+                    compile_state.add_neuron_reset_vars(
+                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
+                    
+                    # Add population to list requiring bespoke TTFS reduction
+                    compile_state.ttfs_reduce_populations.append(pop)
 
                 compile_state.add_neuron_reset_vars(
                     pop, reset_vars,
@@ -2078,6 +2157,7 @@ class EventPropCompiler(Compiler):
                                   else ""))
                 genn_model.prepend_reset_code(reset_code)
 
+                # Generate 'phantom' spike times
                 if sce_loss:
                     # If it's last timestep, neuron hasn't spiked, 
                     # isn't just about to and is correct output, update 
@@ -2091,9 +2171,6 @@ class EventPropCompiler(Compiler):
                         }}
                         """)
 
-                    # Add custom updates to calculate softmax from TFirstSpike
-                    compile_state.batch_softmax_populations.append(
-                        (pop, "TFirstSpike", "Softmax"))
                 elif per_neuron_mse_loss:
                     # If it's last timestep, neuron hasn't spiked, 
                     # isn't just about to and SHOULD spike in this trial,
@@ -2106,6 +2183,7 @@ class EventPropCompiler(Compiler):
                             {reset_code}
                         }}
                         """)
+
             # Otherwise, unsupported readout type
             else:
                 raise NotImplementedError(
