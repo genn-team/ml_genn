@@ -9,12 +9,17 @@ from pygenn import VarAccess
 class ExampleLabel(GroundTruth):
     """Ground truth in the form of a label, output neuron
     readouts aim to produce at the end of each example"""
-    def add_to_neuron(self, model: NeuronModel, shape, 
-                      batch_size: int, example_timesteps: int):
+    def add_to_neuron(self, backward: bool, model: NeuronModel, 
+                      shape, batch_size: int, example_timesteps: int):
         # Add variable, shared across neurons to hold true label for batch
         model.add_var("YTrue", "uint8_t", 0,
                       VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
 
+        # If backward pass is required, add second variable to 
+        # hold the true label for the backward pass
+        if backward:
+            model.add_var("YTrueBack", "uint8_t", 0, 
+                          VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
 
     def push_to_device(self, genn_pop, y_true, shape, batch_size: int,
                        example_timesteps: int):

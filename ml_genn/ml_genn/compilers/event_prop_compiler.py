@@ -1716,9 +1716,9 @@ class EventPropCompiler(Compiler):
                 "defined in terms of AutoSynapseModel")
         
         # Add forward and backward-pass ground truth state to model
-        compile_state.ground_truths[pop].add_to_neuron(genn_model, pop.shape,
-                                                       self.batch_size, 
-                                                       self.example_timesteps)
+        compile_state.ground_truths[pop].add_to_neuron(
+            True, genn_model, pop.shape, 
+            self.batch_size, self.example_timesteps)
 
         # Add output logic to model
         pop.neuron.readout.add_readout_logic(
@@ -1774,29 +1774,23 @@ class EventPropCompiler(Compiler):
         dynamics_code = Template(dynamics_code).substitute(
             {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
-        pop_loss = compile_state.losses[pop]
-        sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
-        mse_loss = isinstance(pop_loss, MeanSquareError)
-        per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
-        rmse_loss = isinstance(pop_loss, RelativeMeanSquareError)
-        if sce_loss or rmse_loss:
-            # Add second variable to hold the true label for the backward pass
-            genn_model.add_var("YTrueBack", "uint8_t", 0, 
-                               VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
-        elif per_neuron_mse_loss and isinstance(pop.neuron.readout, FirstSpikeTime):
-            genn_model.add_var("YTrueBack", "scalar", 0.0,
-                               VarAccess.READ_ONLY_DUPLICATE, reset=False)
-
         # Add dynamic parameter to contain trial index and add 
         # population to list of those which require it updating
         genn_model.add_param("Trial", "unsigned int", 0)
         genn_model.set_param_dynamic("Trial")
         compile_state.update_trial_pops.append(pop)
 
-        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
+        # Variables to track what affect loss function has on reset logic
         additional_reset_vars = []
         reset_event_ring = False
         reset_v_ring = dyn_ts_reset_needed
+
+        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
+        pop_loss = compile_state.losses[pop]
+        sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
+        mse_loss = isinstance(pop_loss, MeanSquareError)
+        per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
+        rmse_loss = isinstance(pop_loss, RelativeMeanSquareError)
         if "threshold" not in model.model or model.model["threshold"] is None:
             # Check adjoint system is also jump-less
             assert len(saved_vars_spike) == 0

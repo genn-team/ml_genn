@@ -7,12 +7,13 @@ from abc import abstractmethod
 class GroundTruth(ABC):
     """Base class for all ground truths"""
     @abstractmethod
-    def add_to_neuron(self, model: NeuronModel, shape, 
-                      batch_size: int, example_timesteps: int):
+    def add_to_neuron(self, backward: bool, model: NeuronModel, 
+                      shape, batch_size: int, example_timesteps: int):
         """Modify a neuron model, adding any additional state 
         required to deliver this ground truth to device code.
 
         Args:
+            backward:           Should backward-pass logic be added?
             model:              Neuron model to modify (in place) 
             shape:              Shape of population ground 
                                 truth is provided for

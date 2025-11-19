@@ -7,8 +7,8 @@ from ml_genn.utils.model import NeuronModel
 class TimestepValue(GroundTruth):
     """Ground truth in the form of a tensor of values, output neuron
     readouts aim to produce each timestep"""
-    def add_to_neuron(self, model: NeuronModel, shape, 
-                      batch_size: int, example_timesteps: int):
+    def add_to_neuron(self, backward: bool, model: NeuronModel, 
+                      shape, batch_size: int, example_timesteps: int):
         # Add extra global parameter to store Y* throughout example
         flat_shape = np.prod(shape)
         egp_size = (example_timesteps * batch_size * flat_shape)
