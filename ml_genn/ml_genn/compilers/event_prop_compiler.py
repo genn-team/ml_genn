@@ -9,6 +9,7 @@ from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .ground_truths import GroundTruth
 from .. import Connection, InputLayer, Layer, Population, Network
 from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
@@ -43,6 +44,7 @@ from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_array, is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
+from .ground_truths import default_ground_truths
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -286,6 +288,12 @@ class CompileState:
         # From these, create losses
         self.losses = get_object_mapping(losses, readouts,
                                          Loss, "Loss", default_losses)
+
+        # And build matching dictionary of ground truth
+        # values each loss function requires 
+        self.ground_truths = {k: get_object(l.ground_truth, GroundTruth, 
+                                            "GroundTruth", default_ground_truths)
+                              for k, l in self.losses.items()}
 
         # If default optimiser settings for all connections has been provided
         if "all_connections" in optimisers:
@@ -1204,7 +1212,7 @@ class EventPropCompiler(Compiler):
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
-            self.communicator, compile_state.losses,
+            self.communicator, compile_state.ground_truths,
             self.example_timesteps, base_train_callbacks,
             base_validate_callbacks, optimisers,
             checkpoint_connection_vars, checkpoint_population_vars, True)
@@ -1706,6 +1714,11 @@ class EventPropCompiler(Compiler):
             raise NotImplementedError(
                 "EventProp compiler only supports output neurons "
                 "defined in terms of AutoSynapseModel")
+        
+        # Add forward and backward-pass ground truth state to model
+        compile_state.ground_truths[pop].add_to_neuron(genn_model, pop.shape,
+                                                       self.batch_size, 
+                                                       self.example_timesteps)
 
         # Add output logic to model
         pop.neuron.readout.add_readout_logic(
@@ -1761,36 +1774,18 @@ class EventPropCompiler(Compiler):
         dynamics_code = Template(dynamics_code).substitute(
             {s: f"tsRing{s}[tsRingOffset + tsRingReadOffset]" for s in saved_vars_timestep})
 
-        # **TODO** move logic into loss classes
-        # **HACK** we don't want to call add_to_neuron on loss function as
-        # it will add unwanted code to end of neuron but we do want this
-         # Check loss function is compatible
-        # **TODO** categorical crossentropy i.e. one-hot encoded
         pop_loss = compile_state.losses[pop]
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
         mse_loss = isinstance(pop_loss, MeanSquareError)
         per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
         rmse_loss = isinstance(pop_loss, RelativeMeanSquareError)
         if sce_loss or rmse_loss:
-            # Add variable, shared across neurons to hold true label for batch
-            genn_model.add_var("YTrue", "uint8_t", 0, 
-                               VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
-
             # Add second variable to hold the true label for the backward pass
             genn_model.add_var("YTrueBack", "uint8_t", 0, 
                                VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
-        elif mse_loss and isinstance(pop.neuron.readout, Var):
-            # The true label is the desired voltage output over time
-            flat_shape = np.prod(pop.shape)
-            egp_size = (self.example_timesteps * self.batch_size * flat_shape)
-            genn_model.add_egp("YTrue", "scalar*",
-                               np.empty(egp_size, dtype=np.float32))
         elif per_neuron_mse_loss and isinstance(pop.neuron.readout, FirstSpikeTime):
-            # The true label is a vector of desired spike times (one per neuron)
-            genn_model.add_var("YTrue", "scalar", 0.0, reset=False)
-        else:
-            raise RuntimeError(f"Unsupported combination of {pop.neuron.readout} "
-                               f"read out and {pop_loss} loss function")
+            genn_model.add_var("YTrueBack", "scalar", 0.0,
+                               VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
         # Add dynamic parameter to contain trial index and add 
         # population to list of those which require it updating
@@ -2046,6 +2041,7 @@ class EventPropCompiler(Compiler):
                         }}
                         {transition_code}
                         """
+
                     # Add second reset custom update to reset YTrueBack to YTrue
                     # **NOTE** seperate as these are SHARED_NEURON variables
                     compile_state.add_neuron_reset_vars(
@@ -2055,9 +2051,6 @@ class EventPropCompiler(Compiler):
                     compile_state.batch_softmax_populations.append(
                         (pop, "TFirstSpike", "Softmax"))
                 elif per_neuron_mse_loss:
-                    genn_model.add_var("YTrueBack", "scalar", 0.0,
-                                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
-                    
                     # Reset YTrueBack to YTrue
                     additional_reset_vars.append(
                         ("YTrueBack", "scalar", "YTrue"))

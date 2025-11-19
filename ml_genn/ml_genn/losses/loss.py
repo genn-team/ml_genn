@@ -6,10 +6,10 @@ from abc import abstractproperty
 class Loss(ABC):
     """Base class for all loss functions"""
     @abstractproperty
-    def prediction(self) -> str:
-        """Gets prediction class this loss function needs
+    def ground_truth(self) -> str:
+        """Gets ground truth class required by this loss function
 
         Returns:
-            str: name of loss function
+            str: name of ground truth class
         """
         pass

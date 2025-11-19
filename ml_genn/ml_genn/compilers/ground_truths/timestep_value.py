@@ -1,12 +1,12 @@
 import numpy as np
 
-from .prediction import Prediction
-from ..utils.model import NeuronModel
+from .ground_truth import GroundTruth
+from ml_genn.utils.model import NeuronModel
 
 
-class TimestepValue(Prediction):
-    """Prediction in the form of a tensor of values, output neuron
-    readouts need to produce each timestep"""
+class TimestepValue(GroundTruth):
+    """Ground truth in the form of a tensor of values, output neuron
+    readouts aim to produce each timestep"""
     def add_to_neuron(self, model: NeuronModel, shape, 
                       batch_size: int, example_timesteps: int):
         # Add extra global parameter to store Y* throughout example
@@ -24,7 +24,7 @@ class TimestepValue(Prediction):
         #    const scalar yTrue = YTrue[index];
         #    """)
 
-    def set_prediction(self, genn_pop, y_true, shape, batch_size: int, 
+    def push_to_device(self, genn_pop, y_true, shape, batch_size: int, 
                        example_timesteps: int):
         # Check shape
         expected_shape = (batch_size, example_timesteps) + shape

@@ -11,5 +11,5 @@ class RelativeMeanSquareError(Loss):
         self.delta = delta
 
     @property
-    def prediction(self) -> str:
+    def ground_truth(self) -> str:
         return "example_label"

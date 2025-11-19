@@ -1,12 +1,12 @@
-"""Prediction classes provide prediction data to loss functions 
+"""Ground truth classes provide ground truth data to loss functions 
 and metrics which require device computation"""
 from .example_label import ExampleLabel
 from .example_value import ExampleValue
-from .prediction import Prediction
+from .ground_truth import GroundTruth
 from .timestep_value import TimestepValue
-from ..utils.module import get_module_classes
+from ml_genn.utils.module import get_module_classes
 
-default_predictions = get_module_classes(globals(), Prediction)
+default_ground_truths = get_module_classes(globals(), GroundTruth)
 
-__all__ = ["ExampleLabel", "ExampleValue", "Prediction", 
-           "TimestepValue", "default_losses"]
+__all__ = ["ExampleLabel", "ExampleValue", "GroundTruth", 
+           "TimestepValue", "default_ground_truths"]
