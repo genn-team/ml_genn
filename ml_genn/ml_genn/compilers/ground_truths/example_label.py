@@ -16,8 +16,8 @@ class ExampleLabel(Prediction):
                       VarAccess.READ_ONLY_SHARED_NEURON)
 
 
-    def set_target(self, genn_pop, y_true, shape, batch_size: int, 
-                   example_timesteps: int):
+    def set_prediction(self, genn_pop, y_true, shape, batch_size: int,
+                       example_timesteps: int):
         # Check shape
         y_true = np.asarray(y_true)
         if y_true.ndim != 1 or len(y_true) > batch_size:

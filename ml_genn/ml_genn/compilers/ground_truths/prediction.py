@@ -22,8 +22,8 @@ class Prediction(ABC):
         pass
 
     @abstractmethod
-    def set_target(self, genn_pop, y_true, shape, batch_size: int, 
-                   example_timesteps: int):
+    def set_prediction(self, genn_pop, y_true, shape, batch_size: int,
+                       example_timesteps: int):
         """
         Write the current target output value to the compiled neuron group.
 

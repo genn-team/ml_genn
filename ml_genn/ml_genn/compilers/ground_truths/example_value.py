@@ -19,8 +19,8 @@ class ExampleValue(Loss):
         #    const scalar yTrue = YTrue;
         #    """)
 
-    def set_target(self, genn_pop, y_true, shape, batch_size: int, 
-                   example_timesteps: int):
+    def set_prediction(self, genn_pop, y_true, shape, batch_size: int,
+                       example_timesteps: int):
         # Check shape
         expected_shape = (batch_size,) + shape
         y_true = np.asarray(y_true)

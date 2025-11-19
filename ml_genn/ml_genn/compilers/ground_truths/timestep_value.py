@@ -24,8 +24,8 @@ class TimestepValue(Prediction):
         #    const scalar yTrue = YTrue[index];
         #    """)
 
-    def set_target(self, genn_pop, y_true, shape, batch_size: int, 
-                   example_timesteps: int):
+    def set_prediction(self, genn_pop, y_true, shape, batch_size: int, 
+                       example_timesteps: int):
         # Check shape
         expected_shape = (batch_size, example_timesteps) + shape
         y_true = np.asarray(y_true)
