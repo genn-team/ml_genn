@@ -1737,9 +1737,6 @@ class EventPropCompiler(Compiler):
                                np.empty(timestep_ring_size, dtype=np.float32))
             dyn_ts_reset_needed = True
 
-        logger.debug(f"\tReset variables: {genn_model.reset_vars}")
-        compile_state.add_neuron_reset_vars(
-            pop, genn_model.reset_vars, False, dyn_ts_reset_needed)
         # add read and write pointer for timestep-wise ring buffers
         if dyn_ts_reset_needed:
             genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
@@ -1802,6 +1799,9 @@ class EventPropCompiler(Compiler):
         compile_state.update_trial_pops.append(pop)
 
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
+        additional_reset_vars = []
+        reset_event_ring = False
+        reset_v_ring = dyn_ts_reset_needed
         if "threshold" not in model.model or model.model["threshold"] is None:
             # Check adjoint system is also jump-less
             assert len(saved_vars_spike) == 0
@@ -1820,7 +1820,10 @@ class EventPropCompiler(Compiler):
                 ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
                 genn_model.add_egp("RingOutputLossTerm", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
-                
+
+                # We have a variable ring so it will need resetting
+                reset_v_ring = True
+
                 # If sparse cross-entropy loss is selected
                 if sce_loss:
                     # If readout is AvgVar or SumVar
@@ -1842,12 +1845,7 @@ class EventPropCompiler(Compiler):
                         # Add custom updates to calculate 
                         # softmax from V and write directly to buffermodel_copy
                         compile_state.timestep_softmax_populations.append(
-                            (pop, out_var_name))
-
-                        # Add custom update to reset state
-                        compile_state.add_neuron_reset_vars(pop, genn_model.reset_vars,
-                                                            False, True)
-                    
+                            (pop, out_var_name))                    
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(
@@ -1867,10 +1865,6 @@ class EventPropCompiler(Compiler):
                         
                         {dynamics_code}
                         """)
-
-                    # Add custom update to reset state JAMIE_CHECK
-                    compile_state.add_neuron_reset_vars(
-                        pop, genn_model.reset_vars, False, True)
 
                     # Add code to fill errors into RingBuffer
                     genn_model.append_sim_code(
@@ -1909,10 +1903,6 @@ class EventPropCompiler(Compiler):
                                   else "Avg")
                         compile_state.batch_softmax_populations.append(
                             (pop, out_var_name + suffix, "Softmax"))
-
-                        # Add custom update to reset state
-                        compile_state.add_neuron_reset_vars(
-                            pop, genn_model.reset_vars, False, dyn_ts_reset_needed)
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
                         local_t_scale = 1.0 / (self.dt * self.example_timesteps)
@@ -1933,9 +1923,6 @@ class EventPropCompiler(Compiler):
                         compile_state.batch_softmax_populations.append(
                             (pop, out_var_name + "Avg", "Softmax"))
 
-                        # Add custom update to reset state
-                        compile_state.add_neuron_reset_vars(
-                            pop, genn_model.reset_vars, False, False)
                     # Otherwise, if readout is MaxVar
                     elif isinstance(pop.neuron.readout, MaxVar):
                         # Add state variable to hold vmax from previous trial
@@ -1959,14 +1946,12 @@ class EventPropCompiler(Compiler):
                         compile_state.batch_softmax_populations.append(
                             (pop, model.output_var_name + "Max", "Softmax"))
 
-                        # Add custom update to reset state
+                        # Additionally reset VMaxTimeBack to VMaxTime
                         # **NOTE** reset VMaxTimeBack first so VMaxTime isn't zeroed
                         # **TODO** time type
-                        compile_state.add_neuron_reset_vars(
-                            pop, 
-                            [(f"{out_var_name}MaxTimeBack", "scalar", 
-                              f"{out_var_name}MaxTime")] + genn_model.reset_vars,
-                            False, False)
+                        additional_reset_vars.append(
+                            (f"{out_var_name}MaxTimeBack", "scalar",
+                             f"{out_var_name}MaxTime"))
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(
@@ -2003,12 +1988,15 @@ class EventPropCompiler(Compiler):
             # started writing to ring during the forward
             # pass and where data to read during backward pass ends
             genn_model.add_var("RingWriteStartOffset", "int",
-                                self.max_spikes - 1, reset=False)
+                               self.max_spikes - 1, reset=False)
             genn_model.add_var("RingReadEndOffset", "int", 
-                                self.max_spikes - 1, reset=False)
+                               self.max_spikes - 1, reset=False)
 
             # Add variable to hold backspike flag
             genn_model.add_var("BackSpike", "uint8_t", False)
+            
+            # We always need to reset the event ring for these losses
+            reset_event_ring = True
 
             # Add EGP for spike time ring variables
             spike_ring_size = self.batch_size * np.prod(pop.shape) * self.max_spikes
@@ -2030,11 +2018,11 @@ class EventPropCompiler(Compiler):
                 # Add state variable to hold TFirstSpike from previous trial
                 # **YUCK** REALLY should be timepoint but then you can't softmax
                 genn_model.add_var("TFirstSpikeBack", "scalar", 0.0,
-                                    VarAccess.READ_ONLY_DUPLICATE, reset=False)
+                                   VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
-                # Add reset logic to reset adjoint state variables 
-                # as well as any state variables from the original model
-                reset_vars = [("TFirstSpikeBack", "scalar", "TFirstSpike")] + genn_model.reset_vars
+                # Reset TFirstSpikeBack to TFirstSpike
+                additional_reset_vars.append(
+                    ("TFirstSpikeBack", "scalar", "TFirstSpike"))
 
                 example_time = self.dt * self.example_timesteps
                 if sce_loss:
@@ -2069,8 +2057,10 @@ class EventPropCompiler(Compiler):
                 elif per_neuron_mse_loss:
                     genn_model.add_var("YTrueBack", "scalar", 0.0,
                                        VarAccess.READ_ONLY_DUPLICATE, reset=False)
-
-                    reset_vars += [("YTrueBack", "scalar", "YTrue")]
+                    
+                    # Reset YTrueBack to YTrue
+                    additional_reset_vars.append(
+                        ("YTrueBack", "scalar", "YTrue"))
 
                     transition_code = f"""
                         scalar drive_p = 0.0;
@@ -2120,10 +2110,6 @@ class EventPropCompiler(Compiler):
                     
                     # Add population to list requiring bespoke TTFS reduction
                     compile_state.ttfs_reduce_populations.append(pop)
-
-                compile_state.add_neuron_reset_vars(
-                    pop, reset_vars,
-                    True, dyn_ts_reset_needed)
 
                 # Add code to start of sim code to run backwards pass 
                 # and handle back spikes with correct LIF dynamics
@@ -2189,5 +2175,12 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError(
                     f"EventProp compiler with spiking output "
                     f"neurons only supports 'FirstSpikeTime' readouts")
-
+        
+        # Add neuron variable reset
+        # **NOTE** we PREPEND the additional variables as
+        # they typically depend on the standard variables 
+        logger.debug(f"\tReset variables: {additional_reset_vars + genn_model.reset_vars}")
+        compile_state.add_neuron_reset_vars(
+            pop, additional_reset_vars + genn_model.reset_vars,
+            reset_event_ring, reset_v_ring)
         return genn_model
