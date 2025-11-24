@@ -1,12 +1,11 @@
-from itertools import count
 from typing import Optional, Union
 from weakref import ref
 from .connectivity import Connectivity
 from .network import Network
 from .population import Population
 from .synapses import Synapse
+from .utils.unique_name import UniqueName
 
-from copy import deepcopy
 from .utils.module import get_object
 
 from .connectivity import default_connectivity
@@ -39,6 +38,8 @@ class Connection:
                             or using heterogeneous delay initialiser from
                             which maximum delay cannot be inferred
     """
+    _unique_name = UniqueName()
+
     def __init__(self, source: Population, target: Population,
                  connectivity: ConnectivityInitializer,
                  synapse: SynapseInitializer = "delta", 
@@ -58,8 +59,8 @@ class Connection:
                                   default_synapses)
 
         # Generate unique name if required
-        self.name = (f"Conn_{source.name}_{target.name}" if name is None
-                     else name)
+        self.name = Connection._unique_name(
+            name, f"Conn_{source.name}_{target.name}")
 
         # Add weak references to ourselves to source
         # and target's outgoing and incoming connection lists
