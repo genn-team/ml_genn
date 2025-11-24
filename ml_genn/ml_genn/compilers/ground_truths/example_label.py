@@ -27,7 +27,7 @@ class ExampleLabel(GroundTruth):
         y_true = np.asarray(y_true)
         if y_true.ndim != 1 or len(y_true) > batch_size:
             raise RuntimeError(f"Length of target data for "
-                               f"ExampleLabel prediction should "
+                               f"ExampleLabel ground truth should "
                                f"be < {batch_size}")
 
         # Copy flattened y_true into view
