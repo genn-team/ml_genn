@@ -9,7 +9,7 @@ class ExampleValue(GroundTruth):
     readouts aim to produce at the end of each example"""
     def add_to_neuron(self, backward: bool, model: NeuronModel, 
                       shape, batch_size: int, example_timesteps: int):
-        # Add variable, shared across neurons to hold true label for batch
+        # Add variable, shared across neurons to hold true value for batch
         model.add_var("YTrue", "scalar", 0.0, 
                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
         
