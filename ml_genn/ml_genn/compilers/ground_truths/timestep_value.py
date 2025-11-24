@@ -31,7 +31,7 @@ class TimestepValue(GroundTruth):
         y_true = np.asarray(y_true)
         if y_true.shape != expected_shape:
             raise RuntimeError(f"Shape of target data for TimestepValue "
-                               f"prediction should be {expected_shape}")
+                               f"ground truth should be {expected_shape}")
 
         # Copy flattened y_true into view
         genn_pop.extra_global_params["YTrue"].view[:] = y_true.flatten()
