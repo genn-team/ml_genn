@@ -14,7 +14,7 @@ class ExampleValue(GroundTruth):
                       VarAccess.READ_ONLY_DUPLICATE, reset=False)
         
         # If backward pass is required, add second variable to 
-        # hold the true label for the backward pass
+        # hold the true value for the backward pass
         if backward:
             model.add_var("YTrueBack", "scalar", 0.0,
                           VarAccess.READ_ONLY_DUPLICATE, reset=False)
