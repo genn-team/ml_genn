@@ -1,7 +1,5 @@
 from .loss import Loss
 
-from pygenn import VarAccess
-
 
 class RelativeMeanSquareError(Loss):
     """Computes the mean squared error between prediction of incorrect 

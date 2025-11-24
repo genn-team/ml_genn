@@ -2,6 +2,7 @@ import numpy as np
 
 from .ground_truth import GroundTruth
 from ml_genn.utils.model import NeuronModel
+from pygenn import VarAccess
 from typing import List, Tuple
 
 class ExampleValue(GroundTruth):
@@ -18,12 +19,6 @@ class ExampleValue(GroundTruth):
         if backward:
             model.add_var("YTrueBack", "scalar", 0.0,
                           VarAccess.READ_ONLY_DUPLICATE, reset=False)
-        # Add sim-code to convert label to one-hot
-        # **THINK** pointless
-        #model.append_sim_code(
-        #    f"""
-        #    const scalar yTrue = YTrue;
-        #    """)
 
     def push_to_device(self, genn_pop, y_true, shape, batch_size: int,
                        example_timesteps: int):

@@ -15,15 +15,6 @@ class TimestepValue(GroundTruth):
         model.add_egp("YTrue", "scalar*",
                       np.empty(egp_size, dtype=np.float32))
 
-        # Add sim-code to read out correct yTrue value 
-        #model.append_sim_code(
-        #    f"""
-        #    const unsigned int timestep = (int)round(t / dt);
-        #    const unsigned int index = (batch * {example_timesteps} * num_neurons)
-        #                               + (timestep * num_neurons) + id;
-        #    const scalar yTrue = YTrue[index];
-        #    """)
-
     def push_to_device(self, genn_pop, y_true, shape, batch_size: int, 
                        example_timesteps: int):
         # Check shape
