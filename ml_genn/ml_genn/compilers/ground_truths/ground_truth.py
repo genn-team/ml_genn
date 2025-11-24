@@ -1,5 +1,6 @@
 from abc import ABC
 from ml_genn.utils.model import NeuronModel
+from typing import List, Tuple
 
 from abc import abstractmethod
 
@@ -41,3 +42,17 @@ class GroundTruth(ABC):
                                 presented to the network for
         """
         pass
+
+    @property
+    def backward_duplicate_var_reset(self) -> List[Tuple[str, str, str]]:
+        """
+        Gets resets for any per-neuron variables this ground truth adds
+        """
+        return []
+
+    @property
+    def backward_shared_neuron_var_reset(self) -> List[Tuple[str, str, str]]:
+        """
+        Gets resets for any shared neuron variables this ground truth adds
+        """
+        return []

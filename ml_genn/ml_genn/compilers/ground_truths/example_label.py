@@ -2,8 +2,8 @@ import numpy as np
 
 from .ground_truth import GroundTruth
 from ml_genn.utils.model import NeuronModel
-
 from pygenn import VarAccess
+from typing import List, Tuple
 
 
 class ExampleLabel(GroundTruth):
@@ -38,3 +38,10 @@ class ExampleLabel(GroundTruth):
 
         # Push YTrue to device
         genn_pop.vars["YTrue"].push_to_device()
+
+    @property
+    def backward_shared_neuron_var_reset(self) -> List[Tuple[str, str, str]]:
+        """
+        Gets resets for any shared neuron variables this ground truth adds
+        """
+        return [("YTrueBack", "uint8_t", "YTrue")]

@@ -1716,9 +1716,9 @@ class EventPropCompiler(Compiler):
                 "defined in terms of AutoSynapseModel")
         
         # Add forward and backward-pass ground truth state to model
-        compile_state.ground_truths[pop].add_to_neuron(
-            True, genn_model, pop.shape, 
-            self.batch_size, self.example_timesteps)
+        ground_truth = compile_state.ground_truths[pop]
+        ground_truth.add_to_neuron(True, genn_model, pop.shape,
+                                   self.batch_size, self.example_timesteps)
 
         # Add output logic to model
         pop.neuron.readout.add_readout_logic(
@@ -1781,7 +1781,7 @@ class EventPropCompiler(Compiler):
         compile_state.update_trial_pops.append(pop)
 
         # Variables to track what affect loss function has on reset logic
-        additional_reset_vars = []
+        additional_reset_vars = ground_truth.backward_duplicate_var_reset
         reset_event_ring = False
         reset_v_ring = dyn_ts_reset_needed
 
@@ -1950,12 +1950,6 @@ class EventPropCompiler(Compiler):
                     raise NotImplementedError(
                         f"EventProp compiler doesn't support "
                         f"time averaged loss for regression.")
-
-            # Add second reset custom update to reset YTrueBack to YTrue
-            # **NOTE** seperate as these are SHARED_NEURON variables
-            if sce_loss:
-                compile_state.add_neuron_reset_vars(
-                    pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
         # Otherwise, output neuron is spiking
         else:
             # Generate transition code
@@ -2036,19 +2030,10 @@ class EventPropCompiler(Compiler):
                         {transition_code}
                         """
 
-                    # Add second reset custom update to reset YTrueBack to YTrue
-                    # **NOTE** seperate as these are SHARED_NEURON variables
-                    compile_state.add_neuron_reset_vars(
-                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
-                    
                     # Add custom updates to calculate softmax from TFirstSpike
                     compile_state.batch_softmax_populations.append(
                         (pop, "TFirstSpike", "Softmax"))
                 elif per_neuron_mse_loss:
-                    # Reset YTrueBack to YTrue
-                    additional_reset_vars.append(
-                        ("YTrueBack", "scalar", "YTrue"))
-
                     transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
@@ -2090,11 +2075,6 @@ class EventPropCompiler(Compiler):
                         {transition_code}
                         """
 
-                    # Add second reset custom update to reset YTrueBack to YTrue
-                    # **NOTE** seperate as these are SHARED_NEURON variables
-                    compile_state.add_neuron_reset_vars(
-                        pop, [("YTrueBack", "uint8_t", "YTrue")], False, False)
-                    
                     # Add population to list requiring bespoke TTFS reduction
                     compile_state.ttfs_reduce_populations.append(pop)
 
@@ -2170,4 +2150,10 @@ class EventPropCompiler(Compiler):
         compile_state.add_neuron_reset_vars(
             pop, additional_reset_vars + genn_model.reset_vars,
             reset_event_ring, reset_v_ring)
+
+        # Add second reset custom update for SHARED_NEURON 
+        # variables required by ground truth
+        compile_state.add_neuron_reset_vars(
+            pop, ground_truth.backward_shared_neuron_var_reset, False, False)
+
         return genn_model

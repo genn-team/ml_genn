@@ -2,7 +2,7 @@ import numpy as np
 
 from .ground_truth import GroundTruth
 from ml_genn.utils.model import NeuronModel
-
+from typing import List, Tuple
 
 class ExampleValue(GroundTruth):
     """Ground truth in the form of a value, output neuron
@@ -39,3 +39,10 @@ class ExampleValue(GroundTruth):
 
         # Push YTrue to device
         genn_pop.vars["YTrue"].push_to_device()
+
+    @property
+    def backward_duplicate_var_reset(self) -> List[Tuple[str, str, str]]:
+        """
+        Gets resets for any per-neuron variables this ground truth adds
+        """
+        return [("YTrueBack", "scalar", "YTrue")]
