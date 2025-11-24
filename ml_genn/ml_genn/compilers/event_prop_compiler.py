@@ -2153,7 +2153,9 @@ class EventPropCompiler(Compiler):
 
         # Add second reset custom update for SHARED_NEURON 
         # variables required by ground truth
-        compile_state.add_neuron_reset_vars(
-            pop, ground_truth.backward_shared_neuron_var_reset, False, False)
+        if len(ground_truth.backward_shared_neuron_var_reset) > 0:
+            compile_state.add_neuron_reset_vars(
+                pop, ground_truth.backward_shared_neuron_var_reset,
+                False, False)
 
         return genn_model
