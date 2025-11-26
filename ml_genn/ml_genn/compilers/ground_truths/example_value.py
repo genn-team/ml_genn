@@ -32,7 +32,7 @@ class ExampleValue(GroundTruth):
         if batch_size == 1:
             genn_pop.vars["YTrue"].view[:] = y_true.flatten()
         else:
-            genn_pop.vars["YTrue"].view[:len(y_true), :] = y_true.flatten()
+            genn_pop.vars["YTrue"].view[:len(y_true), :] = y_true
 
         # Push YTrue to device
         genn_pop.vars["YTrue"].push_to_device()
