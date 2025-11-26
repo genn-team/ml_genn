@@ -1,11 +1,10 @@
-from setuptools import setup, find_packages
+from os import path
 
-setup(
-    name="ml_genn_tf",
-    version="2.3.0",
-    packages=find_packages(),
+from setuptools import setup
 
-    python_requires=">=3.7.0",
-    install_requires = [
-        "tensorflow<2.15.0",
-        "ml_genn>=2.3.0,<3.0.0"])
+# Read version from txt file
+abs_ml_genn_path = path.abspath(path.join(path.dirname(__file__), path.pardir))
+with open(path.join(abs_ml_genn_path, "version.txt")) as version_file:
+    version = version_file.read().strip()
+
+setup(version=version)
