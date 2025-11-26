@@ -23,14 +23,16 @@ class ExampleValue(GroundTruth):
     def push_to_device(self, genn_pop, y_true, shape, batch_size: int,
                        example_timesteps: int):
         # Check shape
-        expected_shape = (batch_size,) + shape
         y_true = np.asarray(y_true)
-        if y_true.shape != expected_shape:
+        if y_true.shape[1:] != shape or len(y_true) > batch_size:
             raise RuntimeError(f"Shape of target data for ExampleValue "
                                f"ground truth should be {expected_shape}")
 
-        # Copy flattened y_true into view
-        genn_pop.vars["YTrue"].view[:batch_size, :] = y_true
+        # Copy flattened y_true into (2D) view
+        if batch_size == 1:
+            genn_pop.vars["YTrue"].view[:] = y_true.flatten()
+        else:
+            genn_pop.vars["YTrue"].view[:len(y_true), :] = y_true.flatten()
 
         # Push YTrue to device
         genn_pop.vars["YTrue"].push_to_device()

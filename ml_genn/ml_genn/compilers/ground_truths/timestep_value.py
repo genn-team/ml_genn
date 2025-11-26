@@ -18,14 +18,16 @@ class TimestepValue(GroundTruth):
     def push_to_device(self, genn_pop, y_true, shape, batch_size: int, 
                        example_timesteps: int):
         # Check shape
-        expected_shape = (batch_size, example_timesteps) + shape
+        expected_shape = (example_timesteps,) + shape
         y_true = np.asarray(y_true)
-        if y_true.shape != expected_shape:
+        if y_true.shape[1:] != expected_shape or len(y_true) > batch_size:
             raise RuntimeError(f"Shape of target data for TimestepValue "
                                f"ground truth should be {expected_shape}")
 
-        # Copy flattened y_true into view
-        genn_pop.extra_global_params["YTrue"].view[:] = y_true.flatten()
+        # Copy flattened y_true into (1D) view
+        y_true_flat = y_true.flatten()
+        egp = genn_pop.extra_global_params["YTrue"]
+        egp.view[:len(y_true_flat)] = y_true_flat
 
         # Push YTrue to device
-        genn_pop.extra_global_params["YTrue"].push_to_device()
+        egp.push_to_device()
