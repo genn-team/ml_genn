@@ -26,13 +26,14 @@ class ExampleValue(GroundTruth):
         y_true = np.asarray(y_true)
         if y_true.shape[1:] != shape or len(y_true) > batch_size:
             raise RuntimeError(f"Shape of target data for ExampleValue "
-                               f"ground truth should be {expected_shape}")
+                               f"ground truth should be {shape}")
 
-        # Copy flattened y_true into (2D) view
+        # Copy y_true into (2D) view
         if batch_size == 1:
             genn_pop.vars["YTrue"].view[:] = y_true.flatten()
         else:
-            genn_pop.vars["YTrue"].view[:len(y_true), :] = y_true
+            y_true = np.reshape(y_true, (y_true.shape[0], -1))
+            genn_pop.vars["YTrue"].view[:len(y_true)] = y_true
 
         # Push YTrue to device
         genn_pop.vars["YTrue"].push_to_device()
