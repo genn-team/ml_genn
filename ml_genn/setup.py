@@ -8,4 +8,6 @@ setup(name="ml_genn",
       install_requires=["pygenn>=5.1.0,<6.0.0",
                         "enum-compat", "deprecated", 
                         "varname", "sympy>=1.9.0,<2.0.0",
-                        "tqdm>=4.27.0"])
+                        "tqdm>=4.27.0"],
+      extras_require={
+        "test": ["pytest", "pytest-cov"]})
