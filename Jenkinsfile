@@ -96,7 +96,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 rm -rf ${WORKSPACE}/venv
                 ${env.PYTHON} -m venv ${WORKSPACE}/venv
                 . ${WORKSPACE}/venv/bin/activate
-                pip install -U pip
+                pip install -U pip flake8
                 """;
             }
 
