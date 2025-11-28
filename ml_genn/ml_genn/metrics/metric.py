@@ -9,7 +9,6 @@ from abc import abstractmethod, abstractproperty
 
 class Metric(ABC):
     """Base class for all metrics"""
-
     @abstractmethod
     def update(self, y_true: np.ndarray, y_pred: np.ndarray,
                communicator: Optional[Communicator]):
