@@ -160,6 +160,14 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Loop through epochs
         step_i = num_train_batches * start_epoch
         for e in range(start_epoch, start_epoch + num_epochs):
+            # Create fresh training and validation metric
+            # state at the start of each epoch
+            train_metric_state = {o: m.create_state()
+                                  for o, m in train_metrics.items()}
+            if x_validate_size > 0:
+                validate_metric_state = {o: m.create_state()
+                                         for o, m in validate_metrics.items()}
+
             # If we should shuffle
             if shuffle:
                 # Generate random permutation
@@ -175,48 +183,44 @@ class CompiledTrainingNetwork(CompiledNetwork):
             xy_train_batched = zip(batch_dataset(x, batch_size, x_train_size),
                                    batch_dataset(y, batch_size, y_train_size))
 
-            # Reset training metrics at start of each epoch
-            for m in train_metrics.values():
-                m.reset()
 
             train_callback_list.on_epoch_begin(e)
 
             # Loop through batches and train
             for batch_i, (x_batch, y_batch) in enumerate(xy_train_batched):
                 self._train_batch(batch_i, step_i, x_batch, y_batch,
-                                  train_metrics, train_callback_list)
+                                  train_metrics, train_metric_state,
+                                  train_callback_list)
                 step_i += 1
 
-            train_callback_list.on_epoch_end(e, train_metrics)
+            train_callback_list.on_epoch_end(e, train_metric_state)
 
             # If there's any validation data
             if x_validate_size > 0:
-                # Reset validation metrics at start of each epoch
-                for m in validate_metrics.values():
-                    m.reset()
-
+  
                 validate_callback_list.on_epoch_begin(e)
 
                 # Loop through batches and validate
                 for batch_i, (x_batch, y_batch) in enumerate(xy_validate_batched):
                     self._validate_batch(batch_i, x_batch, y_batch,
-                                         validate_metrics, validate_callback_list)
+                                         validate_metrics, validate_metric_state,
+                                         validate_callback_list)
 
-                validate_callback_list.on_epoch_end(e, validate_metrics)
+                validate_callback_list.on_epoch_end(e, validate_metric_state)
 
         # End training
-        train_callback_list.on_train_end(train_metrics)
+        train_callback_list.on_train_end(train_metric_state)
 
         # If there's any validation data
         if x_validate_size > 0:
-            validate_callback_list.on_test_end(validate_metrics)
+            validate_callback_list.on_test_end(validate_metric_state)
             
-            return (train_metrics, validate_metrics,
+            return (train_metric_state, validate_metric_state,
                     train_callback_list.get_data(),
                     validate_callback_list.get_data())
         # Otherwise, just return training metrics and callback data
         else:
-            return train_metrics, train_callback_list.get_data()
+            return train_metric_state, train_callback_list.get_data()
 
     def save_connectivity(self, keys=(), serialiser="numpy"):
         # Create serialiser
@@ -273,7 +277,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.optimiser_state = None
 
     def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
-                        callback_list: CallbackList):
+                        metric_state, callback_list: CallbackList):
         # Start batch
         callback_list.on_batch_begin(batch)
 
@@ -293,14 +297,14 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)],
-                              self.communicator)
+            metrics[o].update(metric_state[o], y_true,
+                              out_y_pred[:len(y_true)], self.communicator)
 
         # End batch
-        callback_list.on_batch_end(batch, metrics)
+        callback_list.on_batch_end(batch, metric_state)
 
     def _train_batch(self, batch: int, step: int, x: dict, y: dict,
-                     metrics, callback_list: CallbackList):
+                     metrics, metric_state, callback_list: CallbackList):
         # Start batch
         callback_list.on_batch_begin(batch)
 
@@ -328,14 +332,14 @@ class CompiledTrainingNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+            metrics[o].update(metric_state[o], y_true,
+                              out_y_pred[:len(y_true)],
                               self.communicator)
 
-        # Loop through optimisers
+        # Loop through optimisers and set step
         assert len(self.optimiser_state) == len(self.optimisers)
         for (o, c), s in zip(self.optimisers, self.optimiser_state):
-            # Set step on all custom updates
             o.set_step(s, c, step)
 
         # End batch
-        callback_list.on_batch_end(batch, metrics)
+        callback_list.on_batch_end(batch, metric_state)

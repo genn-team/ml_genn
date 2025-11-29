@@ -75,16 +75,19 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                      num_batches=len(x))
         callback_list.on_test_begin()
 
+        # Create metric state
+        metric_state = {o: m.create_state() for o, m in metrics.items()}
+
         # Loop through batches and evaluate
         for batch_i, (x_batch, y_batch) in enumerate(zip(x, y)):
             self._evaluate_batch(batch_i, x_batch, y_batch,
-                                 metrics, callback_list)
+                                 metrics, metric_state, callback_list)
 
         # End testing
-        callback_list.on_test_end(metrics)
+        callback_list.on_test_end(metric_state)
 
         # Return metrics
-        return metrics, callback_list.get_data()
+        return metric_state, callback_list.get_data()
 
     def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
                 callbacks=[BatchProgressBar()]):
@@ -172,6 +175,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                      num_batches=num_batches)
         callback_list.on_test_begin()
 
+        # Create metric state
+        metric_state = {o: m.create_state() for o, m in metrics.items()}
+
         # Loop through data
         batch_i = 0
         while True:
@@ -199,14 +205,15 @@ class CompiledInferenceNetwork(CompiledNetwork):
                 y = {p: y for p, x in zip(outputs, batch_y)}
 
             # Evaluate batch
-            self._evaluate_batch(batch_i, x, y, metrics, callback_list)
+            self._evaluate_batch(batch_i, x, y, metrics, 
+                                 metric_state, callback_list)
             batch_i += 1
 
         # End testing
-        callback_list.on_test_end(metrics)
+        callback_list.on_test_end(metric_state)
 
         # Return metrics
-        return metrics, callback_list.get_data()
+        return metric_state, callback_list.get_data()
 
     def evaluate_batch(self, x: dict, y: dict,
                        metrics="sparse_categorical_accuracy",
@@ -221,13 +228,16 @@ class CompiledInferenceNetwork(CompiledNetwork):
                                      num_batches=1)
         callback_list.on_test_begin()
 
+        # Create metric state
+        metric_state = {o: m.create_state() for o, m in metrics.items()}
+
         # Evaluate batch and return metrics
-        self._evaluate_batch(0, x, y, metrics, callback_list)
+        self._evaluate_batch(0, x, y, metrics, metric_state, callback_list)
 
         # End testing
-        callback_list.on_test_end(metrics)
+        callback_list.on_test_end(metric_state)
 
-        return metrics, callback_list.get_data()
+        return metric_state, callback_list.get_data()
 
     def _predict_batch(self, batch: int, x: dict, outputs: Sequence,
                        callback_list: CallbackList):
@@ -253,7 +263,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
         return self.get_readout(outputs)
 
     def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
-                        callback_list: CallbackList):
+                        metric_state, callback_list: CallbackList):
         """ Evaluate a single batch of inputs against labels
         Args:
         batch --    index of current batch
@@ -270,11 +280,12 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+            metrics[o].update(metric_state[0], y_true,
+                              out_y_pred[:len(y_true)],
                               self.communicator)
 
         # End batch
-        callback_list.on_batch_end(batch, metrics)
+        callback_list.on_batch_end(batch, metric_state)
 
 
 class CompileState:

@@ -6,12 +6,17 @@ from ..communicators import Communicator
 
 from abc import abstractmethod, abstractproperty
 
+class MetricState(ABC):
+    @abstractproperty
+    def result(self) -> Optional[np.ndarray]:
+        """Quantity calculated by metric"""
+        pass
 
 class Metric(ABC):
     """Base class for all metrics"""
     @abstractmethod
-    def update(self, y_true: np.ndarray, y_pred: np.ndarray,
-               communicator: Optional[Communicator]):
+    def update(self, state: MetricState, y_true: np.ndarray,
+               y_pred: np.ndarray, communicator: Optional[Communicator]):
         """Update metric based on a batch of true and predicted values.
 
         Args:
@@ -24,11 +29,6 @@ class Metric(ABC):
         pass
 
     @abstractmethod
-    def reset(self):
-        """Resets metric"""
-        pass
-
-    @abstractproperty
-    def result(self) -> Optional[np.ndarray]:
-        """Quantity calculated by metric"""
+    def create_state(self) -> MetricState:
+        """Creates new metric state"""
         pass
