@@ -96,7 +96,7 @@ class SpikeRecorder(Callback):
                 cn.genn_model.pull_recording_buffers_from_device()
 
             # If anything should be recorded this batch
-            if np.any(self._batch_mask):
+            if np.any(state.batch_mask):
                 # Get GeNN population
                 genn_pop = cn.neuron_populations[self._pop]
 
