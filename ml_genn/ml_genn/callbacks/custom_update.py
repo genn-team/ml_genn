@@ -51,7 +51,7 @@ class CustomUpdateOnEpochBegin(CustomUpdate):
 class CustomUpdateOnEpochEnd(CustomUpdate):
     """Callback that triggers a GeNN custom update 
     at the end of every epoch."""
-    def on_epoch_end(self, state, epoch, metrics):
+    def on_epoch_end(self, state, epoch, metric_state):
         logger.debug(f"Running custom update {self.name} "
                      f"at end of epoch {epoch}")
         self._custom_update(state)

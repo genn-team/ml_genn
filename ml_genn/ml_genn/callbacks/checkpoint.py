@@ -19,7 +19,7 @@ class Checkpoint(Callback):
     def create_state(self, compiled_network, **kwargs):
         return compiled_network
 
-    def on_epoch_end(self, state, epoch, metrics):
+    def on_epoch_end(self, state, epoch, metric_state):
         # If we should checkpoint this epoch
         if (epoch % self.epoch_interval) == 0:
             state.save((epoch,), self.serialiser)

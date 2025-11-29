@@ -18,21 +18,21 @@ class BatchProgressBar(Callback):
     def create_state(self, num_batches, **kwargs):
         return State(num_batches)
 
-    def on_batch_end(self, state, batch, metrics):
-        self._display_metrics(state, metrics)
+    def on_batch_end(self, state, batch, metric_state):
+        self._display_metrics(state, metric_state)
         state.progress_bar.update(1)
 
     def on_test_begin(self, state):
         self._init_prog_bar(state)
 
-    def on_test_end(self, state, metrics):
-        self._close_prog_bar(state, metrics)
+    def on_test_end(self, state, metric_state):
+        self._close_prog_bar(state, metric_state)
 
     def on_train_begin(self, state):
         self._init_prog_bar(state)
 
-    def on_train_end(self, state, metrics):
-        self._close_prog_bar(state, metrics)
+    def on_train_end(self, state, metric_state):
+        self._close_prog_bar(state, metric_state)
 
     def on_epoch_begin(self, state, epoch):
         # Set description with epoch and reset so batch returns to 0
@@ -48,14 +48,14 @@ class BatchProgressBar(Callback):
         # Reset progress bar
         state.progress_bar.reset()
 
-    def _close_prog_bar(self, state, metrics):
-        self._display_metrics(state, metrics)
+    def _close_prog_bar(self, state, metric_state):
+        self._display_metrics(state, metric_state)
         state.progress_bar.close()
 
-    def _display_metrics(self, state, metrics):
+    def _display_metrics(self, state, metric_state):
         state.progress_bar.set_postfix_str(
             ",".join(f"{type(m).__name__}: {m.result:.4f}"
-                     for m in metrics.values()
+                     for m in metric_state.values()
                      if m.result is not None))
 
 

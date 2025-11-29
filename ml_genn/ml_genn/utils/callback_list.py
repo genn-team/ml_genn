@@ -72,33 +72,33 @@ class CallbackList:
         for c, s in self._on_test_begin_callbacks:
             c.on_test_begin(s)
 
-    def on_test_end(self, metrics):
+    def on_test_end(self, metric_state):
         for c, s in self._on_test_end_callbacks:
-            c.on_test_end(s, metrics)
+            c.on_test_end(s, metric_state)
 
     def on_train_begin(self):
         for c, s in self._on_train_begin_callbacks:
             c.on_train_begin(s)
 
-    def on_train_end(self, metrics):
+    def on_train_end(self, metric_state):
         for c, s in self._on_train_end_callbacks:
-            c.on_train_end(s, metrics)
+            c.on_train_end(s, metric_state)
 
     def on_epoch_begin(self, epoch: int):
         for c, s in self._on_epoch_begin_callbacks:
             c.on_epoch_begin(s, epoch)
 
-    def on_epoch_end(self, epoch: int, metrics):
+    def on_epoch_end(self, epoch: int, metric_state):
         for c, s in self._on_epoch_end_callbacks:
-            c.on_epoch_end(s, epoch, metrics)
+            c.on_epoch_end(s, epoch, metric_state)
 
     def on_batch_begin(self, batch: int):
         for c, s in self._on_batch_begin_callbacks:
             c.on_batch_begin(s, batch)
 
-    def on_batch_end(self, batch: int, metrics):
+    def on_batch_end(self, batch: int, metric_state):
         for c, s in self._on_batch_end_callbacks:
-            c.on_batch_end(s, batch, metrics)
+            c.on_batch_end(s, batch, metric_state)
 
     def on_timestep_begin(self, timestep: int):
         for c, s in self._on_timestep_begin_callbacks:
