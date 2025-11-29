@@ -11,7 +11,7 @@ from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 from ..utils.network import PopulationType
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
@@ -29,7 +29,7 @@ class State:
     batched: bool
     shared: bool
     batch_mask: int
-    data: list = []
+    data: list = field(default_factory=list)
     batch_count: int = None
     
 
@@ -96,15 +96,9 @@ class VarRecorder(Callback):
             logger.warn(f"VarRecorder ignoring neuron mask applied "
                         f"to SHARED_NEURON variable f{self.var}")
 
-        # Create empty list to hold recorded data
-        data[self.key] = []
-        self._data = data[self.key]
-        
         return State(compiled_network, batched, shared,
                      np.ones(compiled_network.genn_model.batch_size,
                              dtype=bool))
-            
-                     
 
     def on_timestep_end(self, state, timestep: int):
         # If anything should be recorded this batch
@@ -125,7 +119,7 @@ class VarRecorder(Callback):
             # Otherwise
             else:
                 # Apply neuron mask
-                if self.shared:
+                if state.shared:
                     data_view = var_view[:]
                 else:
                     data_view = var_view[self._neuron_mask]
@@ -146,7 +140,7 @@ class VarRecorder(Callback):
     def on_batch_begin(self, state, batch: int):
         # Get mask for examples in this batch and count
         state.batch_mask = self._example_filter.get_batch_mask(
-            batch, self._batch_size)
+            batch, state.compiled_network.genn_model.batch_size)
         state.batch_count = np.sum(state.batch_mask)
 
         # If there's anything to record in this

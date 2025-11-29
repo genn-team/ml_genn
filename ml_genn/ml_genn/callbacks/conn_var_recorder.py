@@ -7,7 +7,7 @@ from pygenn import SynapseMatrixConnectivity, VarAccessDim
 from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import namedtuple
 from itertools import chain
 from pygenn import get_var_access_dim
@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 class State:
     compiled_network: CompiledNetwork
     batched: bool
-    data: list = []
-    batch_mask: int = None
+    batch_mask: int
+    data: list = field(default_factory=list)
     batch_count: int = None
 
 class ConnVarRecorder(Callback):
@@ -76,10 +76,6 @@ class ConnVarRecorder(Callback):
             trg_neuron_filter, self.conn.target().shape)
 
     def create_state(self, compiled_network, **kwargs):
-        # Create default batch mask in case on_batch_begin not called
-        batch_mask = np.ones(compiled_network.genn_model.batch_size,
-                             dtype=bool)
-
         # Get GeNN synapse group from compiled model
         pop = compiled_network.connection_populations[self.conn]
 
@@ -103,8 +99,9 @@ class ConnVarRecorder(Callback):
         batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
 
         # Crate state named tuple
-        return State(compiled_network, batched)
-                
+        return State(compiled_network, batched,
+                     np.ones(compiled_network.genn_model.batch_size,
+                             dtype=bool))
 
     def on_timestep_end(self, state, timestep: int):
         # If anything should be recorded this batch
@@ -138,9 +135,9 @@ class ConnVarRecorder(Callback):
 
                 # If SIMULATION is batched but variable isn't,
                 # broadcast batch count copies of variable
-                if self._batch_size > 1:
+                if cn.genn_model.batch_size > 1:
                     data_view = np.broadcast_to(
-                        data_view, (self._batch_count,) + data_view.shape)
+                        data_view, (state.batch_count,) + data_view.shape)
 
             # If there isn't already list to hold data, add one
             if len(state.data) == 0:
@@ -153,7 +150,7 @@ class ConnVarRecorder(Callback):
         # Get mask for examples in this batch and count
         state.batch_mask = self._example_filter.get_batch_mask(
             batch, state.compiled_network.genn_model.batch_size)
-        state.batch_count = np.sum(self.batch_mask)
+        state.batch_count = np.sum(state.batch_mask)
 
         # If there's anything to record in this
         # batch, add list to hold it to data
