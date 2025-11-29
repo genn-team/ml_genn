@@ -39,7 +39,7 @@ class BatchProgressBar(Callback):
         state.progress_bar.set_description(f"Epoch {epoch}")
         state.progress_bar.reset()
 
-	def _init_prog_bar(self, state):
+    def _init_prog_bar(self, state):
         from tqdm.auto import tqdm
         
         assert state.progress_bar is None
