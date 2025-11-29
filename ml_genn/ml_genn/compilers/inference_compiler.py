@@ -280,7 +280,7 @@ class CompiledInferenceNetwork(CompiledNetwork):
 
         # Update metrics
         for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(metric_state[0], y_true,
+            metrics[o].update(metric_state[o], y_true,
                               out_y_pred[:len(y_true)],
                               self.communicator)
 
