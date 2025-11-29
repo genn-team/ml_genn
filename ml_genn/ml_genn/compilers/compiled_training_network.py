@@ -35,6 +35,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
         self.base_train_callbacks = base_train_callbacks
         self.base_validate_callbacks = base_validate_callbacks
         self.optimisers = optimisers
+        self.optimiser_state = None
         self.checkpoint_connection_vars = checkpoint_connection_vars
         self.checkpoint_population_vars = checkpoint_population_vars
         self.reset_time_between_batches = reset_time_between_batches
@@ -257,6 +258,20 @@ class CompiledTrainingNetwork(CompiledNetwork):
             genn_var.pull_from_device()
             serialiser.serialise(keys + (p, v), genn_var.values)
     
+    def __enter__(self):
+        # Superclass
+        super().__enter__()
+
+        # Create fresh state for each optimiser
+        self.optimiser_state = [o.create_state() for o, c in self.optimisers]
+
+    def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
+        # Superclass
+        super().__exit__(dummy_exc_type, dummy_exc_value, dummy_tb)
+
+        # Invalidate optimiser state
+        self.optimiser_state = None
+
     def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
                         callback_list: CallbackList):
         # Start batch
@@ -317,9 +332,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
                               self.communicator)
 
         # Loop through optimisers
-        for o, c in self.optimisers:
+        assert len(self.optimiser_state) == len(self.optimisers)
+        for (o, c), s in zip(self.optimisers, self.optimiser_state):
             # Set step on all custom updates
-            o.set_step(c, step)
+            o.set_step(s, c, step)
 
         # End batch
         callback_list.on_batch_end(batch, metrics)

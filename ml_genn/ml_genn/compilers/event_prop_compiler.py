@@ -442,7 +442,7 @@ class UpdateTrial(Callback):
     def __init__(self, genn_pop):
         self.genn_pop = genn_pop
 
-    def on_batch_begin(self, batch: int):
+    def on_batch_begin(self, state, batch: int):
         logger.debug(f"Updating trial at start of batch {batch}")
 
         # Set dynamic parameter to batch ID
@@ -1054,7 +1054,7 @@ class EventPropCompiler(Compiler):
                         vars["weight"], genn_model)
             
                     # Add custom update to list of optimisers
-                    optimisers.append((deepcopy(vars["weight"]), cu_weight))
+                    optimisers.append((vars["weight"], cu_weight))
                     
                     # Add variable to list of those to checkpoint
                     checkpoint_connection_vars.append((k, "weight"))
@@ -1072,7 +1072,7 @@ class EventPropCompiler(Compiler):
                         (0.0, c.max_delay_steps))
 
                     # Add custom update to list of optimisers
-                    optimisers.append((deepcopy(vars["delay"]), cu_delay))
+                    optimisers.append((vars["delay"], cu_delay))
 
                     # Add variable to list of those to checkpoint
                     checkpoint_connection_vars.append((k, "delay"))
@@ -1102,7 +1102,7 @@ class EventPropCompiler(Compiler):
                             o, genn_model)
 
                     # Add custom update to list of optimisers
-                    optimisers.append((deepcopy(o), cu_param))
+                    optimisers.append((o, cu_param))
                     checkpoint_population_vars.append((k, n))
 
                 i += 1

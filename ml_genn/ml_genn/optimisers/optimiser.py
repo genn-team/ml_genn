@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from ..utils.model import CustomUpdateModel
 
 from abc import abstractmethod
@@ -9,7 +9,7 @@ class Optimiser(ABC):
     """Base class for all optimisers"""
 
     @abstractmethod
-    def set_step(self, genn_cu, step: int):
+    def set_step(self, state, genn_cu, step: int):
         """Performs optimiser-specific update to compiled optimier
         object at given training step e.g. recalculating learning rates
 
@@ -18,6 +18,10 @@ class Optimiser(ABC):
                         compiled into
             step:       Training step
         """
+        pass
+
+    @abstractmethod
+    def create_state(self) -> Any:
         pass
 
     @abstractmethod
