@@ -22,11 +22,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Namedtuple type to contain state
 @dataclass
 class State:
     compiled_network: CompiledNetwork
-    batch_size: int
     batched: bool
     data: list = []
     batch_mask: int = None
@@ -105,15 +103,15 @@ class ConnVarRecorder(Callback):
         batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
 
         # Crate state named tuple
-        return State(compiled_network, compiled_network.genn_model.batch_size,
-                     batched)
+        return State(compiled_network, batched)
                 
 
     def on_timestep_end(self, state, timestep: int):
         # If anything should be recorded this batch
-       if state.batch_count > 0:
+        cn = state.compiled_network
+        if state.batch_count > 0:
             # Copy variable from device
-            pop = self._compiled_network.connection_populations[self.conn]
+            pop = cn.connection_populations[self.conn]
             pop.vars[self.var].pull_from_device()
 
             # Get view, sliced by batch mask if simulation is batched
@@ -122,7 +120,7 @@ class ConnVarRecorder(Callback):
             # If simulation and variable is batched
             num_src = np.prod(self.conn.source().shape)
             num_trg = np.prod(self.conn.target().shape)
-            if state.batch_size > 1 and state.batched:
+            if cn.genn_model.batch_size > 1 and state.batched:
                 # Slice view by batch mask and reshape to num_src * num_trg
                 data_view = np.reshape(var_view[state.batch_mask],
                                        (state.batch_count, num_src, num_trg))
@@ -154,7 +152,7 @@ class ConnVarRecorder(Callback):
     def on_batch_begin(self, state, batch: int):
         # Get mask for examples in this batch and count
         state.batch_mask = self._example_filter.get_batch_mask(
-            batch, self._batch_size)
+            batch, state.compiled_network.genn_model.batch_size)
         state.batch_count = np.sum(self.batch_mask)
 
         # If there's anything to record in this
@@ -169,7 +167,7 @@ class ConnVarRecorder(Callback):
         data = [np.stack(d) for d in state.data]
 
         # If model batched
-        if state.batch_size > 1:
+        if state.compiled_network.genn_model.batch_size > 1:
             # Split each stacked array along the batch axis and
             # chain together resulting in a list, containing a
             # (time, neuron) matrix for each example
