@@ -29,12 +29,12 @@ DT = 1.0
 
 
 class EaseInSchedule(Callback):
-    def set_params(self, compiled_network, **kwargs):
-        self._optimisers = [o for o, _ in compiled_network.optimisers]
+    def create_state(self, compiled_network, **kwargs):
+        return [o for o, _ in compiled_network.optimisers]
 
-    def on_batch_begin(self, batch):
+    def on_batch_begin(self, state, batch):
         # Set parameter to return value of function
-        for optimiser in self._optimisers:
+        for optimiser in state:
             if optimiser.alpha < 0.001 :
                 optimiser.alpha = (0.001 / 1000.0) * (1.05 ** batch)
             else:

@@ -456,15 +456,14 @@ class CustomUpdateOnLastTimestep(Callback):
         self.name = name
         self.example_timesteps = example_timesteps
     
-    def set_params(self, compiled_network, **kwargs):
-        # Extract compiled network
-        self._compiled_network = compiled_network
+    def create_state(self, compiled_network, **kwargs):
+        return compiled_network
 
-    def on_timestep_begin(self, timestep: int):
+    def on_timestep_begin(self, state, timestep: int):
         if timestep == (self.example_timesteps - 1):
             logger.debug(f"Running custom update {self.name} "
                          f"at start of timestep {timestep}")
-            self._compiled_network.genn_model.custom_update(self.name)
+            state.genn_model.custom_update(self.name)
 
 
 class CustomUpdateOnBatchEndNotFirst(Callback):
@@ -473,15 +472,14 @@ class CustomUpdateOnBatchEndNotFirst(Callback):
     def __init__(self, name: str):
         self.name = name
 
-    def set_params(self, compiled_network, **kwargs):
-        # Extract compiled network
-        self._compiled_network = compiled_network
+    def create_state(self, compiled_network, **kwargs):
+        return compiled_network
         
-    def on_batch_end(self, batch, metrics):
+    def on_batch_end(self, state, batch, metrics):
         if batch > 0:
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
-            self._compiled_network.genn_model.custom_update(self.name)
+            state.genn_model.custom_update(self.name)
 
 class CustomUpdateOnFirstBatchEnd(Callback):
     """Callback that triggers a GeNN custom update 
@@ -489,15 +487,14 @@ class CustomUpdateOnFirstBatchEnd(Callback):
     def __init__(self, name: str):
         self.name = name
 
-    def set_params(self, compiled_network, **kwargs):
-        # Extract compiled network
-        self._compiled_network = compiled_network
+    def create_state(self, compiled_network, **kwargs):
+        return compiled_network
         
-    def on_batch_end(self, batch, metrics):
+    def on_batch_end(self, state, batch, metrics):
         if batch == 0:
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
-            self._compiled_network.genn_model.custom_update(self.name)
+            state.genn_model.custom_update(self.name)
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
