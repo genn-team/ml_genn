@@ -22,6 +22,10 @@ class Optimiser(ABC):
 
     @abstractmethod
     def create_state(self) -> Any:
+        """Returns new optimiser-specific state object. 
+        This should contain copies of any attributes of 
+        the optimiser which can be modified at runtime
+        """
         pass
 
     @abstractmethod

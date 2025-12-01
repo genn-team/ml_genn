@@ -475,7 +475,7 @@ class CustomUpdateOnBatchEndNotFirst(Callback):
     def create_state(self, compiled_network, **kwargs):
         return compiled_network
         
-    def on_batch_end(self, state, batch, metrics):
+    def on_batch_end(self, state, batch, metric_state):
         if batch > 0:
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
@@ -490,7 +490,7 @@ class CustomUpdateOnFirstBatchEnd(Callback):
     def create_state(self, compiled_network, **kwargs):
         return compiled_network
         
-    def on_batch_end(self, state, batch, metrics):
+    def on_batch_end(self, state, batch, metric_state):
         if batch == 0:
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
