@@ -111,6 +111,9 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                      num_batches=num_batches)
         callback_list.on_test_begin()
 
+        # Create metric state
+        metric_state = {o: m.create_state() for o, m in metrics.items()}
+
         # Build deque to hold y
         y_pipe_queue = {p: deque(maxlen=d + 1)
                         for p, d in y_pipe_depth.items()}
@@ -168,21 +171,21 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     batch_y_pred = self.get_readout(o)
 
                     # Update metrics
-                    metrics[o].update(batch_y_true,
+                    metrics[o].update(metric_state[o], batch_y_true,
                                       batch_y_pred[:len(batch_y_true)],
                                       self.communicator)
 
             # End batch
-            callback_list.on_batch_end(batch_i, metrics)
+            callback_list.on_batch_end(batch_i, metric_state)
 
             # Next batch
             batch_i += 1
 
         # End testing
-        callback_list.on_test_end(metrics)
+        callback_list.on_test_end(metric_state)
 
         # Return metrics
-        return metrics, callback_list.get_data()
+        return metric_state, callback_list.get_data()
 
 
 # Because we want the converter class to be reusable, we don't want
