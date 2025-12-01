@@ -13,11 +13,11 @@ from ml_genn.utils.data import preprocess_spikes
 
 def test_parameter_learning():
     # Build spike trains
-    ind = [[0, 1],[1, 0],[0, 1],[1, 0]]
-    time = [[0, 10],[0, 10],[0, 10],[0, 10]]
+    ind = [[0, 1],[1, 0]]
+    time = [[0, 10],[0, 10]]
     spikes = [preprocess_spikes(np.asarray(t), np.asarray(i), 2)
               for t, i in zip(time, ind)]
-    labels = [0, 1, 0, 1]
+    labels = [0, 1]
    
     w_in_hid = [[4, 0, 4, 0],
                 [0, 4, 0, 4 ]]
