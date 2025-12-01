@@ -11,8 +11,6 @@ class State:
 class BatchProgressBar(Callback):
     """Callback to display a `tqdm <https://tqdm.github.io/>`_ progress bar
     which gets updated every batch."""
-    def __init__(self):
-
     def create_state(self, num_batches, **kwargs):
         return State(num_batches)
 
