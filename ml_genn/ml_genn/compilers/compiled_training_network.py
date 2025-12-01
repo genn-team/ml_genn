@@ -20,17 +20,17 @@ from ..serialisers import default_serialisers
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
-                 losses, example_timesteps: int,
+                 ground_truths, example_timesteps: int,
                  base_train_callbacks: list, base_validate_callbacks: list,
                  optimisers: List[Tuple],
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
         super(CompiledTrainingNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations,
-            communicator, example_timesteps)
+              genn_model, neuron_populations, connection_populations,
+              communicator, example_timesteps)
 
-        self.losses = losses
+        self.ground_truths = ground_truths
         self.example_timesteps = example_timesteps
         self.base_train_callbacks = base_train_callbacks
         self.base_validate_callbacks = base_validate_callbacks
@@ -296,11 +296,10 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Apply inputs to model
         self.set_input(x)
 
-        # Loop through outputs
+        # Loop through outputs and push ground truth values
         for pop, y_true in y.items():
-            # Update loss function with target labels
             underlying_pop = get_underlying_pop(pop)
-            self.losses[underlying_pop].set_target(
+            self.ground_truths[underlying_pop].push_to_device(
                 self.neuron_populations[underlying_pop],
                 y_true, underlying_pop.shape, self.genn_model.batch_size,
                 self.example_timesteps)
