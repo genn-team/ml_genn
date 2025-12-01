@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import numpy as np
 
@@ -9,12 +11,27 @@ from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 from ..utils.network import PopulationType
 
+from dataclasses import dataclass, field
 from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
 from ..utils.network import get_underlying_pop
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..compilers import CompiledNetwork
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class State:
+    compiled_network: CompiledNetwork
+    batched: bool
+    shared: bool
+    batch_mask: int
+    data: list = field(default_factory=list)
+    batch_count: int = None
+    
 
 class VarRecorder(Callback):
     """Callback used for recording state variables during simulation. 
@@ -56,13 +73,7 @@ class VarRecorder(Callback):
         self._neuron_mask = get_neuron_filter_mask(neuron_filter,
                                                    self._pop.shape)
 
-    def set_params(self, data, compiled_network, **kwargs):
-        self._batch_size = compiled_network.genn_model.batch_size
-        self._compiled_network = compiled_network
-
-        # Create default batch mask in case on_batch_begin not called
-        self._batch_mask = np.ones(self._batch_size, dtype=bool)
-
+    def create_state(self, compiled_network, **kwargs):
         # Get GeNN population from compiled model
         pop = compiled_network.neuron_populations[self._pop]
 
@@ -77,75 +88,74 @@ class VarRecorder(Callback):
                                f"{self.var} to record")
 
         # Determine if var is shared or batched
-        self.shared = not (get_var_access_dim(var.access)
-                           & VarAccessDim.ELEMENT)
-        self.batched = (get_var_access_dim(var.access)
-                        & VarAccessDim.BATCH)
+        shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
+        batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
                            
         # If variable is shared and neuron mask was set, give warning
-        if self.shared and not np.all(self._neuron_mask):
+        if shared and not np.all(self._neuron_mask):
             logger.warn(f"VarRecorder ignoring neuron mask applied "
                         f"to SHARED_NEURON variable f{self.var}")
 
-        # Create empty list to hold recorded data
-        data[self.key] = []
-        self._data = data[self.key]
+        return State(compiled_network, batched, shared,
+                     np.ones(compiled_network.genn_model.batch_size,
+                             dtype=bool))
 
-    def on_timestep_end(self, timestep: int):
+    def on_timestep_end(self, state, timestep: int):
         # If anything should be recorded this batch
-        if self._batch_count > 0:
+        cn = state.compiled_network
+        if state.batch_count > 0:
             # Copy variable from device
-            pop = self._compiled_network.neuron_populations[self._pop]
+            pop = cn.neuron_populations[self._pop]
             pop.vars[self.var].pull_from_device()
 
             # If simulation and variable is batched
             var_view = pop.vars[self.var].current_view
-            if self._batch_size > 1 and self.batched:
+            if cn.genn_model.batch_size > 1 and state.batched:
                 # Apply neuron mask
-                if self.shared:
-                    data_view = var_view[self._batch_mask][:, :]
+                if state.shared:
+                    data_view = var_view[state.batch_mask][:, :]
                 else:
-                    data_view = var_view[self._batch_mask][:, self._neuron_mask]
+                    data_view = var_view[state.batch_mask][:, self._neuron_mask]
             # Otherwise
             else:
                 # Apply neuron mask
-                if self.shared:
+                if state.shared:
                     data_view = var_view[:]
                 else:
                     data_view = var_view[self._neuron_mask]
 
                 # If SIMULATION is batched but variable isn't,
                 # broadcast batch count copies of variable
-                if self._batch_size > 1:
+                if cn.genn_model.batch_size > 1:
                     data_view = np.broadcast_to(
-                        data_view, (self._batch_count,) + data_view.shape)
+                        data_view, (state.batch_count,) + data_view.shape)
 
             # If there isn't already list to hold data, add one
-            if len(self._data) == 0:
-                self._data.append([])
+            if len(state.data) == 0:
+                state.data.append([])
 
             # Add copy to newest list
-            self._data[-1].append(np.copy(data_view))
+            state.data[-1].append(np.copy(data_view))
 
-    def on_batch_begin(self, batch: int):
+    def on_batch_begin(self, state, batch: int):
         # Get mask for examples in this batch and count
-        self._batch_mask = self._example_filter.get_batch_mask(
-            batch, self._batch_size)
-        self._batch_count = np.sum(self._batch_mask)
+        state.batch_mask = self._example_filter.get_batch_mask(
+            batch, state.compiled_network.genn_model.batch_size)
+        state.batch_count = np.sum(state.batch_mask)
 
         # If there's anything to record in this
         # batch, add list to hold it to data
-        if self._batch_count > 0:
-            self._data.append([])
+        if state.batch_count > 0:
+            state.data.append([])
 
-    def get_data(self):
+    def get_data(self, state):
         # Stack 1D or 2D numpy arrays containing value
         # for each timestep in each batch to get
         # (time, batch, neuron) or (time, neuron) arrays
-        data = [np.stack(d) for d in self._data]
+        data = [np.stack(d) for d in state.data]
 
         # If model batched
-        if self._batch_size > 1:
+        if state.compiled_network.genn_model.batch_size > 1:
             # Split each stacked array along the batch axis and
             # chain together resulting in a list, containing a
             # (time, neuron) matrix for each example

@@ -29,16 +29,16 @@ DT = 1.0
 
 
 class EaseInSchedule(Callback):
-    def set_params(self, compiled_network, **kwargs):
-        self._optimisers = [o for o, _ in compiled_network.optimisers]
+    def create_state(self, compiled_network, **kwargs):
+        return [s for s in compiled_network.optimiser_state]
 
-    def on_batch_begin(self, batch):
+    def on_batch_begin(self, state, batch):
         # Set parameter to return value of function
-        for optimiser in self._optimisers:
-            if optimiser.alpha < 0.001 :
-                optimiser.alpha = (0.001 / 1000.0) * (1.05 ** batch)
+        for s in state:
+            if s.alpha < 0.001 :
+                s.alpha = (0.001 / 1000.0) * (1.05 ** batch)
             else:
-                optimiser.alpha = 0.001
+                s.alpha = 0.001
 
 
 class Shift:
@@ -103,6 +103,7 @@ class Delay:
         self.n_delay = n_delay
         self.t_delay = t_delay * 1000
         self.num_input = num_input
+
     def __call__(self, events: np.ndarray) -> np.ndarray:
         delayed_events = [events]
 

@@ -17,11 +17,11 @@ class OptimiserParamSchedule(Callback):
         self.param_name = param_name
         self.func = func
 
-    def set_params(self, compiled_network, **kwargs):
-        self._optimisers = [o for o, _ in compiled_network.optimisers]
+    def create_state(self, compiled_network, **kwargs):
+        return [s for s in compiled_network.optimiser_state]
 
-    def on_epoch_begin(self, epoch):
+    def on_epoch_begin(self, state, epoch):
         # Set parameter to return value of function
-        for o in self._optimisers:
-            setattr(o, self.param_name,
-                    self.func(epoch, getattr(o, self.param_name)))
+        for s in state:
+            setattr(s, self.param_name,
+                    self.func(epoch, getattr(s, self.param_name)))

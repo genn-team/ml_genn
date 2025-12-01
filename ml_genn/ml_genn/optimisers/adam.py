@@ -5,7 +5,7 @@ from ..utils.model import CustomUpdateModel
 from ..utils.snippet import ConstantValueDescriptor
 
 from copy import deepcopy
-
+from dataclasses import dataclass
 
 genn_model = {
     "vars": [("M", "scalar"), ("V", "scalar")],
@@ -26,6 +26,11 @@ genn_model = {
         Variable -= (Alpha * M * MomentScale1) / (sqrt(V * MomentScale2) + Epsilon);
         """}
 
+@dataclass
+class State:
+    alpha: float
+    beta1: float
+    beta2: float
 
 class Adam(Optimiser):
     """Optimizer that implements the Adam algorithm [Kingma2014]_.
@@ -51,12 +56,15 @@ class Adam(Optimiser):
         self.beta2 = beta2
         self.epsilon = epsilon
 
-    def set_step(self, genn_cu, step):
-        assert step >= 0
-        moment_scale_1 = 1.0 / (1.0 - (self.beta1 ** (step + 1)))
-        moment_scale_2 = 1.0 / (1.0 - (self.beta2 ** (step + 1)))
+    def create_state(self):
+        return State(self.alpha, self.beta1, self.beta2)
 
-        genn_cu.set_dynamic_param_value("Alpha", self.alpha)
+    def set_step(self, state, genn_cu, step):
+        assert step >= 0
+        moment_scale_1 = 1.0 / (1.0 - (state.beta1 ** (step + 1)))
+        moment_scale_2 = 1.0 / (1.0 - (state.beta2 ** (step + 1)))
+
+        genn_cu.set_dynamic_param_value("Alpha", state.alpha)
         genn_cu.set_dynamic_param_value("MomentScale1", moment_scale_1)
         genn_cu.set_dynamic_param_value("MomentScale2", moment_scale_2)
 

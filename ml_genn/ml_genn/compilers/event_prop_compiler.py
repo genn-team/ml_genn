@@ -442,7 +442,7 @@ class UpdateTrial(Callback):
     def __init__(self, genn_pop):
         self.genn_pop = genn_pop
 
-    def on_batch_begin(self, batch: int):
+    def on_batch_begin(self, state, batch: int):
         logger.debug(f"Updating trial at start of batch {batch}")
 
         # Set dynamic parameter to batch ID
@@ -456,15 +456,14 @@ class CustomUpdateOnLastTimestep(Callback):
         self.name = name
         self.example_timesteps = example_timesteps
     
-    def set_params(self, compiled_network, **kwargs):
-        # Extract compiled network
-        self._compiled_network = compiled_network
+    def create_state(self, compiled_network, **kwargs):
+        return compiled_network
 
-    def on_timestep_begin(self, timestep: int):
+    def on_timestep_begin(self, state, timestep: int):
         if timestep == (self.example_timesteps - 1):
             logger.debug(f"Running custom update {self.name} "
                          f"at start of timestep {timestep}")
-            self._compiled_network.genn_model.custom_update(self.name)
+            state.genn_model.custom_update(self.name)
 
 
 class CustomUpdateOnBatchEndNotFirst(Callback):
@@ -473,15 +472,14 @@ class CustomUpdateOnBatchEndNotFirst(Callback):
     def __init__(self, name: str):
         self.name = name
 
-    def set_params(self, compiled_network, **kwargs):
-        # Extract compiled network
-        self._compiled_network = compiled_network
+    def create_state(self, compiled_network, **kwargs):
+        return compiled_network
         
-    def on_batch_end(self, batch, metrics):
+    def on_batch_end(self, state, batch, metric_state):
         if batch > 0:
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
-            self._compiled_network.genn_model.custom_update(self.name)
+            state.genn_model.custom_update(self.name)
 
 class CustomUpdateOnFirstBatchEnd(Callback):
     """Callback that triggers a GeNN custom update 
@@ -489,15 +487,14 @@ class CustomUpdateOnFirstBatchEnd(Callback):
     def __init__(self, name: str):
         self.name = name
 
-    def set_params(self, compiled_network, **kwargs):
-        # Extract compiled network
-        self._compiled_network = compiled_network
+    def create_state(self, compiled_network, **kwargs):
+        return compiled_network
         
-    def on_batch_end(self, batch, metrics):
+    def on_batch_end(self, state, batch, metric_state):
         if batch == 0:
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
-            self._compiled_network.genn_model.custom_update(self.name)
+            state.genn_model.custom_update(self.name)
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
@@ -1057,7 +1054,7 @@ class EventPropCompiler(Compiler):
                         vars["weight"], genn_model)
             
                     # Add custom update to list of optimisers
-                    optimisers.append((deepcopy(vars["weight"]), cu_weight))
+                    optimisers.append((vars["weight"], cu_weight))
                     
                     # Add variable to list of those to checkpoint
                     checkpoint_connection_vars.append((k, "weight"))
@@ -1075,7 +1072,7 @@ class EventPropCompiler(Compiler):
                         (0.0, c.max_delay_steps))
 
                     # Add custom update to list of optimisers
-                    optimisers.append((deepcopy(vars["delay"]), cu_delay))
+                    optimisers.append((vars["delay"], cu_delay))
 
                     # Add variable to list of those to checkpoint
                     checkpoint_connection_vars.append((k, "delay"))
@@ -1105,7 +1102,7 @@ class EventPropCompiler(Compiler):
                             o, genn_model)
 
                     # Add custom update to list of optimisers
-                    optimisers.append((deepcopy(o), cu_param))
+                    optimisers.append((o, cu_param))
                     checkpoint_population_vars.append((k, n))
 
                 i += 1

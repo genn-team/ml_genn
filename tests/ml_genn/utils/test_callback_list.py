@@ -6,7 +6,7 @@ from pytest import raises, warns
 def test_missing_key():
     # Create fake callback which returns None as it's data key
     class NoKeyCallback(Callback):
-        def get_data(self):
+        def get_data(self, state):
             return None, "hello"
 
     # Place one in callback list
@@ -19,7 +19,7 @@ def test_missing_key():
 def test_duplicate_key():
     # Create fake callback which returns fixed key
     class FixedKeyCallback(Callback):
-        def get_data(self):
+        def get_data(self, state):
             return "key", "hello"
 
     # Place one in callback list

@@ -1,16 +1,25 @@
 import numpy as np
 
 from typing import Optional
-from .metric import Metric
+from .metric import Metric, MetricState
 from ..communicators import Communicator
+
+class State(MetricState):
+    def __init__(self):
+        self.sum_mse = 0.0
+        self.total = 0.0
+
+    @property
+    def result(self):
+        if self.total == 0.0:
+            return None
+        else:
+            return self.sum_mse / self.total
 
 class MeanSquareError(Metric):
     """Computes the mean squared error between labels and prediction"""
-    def __init__(self):
-        self.reset()
-
-    def update(self, y_true: np.ndarray, y_pred: np.ndarray,
-               communicator: Optional[Communicator]):
+    def update(self, state: MetricState, y_true: np.ndarray,
+               y_pred: np.ndarray, communicator: Optional[Communicator]):
         y_true = np.asarray(y_true)
         if y_true.shape != y_pred.shape:
             raise RuntimeError(f"Prediction shape:{y_pred.shape} does "
@@ -28,16 +37,9 @@ class MeanSquareError(Metric):
             batch_total = communicator.reduce_sum(batch_total)
 
         # Add total size and MSE sum across batch to totals
-        self.sum_mse += batch_sum_mse
-        self.total += batch_total
+        state.sum_mse += batch_sum_mse
+        state.total += batch_total
 
-    def reset(self):
-        self.sum_mse = 0.0
-        self.total = 0
-
-    @property
-    def result(self):
-        if self.total == 0:
-            return None
-        else:
-            return self.sum_mse / self.total
+    def create_state(self) -> MetricState:
+        """Creates new metric state"""
+        return State()
