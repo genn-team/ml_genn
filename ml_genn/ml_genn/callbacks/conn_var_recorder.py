@@ -98,7 +98,7 @@ class ConnVarRecorder(Callback):
         # Determine if var is batched
         batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
 
-        # Crate state named tuple
+        # Create state dataclass
         return State(compiled_network, batched,
                      np.ones(compiled_network.genn_model.batch_size,
                              dtype=bool))
