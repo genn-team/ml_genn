@@ -8,7 +8,6 @@ from .callback import Callback
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
 
 from dataclasses import dataclass, field
-from collections import namedtuple
 from itertools import chain
 from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
