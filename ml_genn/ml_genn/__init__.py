@@ -1,3 +1,4 @@
+from importlib import metadata
 from .connection import Connection
 from .layer import InputLayer, Layer
 from .network import Network
@@ -17,6 +18,8 @@ from . import readouts
 from . import serialisers
 from . import synapses
 from . import utils
+
+__version__ = metadata.version("ml_genn")
 
 __all__ = ["Connection", "InputLayer", "Layer", "Network", "Population",
            "SequentialNetwork", "callbacks", "communicators", "compilers",

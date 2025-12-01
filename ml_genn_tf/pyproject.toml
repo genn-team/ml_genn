@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml_genn_tf"
+dynamic = ["version"]
+requires-python = ">=3.8.0"
+dependencies = [
+    "tensorflow<2.15.0",
+    "ml_genn>=3.0.0,<4.0.0"]

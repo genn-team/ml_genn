@@ -1,13 +1,10 @@
-from setuptools import setup, find_packages
+from os import path
 
-setup(name="ml_genn",
-      version="2.3.0",
-      packages=find_packages(),
+from setuptools import setup
 
-      python_requires=">=3.7.0",
-      install_requires=["pygenn>=5.1.0,<6.0.0",
-                        "enum-compat", "deprecated", 
-                        "varname", "sympy>=1.9.0,<2.0.0",
-                        "tqdm>=4.27.0"],
-      extras_require={
-        "test": ["pytest", "pytest-cov"]})
+# Read version from txt file
+abs_ml_genn_path = path.abspath(path.join(path.dirname(__file__), path.pardir))
+with open(path.join(abs_ml_genn_path, "version.txt")) as version_file:
+    version = version_file.read().strip()
+
+setup(version=version)

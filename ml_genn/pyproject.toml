@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml_genn"
+dynamic = ["version"]
+requires-python = ">=3.8.0"
+dependencies = [
+    "pygenn>=5.1.0,<6.0.0",
+    "deprecated", 
+    "varname",
+    "sympy>=1.9.0,<2.0.0",
+    "tqdm>=4.27.0"]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-cov"]

@@ -96,8 +96,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                 rm -rf ${WORKSPACE}/venv
                 ${env.PYTHON} -m venv ${WORKSPACE}/venv
                 . ${WORKSPACE}/venv/bin/activate
-                pip install -U pip
-                pip install numpy pybind11 pytest pytest-cov wheel flake8 psutil
+                pip install -U pip flake8
                 """;
             }
 
@@ -132,7 +131,7 @@ for (b = 0; b < builderNodes.size(); b++) {
                     // Install ML GeNN
                     sh """
                     . ${WORKSPACE}/venv/bin/activate
-                    pip install -e .
+                    pip install -e .[test]
                     """;
                 }
 
