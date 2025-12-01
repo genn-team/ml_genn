@@ -1,10 +1,15 @@
 __pycache__
+.coverage
 
 # No eggs or build please!
 /ml_genn/ml_genn.egg-info/
 /ml_genn/build
 /ml_genn_tf/ml_genn_tf.egg-info/
 /ml_genn_tf/build
+
+# No tonic data
+/examples/cache
+/examples/data
 
 # Ignore GeNN generated output
 runner_*_Debug.*
