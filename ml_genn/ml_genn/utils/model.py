@@ -2,7 +2,7 @@ import numpy as np
 
 from numbers import Number
 from typing import Any, MutableMapping, Optional, Sequence, Union
-from pygenn import VarAccess, VarAccessModeAttribute
+from pygenn import VarAccess, VarAccessMode, VarAccessModeAttribute
 from .value import Value
 
 from copy import deepcopy
@@ -226,9 +226,10 @@ class CustomUpdateModel(Model):
     def has_egp_ref(self, name):
         return self._is_in_list("egp_refs", name)
 
-    def add_var_ref(self, name, type, value):
+    def add_var_ref(self, name, type, value,
+                    access_mode: int = VarAccessMode.READ_WRITE):
         assert not self.has_var_ref(name)
-        self._add_to_list("var_refs", (name, type))
+        self._add_to_list("var_refs", (name, type, access_mode))
         self.var_refs[name] = value
 
     def set_var_ref_access_mode(self, name, access_mode):
@@ -317,9 +318,13 @@ class SynapseModel(Model):
     def has_neuron_var_ref(self, name):
         return self._is_in_list("neuron_var_refs", name)
 
-    def add_neuron_var_ref(self, name, type, target):
-        self._add_to_list("neuron_var_refs", (name, type))
+    def add_neuron_var_ref(self, name, type, target,
+                           access_mode: int = VarAccessMode.READ_WRITE):
+        self._add_to_list("neuron_var_refs", (name, type, access_mode))
         self.neuron_var_refs[name] = target
+
+    def set_neuron_var_ref_access_mode(self, name, access_mode):
+        self._set_access_model("neuron_var_refs", name, access_mode)
 
     def append_sim_code(self, code):
         self._append_code("sim_code", code)
@@ -363,18 +368,30 @@ class WeightUpdateModel(Model):
     def has_psm_var_ref(self, name):
         return self._is_in_list("psm_var_refs", name)
 
-    def add_pre_neuron_var_ref(self, name, type, target):
-        self._add_to_list("pre_neuron_var_refs", (name, type))
+    def add_pre_neuron_var_ref(self, name, type, target,
+                               access_mode: int = VarAccessMode.READ_WRITE):
+        self._add_to_list("pre_neuron_var_refs", (name, type, access_mode))
         self.pre_neuron_var_refs[name] = target
     
-    def add_post_neuron_var_ref(self, name, type, target):
-        self._add_to_list("post_neuron_var_refs", (name, type))
+    def add_post_neuron_var_ref(self, name, type, target,
+                                access_mode: int = VarAccessMode.READ_WRITE):
+        self._add_to_list("post_neuron_var_refs", (name, type, access_mode))
         self.post_neuron_var_refs[name] = target
 
-    def add_psm_var_ref(self, name, type, target):
-        self._add_to_list("psm_var_refs", (name, type))
+    def add_psm_var_ref(self, name, type, target,
+                        access_mode: int = VarAccessMode.READ_WRITE):
+        self._add_to_list("psm_var_refs", (name, type, access_mode))
         self.psm_var_refs[name] = target
-        
+
+    def set_pre_neuron_var_ref_access_mode(self, name, access_mode):
+        self._set_access_model("pre_neuron_var_refs", name, access_mode)
+    
+    def set_post_neuron_var_ref_access_mode(self, name, access_mode):
+        self._set_access_model("post_neuron_var_refs", name, access_mode)
+
+    def set_psm_var_ref_access_mode(self, name, access_mode):
+        self._set_access_model("psm_var_refs", name, access_mode)
+
     def append_synapse_dynamics(self, code):
         self._append_code("synapse_dynamics_code", code)
     

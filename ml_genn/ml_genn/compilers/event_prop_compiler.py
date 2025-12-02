@@ -3,31 +3,27 @@ import numpy as np
 import sympy
 
 from string import Template
-from typing import Iterator, Mapping, Sequence, Union
-from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
-                    SynapseMatrixType, SynapseMatrixWeight)
+from typing import Mapping, Union
+from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
+                    VarAccess, VarAccessMode)
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from .ground_truths import GroundTruth
 from .. import Connection, InputLayer, Layer, Population, Network
-from ..callbacks import (BatchProgressBar, Callback, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochEnd,
-                         CustomUpdateOnTimestepEnd)
+from ..callbacks import (Callback, CustomUpdateOnBatchBegin,
+                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
                       RelativeMeanSquareError, SparseCategoricalCrossentropy)
-from ..metrics import MetricsType
 from ..neurons import Input
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
                         MaxVar, SumVar, Var)
 from ..utils.auto_model import AutoModel, AutoNeuronModel, AutoSynapseModel
-from ..utils.callback_list import CallbackList
 from ..utils.model import (CustomUpdateModel, Model, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
-from ..utils.network import PopulationType
 from ..utils.snippet import ConnectivitySnippet
 
 from copy import deepcopy
@@ -40,8 +36,7 @@ from .compiler import (create_reset_custom_update, get_delay_type,
                        get_conn_max_delay)
 from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
-from ..utils.network import get_underlying_conn, get_underlying_pop
-from ..utils.value import is_value_array, is_value_constant
+from ..utils.value import is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
 from .ground_truths import default_ground_truths
@@ -258,13 +253,43 @@ def _simplify_using_threshold(var_names, thresold_expr, expr):
     # with solution from threshold condition
     return expr.subs(the_var, sln[0])
 
-def _add_required_parameters(model: AutoModel, genn_model: Model, expression):
-    # If any target population parameters are 
-    # referenced, duplicate in synapse model
+def _add_required_parameters(model: AutoModel, genn_model: Model, expression,
+                             add_var_ref_fn, has_var_ref_fn):
+    # Loop through parameters in model
     for n, v in model.param_vals.items():
-        if (expression.has(sympy.Symbol(n)) and not genn_model.has_param(n)):
-            genn_model.add_param(n, "scalar", v)
+        # If they are referenced in expression
+        if (expression.has(sympy.Symbol(n))):
+            # If their value is constant and parameter doesn't already exist,
+            # duplicate value in another parameter
+            if is_value_constant(v):
+                if not genn_model.has_param(n):
+                    genn_model.add_param(n, "scalar", v)
+            # Otherwise, if variable reference doesn't already exist, 
+            # Add suitable read-only variable reference
+            elif not has_var_ref_fn(genn_model, n):
+                add_var_ref_fn(genn_model, n, "scalar", n,
+                               VarAccessMode.READ_ONLY)
 
+def _add_required_psm_neuron_parameters(model: AutoNeuronModel, 
+                                        genn_model: SynapseModel,
+                                        expression):
+    _add_required_parameters(model, genn_model, expression,
+                             SynapseModel.add_neuron_var_ref, 
+                             SynapseModel.has_neuron_var_ref)
+
+def _add_required_wum_post_neuron_parameters(model: AutoNeuronModel, 
+                                             genn_model: WeightUpdateModel, 
+                                             expression):
+    _add_required_parameters(model, genn_model, expression,
+                             WeightUpdateModel.add_post_neuron_var_ref,
+                             WeightUpdateModel.has_post_neuron_var_ref)
+
+def _add_required_wum_psm_parameters(model: AutoSynapseModel, 
+                                     genn_model: WeightUpdateModel, 
+                                     expression):
+    _add_required_parameters(model, genn_model, expression,
+                             WeightUpdateModel.add_psm_var_ref,
+                             WeightUpdateModel.has_psm_var_ref)
 
 class CompileState:
     def __init__(self, network: Network, losses, optimisers, 
@@ -748,7 +773,8 @@ class EventPropCompiler(Compiler):
             
             # If any target population parameters are 
             # referenced, duplicate in synapse model
-            _add_required_parameters(trg_neuron_model, genn_model, o)
+            _add_required_psm_neuron_parameters(trg_neuron_model,
+                                                genn_model, o)
     
             # Finally add lambda ODE to adjoint system
             dl_dt[_get_lmd_sym(syn_sym)] = o
@@ -902,11 +928,14 @@ class EventPropCompiler(Compiler):
 
             # If any target neuron parameters are referenced in 
             # add to pre expression, duplicate in weight update model
-            _add_required_parameters(trg_neuron_model, genn_model, dx_dt_diff_sum)
+            _add_required_wum_post_neuron_parameters(trg_neuron_model, 
+                                                     genn_model, 
+                                                     dx_dt_diff_sum)
 
             # If any synapse parameters are referenced in add to pre
             # expression, duplicate in weight update model
-            _add_required_parameters(synapse_model, genn_model, dx_dt_diff_sum)
+            _add_required_wum_psm_parameters(synapse_model, genn_model,
+                                             dx_dt_diff_sum)
 
             # If any target population variables or lambda variables are 
             # referenced, add neuron variable references and, if connection
@@ -994,8 +1023,8 @@ class EventPropCompiler(Compiler):
             
             # If any synapse parameters are referenced in gradient 
             # update expression, duplicate in weight update model
-            _add_required_parameters(synapse_model, genn_model,
-                                     weight_grad_update)
+            _add_required_wum_psm_parameters(synapse_model, genn_model,
+                                             weight_grad_update)
         
             # If delays can be learned
             if has_learnable_delay:
