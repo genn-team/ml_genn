@@ -264,7 +264,7 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression,
             if is_value_constant(v):
                 if not genn_model.has_param(n):
                     genn_model.add_param(n, "scalar", v)
-            # Otherwise, if variable reference doens't already exist, 
+            # Otherwise, if variable reference doesn't already exist, 
             # Add suitable read-only variable reference
             elif not has_var_ref_fn(genn_model, n):
                 add_var_ref_fn(genn_model, n, "scalar", n,
