@@ -39,3 +39,10 @@ class Readout(ABC):
         to reset any state variables added by readout to
         """
         return []
+    
+    @property
+    def per_timestep(self) -> bool:
+        """Does this readout need to be read every
+        timestep or just at the end of each example?
+        """
+        return False

@@ -31,3 +31,7 @@ class Var(Readout):
         # Return contents, reshaped as desired
         return np.reshape(genn_pop.vars[self.output_var_name].view,
                           (batch_size,) + shape)
+
+    @property
+    def per_timestep(self) -> bool:
+        return True
