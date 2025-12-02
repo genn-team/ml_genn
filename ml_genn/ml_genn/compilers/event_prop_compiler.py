@@ -3,7 +3,7 @@ import numpy as np
 import sympy
 
 from string import Template
-from typing import  Mapping, Union
+from typing import Mapping, Union
 from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
                     VarAccess, VarAccessMode)
 
