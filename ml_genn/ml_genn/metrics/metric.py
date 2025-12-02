@@ -4,10 +4,11 @@ from abc import ABC
 from typing import Optional
 from ..communicators import Communicator
 
-from abc import abstractmethod, abstractproperty
+from abc import abstractmethod
 
 class MetricState(ABC):
-    @abstractproperty
+    @property
+    @abstractmethod
     def result(self) -> Optional[np.ndarray]:
         """Quantity calculated by metric"""
         pass
