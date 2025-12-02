@@ -2,14 +2,26 @@ import numpy as np
 import sympy
 
 from typing import Any, MutableMapping, Optional, Tuple
-from .model import NeuronModel, SynapseModel
 from .value import Value
 
-from copy import deepcopy
-from itertools import chain
 from ..utils.value import get_auto_values
 
 Variables = MutableMapping[str, Tuple[Optional[str], Optional[str]]]
+
+# So lots of seemingly-innocent variable names don't conflict with bits of 
+# sympy, we want to significantly cut back the 'global dictionary' passed 
+# to parse_expr. We only require transcendental functions and pi. Symbol 
+# is automatically added around symbols by 'auto_symbol' transformation.
+# Literals get tagged with 'Integer', 'Float' and 'Rational' by other 
+# transformations
+_required_symbol_names = ["sin", "cos", "tan", "sec", "csc", "cot", "sinc",
+                          "asin", "acos", "atan", "asec", "acsc", "acot",
+                          "atan2", "exp", "ln", "log", "sinh", "cosh", 
+                          "tanh", "coth", "sech", "csch", "asinh", "acosh",
+                          "atanh", "acoth", "asech", "acsch", "sqrt", 
+                          "root", "cbrt", "pi", "Symbol", "Integer",
+                          "Rational", "Float"]
+_global_dict = {f: getattr(sympy, f) for f in _required_symbol_names}
 
 class AutoModel:
     def __init__(self, model: MutableMapping[str, Any],
@@ -28,13 +40,15 @@ class AutoModel:
         if "vars" in self.model:
             # Parse ODEs
             self.dx_dt =\
-                {sympy.Symbol(n): sympy.parse_expr(v[0])
+                {sympy.Symbol(n): sympy.parse_expr(v[0],
+                                                   global_dict=_global_dict)
                  for n, v in self.model["vars"].items()
                  if v[0] is not None}
             
             # Parse jumps
             self.jumps =\
-                {sympy.Symbol(n): sympy.parse_expr(v[1])
+                {sympy.Symbol(n): sympy.parse_expr(v[1],
+                                                   global_dict=_global_dict)
                  for n, v in self.model["vars"].items()
                  if v[1] is not None}
         else:
@@ -48,9 +62,11 @@ class AutoModel:
         
         # If provided, parse dynamics and jump and add to dicts
         if dynamics is not None:
-            self.dx_dt[sym] = sympy.parse_expr(dynamics)
+            self.dx_dt[sym] = sympy.parse_expr(dynamics, 
+                                               global_dict=_global_dict)
         if jump is not None:
-            self.jumps[sym] = sympy.parse_expr(jump)
+            self.jumps[sym] = sympy.parse_expr(jump,
+                                               global_dict=_global_dict)
 
         # Add value to dictionary
         self.var_vals[name] = value
@@ -72,7 +88,8 @@ class AutoNeuronModel(AutoModel):
         self.output_var_name = output_var_name
         
         if "threshold" in self.model and self.model["threshold"] is not None:
-            self.threshold = sympy.parse_expr(self.model["threshold"])
+            self.threshold = sympy.parse_expr(self.model["threshold"],
+                                              global_dict=_global_dict)
         else:
             self.threshold = 0
 
@@ -108,7 +125,7 @@ class AutoSynapseModel(AutoModel):
 
         if "inject_current" in self.model:
             self.inject_current = sympy.parse_expr(
-                self.model["inject_current"])
+                self.model["inject_current"], global_dict=_global_dict)
         else:
             raise RuntimeError("AutoSynapseModel requires an "
                                "'inject_current' expression.")
