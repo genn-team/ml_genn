@@ -1099,7 +1099,7 @@ class EventPropCompiler(Compiler):
                         f"Delay{i}", create_wu_var_ref(genn_pop, "delay"),
                         create_wu_var_ref(genn_pop, "delayGradient"),
                         vars["delay"], genn_model,
-                        (0.0, c.max_delay_steps))
+                        (0.0, k.max_delay_steps))
 
                     # Add custom update to list of optimisers
                     optimisers.append((vars["delay"], cu_delay))

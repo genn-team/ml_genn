@@ -282,7 +282,7 @@ class NeuronModel(Model):
 
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst,
-                             param_vals={}, var_vals={}, egp_vals={}):
+                             param_vals=None, var_vals=None, egp_vals=None):
         return NeuronModel(
             model, output_var_name, 
             get_values(inst, model.get("params", []), param_vals),
@@ -334,8 +334,8 @@ class SynapseModel(Model):
 
     @staticmethod
     def from_val_descriptors(model, inst,
-                             param_vals={}, var_vals={},
-                             egp_vals={}, neuron_var_refs={}):
+                             param_vals=None, var_vals=None,
+                             egp_vals=None, neuron_var_refs=None):
         return SynapseModel(
             model, 
             get_values(inst, model.get("params", []), param_vals),

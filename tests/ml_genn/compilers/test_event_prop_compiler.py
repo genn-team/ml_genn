@@ -10,15 +10,41 @@ from ml_genn.callbacks import SpikeRecorder, VarRecorder
 
 from ml_genn.utils.data import preprocess_spikes
 
-
-def test_parameter_learning():
-    # Build spike trains
+def get_xor_dataset():
     ind = [[0, 1],[1, 0]]
     time = [[0, 10],[0, 10]]
     spikes = [preprocess_spikes(np.asarray(t), np.asarray(i), 2)
               for t, i in zip(time, ind)]
     labels = [0, 1]
-   
+    
+    return spikes, labels
+
+def test_delay_learning():
+    spikes, labels = get_xor_dataset()
+
+    network = SequentialNetwork()
+    with network:
+        input = InputLayer(SpikeInput(max_spikes=2), 2)
+        output = Layer(Dense(1.0, 0), 
+                       LeakyIntegrate(tau_mem=10.0, readout="max_var"),
+                       2, Exponential(5), max_delay_steps=15)
+
+    compiler = EventPropCompiler(example_timesteps=100,
+                                 losses="sparse_categorical_crossentropy",
+                                 batch_size=1)
+    compiled_net = compiler.compile(network, optimisers={output: {"delay": Adam(1.0)}})
+
+    with compiled_net:
+        metrics, _  = compiled_net.train({input: spikes}, {output: labels}, 
+                                         num_epochs=5)
+
+        assert metrics[output].result == 1.0
+
+
+
+def test_parameter_learning():
+    spikes, labels = get_xor_dataset()
+
     w_in_hid = [[4, 0, 4, 0],
                 [0, 4, 0, 4 ]]
     w_hid_out = [[4, 0],
@@ -43,5 +69,5 @@ def test_parameter_learning():
     with compiled_net:
         metrics, _  = compiled_net.train({input: spikes}, {output: labels}, 
                                          shuffle=False, num_epochs=40)
-        
+
         assert metrics[output].result == 1.0
