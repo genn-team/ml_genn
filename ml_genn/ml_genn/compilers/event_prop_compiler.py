@@ -254,14 +254,14 @@ def _simplify_using_threshold(var_names, thresold_expr, expr):
     return expr.subs(the_var, sln[0])
 
 def _add_required_parameters(model: AutoModel, genn_model: Model, expression,
-                             add_var_ref_fn, has_var_ref_fn):
+                             learn_params, add_var_ref_fn, has_var_ref_fn):
     # Loop through parameters in model
     for n, v in model.param_vals.items():
         # If they are referenced in expression
         if (expression.has(sympy.Symbol(n))):
             # If their value is constant and parameter doesn't already exist,
             # duplicate value in another parameter
-            if is_value_constant(v):
+            if is_value_constant(v) and n not in learn_params:
                 if not genn_model.has_param(n):
                     genn_model.add_param(n, "scalar", v)
             # Otherwise, if variable reference doesn't already exist, 
@@ -272,22 +272,22 @@ def _add_required_parameters(model: AutoModel, genn_model: Model, expression,
 
 def _add_required_psm_neuron_parameters(model: AutoNeuronModel, 
                                         genn_model: SynapseModel,
-                                        expression):
-    _add_required_parameters(model, genn_model, expression,
+                                        expression, learn_params):
+    _add_required_parameters(model, genn_model, expression, learn_params,
                              SynapseModel.add_neuron_var_ref, 
                              SynapseModel.has_neuron_var_ref)
 
 def _add_required_wum_post_neuron_parameters(model: AutoNeuronModel, 
                                              genn_model: WeightUpdateModel, 
-                                             expression):
-    _add_required_parameters(model, genn_model, expression,
+                                             expression, learn_params):
+    _add_required_parameters(model, genn_model, expression, learn_params,
                              WeightUpdateModel.add_post_neuron_var_ref,
                              WeightUpdateModel.has_post_neuron_var_ref)
 
 def _add_required_wum_psm_parameters(model: AutoSynapseModel, 
                                      genn_model: WeightUpdateModel, 
                                      expression):
-    _add_required_parameters(model, genn_model, expression,
+    _add_required_parameters(model, genn_model, expression, {},
                              WeightUpdateModel.add_psm_var_ref,
                              WeightUpdateModel.has_psm_var_ref)
 
@@ -773,8 +773,9 @@ class EventPropCompiler(Compiler):
             
             # If any target population parameters are 
             # referenced, duplicate in synapse model
-            _add_required_psm_neuron_parameters(trg_neuron_model,
-                                                genn_model, o)
+            _add_required_psm_neuron_parameters(
+                trg_neuron_model, genn_model, o,
+                compile_state.optimisers.get(trg_pop, {}))
     
             # Finally add lambda ODE to adjoint system
             dl_dt[_get_lmd_sym(syn_sym)] = o
@@ -928,9 +929,9 @@ class EventPropCompiler(Compiler):
 
             # If any target neuron parameters are referenced in 
             # add to pre expression, duplicate in weight update model
-            _add_required_wum_post_neuron_parameters(trg_neuron_model, 
-                                                     genn_model, 
-                                                     dx_dt_diff_sum)
+            _add_required_wum_post_neuron_parameters(
+                trg_neuron_model, genn_model, dx_dt_diff_sum,
+                compile_state.optimisers.get(trg_pop, {}))
 
             # If any synapse parameters are referenced in add to pre
             # expression, duplicate in weight update model
