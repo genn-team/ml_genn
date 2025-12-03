@@ -1372,7 +1372,8 @@ class EventPropCompiler(Compiler):
     def _create_ttfs_reduce_custom_update(self, genn_model,
                                           genn_pop, example_time: float,
                                           name: str):
-        # Create model which:
+        # Create model which sums valid first spike times into TFirstSpikeSumBack
+        # and selects first spike time from true output
         reduce_model = CustomUpdateModel(
             model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
                                 ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
