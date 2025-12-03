@@ -45,17 +45,17 @@ class MaxVar(Readout):
             # Add code to update max variable and time 
             model.append_sim_code(
                 f"""
-                if ($({self.output_var_name}) > $({max_var_name})) {{
-                    $({max_var_name})= $({self.output_var_name});
-                    $({max_time_var_name}) = t;
+                if ({self.output_var_name} > {max_var_name}) {{
+                    {max_var_name}= {self.output_var_name};
+                    {max_time_var_name} = t;
                 }}
                 """)
         # Otherwise, just add code to update max variable
         else:
             model.append_sim_code(
                 f"""
-                if ($({self.output_var_name}) > $({max_var_name})) {{
-                    $({max_var_name})= $({self.output_var_name});
+                if ({self.output_var_name} > {max_var_name}) {{
+                    {max_var_name}= {self.output_var_name};
                 }}
                 """)
 
