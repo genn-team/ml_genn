@@ -1874,7 +1874,7 @@ class EventPropCompiler(Compiler):
                         # Add custom updates to calculate 
                         # softmax from V and write directly to buffermodel_copy
                         compile_state.timestep_softmax_populations.append(
-                            (pop, out_var_name))                    
+                            (pop, out_var_name))
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(
