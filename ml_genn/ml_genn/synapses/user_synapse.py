@@ -23,16 +23,16 @@ class UserSynapse(Synapse):
     """
 
     def __init__(self, vars: Variable, inject_current: str,
-                 param_vals: MutableMapping[str, InitValue] = {},
-                 var_vals: MutableMapping[str, InitValue] = {},
+                 param_vals: Optional[MutableMapping[str, InitValue]] = None,
+                 var_vals: Optional[MutableMapping[str, InitValue]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1):
         super(UserSynapse, self).__init__()
 
         self.vars = vars
         self.inject_current = inject_current
-        self.param_vals = param_vals
-        self.var_vals = var_vals
+        self.param_vals = param_vals or {}
+        self.var_vals = var_vals or {}
         self.solver = solver
         self.sub_steps = sub_steps
 

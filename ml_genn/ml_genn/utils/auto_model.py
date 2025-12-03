@@ -90,7 +90,7 @@ class AutoNeuronModel(AutoModel):
     
     @staticmethod
     def from_val_descriptors(model, output_var_name: str,inst, 
-                             param_vals={}, var_vals={},
+                             param_vals=None, var_vals=None,
                              solver: str = "exponential_euler",
                              sub_steps: int = 1):
         param_vals, var_vals = get_auto_values(inst, 
@@ -162,7 +162,7 @@ class AutoSynapseModel(AutoModel):
 
     @staticmethod
     def from_val_descriptors(model, inst, 
-                             param_vals={}, var_vals={},
+                             param_vals=None, var_vals=None,
                              solver: str = "exponential_euler",
                              sub_steps: int = 1):
         param_vals, var_vals = get_auto_values(inst, 

@@ -59,7 +59,7 @@ def is_value_initializer(value):
     return isinstance(value, Initializer)
 
 
-def get_values(inst, name_types, vals={}):
+def get_values(inst, name_types, vals=None):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
@@ -67,11 +67,12 @@ def get_values(inst, name_types, vals={}):
     names = set(n[0] for n in name_types)
     
     # Update vals with value descriptor values
+    vals = vals or {}
     vals.update({n: d.get_value(inst) for n, d in descriptors
                  if isinstance(d, ValueDescriptor) and n in names})
     return vals
 
-def get_auto_values(inst, var_names, param_vals={}, var_vals={}):
+def get_auto_values(inst, var_names, param_vals=None, var_vals=None):
     # Get descriptors
     descriptors = getmembers(type(inst), isdatadescriptor)
 
@@ -79,9 +80,11 @@ def get_auto_values(inst, var_names, param_vals={}, var_vals={}):
     var_names = set(var_names)
     
     # Update dictionaries of var and parameter values from value descriptors
+    param_vals = param_vals or {}
     param_vals.update(
         {n: d.get_value(inst) for n, d in descriptors
          if isinstance(d, ValueDescriptor) and n not in var_names})
+    var_vals = var_vals or {}
     var_vals.update(
         {n: d.get_value(inst) for n, d in descriptors
          if isinstance(d, ValueDescriptor) and n in var_names})
