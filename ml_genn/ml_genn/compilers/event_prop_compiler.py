@@ -286,8 +286,8 @@ def _add_required_wum_post_neuron_parameters(model: AutoNeuronModel,
 
 def _add_required_wum_psm_parameters(model: AutoSynapseModel, 
                                      genn_model: WeightUpdateModel, 
-                                     expression, learn_params):
-    _add_required_parameters(model, genn_model, expression, learn_params,
+                                     expression):
+    _add_required_parameters(model, genn_model, expression, {},
                              WeightUpdateModel.add_psm_var_ref,
                              WeightUpdateModel.has_psm_var_ref)
 
@@ -935,9 +935,8 @@ class EventPropCompiler(Compiler):
 
             # If any synapse parameters are referenced in add to pre
             # expression, duplicate in weight update model
-            _add_required_wum_psm_parameters(
-                synapse_model, genn_model, dx_dt_diff_sum,
-                compile_state.optimisers.get(conn, {}))
+            _add_required_wum_psm_parameters(synapse_model, genn_model,
+                                             dx_dt_diff_sum)
 
             # If any target population variables or lambda variables are 
             # referenced, add neuron variable references and, if connection
@@ -1025,9 +1024,8 @@ class EventPropCompiler(Compiler):
             
             # If any synapse parameters are referenced in gradient 
             # update expression, duplicate in weight update model
-            _add_required_wum_psm_parameters(
-                synapse_model, genn_model, weight_grad_update,
-                compile_state.optimisers.get(conn, {}))
+            _add_required_wum_psm_parameters(synapse_model, genn_model,
+                                             weight_grad_update)
         
             # If delays can be learned
             if has_learnable_delay:
