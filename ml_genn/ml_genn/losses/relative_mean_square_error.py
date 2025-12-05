@@ -5,7 +5,9 @@ class RelativeMeanSquareError(Loss):
     """Computes the mean squared error between prediction of incorrect 
     outputs and correct output when there are two or more label classes, 
     specified as integers."""
-    def __init__(self, delta: float):
+    def __init__(self, delta: float, record: bool = False):
+        super().__init__(record)
+
         self.delta = delta
 
     @property
