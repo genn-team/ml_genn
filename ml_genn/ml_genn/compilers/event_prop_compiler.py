@@ -656,11 +656,8 @@ class EventPropCompiler(Compiler):
                   "tuple if separate values for undershoot "
                   "and overshoot are required.", FutureWarning)
 
-        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
-                                                batch_size, rng_seed,
-                                                kernel_profiling,
-                                                communicator,
-                                                **genn_kwargs)
+        super().__init__(supported_matrix_types, dt, batch_size, rng_seed,
+                         kernel_profiling, communicator, **genn_kwargs)
 
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -706,8 +703,7 @@ class EventPropCompiler(Compiler):
                            model: Union[AutoNeuronModel, SynapseModel],
                            compile_state: CompileState) -> NeuronModel:
         # Build GeNNCode neuron model implementing forward pass of model
-        genn_model = super(EventPropCompiler, self).build_neuron_model(
-                           pop, model, compile_state)
+        genn_model = super().build_neuron_model(pop, model, compile_state)
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -736,8 +732,7 @@ class EventPropCompiler(Compiler):
     
    
         # Build GeNNCode neuron model implementing forward pass of model
-        genn_model = super(EventPropCompiler, self).build_synapse_model(
-                           conn, model, compile_state)
+        genn_model = super().build_synapse_model(conn, model, compile_state)
 
         logger.debug("\tBuilding adjoint system for AutoSynapseModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")

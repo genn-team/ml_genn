@@ -12,7 +12,7 @@ class SparseBase(Connectivity):
     post_ind = ValueDescriptor()
     
     def __init__(self, weight: InitValue, delay: InitValue):
-        super(SparseBase, self).__init__(weight, delay)
+        super().__init__(weight, delay)
         
         # Initialise pre and postsynaptic indices
         self.pre_ind = None

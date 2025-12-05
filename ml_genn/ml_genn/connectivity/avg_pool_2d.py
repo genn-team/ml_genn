@@ -76,8 +76,7 @@ class AvgPool2D(Connectivity):
         self.pool_strides = get_param_2d("pool_strides", pool_strides,
                                          default=self.pool_size)
 
-        super(AvgPool2D, self).__init__(
-            1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
+        super().__init__(1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
 
         if (self.pool_strides[0] < self.pool_size[0]
                 or self.pool_strides[1] < self.pool_size[1]):

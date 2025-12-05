@@ -43,7 +43,7 @@ class SpikeInput(Neuron, Input):
                     per example, :math:`\\text{max_spikes} = 32 * 100 * 1 = 3200`
     """
     def __init__(self, max_spikes=1000000):
-        super(SpikeInput, self).__init__()
+        super().__init__()
 
         self.max_spikes = max_spikes
 

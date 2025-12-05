@@ -19,7 +19,7 @@ class PadMode(Enum):
 
 class KernelInit(Initializer):
     def __init__(self, kernel):
-        super(KernelInit, self).__init__()
+        super().__init__()
 
         self.kernel = kernel
 

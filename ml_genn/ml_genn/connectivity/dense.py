@@ -23,7 +23,7 @@ class Dense(Connectivity):
         delay:  Connection delays
     """
     def __init__(self, weight: InitValue, delay: InitValue = 0):
-        super(Dense, self).__init__(weight, delay)
+        super().__init__(weight, delay)
 
     def connect(self, source: Population, target: Population):
         # If weights are specified as 2D array

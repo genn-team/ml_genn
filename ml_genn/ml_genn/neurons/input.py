@@ -49,7 +49,7 @@ class InputBase(Input):
     def __init__(self, var_name="Input", egp_name=None,
                  input_frames=1, input_frame_timesteps=1,
                  **kwargs):
-        super(InputBase, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         # If input has multiple frames but no EGP name is given, give error
         if input_frames > 1 and egp_name is None:

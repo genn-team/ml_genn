@@ -27,9 +27,9 @@ class CompiledInferenceNetwork(CompiledNetwork):
                  connection_populations, communicator,
                  evaluate_timesteps: int, base_callbacks: list,
                  reset_time_between_batches: bool = True):
-        super(CompiledInferenceNetwork, self).__init__(
-            genn_model, neuron_populations, connection_populations,
-            communicator, evaluate_timesteps)
+        super().__init__(genn_model, neuron_populations,
+                         connection_populations, communicator,
+                         evaluate_timesteps)
 
         self.evaluate_timesteps = evaluate_timesteps
         self.base_callbacks = base_callbacks
@@ -397,11 +397,8 @@ class InferenceCompiler(Compiler):
                                      SynapseMatrixType.PROCEDURAL,
                                      SynapseMatrixType.SPARSE,
                                      SynapseMatrixType.DENSE]
-        super(InferenceCompiler, self).__init__(supported_matrix_type, dt,
-                                                batch_size, rng_seed,
-                                                kernel_profiling,
-                                                communicator,
-                                                **genn_kwargs)
+        super().__init__(supported_matrix_type, dt, batch_size, rng_seed,
+                         kernel_profiling, communicator, **genn_kwargs)
         self.evaluate_timesteps = evaluate_timesteps
         self.reset_time_between_batches = reset_time_between_batches
         self.reset_vars_between_batches = reset_vars_between_batches
@@ -416,8 +413,7 @@ class InferenceCompiler(Compiler):
                            compile_state: CompileState) -> NeuronModel:
         # Build neuron model
         # **NOTE** this will handle AutoNeuron etc
-        model = super(InferenceCompiler, self).build_neuron_model(
-                      pop, model, compile_state)
+        model = super().build_neuron_model(pop, model, compile_state)
 
         # If population has a readout i.e. it's an output
         # Add readout logic to model
@@ -436,8 +432,7 @@ class InferenceCompiler(Compiler):
                             compile_state: CompileState) -> SynapseModel:
         # Build neuron model
         # **NOTE** this will handle AutoNeuron etc
-        model = super(InferenceCompiler, self).build_synapse_model(
-            conn, model, compile_state)
+        model = super().build_synapse_model(conn, model, compile_state)
         
         # Add any PSM reset variables to compile state
         if self.reset_vars_between_batches:

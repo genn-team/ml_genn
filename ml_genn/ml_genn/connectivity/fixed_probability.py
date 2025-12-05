@@ -30,7 +30,7 @@ class FixedProbability(SparseBase):
 
     def __init__(self, p: float, weight: InitValue,
                  allow_self_connections: bool = False, delay: InitValue = 0):
-        super(FixedProbability, self).__init__(weight, delay)
+        super().__init__(weight, delay)
 
         self.p = p
         self.allow_self_connections = allow_self_connections
@@ -46,6 +46,6 @@ class FixedProbability(SparseBase):
                       and connection.source() == connection.target())
         snippet = ("FixedProbabilityNoAutapse" if no_autapse
                    else "FixedProbability")
-        return super(FixedProbability, self)._get_snippet(
-            supported_matrix_type, 
+        return super()._get_snippet(
+            supported_matrix_type,
             init_sparse_connectivity(snippet, {"prob": self.p}))

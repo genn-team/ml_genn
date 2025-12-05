@@ -19,7 +19,7 @@ class Delta(Synapse):
     """Synapse model where inputs produce instantaneous
     voltage jumps in target neurons."""
     def __init__(self):
-        super(Delta, self).__init__()
+        super().__init__()
 
     def get_model(self, connection: Connection, dt: float,
                   batch_size: int) -> Union[AutoSynapseModel, SynapseModel]:
