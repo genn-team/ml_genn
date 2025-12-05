@@ -2,11 +2,11 @@ import logging
 import numpy as np
 import sympy
 
+from abc import ABC
 from string import Template
 from typing import Mapping, Union, Tuple
 from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
                     VarAccess, VarAccessMode)
-
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
 from .ground_truths import GroundTruth
@@ -26,7 +26,9 @@ from ..utils.model import (CustomUpdateModel, Model, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 
+from abc import abstractmethod
 from copy import deepcopy
+from dataclasses import dataclass, field
 from itertools import chain
 from warnings import warn
 from pygenn import (create_egp_ref, create_psm_var_ref,
@@ -291,6 +293,7 @@ def _add_required_wum_psm_parameters(model: AutoSynapseModel,
                              WeightUpdateModel.add_psm_var_ref,
                              WeightUpdateModel.has_psm_var_ref)
 
+
 class CompileState:
     def __init__(self, network: Network, losses, optimisers, 
                  supported_matrix_type, backend_name):
@@ -305,6 +308,7 @@ class CompileState:
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
         self.optimisers = {}
+        self.loss_recorder_callbacks = []
 
         # Build list of output populations
         readouts = [p for p in network.populations
@@ -522,6 +526,40 @@ class CustomUpdateOnFirstBatchEnd(Callback):
             logger.debug(f"Running custom update {self.name} "
                          f"at end of batch {batch}")
             state.genn_model.custom_update(self.name)
+
+@dataclass
+class LossRecorderState:
+    compiled_network: CompiledTrainingNetwork
+    losses: list = field(default_factory=list)
+
+class LossRecorderCallback(Callback, ABC):
+    def __init__(self, pop: Population, key: str, var_name: str):
+        self.pop = pop
+        self.key = key
+        self.var_name = var_name
+    
+    @abstractmethod
+    def calculate_loss(self, loss, example_timesteps: int,
+                       batch_size: int):
+        pass
+
+    def create_state(self, compiled_network, **kwargs):
+        return LossRecorderState(compiled_network)
+
+    def on_batch_end(self, state, batch, metric_state):
+        # Pull variable loss is calculated from from device
+        cn = state.compiled_network
+        genn_pop = cn.neuron_populations[self.pop]
+        genn_pop.vars[self.var_name].pull_from_device()
+
+        # Calculate loss and add to list
+        state.losses.apppend(
+            self.calculate_loss(genn_pop.vars[self.var_name].values,
+                                cn.example_timesteps,
+                                cn.genn_model.batch_size))
+
+    def get_data(self, state):
+        return self.key, state.losses
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
@@ -1866,11 +1904,21 @@ class EventPropCompiler(Compiler):
                 if not dyn_ts_reset_needed:
                     genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
                     genn_model.add_var("tsRingReadOffset", "int", 0, reset=False)
-
+ 
                 # Add EGP for softmax V (SCE) or regression difference (MSE) ring variable
                 ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
                 genn_model.add_egp("RingOutputLossTerm", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
+
+                # If we should record loss, add variable to sum into
+                # and generate code string to add log loss to it
+                if pop_loss.record_key is not None:
+                    record_code = "LossSum += -log(loss);"
+                    genn_model.add_var("LossSum", "scalar", 0.0)
+                    compile_state.loss_recorder_callbacks.append()
+                        
+                else:
+                    record_code = ""
 
                 # We have a variable ring so it will need resetting
                 reset_v_ring = True
@@ -1885,9 +1933,15 @@ class EventPropCompiler(Compiler):
                             const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
                                 tsRingReadOffset--;
-                                const scalar softmax = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                                const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+
+                                if(id == YTrueBack) {{
+                                    {record_code}
+                                    drive = (1.0 - loss) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -loss / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
 
                             {dynamics_code}
@@ -1910,8 +1964,9 @@ class EventPropCompiler(Compiler):
                         const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                         if (Trial > 0) {{
                             tsRingReadOffset--;
-                            const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            drive = error / (num_batch * {self.dt * self.example_timesteps});
+                            const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+                            {record_code}
+                            drive = loss / (num_batch * {self.dt * self.example_timesteps});
                         }}
                         
                         {dynamics_code}
@@ -1921,8 +1976,7 @@ class EventPropCompiler(Compiler):
                     genn_model.append_sim_code(
                         f"""
                         const unsigned int timestep = (int)round(t / dt);
-                        const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
-                        + (timestep * num_neurons) + id;
+                        const unsigned int index = (batch * {self.example_timesteps} * num_neurons) + (timestep * num_neurons) + id;
                         RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
                         tsRingWriteOffset++;
                         """) 
@@ -1933,6 +1987,10 @@ class EventPropCompiler(Compiler):
                     genn_model.add_var("Softmax", "scalar", 0.0,
                                        VarAccess.READ_ONLY_DUPLICATE,
                                        reset=False)
+
+                    # If we should record loss, add variable to sum into
+                    if pop_loss.record_key:
+                        compile_state.loss_calculators[pop] = LossCalculator("Softmax")
 
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
