@@ -581,7 +581,8 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses,
-                 reg_lambda: float = 0.0, reg_nu_upper: float = 0.0,
+                 reg_lambda_lower: float = 0.0, reg_lambda_upper: float = 0.0,
+                 reg_nu_upper: float = 0.0,
                  grad_limit: float = 100.0,
                  max_spikes: int = 500, 
                  strict_buffer_checking: bool = False, 
@@ -606,24 +607,12 @@ class EventPropCompiler(Compiler):
                                "{\"weight\": \"adam\"} to optimise all "
                                "weights with the adam optimiser")
         
-        # If legacy upper and lower regularisation strength are specified
-        # **NOTE** needs to be before superclass call so these get removed 
-        # from genn_kwargs as unknown arguments now causes an error
-        reg_lambda_upper = genn_kwargs.pop("reg_lambda_upper", None)
-        reg_lambda_lower = genn_kwargs.pop("reg_lambda_lower", None)
-        if reg_lambda_upper is not None or reg_lambda_lower is not None:
-            # If they match, use as regularisation strength
-            if reg_lambda_upper == reg_lambda_lower:
-                reg_lambda = reg_lambda_upper
-                warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
-                     "arguments for EventPropCompiler are no longer "
-                     "supported, please use 'reg_lambda'", FutureWarning)
-            # Otherwise, give error
-            else:
-                raise NotImplemented("Seperate 'reg_lambda_upper' and "
-                                     "'reg_lambda_lower' arguments for "
-                                     "EventPropCompiler are no longer "
-                                     "supported, please use 'reg_lambda'")
+        # If reg_lambda is specified, use it for both, reg_lambda_lower and
+        # reg_lambda_upper
+        reg_lambda = genn_kwargs.pop("reg_lambda", None)
+        if reg_lambda is not None:
+            reg_lambda_lower = reg_lambda
+            reg_lambda_upper = reg_lambda
 
         super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
                                                 batch_size, rng_seed,
@@ -633,7 +622,8 @@ class EventPropCompiler(Compiler):
         
         self.example_timesteps = example_timesteps
         self.losses = losses
-        self.reg_lambda = reg_lambda
+        self.reg_lambda_lower = reg_lambda_lower
+        self.reg_lambda_upper = reg_lambda_upper
         self.reg_nu_upper = reg_nu_upper
         self.grad_limit = grad_limit
         self.max_spikes = max_spikes
@@ -1545,8 +1535,9 @@ class EventPropCompiler(Compiler):
             
             # Build adjoint system from model
             learn_params = compile_state.optimisers.get(pop, {})
+            regularise = (self.reg_lambda_lower != 0.0) or (self.reg_lambda_upper != 0.0)
             dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
-                self._build_adjoint_system(model, learn_params, False, self.reg_lambda != 0.0)
+                self._build_adjoint_system(model, learn_params, False, regularise)
 
             additional_reset_vars = []
             # Add variables for parameter gradients
@@ -1593,7 +1584,7 @@ class EventPropCompiler(Compiler):
 
             # If regularisation is enabled
             # **THINK** is this LIF-specific?
-            if self.reg_lambda != 0.0 and model.threshold != 0:
+            if regularise and model.threshold != 0:
                 logger.debug("\tBuilding regulariser")
                 # Add state variables to hold spike count
                 # during forward and backward pass. 
@@ -1626,7 +1617,13 @@ class EventPropCompiler(Compiler):
                 # number of spike times, which biases regularisation towards suppressing too many spikes over enhancing to few
                 dynamics_code += f"""
                 scalar drive_reg;
-                drive_reg = -{self.reg_lambda/self.full_batch_size/self.full_batch_size} * (SpikeCountBackBatch - RegNuUpperBatch);
+                const scalar spikeDev = (SpikeCountBackBatch - RegNuUpperBatch);
+                if (spikeDev > 0.0) {
+                    drive_reg = -{self.reg_lambda_upper/self.full_batch_size/self.full_batch_size} * spikeDev;
+                }
+                else {
+                    drive_reg = -{self.reg_lambda_lower/self.full_batch_size/self.full_batch_size} * spikeDev;
+                }
                 """
 
                 # Add population to list of those that 
