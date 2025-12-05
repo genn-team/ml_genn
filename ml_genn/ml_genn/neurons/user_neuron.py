@@ -27,8 +27,8 @@ class UserNeuron(Neuron):
 
     def __init__(self, vars: Variable, output_var_name: str,
                  threshold: Optional[str] = None,
-                 param_vals: MutableMapping[str, InitValue] = {},
-                 var_vals: MutableMapping[str, InitValue] = {},
+                 param_vals: Optional[MutableMapping[str, InitValue]] = None,
+                 var_vals: Optional[MutableMapping[str, InitValue]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1,
                  readout=None, **kwargs):
@@ -37,8 +37,8 @@ class UserNeuron(Neuron):
         self.vars = vars
         self.output_var_name = output_var_name
         self.threshold = threshold
-        self.param_vals = param_vals
-        self.var_vals = var_vals
+        self.param_vals = param_vals or {}
+        self.var_vals = var_vals or {}
         self.solver = solver
         self.sub_steps = sub_steps
 
