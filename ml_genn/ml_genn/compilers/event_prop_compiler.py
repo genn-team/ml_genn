@@ -1618,12 +1618,12 @@ class EventPropCompiler(Compiler):
                 dynamics_code += f"""
                 scalar drive_reg;
                 const scalar spikeDev = (SpikeCountBackBatch - RegNuUpperBatch);
-                if (spikeDev > 0.0) {
+                if (spikeDev > 0.0) {{
                     drive_reg = -{self.reg_lambda_upper/self.full_batch_size/self.full_batch_size} * spikeDev;
-                }
-                else {
+                }}
+                else {{
                     drive_reg = -{self.reg_lambda_lower/self.full_batch_size/self.full_batch_size} * spikeDev;
-                }
+                }}
                 """
 
                 # Add population to list of those that 
