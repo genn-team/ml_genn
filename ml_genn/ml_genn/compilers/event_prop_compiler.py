@@ -27,7 +27,6 @@ from ..utils.model import (CustomUpdateModel, Model, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 
-from abc import abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
@@ -309,7 +308,7 @@ class CompileState:
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
         self.optimisers = {}
-        self.loss_recorder_callbacks = []
+        self.loss_recorder_populations = []
 
         # Build list of output populations
         readouts = [p for p in network.populations
@@ -534,15 +533,9 @@ class LossRecorderState:
     losses: list = field(default_factory=list)
 
 class LossRecorderCallback(Callback, ABC):
-    def __init__(self, pop: Population, key: str, var_name: str):
+    def __init__(self, pop: Population, key: str):
         self.pop = pop
         self.key = key
-        self.var_name = var_name
-    
-    @abstractmethod
-    def calculate_loss(self, loss, example_timesteps: int,
-                       batch_size: int):
-        pass
 
     def create_state(self, compiled_network, **kwargs):
         return LossRecorderState(compiled_network)
@@ -551,13 +544,12 @@ class LossRecorderCallback(Callback, ABC):
         # Pull variable loss is calculated from from device
         cn = state.compiled_network
         genn_pop = cn.neuron_populations[self.pop]
-        genn_pop.vars[self.var_name].pull_from_device()
+        genn_pop.vars["LossSum"].pull_from_device()
 
         # Calculate loss and add to list
-        state.losses.apppend(
-            self.calculate_loss(genn_pop.vars[self.var_name].values,
-                                cn.example_timesteps,
-                                cn.genn_model.batch_size))
+        loss = np.sum(genn_pop.vars["LossSum"].view
+                      / cn.genn_model.batch_size)
+        state.losses.append(loss)
 
     def get_data(self, state):
         return self.key, state.losses
@@ -1308,6 +1300,11 @@ class EventPropCompiler(Compiler):
         if len(compile_state.ttfs_reduce_populations) > 0:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
 
+        # Add callbacks for loss recording
+        for pop, key in compile_state.loss_recorder_populations:
+            base_train_callbacks.append(LossRecorderCallback(pop, key))
+            base_validate_callbacks.append(LossRecorderCallback(pop, key))
+
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
@@ -1905,11 +1902,19 @@ class EventPropCompiler(Compiler):
             window_start, window_end = pop.neuron.readout.window_start_end(
                 self.example_timesteps, self.dt)
 
-        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
+        # If we should record loss
         pop_loss = compile_state.losses[pop]
         if pop_loss.record_key is not None:
-            gen_record_code = lambda n: f"LossSum += -log({n});"
+            # Add variable to record into
             genn_model.add_var("LossSum", "scalar", 0.0)
+
+            # Define code generator function
+            gen_record_code = lambda n: f"LossSum += -log({n});"
+            
+            # Add population to list 
+            compile_state.loss_recorder_populations.append(
+                (pop, pop_loss.record_key))
+        # Otherwise don't generate any code
         else:
             gen_record_code = lambda n: ""
             
@@ -2008,10 +2013,6 @@ class EventPropCompiler(Compiler):
                     genn_model.add_var("Softmax", "scalar", 0.0,
                                        VarAccess.READ_ONLY_DUPLICATE,
                                        reset=False)
-
-                    # If we should record loss, add variable to sum into
-                    if pop_loss.record_key:
-                        compile_state.loss_calculators[pop] = LossCalculator("Softmax")
 
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
