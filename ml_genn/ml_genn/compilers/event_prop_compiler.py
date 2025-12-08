@@ -1907,6 +1907,13 @@ class EventPropCompiler(Compiler):
 
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         pop_loss = compile_state.losses[pop]
+        if pop_loss.record_key is not None:
+            record_code = lambda n: f"LossSum += -log({n});"
+            genn_model.add_var("LossSum", "scalar", 0.0)
+        else:
+            record_code = lambda n: ""
+            
+        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
         mse_loss = isinstance(pop_loss, MeanSquareError)
         per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
@@ -1929,16 +1936,6 @@ class EventPropCompiler(Compiler):
                 ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
                 genn_model.add_egp("RingOutputLossTerm", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
-
-                # If we should record loss, add variable to sum into
-                # and generate code string to add log loss to it
-                if pop_loss.record_key is not None:
-                    record_code = "LossSum += -log(loss);"
-                    genn_model.add_var("LossSum", "scalar", 0.0)
-                    compile_state.loss_recorder_callbacks.append()
-                        
-                else:
-                    record_code = ""
 
                 # We have a variable ring so it will need resetting
                 reset_v_ring = True
@@ -1989,7 +1986,7 @@ class EventPropCompiler(Compiler):
                         if (Trial > 0) {{
                             tsRingReadOffset--;
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            {record_code}
+                            {record_code('loss')}
                             drive = loss / (num_batch * {self.dt * self.example_timesteps});
                         }}
                         
@@ -2020,8 +2017,13 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         ro = pop.neuron.readout
                         code = f"""
-                            const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = g / (num_batch * {window_end-window_start});
+                           if(id == YTrueBack) {{
+                               {record_code('Softmax')}
+                               drive = (1.0 - Softmax) / (num_batch * {window_end-window_start});
+                            }}
+                            else {{
+                                drive = -Softmax / (num_batch * {window_end-window_start});
+                            }}
                         """
                         genn_model.prepend_sim_code(
                             f"""
@@ -2046,8 +2048,13 @@ class EventPropCompiler(Compiler):
                         local_t_scale = 1.0 / (window_end - window_start)
                         T = self.dt * self.example_timesteps
                         code = f"""
-                            const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = (g * exp(-({T}-t-{window_start}) * {local_t_scale})) / (num_batch * {window_end - window_start});
+                            if(id == YTrueBack) {{
+                                {record_code('Softmax')}
+                                drive = ((1.0 - Softmax) * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {window_end - window_start});
+                            }}
+                            else {{
+                                drive = -(-Softmax * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {window_end - window_start});
+                            }}
                         """
                         genn_model.prepend_sim_code(
                             f"""
@@ -2081,8 +2088,13 @@ class EventPropCompiler(Compiler):
                             const scalar backT = {self.example_timesteps * self.dt} - t - dt;
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {record_code('Softmax')}
+                                    drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -Softmax / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
