@@ -1884,9 +1884,17 @@ class EventPropCompiler(Compiler):
         additional_reset_vars = ground_truth.backward_duplicate_var_reset
         reset_event_ring = False
         reset_v_ring = dyn_ts_reset_needed
-
-        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
+        
+        # If we should record loss, add variable to sum into
+        # and generate code string to add log loss to it
         pop_loss = compile_state.losses[pop]
+        if pop_loss.record_key is not None:
+            record_code = lambda n: f"LossSum += -log({n});"
+            genn_model.add_var("LossSum", "scalar", 0.0)
+        else:
+            record_code = lambda n: ""
+            
+        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
         mse_loss = isinstance(pop_loss, MeanSquareError)
         per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
@@ -1910,16 +1918,6 @@ class EventPropCompiler(Compiler):
                 genn_model.add_egp("RingOutputLossTerm", "scalar*", 
                                    np.empty(ring_size, dtype=np.float32))
 
-                # If we should record loss, add variable to sum into
-                # and generate code string to add log loss to it
-                if pop_loss.record_key is not None:
-                    record_code = "LossSum += -log(loss);"
-                    genn_model.add_var("LossSum", "scalar", 0.0)
-                    compile_state.loss_recorder_callbacks.append()
-                        
-                else:
-                    record_code = ""
-
                 # We have a variable ring so it will need resetting
                 reset_v_ring = True
 
@@ -1936,7 +1934,7 @@ class EventPropCompiler(Compiler):
                                 const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
 
                                 if(id == YTrueBack) {{
-                                    {record_code}
+                                    {record_code('loss')}
                                     drive = (1.0 - loss) / (num_batch * {self.dt * self.example_timesteps});
                                 }}
                                 else {{
@@ -1965,7 +1963,7 @@ class EventPropCompiler(Compiler):
                         if (Trial > 0) {{
                             tsRingReadOffset--;
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            {record_code}
+                            {record_code('loss')}
                             drive = loss / (num_batch * {self.dt * self.example_timesteps});
                         }}
                         
@@ -1998,8 +1996,13 @@ class EventPropCompiler(Compiler):
                             f"""
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {record_code('Softmax')}
+                                    drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -Softmax / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -2020,8 +2023,13 @@ class EventPropCompiler(Compiler):
                             // Backward pass
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {record_code('Softmax')}
+                                    drive = ((1.0 - Softmax) * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -(-Softmax * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -2043,8 +2051,13 @@ class EventPropCompiler(Compiler):
                             const scalar backT = {self.example_timesteps * self.dt} - t - dt;
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {record_code('Softmax')}
+                                    drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -Softmax / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
