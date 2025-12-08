@@ -1889,10 +1889,10 @@ class EventPropCompiler(Compiler):
         # and generate code string to add log loss to it
         pop_loss = compile_state.losses[pop]
         if pop_loss.record_key is not None:
-            record_code = lambda n: f"LossSum += -log({n});"
+            gen_record_code = lambda n: f"LossSum += -log({n});"
             genn_model.add_var("LossSum", "scalar", 0.0)
         else:
-            record_code = lambda n: ""
+            gen_record_code = lambda n: ""
             
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
@@ -1934,7 +1934,7 @@ class EventPropCompiler(Compiler):
                                 const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
 
                                 if(id == YTrueBack) {{
-                                    {record_code('loss')}
+                                    {gen_record_code('loss')}
                                     drive = (1.0 - loss) / (num_batch * {self.dt * self.example_timesteps});
                                 }}
                                 else {{
@@ -1963,7 +1963,7 @@ class EventPropCompiler(Compiler):
                         if (Trial > 0) {{
                             tsRingReadOffset--;
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            {record_code('loss')}
+                            {gen_record_code('loss')}
                             drive = loss / (num_batch * {self.dt * self.example_timesteps});
                         }}
                         
@@ -1997,7 +1997,7 @@ class EventPropCompiler(Compiler):
                             scalar drive = 0.0;
                             if (Trial > 0) {{
                                 if(id == YTrueBack) {{
-                                    {record_code('Softmax')}
+                                    {gen_record_code('Softmax')}
                                     drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
                                 }}
                                 else {{
@@ -2024,7 +2024,7 @@ class EventPropCompiler(Compiler):
                             scalar drive = 0.0;
                             if (Trial > 0) {{
                                 if(id == YTrueBack) {{
-                                    {record_code('Softmax')}
+                                    {gen_record_code('Softmax')}
                                     drive = ((1.0 - Softmax) * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
                                 }}
                                 else {{
@@ -2052,7 +2052,7 @@ class EventPropCompiler(Compiler):
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
                                 if(id == YTrueBack) {{
-                                    {record_code('Softmax')}
+                                    {gen_record_code('Softmax')}
                                     drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
                                 }}
                                 else {{
@@ -2171,6 +2171,7 @@ class EventPropCompiler(Compiler):
                             if (id == YTrueBack) {{
                                 const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
+                                {gen_record_code('Softmax')}
                             }}
                             else {{
                                 drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
@@ -2187,6 +2188,7 @@ class EventPropCompiler(Compiler):
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             drive_p = (-TFirstSpikeBack-YTrueBack);
+                            {gen_record_code('drive_p')}
                         }}
                         {transition_code}
                         """
@@ -2216,6 +2218,7 @@ class EventPropCompiler(Compiler):
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             if(id == YTrueBack) {{
                                 drive_p = (TFirstSpikeSumBack - (num_neurons * TFirstSpikeTrueBack) + ((num_neurons - 1) * Delta));
+                                {gen_record_code('drive_p')}
                             }}
                             else {{
                                 drive_p = ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta);
