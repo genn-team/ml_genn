@@ -633,23 +633,6 @@ class EventPropCompiler(Compiler):
                                "{\"weight\": \"adam\"} to optimise all "
                                "weights with the adam optimiser")
 
-        # Handle legacy regularisation strength definitions
-        reg_lambda_lower = genn_kwargs.pop("reg_lambda_lower", None)
-        reg_lambda_upper = genn_kwargs.pop("reg_lambda_upper", None)
-        reg_warning = False
-        if reg_lambda_lower is not None:
-            self.reg_lambda_lower = reg_lambda_lower
-            reg_warning = True
-        if reg_lambda_upper is not None:
-            self.reg_lambda_upper = reg_lambda_upper
-            reg_warning = True
-        if reg_warning:
-             warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
-                  "arguments for EventPropCompiler are no longer "
-                  "supported, please use 'reg_lambda' and use a "
-                  "tuple if separate values for undershoot "
-                  "and overshoot are required.", FutureWarning)
-
         # If regularisation strength is specified as a single float, use for both upper and lower
         if isinstance(reg_lambda, float):
             self.reg_lambda_lower = reg_lambda
@@ -657,6 +640,21 @@ class EventPropCompiler(Compiler):
         # Otherwise, unpack
         else:
             self.reg_lambda_lower, self.reg_lambda_upper = reg_lambda
+
+        # Handle legacy regularisation strength definitions
+        reg_warning = False
+        if "reg_lambda_lower" in genn_kwargs:
+            self.reg_lambda_lower = genn_kwargs.pop("reg_lambda_lower")
+            reg_warning = True
+        if "reg_lambda_upper" in genn_kwargs:
+            self.reg_lambda_upper = genn_kwargs.pop("reg_lambda_upper")
+            reg_warning = True
+        if reg_warning:
+             warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
+                  "arguments for EventPropCompiler are no longer "
+                  "supported, please use 'reg_lambda' and use a "
+                  "tuple if separate values for undershoot "
+                  "and overshoot are required.", FutureWarning)
 
         super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
                                                 batch_size, rng_seed,
