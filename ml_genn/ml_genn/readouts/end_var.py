@@ -36,6 +36,3 @@ class EndVar(Readout):
         # Return contents, reshaped as desired
         return np.reshape(end_var.view, (batch_size,) + shape)
 
-    @property
-    def reset_vars(self):
-        return [(self.output_var_name, self.output_var_type, 0.0)]
