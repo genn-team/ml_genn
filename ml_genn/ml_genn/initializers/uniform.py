@@ -13,7 +13,7 @@ class Uniform(Initializer):
     max = ConstantValueDescriptor()
 
     def __init__(self, min: float = 0.0, max: float = 1.0):
-        super(Uniform, self).__init__()
+        super().__init__()
 
         self.min = min
         self.max = max

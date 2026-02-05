@@ -13,7 +13,7 @@ class Normal(Initializer):
     sd = ConstantValueDescriptor()
 
     def __init__(self, mean: float = 0.0, sd: float = 1.0):
-        super(Normal, self).__init__()
+        super().__init__()
 
         self.mean = mean
         self.sd = sd

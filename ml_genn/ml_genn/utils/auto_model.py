@@ -83,7 +83,7 @@ class AutoNeuronModel(AutoModel):
                  var_vals: Optional[MutableMapping[str, Value]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1):
-        super(AutoNeuronModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
+        super().__init__(model, param_vals, var_vals, solver, sub_steps)
 
         self.output_var_name = output_var_name
         
@@ -121,7 +121,7 @@ class AutoSynapseModel(AutoModel):
                  var_vals: Optional[MutableMapping[str, Value]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1):
-        super(AutoSynapseModel, self).__init__(model, param_vals, var_vals, solver, sub_steps)
+        super().__init__(model, param_vals, var_vals, solver, sub_steps)
 
         if "inject_current" in self.model:
             self.inject_current = sympy.parse_expr(

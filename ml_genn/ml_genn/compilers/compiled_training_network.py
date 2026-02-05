@@ -26,9 +26,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
-        super(CompiledTrainingNetwork, self).__init__(
-              genn_model, neuron_populations, connection_populations,
-              communicator, example_timesteps)
+        super().__init__(genn_model, neuron_populations, 
+                         connection_populations, communicator,
+                         example_timesteps)
 
         self.ground_truths = ground_truths
         self.example_timesteps = example_timesteps

@@ -656,11 +656,8 @@ class EventPropCompiler(Compiler):
                   "tuple if separate values for undershoot "
                   "and overshoot are required.", FutureWarning)
 
-        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
-                                                batch_size, rng_seed,
-                                                kernel_profiling,
-                                                communicator,
-                                                **genn_kwargs)
+        super().__init__(supported_matrix_types, dt, batch_size, rng_seed,
+                         kernel_profiling, communicator, **genn_kwargs)
 
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -706,8 +703,7 @@ class EventPropCompiler(Compiler):
                            model: Union[AutoNeuronModel, SynapseModel],
                            compile_state: CompileState) -> NeuronModel:
         # Build GeNNCode neuron model implementing forward pass of model
-        genn_model = super(EventPropCompiler, self).build_neuron_model(
-                           pop, model, compile_state)
+        genn_model = super().build_neuron_model(pop, model, compile_state)
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -736,8 +732,7 @@ class EventPropCompiler(Compiler):
     
    
         # Build GeNNCode neuron model implementing forward pass of model
-        genn_model = super(EventPropCompiler, self).build_synapse_model(
-                           conn, model, compile_state)
+        genn_model = super().build_synapse_model(conn, model, compile_state)
 
         logger.debug("\tBuilding adjoint system for AutoSynapseModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
@@ -1372,7 +1367,8 @@ class EventPropCompiler(Compiler):
     def _create_ttfs_reduce_custom_update(self, genn_model,
                                           genn_pop, example_time: float,
                                           name: str):
-        # Create model which:
+        # Create model which sums valid first spike times into TFirstSpikeSumBack
+        # and selects first spike time from true output
         reduce_model = CustomUpdateModel(
             model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
                                 ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
@@ -1873,7 +1869,7 @@ class EventPropCompiler(Compiler):
                         # Add custom updates to calculate 
                         # softmax from V and write directly to buffermodel_copy
                         compile_state.timestep_softmax_populations.append(
-                            (pop, out_var_name))                    
+                            (pop, out_var_name))
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(

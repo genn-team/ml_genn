@@ -22,9 +22,8 @@ class BinarySpikeInput(Neuron, InputBase):
     """
     def __init__(self, signed_spikes=False, input_frames=1,
                  input_frame_timesteps=1):
-        super(BinarySpikeInput, self).__init__(
-            egp_name="Input", input_frames=input_frames,
-            input_frame_timesteps=input_frame_timesteps)
+        super().__init__(egp_name="Input", input_frames=input_frames,
+                         input_frame_timesteps=input_frame_timesteps)
 
         self.signed_spikes = signed_spikes
         if self.signed_spikes and input_frames > 1:

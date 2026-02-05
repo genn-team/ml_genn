@@ -27,7 +27,7 @@ class UserSynapse(Synapse):
                  var_vals: Optional[MutableMapping[str, InitValue]] = None,
                  solver: str = "exponential_euler",
                  sub_steps: int = 1):
-        super(UserSynapse, self).__init__()
+        super().__init__()
 
         self.vars = vars
         self.inject_current = inject_current

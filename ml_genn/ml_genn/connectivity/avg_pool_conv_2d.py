@@ -115,7 +115,7 @@ class AvgPoolConv2D(Connectivity):
                  pool_strides: Optional[Param2D] = None, 
                  conv_strides: Optional[Param2D] = None,
                  conv_padding: str = "valid", delay: InitValue = 0):
-        super(AvgPoolConv2D, self).__init__(weight, delay)
+        super().__init__(weight, delay)
         self.filters = filters
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.conv_size = get_param_2d("conv_size", conv_size)

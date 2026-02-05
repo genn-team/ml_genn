@@ -76,7 +76,7 @@ class AvgPoolDense2D(Connectivity):
     """
     def __init__(self, weight: InitValue, pool_size, pool_strides=None,
                  delay: InitValue = 0):
-        super(AvgPoolDense2D, self).__init__(weight, delay)
+        super().__init__(weight, delay)
 
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.pool_strides = get_param_2d("pool_strides", pool_strides,

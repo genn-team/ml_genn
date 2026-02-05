@@ -24,7 +24,7 @@ class Neuron(ABC):
         readout: Type of readout to attach to this neuron's output variable
     """
     def __init__(self, readout: Optional[Readout] = None, **kwargs):
-        super(Neuron, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.readout = readout
 
     @abstractmethod

@@ -27,7 +27,7 @@ class LeakyIntegrate(Neuron):
 
     def __init__(self, v: InitValue = 0.0, bias: InitValue = 0.0,
                  tau_mem: InitValue = 20.0, readout=None):
-        super(LeakyIntegrate, self).__init__(readout)
+        super().__init__(readout)
 
         self.v = v
         self.bias = bias

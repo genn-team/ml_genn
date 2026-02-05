@@ -4,7 +4,7 @@ from ..utils.snippet import InitializerSnippet
 
 class Wrapper(Initializer):
     def __init__(self, snippet, param_vals, egp_vals):
-        super(Wrapper, self).__init__()
+        super().__init__()
 
         self.snippet = snippet
         self.param_vals = param_vals

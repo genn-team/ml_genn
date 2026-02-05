@@ -214,8 +214,7 @@ class Model:
 class CustomUpdateModel(Model):
     def __init__(self, model, param_vals=None, var_vals=None, 
                  var_refs=None, egp_vals=None, egp_refs=None):
-        super(CustomUpdateModel, self).__init__(model, param_vals,
-                                                var_vals, egp_vals)
+        super().__init__(model, param_vals, var_vals, egp_vals)
 
         self.var_refs = var_refs or {}
         self.egp_refs = egp_refs or {}
@@ -244,15 +243,13 @@ class CustomUpdateModel(Model):
         self._append_code("update_code", code)
     
     def process(self):
-        return (super(CustomUpdateModel, self).process() 
-                + (self.var_refs,) + (self.egp_refs,))
+        return (super().process() + (self.var_refs,) + (self.egp_refs,))
 
 
 class NeuronModel(Model):
     def __init__(self, model, output_var_name,
                  param_vals=None, var_vals=None, egp_vals=None):
-        super(NeuronModel, self).__init__(model, param_vals, 
-                                          var_vals, egp_vals)
+        super().__init__(model, param_vals, var_vals, egp_vals)
 
         self.output_var_name = output_var_name
 
@@ -306,14 +303,12 @@ class NeuronModel(Model):
 class SynapseModel(Model):
     def __init__(self, model, param_vals=None, var_vals=None,
                  egp_vals=None, neuron_var_refs=None):
-        super(SynapseModel, self).__init__(model, param_vals, 
-                                           var_vals, egp_vals)
+        super().__init__(model, param_vals,var_vals, egp_vals)
 
         self.neuron_var_refs = neuron_var_refs or {}
 
     def process(self):
-        return (super(SynapseModel, self).process() 
-                + (self.neuron_var_refs,))
+        return (super().process() + (self.neuron_var_refs,))
     
     def has_neuron_var_ref(self, name):
         return self._is_in_list("neuron_var_refs", name)
@@ -348,8 +343,7 @@ class WeightUpdateModel(Model):
                  pre_var_vals=None, post_var_vals=None, egp_vals=None,
                  pre_neuron_var_refs=None, post_neuron_var_refs=None,
                  psm_var_refs=None):
-        super(WeightUpdateModel, self).__init__(model, param_vals, 
-                                                var_vals, egp_vals)
+        super().__init__(model, param_vals, var_vals, egp_vals)
 
         self.pre_var_vals = pre_var_vals or {}
         self.post_var_vals = post_var_vals or {}
@@ -402,9 +396,10 @@ class WeightUpdateModel(Model):
         self._append_code("pre_event_syn_code", code)
 
     def process(self):
-        return (super(WeightUpdateModel, self).process() 
-                + (self.pre_var_vals, self.post_var_vals,
-                   self.pre_neuron_var_refs, self.post_neuron_var_refs, self.psm_var_refs))
+        return (super().process() + (self.pre_var_vals, self.post_var_vals,
+                                     self.pre_neuron_var_refs,
+                                     self.post_neuron_var_refs,
+                                     self.psm_var_refs))
 
     @property
     def reset_pre_vars(self):
