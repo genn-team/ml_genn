@@ -20,7 +20,7 @@ from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
 from ..neurons import Input
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
-                        MaxVar, SumVar, Var)
+                        EndVar, MaxVar, SumVar, Var)
 from ..utils.auto_model import AutoModel, AutoNeuronModel, AutoSynapseModel
 from ..utils.model import (CustomUpdateModel, Model, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
@@ -1980,6 +1980,22 @@ class EventPropCompiler(Compiler):
                         additional_reset_vars.append(
                             (f"{out_var_name}MaxTimeBack", "scalar",
                              f"{out_var_name}MaxTime"))
+                    elif isinstance(pop.neuron.readout, EndVar):
+                        genn_model.prepend_sim_code(
+                            f"""
+                            scalar drive = 0.0;
+                            if (Trial > 0 && t < 1e-3*dt) {{
+                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                            }}
+                            {read_pointer_code}
+                            {dynamics_code}
+                            {write_pointer_code}
+                            """)
+
+                        # Add custom updates to calculate softmax from output variable
+                        compile_state.batch_softmax_populations.append(
+                            (pop, model.output_var_name, "Softmax"))
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(

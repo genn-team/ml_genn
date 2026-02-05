@@ -10,7 +10,7 @@ from .. import Connection, Population, Network
 from ..communicators import Communicator
 from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
-from ..readouts import Var
+from ..readouts import EndVar
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.model import NeuronModel, SynapseModel
@@ -278,10 +278,10 @@ class FewSpikeCompiler(Compiler):
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             # Check readout is supported
-            if not isinstance(pop.neuron.readout, Var):
+            if not isinstance(pop.neuron.readout, EndVar):
                 raise NotImplementedError(
                     "FewSpike models only support output "
-                    "neurons with Var readout")
+                    "neurons with EndVar readout")
 
             # Add readout logic to model
             pop.neuron.readout.add_readout_logic(model)

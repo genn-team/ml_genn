@@ -22,7 +22,7 @@ def test_conn_var_recorder(batch_size, src_neuron_filter, trg_neuron_filter,
     with network:
         input = InputLayer(BinarySpikeInput(), 10)
         output = Layer(Dense(weight=weight), 
-                       IntegrateFire(readout="var"))
+                       IntegrateFire(readout="end_var"))
 
     compiler = InferenceCompiler(evaluate_timesteps=2, batch_size=batch_size)
     compiled_net = compiler.compile(network, request.keywords.node.name)

@@ -29,7 +29,7 @@ def test_spike_record(neuron_inds):
     with network:
         input = InputLayer(SpikeInput(max_spikes=len(input_times)), 10, record_spikes=True)
         output = Layer(OneToOne(weight=1.0), 
-                       LeakyIntegrate(readout="var"))
+                       LeakyIntegrate(readout="end_var"))
 
     compiler = InferenceCompiler(evaluate_timesteps=10, dt=1.0)
     compiled_net = compiler.compile(network, "test_spike_record")
