@@ -7,8 +7,6 @@ from ml_genn.compilers import FewSpikeCompiler
 from ml_genn.neurons import FewSpikeRelu, FewSpikeReluInput
 from .converter import Converter
 
-from copy import copy
-
 logger = logging.getLogger(__name__)
 
 # Because we want the converter class to be reusable, we don't want the
@@ -39,7 +37,7 @@ class FewSpike(Converter):
         alpha = (pre_conv_alpha[tf_layer] if tf_layer in pre_conv_alpha
                  else self.alpha)
         return FewSpikeRelu(self.k, alpha, 
-                            readout="var" if is_output else None)
+                            readout="end_var" if is_output else None)
 
     def pre_convert(self, tf_model):
         # If any normalisation data was provided
