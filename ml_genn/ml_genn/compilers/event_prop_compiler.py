@@ -1993,7 +1993,7 @@ class EventPropCompiler(Compiler):
                             {write_pointer_code}
                             """)
 
-                        # Add custom updates to calculate softmax from VMax
+                        # Add custom updates to calculate softmax from output variable
                         compile_state.batch_softmax_populations.append(
                             (pop, model.output_var_name, "Softmax"))
                     # Otherwise, unsupported readout type
