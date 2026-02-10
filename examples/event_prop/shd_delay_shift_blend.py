@@ -217,13 +217,14 @@ with compiled_net:
         labels_train = []
         blended_dataset = blend(raw_dataset, classes)
         for events, label in blended_dataset:
-            spikes_train.append(preprocess_tonic_spikes(delay(shift(events)), dataset.ordering,
-                                                    (dataset.sensor_size[0]*N_DELAY,
-                                                    dataset.sensor_size[1],dataset.sensor_size[2])))
+            spikes_train.append(
+                preprocess_tonic_spikes(delay(shift(events)), dataset.ordering,
+                                        (dataset.sensor_size[0]*N_DELAY,
+                                        dataset.sensor_size[1],dataset.sensor_size[2])))
             labels_train.append(label)
 
         # Train epoch
-        train_metrics, valid_metrics, train_cb, valid_cb  = compiled_net.train(
+        train_metrics, valid_metrics, train_cb, valid_cb  = compiled_net.train_validate(
             {input: spikes_train}, {output: labels_train},
             start_epoch=e, num_epochs=1, shuffle=True,
             callbacks=callbacks, validation_callbacks=[],
@@ -253,8 +254,8 @@ with compiled_net:
 network.load((best_e,), serialiser)
 
 compiler = InferenceCompiler(evaluate_timesteps=max_example_timesteps,
-                            reset_in_syn_between_batches=True,
-                            batch_size=BATCH_SIZE)
+                             reset_in_syn_between_batches=True,
+                             batch_size=BATCH_SIZE)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
