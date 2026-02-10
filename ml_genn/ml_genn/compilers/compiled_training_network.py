@@ -60,7 +60,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             y:                      Dictionary of training labels 
                                     to compare predictions against
             num_epochs:             Number of epochs to train for
-            start_epoch:            Epoch to stasrt training from
+            start_epoch:            Epoch to start training from
             shuffle:                Should training data be shuffled
                                     between epochs?
             metrics:                Metrics to calculate.
