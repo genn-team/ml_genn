@@ -72,8 +72,8 @@ class CompiledTrainingNetwork(CompiledNetwork):
     def train_validate(self, x: dict, y: dict, num_epochs: int, 
                        start_epoch: int = 0, shuffle: bool = True,
                        metrics: MetricsType = "sparse_categorical_accuracy",
-                       callbacks : List[Callback] = [BatchProgressBar()],
-                       validation_callbacks : List[Callback] = [BatchProgressBar()],
+                       callbacks: List[Callback] = [BatchProgressBar()],
+                       validation_callbacks: List[Callback] = [BatchProgressBar()],
                        validation_split: float = 0.0,
                        validation_x: Optional[dict] = None, 
                        validation_y: Optional[dict] = None
