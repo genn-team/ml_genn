@@ -27,6 +27,7 @@ from ..utils.model import (CustomUpdateModel, Model, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 
+from abc import abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
@@ -532,7 +533,7 @@ class LossRecorderState:
     compiled_network: CompiledTrainingNetwork
     losses: list = field(default_factory=list)
 
-class LossRecorderCallback(Callback, ABC):
+class LossRecorderCallbackBase(Callback):
     def __init__(self, pop: Population, key: str):
         self.pop = pop
         self.key = key
@@ -541,19 +542,33 @@ class LossRecorderCallback(Callback, ABC):
         return LossRecorderState(compiled_network)
 
     def on_batch_end(self, state, batch, metric_state):
-        # Pull variable loss is calculated from from device
-        cn = state.compiled_network
-        genn_pop = cn.neuron_populations[self.pop]
-        genn_pop.vars["LossSum"].pull_from_device()
+        # If this isn't the first batch (where there is no backward pass)
+        if batch > 0:
+            # Pull variable loss is calculated from from device
+            genn_pop = state.compiled_network.neuron_populations[self.pop]
+            genn_pop.vars["LossSum"].pull_from_device()
 
-        # Calculate loss and add to list
-        loss = np.sum(genn_pop.vars["LossSum"].view
-                      / cn.genn_model.batch_size)
-        state.losses.append(loss)
+            # Calculate loss and add to list
+            state.losses.append(
+                self.calculate_loss(state,  genn_pop.vars["LossSum"].view))
 
     def get_data(self, state):
         return self.key, state.losses
 
+    @abstractmethod
+    def calculate_loss(self, state, loss_sum):
+        pass
+
+class LossRecorderCallbackSCE(LossRecorderCallbackBase):
+    def calculate_loss(self, state, loss_sum):
+        batch_size = state.compiled_network.genn_model.batch_size
+        return np.sum(loss_sum) / batch_size
+
+class LossRecorderCallbackMSE(LossRecorderCallbackBase):
+    def calculate_loss(self, state, loss_sum):
+        batch_size = state.compiled_network.genn_model.batch_size
+        return np.sum(np.sqrt(loss_sum)) / batch_size
+        
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
 
@@ -1301,9 +1316,11 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
 
         # Add callbacks for loss recording
-        for pop, key in compile_state.loss_recorder_populations:
-            base_train_callbacks.append(LossRecorderCallback(pop, key))
-            base_validate_callbacks.append(LossRecorderCallback(pop, key))
+        for pop, key, sce_loss in compile_state.loss_recorder_populations:
+            L = (LossRecorderCallbackSCE if sce_loss
+                  else LossRecorderCallbackMSE)
+            base_train_callbacks.append(L(pop, key))
+            base_validate_callbacks.append(L(pop, key))
 
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
@@ -1902,27 +1919,36 @@ class EventPropCompiler(Compiler):
             window_start, window_end = pop.neuron.readout.window_start_end(
                 self.example_timesteps, self.dt)
 
-        # If we should record loss
+        # Classify loss
         pop_loss = compile_state.losses[pop]
-        if pop_loss.record_key is not None:
-            # Add variable to record into
-            genn_model.add_var("LossSum", "scalar", 0.0)
-
-            # Define code generator function
-            gen_record_code = lambda n: f"LossSum += -log({n});"
-            
-            # Add population to list 
-            compile_state.loss_recorder_populations.append(
-                (pop, pop_loss.record_key))
-        # Otherwise don't generate any code
-        else:
-            gen_record_code = lambda n: ""
-            
-        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
         mse_loss = isinstance(pop_loss, MeanSquareError)
         per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
         rmse_loss = isinstance(pop_loss, RelativeMeanSquareError)
+        
+        # If we should record loss
+        if pop_loss.record_key is not None:
+            # Add variable to record into
+            genn_model.add_var("LossSum", "scalar", 0.0)
+
+            # Define templates for loss recording code
+            gen_record_code = Template("LossSum += ($n);")
+            gen_first_timestep_record_code = Template(
+                """
+                if(t == 0.0) {
+                    LossSum = ($n);
+                }
+                """)
+            
+            # Add population to list 
+            compile_state.loss_recorder_populations.append(
+                (pop, pop_loss.record_key, sce_loss))
+        # Otherwise provide empty templates
+        else:
+            gen_record_code = Template("")
+            gen_first_timestep_record_code = Template("")
+            
+        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         if "threshold" not in model.model or model.model["threshold"] is None:
             # Check adjoint system is also jump-less
             assert len(saved_vars_spike) == 0
@@ -1955,7 +1981,7 @@ class EventPropCompiler(Compiler):
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
 
                             if(id == YTrueBack) {{
-                                {gen_record_code('loss')}
+                                {gen_record_code.substitute(n='-log(loss)')}
                                 drive = (1.0 - loss) / (num_batch * {window_end-window_start});
                             }}
                             else {{
@@ -1991,7 +2017,7 @@ class EventPropCompiler(Compiler):
                         if (Trial > 0) {{
                             tsRingReadOffset--;
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            {gen_record_code('loss')}
+                            {gen_record_code.substitute(n='loss * loss')}
                             drive = loss / (num_batch * {self.dt * self.example_timesteps});
                         }}
                         
@@ -2019,7 +2045,7 @@ class EventPropCompiler(Compiler):
                         ro = pop.neuron.readout
                         code = f"""
                            if(id == YTrueBack) {{
-                               {gen_record_code('Softmax')}
+                               {gen_first_timestep_record_code.substitute(n='-log(Softmax)')}
                                drive = (1.0 - Softmax) / (num_batch * {window_end-window_start});
                             }}
                             else {{
@@ -2050,7 +2076,7 @@ class EventPropCompiler(Compiler):
                         T = self.dt * self.example_timesteps
                         code = f"""
                             if(id == YTrueBack) {{
-                                {gen_record_code('Softmax')}
+                                {gen_first_timestep_record_code.substitute(n='-log(Softmax)')}
                                 drive = ((1.0 - Softmax) * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {window_end - window_start});
                             }}
                             else {{
@@ -2090,7 +2116,7 @@ class EventPropCompiler(Compiler):
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
                                 if(id == YTrueBack) {{
-                                    {gen_record_code('Softmax')}
+                                    {gen_record_code.substitute(n='-log(Softmax)')}
                                     drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
                                 }}
                                 else {{
@@ -2217,7 +2243,7 @@ class EventPropCompiler(Compiler):
                             if (id == YTrueBack) {{
                                 const scalar fst = {1.01 * window_end} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
-                                {gen_record_code('Softmax')}
+                                {gen_record_code.substitute(n='-log(Softmax)')}
                             }}
                             else {{
                                 drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
@@ -2239,7 +2265,7 @@ class EventPropCompiler(Compiler):
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             drive_p = (-TFirstSpikeBack-YTrueBack);
-                            {gen_record_code('drive_p')}
+                            {gen_record_code.substitute(n='drive_p * drive_p')}
                         }}
                         {transition_code}
                         """
@@ -2274,7 +2300,7 @@ class EventPropCompiler(Compiler):
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             if(id == YTrueBack) {{
                                 drive_p = (TFirstSpikeSumBack - (num_neurons * TFirstSpikeTrueBack) + ((num_neurons - 1) * Delta));
-                                {gen_record_code('drive_p')}
+                                {gen_record_code.substitute(n='drive_p * drive_p')}
                             }}
                             else {{
                                 drive_p = ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta);
