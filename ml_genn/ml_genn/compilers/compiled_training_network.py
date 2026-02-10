@@ -78,6 +78,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                        validation_x: Optional[dict] = None, 
                        validation_y: Optional[dict] = None
                        ) -> Tuple[MetricStateDict, MetricStateDict,
+                                  dict, dict]:
         """ Train model on a sequence of inputs against labels and,
         after each epoch, evaluates validation accuracy using
         either a seperate dataset or a split
