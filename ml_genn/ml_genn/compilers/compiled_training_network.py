@@ -81,7 +81,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
                                   dict, dict]:
         """ Train model on a sequence of inputs against labels and,
         after each epoch, evaluates validation accuracy using
-        either a seperate dataset or a split
+        either a separate dataset or a split
 
         Args:
             x:                      Dictionary of training inputs
