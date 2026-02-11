@@ -1525,7 +1525,7 @@ class EventPropCompiler(Compiler):
                     # scaling factor is made so that jumps lead to an area of size 1
                     # to be added to the integral of the "invisible trace variable"
                     # underlying the regularisation loss
-                    drive += sympy.Symbol("drive_reg")/(sympy.Symbol("t")+self.dt)
+                    drive += sympy.Symbol("drive_reg")
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
@@ -1956,14 +1956,20 @@ class EventPropCompiler(Compiler):
                             (pop, out_var_name + suffix, "Softmax"))
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
-                        local_t_scale = 1.0 / (self.dt * self.example_timesteps)
+                        ro = pop.neuron.readout
+                        window_start = 0 if ro.window_start is None else ro.window_start
+                        window_end = self.example_timesteps if ro.window_end is None else ro.window_end
+                        local_t_scale = 1.0 / (window_end - window_start)
+                        T = self.dt * self.example_timesteps
                         genn_model.prepend_sim_code(
                             f"""
                             // Backward pass
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
+                                if (t <= {T-window_start} && t > {T-window_end}) {{
+                                    const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                    drive = (g * exp(-(1.0 - ((t-{window_start}) * {local_t_scale})))) / (num_batch * {window_end - window_start});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
