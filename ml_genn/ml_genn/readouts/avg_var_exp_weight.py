@@ -9,6 +9,14 @@ from copy import deepcopy
 class AvgVarExpWeight(Readout):
     """Read out per-neuron average of neuron model's output variable
     with exponential weighting as described by [Nowotny2024]_."""
+    def __init__(self, **kwargs):
+        """Through kwargs, allow to define a window in which to average
+        the output var with exponential weighting across the window
+        from 1 to 1/e. If no window is defined, default to the original
+        averaging and exponential weight across the whole trial."""
+        self.window_start = kwargs.get("window_start")
+        self.window_end = kwargs.get("window_end")
+
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
@@ -32,10 +40,12 @@ class AvgVarExpWeight(Readout):
         self.output_var_type = output_var[1]
 
         # Add code to update average variable
-        scale = 1.0 / kwargs["example_timesteps"]
-        local_t_scale = 1.0 / (kwargs["dt"] * kwargs["example_timesteps"])
+        window_start = 0 if self.window_start is None else self.window_start
+        window_end = kwargs["example_timesteps"] if self.window_end is None else self.window_end
+        scale = kwargs["dt"] / (window_end - window_start)
+        local_t_scale = 1.0 / (window_end - window_start)
         model.append_sim_code(
-            f"{avg_var_name} += exp(-(t * {local_t_scale})) * {scale} * {self.output_var_name};")
+            f"if (t >= {window_start} && t < {window_end}) {avg_var_name} += exp(-((t-{window_start}) * {local_t_scale})) * {scale} * {self.output_var_name};")
 
         # Add average variable with same type as output
         # variable and initialise to zero
