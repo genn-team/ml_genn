@@ -383,7 +383,7 @@ class CompileState:
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
-         if len(reset_vars) > 0 or reset_event_ring or reset_v_ring:
+        if len(reset_vars) > 0 or reset_event_ring or reset_v_ring:
             self._neuron_reset_vars.append((pop, reset_vars, 
                                             reset_event_ring, reset_v_ring))
     
