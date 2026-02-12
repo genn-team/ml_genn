@@ -383,11 +383,13 @@ class CompileState:
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
-        self._neuron_reset_vars.append((pop, reset_vars, 
-                                        reset_event_ring, reset_v_ring))
+        if len(reset_vars) > 0 or reset_event_ring or reset_v_ring:
+            self._neuron_reset_vars.append((pop, reset_vars, 
+                                            reset_event_ring, reset_v_ring))
     
     def add_synapse_reset_vars(self, conn, reset_vars):
-        self._synapse_reset_vars.append((conn, reset_vars))
+        if len(reset_vars) > 0:
+            self._synapse_reset_vars.append((conn, reset_vars))
         
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops, conn_pops):
@@ -838,8 +840,7 @@ class EventPropCompiler(Compiler):
         
         # Build post-jump injection expression by replacing 
         # all variables with jumps with jump expressions
-        inject_expr = synapse_model.inject_current
-        inject_plus_m_expr = inject_expr
+        inject_plus_m_expr = synapse_model.inject_current
         for jump_sym, jump_expr in synapse_model.jumps.items():
             inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
 
@@ -919,6 +920,11 @@ class EventPropCompiler(Compiler):
                 for syn_sym, syn_expr in synapse_model.dx_dt.items())
 
             # then neuron equations:
+            # **NOTE** if this is a delta synapse, nothing is 
+            # injected via ISyn apart from at jump-time so we should 
+            # be subtracting neuron dynamics with NO synaptic input
+            inject_expr = (0 if synapse_model.is_delta_synapse 
+                           else synapse_model.inject_current)
             dx_dt_diff_sum += sum(
                 _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
                                         - trg_expr.subs(isyn_sym, inject_expr))
@@ -1013,6 +1019,27 @@ class EventPropCompiler(Compiler):
                 if has_delay:
                     weight_grad_update = _template_symbol(weight_grad_update,
                                                           lambda_sym)
+
+            # If this is a delta synapse
+            if synapse_model.is_delta_synapse:
+                # Loop through neuron variables
+                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
+                    # If input is injected into this variable
+                    if trg_expr.has(isyn_sym):
+                        lambda_sym = _get_lmd_sym(trg_sym)
+                        weight_grad_update -= lambda_sym
+
+                        # Add variable reference if required
+                        if not genn_model.has_post_neuron_var_ref(lambda_sym.name):
+                            genn_model.add_post_neuron_var_ref(lambda_sym.name, 
+                                                               "scalar", 
+                                                               lambda_sym.name)
+                        
+                        # If connection has delays, add $ to name so we 
+                        # can use template engine to add delay indexing
+                        if has_delay:
+                            weight_grad_update = _template_symbol(weight_grad_update,
+                                                                  lambda_sym)
 
             logger.debug(f"\tWeight gradient update: {weight_grad_update}")
             weight_grad_update_code =\

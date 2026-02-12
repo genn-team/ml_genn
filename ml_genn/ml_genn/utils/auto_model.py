@@ -53,6 +53,7 @@ class AutoModel:
                  if v[1] is not None}
         else:
             self.dx_dt = {}
+            self.jumps = {}
 
     def add_var(self, name: str, dynamics: Optional[str], 
                 jump: Optional[str], value: Value = 0.0):
@@ -131,14 +132,14 @@ class AutoSynapseModel(AutoModel):
                                "'inject_current' expression.")
 
         try:
-            # Find first variable that can be implemented using built-in inSyn
             weight_sym = sympy.Symbol("weight")
+            # Find first variable that can be implemented using built-in inSyn
             rep_sym = next(sym for sym, expr in self.jumps.items()
                            if (expr == (sym + weight_sym)
                                and self.var_vals[sym.name] == 0))
         except StopIteration:
             pass
-        finally:
+        else:
             # Rename variable in dx_dt and jumps as inSyn
             # and substitute in all jumps and dynamics
             in_syn_sym = sympy.Symbol("inSyn")
@@ -147,7 +148,7 @@ class AutoSynapseModel(AutoModel):
             self.jumps = {in_syn_sym if sym == rep_sym else sym: expr.subs(rep_sym, in_syn_sym)
                           for sym, expr in self.jumps.items()}
 
-            # Also substitue in inject expression            
+            # Also substitute in inject expression            
             self.inject_current = self.inject_current.subs(rep_sym, in_syn_sym)
 
             # Remove from var_vals 
@@ -168,14 +169,17 @@ class AutoSynapseModel(AutoModel):
                   for sym, expr in self.jumps.items()
                   if sym != in_syn_sym]
 
-        # If an inSyn jump isn't specified, zero it
-        if in_syn_sym not in self.jumps:
-            clines.append("inSyn = 0;")
         return "\n".join(clines)
 
     # **TODO** property
     def get_inject_current_code(self):
-        return sympy.ccode(self.inject_current)
+        in_syn_sym = sympy.Symbol("inSyn")
+        w_sym = sympy.Symbol("weight")
+        return sympy.ccode(self.inject_current.subs(w_sym, in_syn_sym))
+    
+    @property
+    def is_delta_synapse(self):
+        return (self.inject_current == sympy.Symbol("weight"))
 
     @staticmethod
     def from_val_descriptors(model, inst, 

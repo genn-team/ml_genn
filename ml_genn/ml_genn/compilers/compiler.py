@@ -289,8 +289,15 @@ class Compiler:
                             :meth:`.pre_compile`.
         """
         if isinstance(model, AutoSynapseModel):
+            # If model is a delta synapse, manually zero inSyn
+            if model.is_delta_synapse:
+                dynamics_code = "inSyn = 0;"
+            # Otherwise, solve ODE
+            else:
+                dynamics_code = solve_ode(model.dx_dt, model.solver,
+                                          model.sub_steps)
+
             # Build GeNNCode model
-            # **TODO** solver
             genn_model = {
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
@@ -298,7 +305,7 @@ class Compiler:
                     f"""
                     {model.get_jump_code()}
                     injectCurrent({model.get_inject_current_code()});
-                    {solve_ode(model.dx_dt, model.solver, model.sub_steps)}
+                    {dynamics_code}
                     """}
 
             return SynapseModel(genn_model, copy(model.param_vals),
