@@ -1957,8 +1957,8 @@ class EventPropCompiler(Compiler):
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
                         ro = pop.neuron.readout
-                        window_start = 0 if ro.window_start is None else ro.window_start
-                        window_end = self.example_timesteps if ro.window_end is None else ro.window_end
+                        window_start = ro.window_start or 0
+                        window_end = ro.window_end or self.example_timesteps
                         local_t_scale = 1.0 / (window_end - window_start)
                         T = self.dt * self.example_timesteps
                         genn_model.prepend_sim_code(
