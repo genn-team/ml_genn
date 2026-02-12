@@ -920,6 +920,9 @@ class EventPropCompiler(Compiler):
                 for syn_sym, syn_expr in synapse_model.dx_dt.items())
 
             # then neuron equations:
+            # **NOTE** if this is a delta synapse, nothing is 
+            # injected via ISyn apart from at jump-time so we should 
+            # be subtracting neuron dynamics with NO synaptic input
             inject_expr = (0 if synapse_model.is_delta_synapse 
                            else synapse_model.inject_current)
             dx_dt_diff_sum += sum(
