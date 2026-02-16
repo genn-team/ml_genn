@@ -50,12 +50,12 @@ class VarRecorder(Callback):
         neuron_filter:  Filter used to select which neurons to record from
                         (see :ref:`section-callbacks-recording` 
                         for more information).
-        genn_var:       Internal name of variable to record
+
     """
     def __init__(self, pop: Union[PopulationType, ConnectionType], var: str,
                  key=None, example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None):
-        # Get underlying population
+        # Get underlying population or connection
         # **YUCK** in Python 3.10 could just isinstance(PopulationType)
         if isinstance(pop, (InputLayer, Layer, Population)):
             self._pop = get_underlying_pop(pop)
@@ -102,7 +102,7 @@ class VarRecorder(Callback):
         # If variable is shared and neuron mask was set, give warning
         if shared and not np.all(self._neuron_mask):
             logger.warning(f"VarRecorder ignoring neuron mask applied "
-                           f"to SHARED_NEURON variable f{self.var}")
+                           f"to SHARED_NEURON variable {self.var}")
 
         return State(compiled_network, batched, shared,
                      np.ones(compiled_network.genn_model.batch_size,
