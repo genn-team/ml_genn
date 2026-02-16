@@ -1968,7 +1968,7 @@ class EventPropCompiler(Compiler):
                             if (Trial > 0) {{
                                 if (t <= {T-window_start} && t > {T-window_end}) {{
                                     const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                    drive = (g * exp(-(1.0 - ((t-{window_start}) * {local_t_scale})))) / (num_batch * {window_end - window_start});
+                                    drive = (g * exp(-({T}-t-{window_start}) * {local_t_scale})) / (num_batch * {window_end - window_start});
                                 }}
                             }}
                             {read_pointer_code}
