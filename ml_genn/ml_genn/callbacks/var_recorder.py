@@ -5,7 +5,7 @@ import numpy as np
 
 from itertools import chain
 
-from pygenn import VarAccessDim
+from pygenn import VarAccess, VarAccessDim
 from typing import Union
 from .callback import Callback
 from .. import InputLayer, Layer, Population
@@ -24,6 +24,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+def _find_var(model_vars, name):
+    try:
+        # Find variable
+        return next(v for v in model_vars if v.name == name)
+    except StopIteration:
+        raise RuntimeError(f"Model does not have variable "
+                           f"{name} to record")
 @dataclass
 class State:
     compiled_network: CompiledNetwork
@@ -79,25 +86,24 @@ class VarRecorder(Callback):
         if isinstance(self._pop, Population):
             # Get GeNN neuron population from compiled model
             pop = compiled_network.neuron_populations[self._pop]
-
-            # Get neuron model variables
-            pop_vars = pop.model.get_vars()
+            
+            # Check variable exists and get its access mode
+            var_access = _find_var(pop.model.get_vars(), self.var).access
         else:
             # Get GeNN synapse population from compiled model
             pop = compiled_network.connection_populations[self._pop]
 
-            # Get postsynaptic model variables
-            pop_vars = pop.ps_initialiser.snippet.get_vars()
-        try:
-            # Find variable
-            var = next(v for v in pop_vars if v.name == self.var)
-        except StopIteration:
-            raise RuntimeError(f"Model does not have variable "
-                               f"{self.var} to record")
-
+            if self.var == "out_post":
+                var_access = VarAccess.READ_WRITE
+            else:
+                # Check variable exists and get its access mode
+                var_access = _find_var(
+                    pop.ps_initialiser.snippet.get_vars(), self.var).access
+            
+   
         # Determine if var is shared or batched
-        shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
-        batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
+        shared = not (get_var_access_dim(var_access) & VarAccessDim.ELEMENT)
+        batched = (get_var_access_dim(var_access) & VarAccessDim.BATCH)
                            
         # If variable is shared and neuron mask was set, give warning
         if shared and not np.all(self._neuron_mask):
@@ -115,15 +121,20 @@ class VarRecorder(Callback):
             if isinstance(self._pop, Population):
                 pop = cn.neuron_populations[self._pop]
                 var = pop.vars[self.var]
+                var_view = var.current_view
             else:
                 pop = cn.connection_populations[self._pop]
-                var = pop.psm_vars[self.var]
+                if self.var == "out_post":
+                    var = pop.out_post
+                    var_view = var.view
+                else:
+                    var = pop.psm_vars[self.var]
+                    var_view = var.current_view
             
             # Copy variable from device
             var.pull_from_device()
 
             # If simulation and variable is batched
-            var_view = var.current_view
             if cn.genn_model.batch_size > 1 and state.batched:
                 # Apply neuron mask
                 if state.shared:
