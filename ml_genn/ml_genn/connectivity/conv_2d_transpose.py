@@ -84,7 +84,7 @@ class Conv2DTranspose(Connectivity):
                  conv_size: Param2D, flatten=False, 
                  conv_strides: Optional[Param2D] = None, 
                  conv_padding: str = "valid", delay: InitValue = 0):
-        super(Conv2DTranspose, self).__init__(weight, delay)
+        super().__init__(weight, delay)
 
         self.filters = filters
         self.conv_size = get_param_2d("conv_size", conv_size)

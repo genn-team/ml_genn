@@ -23,7 +23,7 @@ class OneToOne(SparseBase):
         delay:  Connection delays
     """
     def __init__(self, weight: InitValue, delay: InitValue = 0):
-        super(OneToOne, self).__init__(weight, delay)
+        super().__init__(weight, delay)
 
     def connect(self, source: Population, target: Population):
         output_shape = source.shape
@@ -35,6 +35,5 @@ class OneToOne(SparseBase):
 
     def get_snippet(self, connection: Connection,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
-        return super(OneToOne, self)._get_snippet(
-            supported_matrix_type,
-            init_sparse_connectivity("OneToOne"))
+        return super()._get_snippet(supported_matrix_type,
+                                    init_sparse_connectivity("OneToOne"))

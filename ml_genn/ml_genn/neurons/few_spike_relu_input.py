@@ -80,7 +80,7 @@ class FewSpikeReluInput(Neuron, InputBase):
     alpha = ConstantValueDescriptor()
 
     def __init__(self, k: int = 10, alpha: float = 25, signed_input=False):
-        super(FewSpikeReluInput, self).__init__(var_name="V")
+        super().__init__(var_name="V")
 
         self.k = k
         self.alpha = alpha

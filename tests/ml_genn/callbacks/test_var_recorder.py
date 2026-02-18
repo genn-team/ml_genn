@@ -23,7 +23,7 @@ def test_var_recorder(batch_size, neuron_filter, example_filter, request):
     with network:
         input = InputLayer(BinarySpikeInput(), 10)
         output = Layer(Dense(weight=0), 
-                       IntegrateFire(readout="var", v_thresh=v_thresh),
+                       IntegrateFire(readout="end_var", v_thresh=v_thresh),
                        10)
 
     compiler = InferenceCompiler(evaluate_timesteps=2, batch_size=batch_size)

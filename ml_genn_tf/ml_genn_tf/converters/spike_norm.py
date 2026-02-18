@@ -46,8 +46,7 @@ class NormCompiler(InferenceCompiler):
             model.set_param_dynamic("Vthresh")
 
         # Build neuron model
-        return super(NormCompiler, self).build_neuron_model(
-            pop, model, compile_state)
+        return super().build_neuron_model(pop, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations,
                                 connection_populations, compile_state):
@@ -74,13 +73,13 @@ class NormCompiler(InferenceCompiler):
                 genn_threshold_2 = self.add_custom_update(
                     genn_model, threshold_2, 
                     "UpdateThresh2" + pop.name, "CUThreshold2" + pop.name)
-                 
+
                 pop_threshold_custom_updates[pop] = genn_threshold_1
         # Superclass
-        compiled_net = super(NormCompiler, self).create_compiled_network(
-            genn_model, neuron_populations, connection_populations, 
-            compile_state)
-        
+        compiled_net = super().create_compiled_network(
+            genn_model, neuron_populations,
+            connection_populations, compile_state)
+
         # **YUCK** monkey patch compiled network with dictionary of custom 
         # updates responsible for calculating each population's thresholds
         compiled_net.pop_threshold_custom_updates =\

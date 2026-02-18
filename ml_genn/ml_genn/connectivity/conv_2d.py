@@ -45,7 +45,7 @@ class Conv2D(Connectivity):
                  conv_size: Param2D, flatten: bool = False, 
                  conv_strides: Optional[Param2D] = None,
                  conv_padding: str = "valid", delay: InitValue = 0):
-        super(Conv2D, self).__init__(weight, delay)
+        super().__init__(weight, delay)
 
         self.filters = filters
         self.conv_size = get_param_2d("conv_size", conv_size)

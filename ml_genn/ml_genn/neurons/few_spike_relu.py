@@ -115,7 +115,7 @@ class FewSpikeRelu(Neuron):
     alpha = ConstantValueDescriptor()
 
     def __init__(self, k: int = 10, alpha: float = 25, readout=None):
-        super(FewSpikeRelu, self).__init__(readout)
+        super().__init__(readout)
         self.k = k
         self.alpha = alpha
 

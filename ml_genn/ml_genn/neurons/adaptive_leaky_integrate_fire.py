@@ -44,7 +44,7 @@ class AdaptiveLeakyIntegrateFire(Neuron):
                  v: InitValue = 0.0, a: InitValue = 0.0, beta: InitValue = 0.0174,
                  tau_mem: InitValue = 20.0, tau_adapt: InitValue = 2000.0, 
                  relative_reset: bool = False, readout=None):
-        super(AdaptiveLeakyIntegrateFire, self).__init__(readout)
+        super().__init__(readout)
 
         self.v_thresh = v_thresh
         self.v_reset = v_reset

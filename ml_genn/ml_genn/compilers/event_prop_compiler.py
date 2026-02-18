@@ -383,11 +383,13 @@ class CompileState:
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
-        self._neuron_reset_vars.append((pop, reset_vars, 
-                                        reset_event_ring, reset_v_ring))
+        if len(reset_vars) > 0 or reset_event_ring or reset_v_ring:
+            self._neuron_reset_vars.append((pop, reset_vars, 
+                                            reset_event_ring, reset_v_ring))
     
     def add_synapse_reset_vars(self, conn, reset_vars):
-        self._synapse_reset_vars.append((conn, reset_vars))
+        if len(reset_vars) > 0:
+            self._synapse_reset_vars.append((conn, reset_vars))
         
     def create_reset_custom_updates(self, compiler, genn_model,
                                     neuron_pops, conn_pops):
@@ -656,11 +658,8 @@ class EventPropCompiler(Compiler):
                   "tuple if separate values for undershoot "
                   "and overshoot are required.", FutureWarning)
 
-        super(EventPropCompiler, self).__init__(supported_matrix_types, dt,
-                                                batch_size, rng_seed,
-                                                kernel_profiling,
-                                                communicator,
-                                                **genn_kwargs)
+        super().__init__(supported_matrix_types, dt, batch_size, rng_seed,
+                         kernel_profiling, communicator, **genn_kwargs)
 
         self.example_timesteps = example_timesteps
         self.losses = losses
@@ -706,8 +705,7 @@ class EventPropCompiler(Compiler):
                            model: Union[AutoNeuronModel, SynapseModel],
                            compile_state: CompileState) -> NeuronModel:
         # Build GeNNCode neuron model implementing forward pass of model
-        genn_model = super(EventPropCompiler, self).build_neuron_model(
-                           pop, model, compile_state)
+        genn_model = super().build_neuron_model(pop, model, compile_state)
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
@@ -736,8 +734,7 @@ class EventPropCompiler(Compiler):
     
    
         # Build GeNNCode neuron model implementing forward pass of model
-        genn_model = super(EventPropCompiler, self).build_synapse_model(
-                           conn, model, compile_state)
+        genn_model = super().build_synapse_model(conn, model, compile_state)
 
         logger.debug("\tBuilding adjoint system for AutoSynapseModel:")
         logger.debug(f"\t\tVariables: {model.var_vals.keys()}")
@@ -843,8 +840,7 @@ class EventPropCompiler(Compiler):
         
         # Build post-jump injection expression by replacing 
         # all variables with jumps with jump expressions
-        inject_expr = synapse_model.inject_current
-        inject_plus_m_expr = inject_expr
+        inject_plus_m_expr = synapse_model.inject_current
         for jump_sym, jump_expr in synapse_model.jumps.items():
             inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
 
@@ -924,6 +920,11 @@ class EventPropCompiler(Compiler):
                 for syn_sym, syn_expr in synapse_model.dx_dt.items())
 
             # then neuron equations:
+            # **NOTE** if this is a delta synapse, nothing is 
+            # injected via ISyn apart from at jump-time so we should 
+            # be subtracting neuron dynamics with NO synaptic input
+            inject_expr = (0 if synapse_model.is_delta_synapse 
+                           else synapse_model.inject_current)
             dx_dt_diff_sum += sum(
                 _get_lmd_sym(trg_sym) * (trg_dx_dt_plus_m[trg_sym] 
                                         - trg_expr.subs(isyn_sym, inject_expr))
@@ -1018,6 +1019,27 @@ class EventPropCompiler(Compiler):
                 if has_delay:
                     weight_grad_update = _template_symbol(weight_grad_update,
                                                           lambda_sym)
+
+            # If this is a delta synapse
+            if synapse_model.is_delta_synapse:
+                # Loop through neuron variables
+                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
+                    # If input is injected into this variable
+                    if trg_expr.has(isyn_sym):
+                        lambda_sym = _get_lmd_sym(trg_sym)
+                        weight_grad_update -= lambda_sym
+
+                        # Add variable reference if required
+                        if not genn_model.has_post_neuron_var_ref(lambda_sym.name):
+                            genn_model.add_post_neuron_var_ref(lambda_sym.name, 
+                                                               "scalar", 
+                                                               lambda_sym.name)
+                        
+                        # If connection has delays, add $ to name so we 
+                        # can use template engine to add delay indexing
+                        if has_delay:
+                            weight_grad_update = _template_symbol(weight_grad_update,
+                                                                  lambda_sym)
 
             logger.debug(f"\tWeight gradient update: {weight_grad_update}")
             weight_grad_update_code =\
@@ -1372,7 +1394,8 @@ class EventPropCompiler(Compiler):
     def _create_ttfs_reduce_custom_update(self, genn_model,
                                           genn_pop, example_time: float,
                                           name: str):
-        # Create model which:
+        # Create model which sums valid first spike times into TFirstSpikeSumBack
+        # and selects first spike time from true output
         reduce_model = CustomUpdateModel(
             model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
                                 ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
@@ -1873,7 +1896,7 @@ class EventPropCompiler(Compiler):
                         # Add custom updates to calculate 
                         # softmax from V and write directly to buffermodel_copy
                         compile_state.timestep_softmax_populations.append(
-                            (pop, out_var_name))                    
+                            (pop, out_var_name))
                     # Otherwise, unsupported readout type
                     else:
                         raise NotImplementedError(
@@ -1999,7 +2022,7 @@ class EventPropCompiler(Compiler):
                             {write_pointer_code}
                             """)
 
-                        # Add custom updates to calculate softmax from VMax
+                        # Add custom updates to calculate softmax from output variable
                         compile_state.batch_softmax_populations.append(
                             (pop, model.output_var_name, "Softmax"))
                     # Otherwise, unsupported readout type

@@ -14,7 +14,7 @@ class SequentialNetwork(Network):
     """
 
     def __init__(self):
-        super(SequentialNetwork, self).__init__()
+        super().__init__()
 
         self.layers = []
 

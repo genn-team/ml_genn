@@ -3,8 +3,6 @@ import numpy as np
 from .readout import Readout
 from ..utils.model import NeuronModel
 
-from copy import deepcopy
-
 
 class EndVar(Readout):
     """Read out final value of neuron model's output variable"""
@@ -36,6 +34,3 @@ class EndVar(Readout):
         # Return contents, reshaped as desired
         return np.reshape(end_var.view, (batch_size,) + shape)
 
-    @property
-    def reset_vars(self):
-        return [(self.output_var_name, self.output_var_type, 0.0)]

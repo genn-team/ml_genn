@@ -111,7 +111,7 @@ class CallbackList:
     def __getitem__(self, index: int):
         return self._callbacks[index]
     
-    def get_data(self):
+    def get_data(self) -> dict:
         # Loop through callbacks
         cb_data = {}
         for i, c in enumerate(self._callbacks):

@@ -10,7 +10,7 @@ from .. import Connection, Population, Network
 from ..communicators import Communicator
 from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
-from ..readouts import Var
+from ..readouts import EndVar
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.model import NeuronModel, SynapseModel
@@ -30,9 +30,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
                  connection_populations, communicator,
                  k: int, pop_pipeline_depth: dict):
-        super(CompiledFewSpikeNetwork, self).__init__(
-              genn_model, neuron_populations, connection_populations,
-              communicator, k)
+        super().__init__(genn_model, neuron_populations,
+                         connection_populations, communicator, k)
 
         self.k = k
         self.pop_pipeline_depth = pop_pipeline_depth
@@ -212,10 +211,8 @@ class FewSpikeCompiler(Compiler):
                                      SynapseMatrixType.PROCEDURAL,
                                      SynapseMatrixType.SPARSE,
                                      SynapseMatrixType.DENSE]
-        super(FewSpikeCompiler, self).__init__(supported_matrix_type, dt,
-                                               batch_size, rng_seed,
-                                               kernel_profiling, communicator,
-                                               **genn_kwargs)
+        super().__init__(supported_matrix_type, dt, batch_size, rng_seed,
+                         kernel_profiling, communicator, **genn_kwargs)
         self.k = k
 
     def pre_compile(self, network: Network, genn_model, 
@@ -272,16 +269,15 @@ class FewSpikeCompiler(Compiler):
                 "and FewSpikeReluInput neurons")
 
         # Build neuron model
-        model = super(FewSpikeCompiler, self).build_neuron_model(
-            pop, model, compile_state)
+        model = super().build_neuron_model(pop, model, compile_state)
 
         # If population has a readout i.e. it's an output
         if pop.neuron.readout is not None:
             # Check readout is supported
-            if not isinstance(pop.neuron.readout, Var):
+            if not isinstance(pop.neuron.readout, EndVar):
                 raise NotImplementedError(
                     "FewSpike models only support output "
-                    "neurons with Var readout")
+                    "neurons with EndVar readout")
 
             # Add readout logic to model
             pop.neuron.readout.add_readout_logic(model)
@@ -294,8 +290,7 @@ class FewSpikeCompiler(Compiler):
             raise NotImplementedError("FewSpike models only "
                                       "support Delta synapses")
 
-        return super(FewSpikeCompiler, self).build_synapse_model(
-            conn, model, compile_state)
+        return super().build_synapse_model(conn, model, compile_state)
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
                                 connection_populations: dict, 

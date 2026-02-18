@@ -1,13 +1,14 @@
 import numpy as np
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from pygenn import SynapseMatrixConnectivity
 from .compiled_network import CompiledNetwork
-from ..callbacks import BatchProgressBar
+from ..callbacks import BatchProgressBar, Callback
 from ..connectivity.sparse_base import SparseBase
-from ..metrics import Metric, MetricsType
+from ..metrics import Metric, MetricState, MetricsType
 from ..serialisers import Serialiser
 from ..utils.callback_list import CallbackList
+from ..utils.network import PopulationType
 
 from ..utils.data import (batch_dataset, get_dataset_size,
                           permute_dataset, split_dataset)
@@ -16,6 +17,8 @@ from ..utils.network import get_underlying_pop
 
 from ..metrics import default_metrics
 from ..serialisers import default_serialisers
+
+MetricStateDict = Dict[PopulationType, MetricState]
 
 class CompiledTrainingNetwork(CompiledNetwork):
     def __init__(self, genn_model, neuron_populations,
@@ -26,9 +29,9 @@ class CompiledTrainingNetwork(CompiledNetwork):
                  checkpoint_connection_vars: list,
                  checkpoint_population_vars: list,
                  reset_time_between_batches: bool = True):
-        super(CompiledTrainingNetwork, self).__init__(
-              genn_model, neuron_populations, connection_populations,
-              communicator, example_timesteps)
+        super().__init__(genn_model, neuron_populations, 
+                         connection_populations, communicator,
+                         example_timesteps)
 
         self.ground_truths = ground_truths
         self.example_timesteps = example_timesteps
@@ -48,12 +51,37 @@ class CompiledTrainingNetwork(CompiledNetwork):
     def train(self, x: dict, y: dict, num_epochs: int, 
               start_epoch: int = 0, shuffle: bool = True,
               metrics: MetricsType = "sparse_categorical_accuracy",
-              callbacks=[BatchProgressBar()],
-              validation_callbacks=[BatchProgressBar()],
-              validation_split: float = 0.0,
-              validation_x: Optional[dict] = None, 
-              validation_y: Optional[dict] = None):
-        """ Train model on an input in numpy format against labels
+              callbacks: List[Callback] = [BatchProgressBar()]
+              ) -> Tuple[MetricStateDict, dict]:
+        """ Train model on a sequence of inputs against labels
+
+        Args:
+            x:                      Dictionary of training inputs
+            y:                      Dictionary of training labels 
+                                    to compare predictions against
+            num_epochs:             Number of epochs to train for
+            start_epoch:            Epoch to start training from
+            shuffle:                Should training data be shuffled
+                                    between epochs?
+            metrics:                Metrics to calculate.
+            callbacks:              List of callbacks to run during training.
+        """
+        return self._train_validate(x, y, num_epochs, start_epoch, shuffle,
+                                    metrics, callbacks, [], None, None)
+                                    
+    def train_validate(self, x: dict, y: dict, num_epochs: int, 
+                       start_epoch: int = 0, shuffle: bool = True,
+                       metrics: MetricsType = "sparse_categorical_accuracy",
+                       callbacks: List[Callback] = [BatchProgressBar()],
+                       validation_callbacks: List[Callback] = [BatchProgressBar()],
+                       validation_split: float = 0.0,
+                       validation_x: Optional[dict] = None, 
+                       validation_y: Optional[dict] = None
+                       ) -> Tuple[MetricStateDict, MetricStateDict,
+                                  dict, dict]:
+        """ Train model on a sequence of inputs against labels and,
+        after each epoch, evaluates validation accuracy using
+        either a separate dataset or a split
 
         Args:
             x:                      Dictionary of training inputs
@@ -78,13 +106,151 @@ class CompiledTrainingNetwork(CompiledNetwork):
         if validation_split != 0.0:
             # Check validation data isn't also provided
             if validation_x is not None or validation_y is not None:
-                raise RuntimeError("validation data and validation split "
+                raise RuntimeError("Validation data and validation split "
                                    "cannot both be provided")
 
             # Split dataset into training and validation
             x, validation_x = split_dataset(x, validation_split)
             y, validation_y = split_dataset(y, validation_split)
+        
+        # Check some validation data has been provided
+        if validation_x is None or validation_y is None:
+            raise RuntimeError("Validation data or validation split "
+                               "is required for train_validate")
+                                   
+        return self._train_validate(x, y, num_epochs, start_epoch, shuffle,
+                                    metrics, callbacks, validation_callbacks,
+                                    validation_x, validation_y)
 
+    def save_connectivity(self, keys=(), serialiser="numpy"):
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through connections and their corresponding synapse groups
+        for c, genn_pop in self.connection_populations.items():
+            # If synapse group has sparse connectivity, download  
+            # connectivity and save pre and postsynaptic indices
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
+                genn_pop.pull_connectivity_from_device()
+                serialiser.serialise(keys + (c, "pre_ind"),
+                                     genn_pop.get_sparse_pre_inds())
+                serialiser.serialise(keys + (c, "post_ind"),
+                                     genn_pop.get_sparse_post_inds())
+
+    def save(self, keys=(), serialiser="numpy"):
+        # Create serialiser
+        serialiser = get_object(serialiser, Serialiser, "Serialiser",
+                                default_serialisers)
+        
+        # Loop through synapse groups with variables to be checkpointed
+        for genn_pop in self.checkpoint_synapse_groups:
+            # If synapse group has sparse connectivity, download  
+            # connectivity so variables can be accessed correctly
+            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
+                genn_pop.pull_connectivity_from_device()
+
+        # Loop through connection variables to checkpoint
+        for c, v in self.checkpoint_connection_vars:
+            genn_var = self.connection_populations[c].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (c, v), genn_var.values)
+
+        # Loop through population variables to checkpoint
+        for p, v in self.checkpoint_population_vars:
+            genn_var = self.neuron_populations[p].vars[v]
+            genn_var.pull_from_device()
+            serialiser.serialise(keys + (p, v), genn_var.values)
+    
+    def __enter__(self):
+        # Superclass
+        super().__enter__()
+
+        # Create fresh state for each optimiser
+        self.optimiser_state = [o.create_state() for o, c in self.optimisers]
+
+    def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
+        # Superclass
+        super().__exit__(dummy_exc_type, dummy_exc_value, dummy_tb)
+
+        # Invalidate optimiser state
+        self.optimiser_state = None
+
+    def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
+                        metric_state, callback_list: CallbackList):
+        # Start batch
+        callback_list.on_batch_begin(batch)
+
+        # Reset time to 0 if desired
+        if self.reset_time_between_batches:
+            self.genn_model.timestep = 0
+
+        # Apply inputs to model
+        self.set_input(x)
+
+        # Simulate timesteps
+        for t in range(self.example_timesteps):
+            self.step_time(callback_list)
+
+        # Get predictions from model
+        y_pred = self.get_readout(list(y.keys()))
+
+        # Update metrics
+        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
+            metrics[o].update(metric_state[o], y_true,
+                              out_y_pred[:len(y_true)], self.communicator)
+
+        # End batch
+        callback_list.on_batch_end(batch, metric_state)
+    
+    def _train_batch(self, batch: int, step: int, x: dict, y: dict,
+                     metrics, metric_state, callback_list: CallbackList):
+        # Start batch
+        callback_list.on_batch_begin(batch)
+
+        # Reset time to 0 if desired
+        if self.reset_time_between_batches:
+            self.genn_model.timestep = 0
+
+        # Apply inputs to model
+        self.set_input(x)
+
+        # Loop through outputs and push ground truth values
+        for pop, y_true in y.items():
+            underlying_pop = get_underlying_pop(pop)
+            self.ground_truths[underlying_pop].push_to_device(
+                self.neuron_populations[underlying_pop],
+                y_true, underlying_pop.shape, self.genn_model.batch_size,
+                self.example_timesteps)
+ 
+        # Simulate timesteps
+        for t in range(self.example_timesteps):
+            self.step_time(callback_list)
+
+        # Get predictions from model
+        y_pred = self.get_readout(list(y.keys()))
+
+        # Update metrics
+        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
+            metrics[o].update(metric_state[o], y_true,
+                              out_y_pred[:len(y_true)],
+                              self.communicator)
+
+        # Loop through optimisers and set step
+        assert len(self.optimiser_state) == len(self.optimisers)
+        for (o, c), s in zip(self.optimisers, self.optimiser_state):
+            o.set_step(s, c, step)
+
+        # End batch
+        callback_list.on_batch_end(batch, metric_state)
+    
+    def _train_validate(self, x: dict, y: dict, num_epochs: int, 
+                        start_epoch: int, shuffle: bool,
+                        metrics: MetricsType, callbacks: List[Callback],
+                        validation_callbacks: List[Callback],
+                        validation_x: Optional[dict],
+                        validation_y: Optional[dict]):
+        
         # Get the size of x and y
         x_train_size = get_dataset_size(x)
         y_train_size = get_dataset_size(y)
@@ -100,7 +266,7 @@ class CompiledTrainingNetwork(CompiledNetwork):
             raise RuntimeError("Number of training inputs "
                                "and labels must match")
 
-        # If seperate validation data is provided
+        # If validation data is provided
         if validation_x is not None and validation_y is not None:
             # Get the size of validation_x and validation_y
             x_validate_size = get_dataset_size(validation_x)
@@ -221,125 +387,3 @@ class CompiledTrainingNetwork(CompiledNetwork):
         # Otherwise, just return training metrics and callback data
         else:
             return train_metric_state, train_callback_list.get_data()
-
-    def save_connectivity(self, keys=(), serialiser="numpy"):
-        # Create serialiser
-        serialiser = get_object(serialiser, Serialiser, "Serialiser",
-                                default_serialisers)
-        
-        # Loop through connections and their corresponding synapse groups
-        for c, genn_pop in self.connection_populations.items():
-            # If synapse group has sparse connectivity, download  
-            # connectivity and save pre and postsynaptic indices
-            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
-                genn_pop.pull_connectivity_from_device()
-                serialiser.serialise(keys + (c, "pre_ind"),
-                                     genn_pop.get_sparse_pre_inds())
-                serialiser.serialise(keys + (c, "post_ind"),
-                                     genn_pop.get_sparse_post_inds())
-
-    def save(self, keys=(), serialiser="numpy"):
-        # Create serialiser
-        serialiser = get_object(serialiser, Serialiser, "Serialiser",
-                                default_serialisers)
-        
-        # Loop through synapse groups with variables to be checkpointed
-        for genn_pop in self.checkpoint_synapse_groups:
-            # If synapse group has sparse connectivity, download  
-            # connectivity so variables can be accessed correctly
-            if genn_pop.matrix_type & SynapseMatrixConnectivity.SPARSE:
-                genn_pop.pull_connectivity_from_device()
-
-        # Loop through connection variables to checkpoint
-        for c, v in self.checkpoint_connection_vars:
-            genn_var = self.connection_populations[c].vars[v]
-            genn_var.pull_from_device()
-            serialiser.serialise(keys + (c, v), genn_var.values)
-
-        # Loop through population variables to checkpoint
-        for p, v in self.checkpoint_population_vars:
-            genn_var = self.neuron_populations[p].vars[v]
-            genn_var.pull_from_device()
-            serialiser.serialise(keys + (p, v), genn_var.values)
-    
-    def __enter__(self):
-        # Superclass
-        super().__enter__()
-
-        # Create fresh state for each optimiser
-        self.optimiser_state = [o.create_state() for o, c in self.optimisers]
-
-    def __exit__(self, dummy_exc_type, dummy_exc_value, dummy_tb):
-        # Superclass
-        super().__exit__(dummy_exc_type, dummy_exc_value, dummy_tb)
-
-        # Invalidate optimiser state
-        self.optimiser_state = None
-
-    def _validate_batch(self, batch: int, x: dict, y: dict, metrics,
-                        metric_state, callback_list: CallbackList):
-        # Start batch
-        callback_list.on_batch_begin(batch)
-
-        # Reset time to 0 if desired
-        if self.reset_time_between_batches:
-            self.genn_model.timestep = 0
-
-        # Apply inputs to model
-        self.set_input(x)
-
-        # Simulate timesteps
-        for t in range(self.example_timesteps):
-            self.step_time(callback_list)
-
-        # Get predictions from model
-        y_pred = self.get_readout(list(y.keys()))
-
-        # Update metrics
-        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(metric_state[o], y_true,
-                              out_y_pred[:len(y_true)], self.communicator)
-
-        # End batch
-        callback_list.on_batch_end(batch, metric_state)
-
-    def _train_batch(self, batch: int, step: int, x: dict, y: dict,
-                     metrics, metric_state, callback_list: CallbackList):
-        # Start batch
-        callback_list.on_batch_begin(batch)
-
-        # Reset time to 0 if desired
-        if self.reset_time_between_batches:
-            self.genn_model.timestep = 0
-
-        # Apply inputs to model
-        self.set_input(x)
-
-        # Loop through outputs and push ground truth values
-        for pop, y_true in y.items():
-            underlying_pop = get_underlying_pop(pop)
-            self.ground_truths[underlying_pop].push_to_device(
-                self.neuron_populations[underlying_pop],
-                y_true, underlying_pop.shape, self.genn_model.batch_size,
-                self.example_timesteps)
- 
-        # Simulate timesteps
-        for t in range(self.example_timesteps):
-            self.step_time(callback_list)
-
-        # Get predictions from model
-        y_pred = self.get_readout(list(y.keys()))
-
-        # Update metrics
-        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
-            metrics[o].update(metric_state[o], y_true,
-                              out_y_pred[:len(y_true)],
-                              self.communicator)
-
-        # Loop through optimisers and set step
-        assert len(self.optimiser_state) == len(self.optimisers)
-        for (o, c), s in zip(self.optimisers, self.optimiser_state):
-            o.set_step(s, c, step)
-
-        # End batch
-        callback_list.on_batch_end(batch, metric_state)

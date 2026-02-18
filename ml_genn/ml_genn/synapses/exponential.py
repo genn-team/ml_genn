@@ -23,7 +23,7 @@ class Exponential(Synapse):
     tau = ValueDescriptor()
 
     def __init__(self, tau: InitValue = 5.0):
-        super(Exponential, self).__init__()
+        super().__init__()
 
         self.tau = tau
 

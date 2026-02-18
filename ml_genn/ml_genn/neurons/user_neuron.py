@@ -32,7 +32,7 @@ class UserNeuron(Neuron):
                  solver: str = "exponential_euler",
                  sub_steps: int = 1,
                  readout=None, **kwargs):
-        super(UserNeuron, self).__init__(readout, **kwargs)
+        super().__init__(readout, **kwargs)
 
         self.vars = vars
         self.output_var_name = output_var_name
