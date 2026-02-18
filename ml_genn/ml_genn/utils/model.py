@@ -331,7 +331,7 @@ class SynapseModel(Model):
         self._prepend_code("sim_code", code)
 
     def process(self):
-        return (super().process() + (self.neuron_var_refs,))
+        return (super()._process() + (self.neuron_var_refs,))
 
     @staticmethod
     def from_val_descriptors(model, inst,
@@ -402,10 +402,10 @@ class WeightUpdateModel(Model):
         self._append_code("pre_event_syn_code", code)
 
     def process(self):
-        return (super().process() + (self.pre_var_vals, self.post_var_vals,
-                                     self.pre_neuron_var_refs,
-                                     self.post_neuron_var_refs,
-                                     self.psm_var_refs))
+        return (super()._process() + (self.pre_var_vals, self.post_var_vals,
+                                      self.pre_neuron_var_refs,
+                                      self.post_neuron_var_refs,
+                                      self.psm_var_refs))
 
     @property
     def reset_pre_vars(self):
