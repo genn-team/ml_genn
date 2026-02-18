@@ -10,12 +10,12 @@ class AvgVarExpWeight(Readout):
     """Read out per-neuron average of neuron model's output variable
     with exponential weighting as described by [Nowotny2024]_."""
     def __init__(self, window_start=None, window_end=None):
-        """Through kwargs, allow to define a window in which to average
+        """Through window_start and window_end define a window in which to average
         the output var with exponential weighting across the window
-        from 1 to 1/e. If no window is defined, default to the original
-        averaging and exponential weight across the whole trial."""
-        self.window_start = kwargs.get("window_start")
-        self.window_end = kwargs.get("window_end")
+        from 1 to 1/e. If no explicit window is defined, default to the original
+        averaging and exponential weighting across the whole trial."""
+        self.window_start = window_start
+        self.window_end = window_end
 
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
