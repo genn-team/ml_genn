@@ -1,13 +1,25 @@
 import numpy as np
 
 from ml_genn.initializers import Uniform
-from ml_genn.utils.model import (NeuronModel, WeightUpdateModel)
+from ml_genn.utils.model import (CustomUpdateModel, NeuronModel,
+                                 WeightUpdateModel)
 
-from pygenn import VarAccess
+from pygenn import CustomUpdateVarAccess, VarAccess
 
 from pytest import raises
 
-def test_process():
+def get_var_access(model_copy, var_name):
+    model_vars = model_copy["vars"]
+    
+    # Find output variable
+    try:
+        var = next(v for v in model_vars if v[0] == var_name)
+    except StopIteration:
+        assert False
+    
+    return var[2]
+
+def test_neuron_model_process():
     nm = NeuronModel({"params": [("P1", "scalar"), ("P2", "scalar"),
                                  ("P3", "scalar")],
                       "vars": [("V", "scalar")]},
@@ -20,6 +32,26 @@ def test_process():
     assert "P2" in var_vals
     assert "P3" in var_vals
     assert "V" in var_vals
+    
+    assert get_var_access(model_copy, "P2") == VarAccess.READ_ONLY
+    assert get_var_access(model_copy, "P2") == VarAccess.READ_ONLY
+
+def test_custom_update_model_process():
+    cm = CustomUpdateModel({"params": [("P1", "scalar"), ("P2", "scalar"),
+                                       ("P3", "scalar")],
+                            "vars": [("V", "scalar")]},
+                            {"P1": 3.0, "P2": np.arange(4), "P3": Uniform()},
+                            {"V": 1.0})
+    
+    model_copy, constant_param_vals, _, var_vals, _, _, _, _ = cm.process()
+    
+    assert "P1" in constant_param_vals
+    assert "P2" in var_vals
+    assert "P3" in var_vals
+    assert "V" in var_vals
+    
+    assert get_var_access(model_copy, "P2") == CustomUpdateVarAccess.READ_ONLY
+    assert get_var_access(model_copy, "P2") == CustomUpdateVarAccess.READ_ONLY
 
 def test_reset_vars():
     nm = NeuronModel({"vars": [("V", "scalar"),
