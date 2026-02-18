@@ -14,8 +14,8 @@ class AvgVarExpWeight(Readout):
         the output var with exponential weighting across the window
         from 1 to 1/e. If no window is defined, default to the original
         averaging and exponential weight across the whole trial."""
-        self.window_start = kwargs.get("window_start")
-        self.window_end = kwargs.get("window_end")
+        self.window_start = window_start
+        self.window_end = window_end
 
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
