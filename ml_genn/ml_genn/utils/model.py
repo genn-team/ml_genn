@@ -2,7 +2,8 @@ import numpy as np
 
 from numbers import Number
 from typing import Any, MutableMapping, Optional, Sequence, Union
-from pygenn import VarAccess, VarAccessMode, VarAccessModeAttribute
+from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
+                    VarAccessModeAttribute)
 from .value import Value
 
 from copy import deepcopy
@@ -73,7 +74,7 @@ class Model:
         self._make_param_var("vars", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
-    def process(self):
+    def process(self, var_access_mode: int = VarAccess.READ_ONLY):
         # Make copy of model
         model_copy = deepcopy(self.model)
 
@@ -119,7 +120,7 @@ class Model:
                 assert name not in self.dynamic_param_names
     
                 model_copy["vars"].append((name, ptype,
-                                           VarAccess.READ_ONLY))
+                                           var_access_mode))
                 if is_value_initializer(val):
                     snippet = val.get_snippet()
                     var_vals_copy[name] = init_var(snippet.snippet,
@@ -243,7 +244,8 @@ class CustomUpdateModel(Model):
         self._append_code("update_code", code)
     
     def process(self):
-        return (super().process() + (self.var_refs,) + (self.egp_refs,))
+        return (super().process(CustomUpdateVarAccess.READ_ONLY) 
+                + (self.var_refs,) + (self.egp_refs,))
 
 
 class NeuronModel(Model):
