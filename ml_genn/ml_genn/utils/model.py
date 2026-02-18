@@ -74,7 +74,12 @@ class Model:
         self._make_param_var("vars", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
-    def process(self, var_access_mode: int = VarAccess.READ_ONLY):
+    @property
+    def reset_vars(self):
+        return self._get_reset_vars("vars", self.var_vals,
+                                    self.non_reset_vars)
+
+    def _process(self, var_access_mode: int = VarAccess.READ_ONLY):
         # Make copy of model
         model_copy = deepcopy(self.model)
 
@@ -135,10 +140,6 @@ class Model:
         return (model_copy, constant_param_vals, self.dynamic_param_names,
                 var_vals_copy, self.egp_vals, var_egp)
 
-    @property
-    def reset_vars(self):
-        return self._get_reset_vars("vars", self.var_vals,
-                                    self.non_reset_vars)
 
     def _search_list(self, name: str, value: str):
         item = [(i, p) for i, p in enumerate(self.model[name])
@@ -244,7 +245,7 @@ class CustomUpdateModel(Model):
         self._append_code("update_code", code)
     
     def process(self):
-        return (super().process(CustomUpdateVarAccess.READ_ONLY) 
+        return (super()._process(CustomUpdateVarAccess.READ_ONLY) 
                 + (self.var_refs,) + (self.egp_refs,))
 
 
@@ -279,6 +280,9 @@ class NeuronModel(Model):
     def replace_reset_code(self, source: str, target: str):
         self._replace_code("reset_code", source, target)
 
+    def process(self):
+        return super()._process()
+
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst,
                              param_vals=None, var_vals=None, egp_vals=None):
@@ -309,9 +313,6 @@ class SynapseModel(Model):
 
         self.neuron_var_refs = neuron_var_refs or {}
 
-    def process(self):
-        return (super().process() + (self.neuron_var_refs,))
-    
     def has_neuron_var_ref(self, name):
         return self._is_in_list("neuron_var_refs", name)
 
@@ -328,6 +329,9 @@ class SynapseModel(Model):
 
     def prepend_sim_code(self, code):
         self._prepend_code("sim_code", code)
+
+    def process(self):
+        return (super().process() + (self.neuron_var_refs,))
 
     @staticmethod
     def from_val_descriptors(model, inst,
@@ -354,7 +358,7 @@ class WeightUpdateModel(Model):
         self.psm_var_refs = psm_var_refs or {}
         self.non_reset_pre_vars = set()
         self.non_reset_post_vars = set()
-    
+
     def has_pre_neuron_var_ref(self, name):
         return self._is_in_list("pre_neuron_var_refs", name)
     
