@@ -462,6 +462,12 @@ class InferenceCompiler(Compiler):
                     genn_model, connection_populations[c],
                     "Reset", f"CUZeroOutPost{i}")
     
+        # Create custom updates in "Reset" group to zero spike counts
+        for i, genn_syn_pop in enumerate(connection_populations.values()):
+            self.add_spike_count_zero_custom_update(
+                genn_model, genn_syn_pop,
+                "Reset", f"CUZeroSpikeCount{i}")
+
         base_callbacks = [CustomUpdateOnBatchBegin("Reset")]
 
         return CompiledInferenceNetwork(genn_model, neuron_populations,
