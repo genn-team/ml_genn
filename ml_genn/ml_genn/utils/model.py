@@ -2,7 +2,8 @@ import numpy as np
 
 from numbers import Number
 from typing import Any, MutableMapping, Optional, Sequence, Union
-from pygenn import VarAccess, VarAccessMode, VarAccessModeAttribute
+from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
+                    VarAccessModeAttribute)
 from .value import Value
 
 from copy import deepcopy
@@ -73,7 +74,12 @@ class Model:
         self._make_param_var("vars", param_name, 
                              self.param_vals, self.var_vals, access_mode)
 
-    def process(self):
+    @property
+    def reset_vars(self):
+        return self._get_reset_vars("vars", self.var_vals,
+                                    self.non_reset_vars)
+
+    def _process(self, var_access_mode: int = VarAccess.READ_ONLY):
         # Make copy of model
         model_copy = deepcopy(self.model)
 
@@ -119,7 +125,7 @@ class Model:
                 assert name not in self.dynamic_param_names
     
                 model_copy["vars"].append((name, ptype,
-                                           VarAccess.READ_ONLY))
+                                           var_access_mode))
                 if is_value_initializer(val):
                     snippet = val.get_snippet()
                     var_vals_copy[name] = init_var(snippet.snippet,
@@ -134,10 +140,6 @@ class Model:
         return (model_copy, constant_param_vals, self.dynamic_param_names,
                 var_vals_copy, self.egp_vals, var_egp)
 
-    @property
-    def reset_vars(self):
-        return self._get_reset_vars("vars", self.var_vals,
-                                    self.non_reset_vars)
 
     def _search_list(self, name: str, value: str):
         item = [(i, p) for i, p in enumerate(self.model[name])
@@ -243,7 +245,8 @@ class CustomUpdateModel(Model):
         self._append_code("update_code", code)
     
     def process(self):
-        return (super().process() + (self.var_refs,) + (self.egp_refs,))
+        return (super()._process(CustomUpdateVarAccess.READ_ONLY) 
+                + (self.var_refs,) + (self.egp_refs,))
 
 
 class NeuronModel(Model):
@@ -277,6 +280,9 @@ class NeuronModel(Model):
     def replace_reset_code(self, source: str, target: str):
         self._replace_code("reset_code", source, target)
 
+    def process(self):
+        return super()._process()
+
     @staticmethod
     def from_val_descriptors(model, output_var_name, inst,
                              param_vals=None, var_vals=None, egp_vals=None):
@@ -307,9 +313,6 @@ class SynapseModel(Model):
 
         self.neuron_var_refs = neuron_var_refs or {}
 
-    def process(self):
-        return (super().process() + (self.neuron_var_refs,))
-    
     def has_neuron_var_ref(self, name):
         return self._is_in_list("neuron_var_refs", name)
 
@@ -326,6 +329,9 @@ class SynapseModel(Model):
 
     def prepend_sim_code(self, code):
         self._prepend_code("sim_code", code)
+
+    def process(self):
+        return (super()._process() + (self.neuron_var_refs,))
 
     @staticmethod
     def from_val_descriptors(model, inst,
@@ -352,7 +358,7 @@ class WeightUpdateModel(Model):
         self.psm_var_refs = psm_var_refs or {}
         self.non_reset_pre_vars = set()
         self.non_reset_post_vars = set()
-    
+
     def has_pre_neuron_var_ref(self, name):
         return self._is_in_list("pre_neuron_var_refs", name)
     
@@ -396,10 +402,10 @@ class WeightUpdateModel(Model):
         self._append_code("pre_event_syn_code", code)
 
     def process(self):
-        return (super().process() + (self.pre_var_vals, self.post_var_vals,
-                                     self.pre_neuron_var_refs,
-                                     self.post_neuron_var_refs,
-                                     self.psm_var_refs))
+        return (super()._process() + (self.pre_var_vals, self.post_var_vals,
+                                      self.pre_neuron_var_refs,
+                                      self.post_neuron_var_refs,
+                                      self.psm_var_refs))
 
     @property
     def reset_pre_vars(self):
