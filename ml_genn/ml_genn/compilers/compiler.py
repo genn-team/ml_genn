@@ -22,8 +22,9 @@ from copy import copy, deepcopy
 from pygenn import (create_custom_connectivity_update_model,
                     create_custom_update_model, create_den_delay_var_ref,
                     create_neuron_model, create_out_post_var_ref,
-                    create_postsynaptic_model, create_weight_update_model,
-                    create_var_ref, init_postsynaptic, init_weight_update)
+                    create_postsynaptic_model, create_src_spike_count_var_ref,
+                    create_weight_update_model, create_var_ref,
+                    init_postsynaptic, init_weight_update)
 from string import digits
 from .weight_update_models import (get_static_pulse_delay_model, 
                                    get_signed_static_pulse_delay_model)
@@ -426,10 +427,22 @@ class Compiler:
         
         # Configure EGPs
         set_egp(ccu_egp_vals, genn_ccu.extra_global_params)
-    
+
         # Configure var init EGPs
         set_var_egps(ccu_var_egp_vals, genn_ccu.vars)
         return genn_ccu
+
+    def add_spike_count_zero_custom_update(self, genn_model, genn_syn_pop,
+                                           group: str, name: str):
+        # Create reset model
+        zero_spike_count_model = create_reset_custom_update(
+            [("SpikeCount", "uint32_t", 0)],
+            lambda _: create_src_spike_count_var_ref(genn_syn_pop))
+        
+        # Add GeNN custom update to model
+        self.add_custom_update(
+            genn_model, zero_spike_count_model, 
+            group, name)
 
     def add_out_post_zero_custom_update(self, genn_model, genn_syn_pop,
                                         group: str, name: str):
