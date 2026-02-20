@@ -5,16 +5,17 @@ import numpy as np
 
 from itertools import chain
 
-from pygenn import VarAccessDim
-from typing import Optional
+from pygenn import VarAccess, VarAccessDim
+from typing import Union
 from .callback import Callback
+from .. import InputLayer, Layer, Population
 from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
-from ..utils.network import PopulationType
+from ..utils.network import ConnectionType, PopulationType
 
 from dataclasses import dataclass, field
 from pygenn import get_var_access_dim
 from ..utils.filter import get_neuron_filter_mask
-from ..utils.network import get_underlying_pop
+from ..utils.network import get_underlying_conn, get_underlying_pop
 
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+def _find_var(model_vars, name):
+    try:
+        # Find variable
+        return next(v for v in model_vars if v.name == name)
+    except StopIteration:
+        raise RuntimeError(f"Model does not have variable "
+                           f"{name} to record")
 @dataclass
 class State:
     compiled_network: CompiledNetwork
@@ -35,15 +43,10 @@ class State:
 
 class VarRecorder(Callback):
     """Callback used for recording state variables during simulation. 
-    Variables can specified either by the name of the mlGeNN 
-    :class:`ml_genn.utils.value.ValueDescriptor` class attribute corresponding to
-    the variable e.g. ``v`` for the membrane voltage of a 
-    :class:`ml_genn.neurons.LeakyIntegrateFire` neuron or by the internal name
-    of a GeNN state variable e.g. ``LambdaV`` which is a state variable
-    added to track gradients by :class:`ml_genn.compilers.EventPropCompiler`.
-    
+
     Args:
-        pop:            Population to record from
+        pop:            Population to record neuron variables or
+                        Connection to record synapse variables from
         var:            Name of variable to record
         key:            Key to assign recording data produced by this 
                         callback in dictionary  returned by 
@@ -54,13 +57,19 @@ class VarRecorder(Callback):
         neuron_filter:  Filter used to select which neurons to record from
                         (see :ref:`section-callbacks-recording` 
                         for more information).
-        genn_var:       Internal name of variable to record
+
     """
-    def __init__(self, pop: PopulationType, var: str,
+    def __init__(self, pop: Union[PopulationType, ConnectionType], var: str,
                  key=None, example_filter: ExampleFilterType = None,
                  neuron_filter: NeuronFilterType = None):
-        # Get underlying population
-        self._pop = get_underlying_pop(pop)
+        # Get underlying population or connection
+        # **YUCK** in Python 3.10 could just isinstance(PopulationType)
+        if isinstance(pop, (InputLayer, Layer, Population)):
+            self._pop = get_underlying_pop(pop)
+            var_shape = self._pop.shape
+        else:
+            self._pop = get_underlying_conn(pop)
+            var_shape = self._pop.target().shape
 
         # Stash var name and key
         self.var = var
@@ -71,30 +80,35 @@ class VarRecorder(Callback):
 
         # Create neuron filter mask
         self._neuron_mask = get_neuron_filter_mask(neuron_filter,
-                                                   self._pop.shape)
+                                                   var_shape)
 
     def create_state(self, compiled_network, **kwargs):
-        # Get GeNN population from compiled model
-        pop = compiled_network.neuron_populations[self._pop]
+        if isinstance(self._pop, Population):
+            # Get GeNN neuron population from compiled model
+            pop = compiled_network.neuron_populations[self._pop]
+            
+            # Check variable exists and get its access mode
+            var_access = _find_var(pop.model.get_vars(), self.var).access
+        else:
+            # Get GeNN synapse population from compiled model
+            pop = compiled_network.connection_populations[self._pop]
 
-        # Get neuron model variables
-        pop_vars = pop.model.get_vars()
-
-        try:
-            # Find variable
-            var = next(v for v in pop_vars if v.name == self.var)
-        except StopIteration:
-            raise RuntimeError(f"Model does not have variable "
-                               f"{self.var} to record")
-
+            if self.var == "out_post":
+                var_access = VarAccess.READ_WRITE
+            else:
+                # Check variable exists and get its access mode
+                var_access = _find_var(
+                    pop.ps_initialiser.snippet.get_vars(), self.var).access
+            
+   
         # Determine if var is shared or batched
-        shared = not (get_var_access_dim(var.access) & VarAccessDim.ELEMENT)
-        batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
+        shared = not (get_var_access_dim(var_access) & VarAccessDim.ELEMENT)
+        batched = (get_var_access_dim(var_access) & VarAccessDim.BATCH)
                            
         # If variable is shared and neuron mask was set, give warning
         if shared and not np.all(self._neuron_mask):
-            logger.warn(f"VarRecorder ignoring neuron mask applied "
-                        f"to SHARED_NEURON variable f{self.var}")
+            logger.warning(f"VarRecorder ignoring neuron mask applied "
+                           f"to SHARED_NEURON variable {self.var}")
 
         return State(compiled_network, batched, shared,
                      np.ones(compiled_network.genn_model.batch_size,
@@ -104,12 +118,23 @@ class VarRecorder(Callback):
         # If anything should be recorded this batch
         cn = state.compiled_network
         if state.batch_count > 0:
+            if isinstance(self._pop, Population):
+                pop = cn.neuron_populations[self._pop]
+                var = pop.vars[self.var]
+                var_view = var.current_view
+            else:
+                pop = cn.connection_populations[self._pop]
+                if self.var == "out_post":
+                    var = pop.out_post
+                    var_view = var.view
+                else:
+                    var = pop.psm_vars[self.var]
+                    var_view = var.current_view
+            
             # Copy variable from device
-            pop = cn.neuron_populations[self._pop]
-            pop.vars[self.var].pull_from_device()
+            var.pull_from_device()
 
             # If simulation and variable is batched
-            var_view = pop.vars[self.var].current_view
             if cn.genn_model.batch_size > 1 and state.batched:
                 # Apply neuron mask
                 if state.shared:
