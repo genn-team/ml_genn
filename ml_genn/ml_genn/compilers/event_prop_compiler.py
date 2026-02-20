@@ -475,24 +475,6 @@ class UpdateTrial(Callback):
         # Set dynamic parameter to batch ID
         self.genn_pop.set_dynamic_param_value("Trial", batch)
 
-
-class CustomUpdateOnLastTimestep(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the start of the last timestep in each example"""
-    def __init__(self, name: str, example_timesteps: int):
-        self.name = name
-        self.example_timesteps = example_timesteps
-    
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-
-    def on_timestep_begin(self, state, timestep: int):
-        if timestep == (self.example_timesteps - 1):
-            logger.debug(f"Running custom update {self.name} "
-                         f"at start of timestep {timestep}")
-            state.genn_model.custom_update(self.name)
-
-
 class CustomUpdateOnBatchEndNotFirst(Callback):
     """Callback that triggers a GeNN custom update 
     at the end of every batch after the first."""
