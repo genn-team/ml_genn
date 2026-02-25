@@ -1936,12 +1936,17 @@ class EventPropCompiler(Compiler):
 
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
+                        ro = pop.neuron.readout
+                        window_start = ro.window_start or 0
+                        window_end = ro.window_end or self.example_timesteps*self.dt
                         genn_model.prepend_sim_code(
                             f"""
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if (t <= {T-window_start} && t > {T-window_end}) {{
+                                    const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                                    drive = g / (num_batch * {window_end-window_start});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -1958,7 +1963,7 @@ class EventPropCompiler(Compiler):
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
                         ro = pop.neuron.readout
                         window_start = ro.window_start or 0
-                        window_end = ro.window_end or self.example_timesteps
+                        window_end = ro.window_end or self.example_timesteps*self.dt
                         local_t_scale = 1.0 / (window_end - window_start)
                         T = self.dt * self.example_timesteps
                         genn_model.prepend_sim_code(

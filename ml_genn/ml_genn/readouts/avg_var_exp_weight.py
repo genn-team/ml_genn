@@ -10,7 +10,7 @@ class AvgVarExpWeight(Readout):
     """Read out per-neuron average of neuron model's output variable
     with exponential weighting as described by [Nowotny2024]_."""
     def __init__(self, window_start=None, window_end=None):
-        """Through kwargs, allow to define a window in which to average
+        """Allow to define a window in which to average
         the output var with exponential weighting across the window
         from 1 to 1/e. If no window is defined, default to the original
         averaging and exponential weight across the whole trial."""
@@ -40,12 +40,17 @@ class AvgVarExpWeight(Readout):
         self.output_var_type = output_var[1]
 
         # Add code to update average variable
-        window_start = self.window_start or 0
-        window_end = self.window_end or kwargs["example_timesteps"]
-        scale = kwargs["dt"] / (window_end - window_start)
-        local_t_scale = 1.0 / (window_end - window_start)
-        model.append_sim_code(
-            f"if (t >= {window_start} && t < {window_end}) {avg_var_name} += exp(-((t-{window_start}) * {local_t_scale})) * {scale} * {self.output_var_name};")
+        if self.window_start is not None or self.window_end is not None:
+            window_start = self.window_start or 0
+            window_end = self.window_end or kwargs["example_timesteps"]*kwargs["dt"]
+            scale = kwargs["dt"] / (window_end - window_start)
+            local_t_scale = 1.0 / (window_end - window_start)
+            model.append_sim_code(
+                f"if (t >= {window_start} && t < {window_end}) {avg_var_name} += exp(-((t-{window_start}) * {local_t_scale})) * {scale} * {self.output_var_name};")
+        else:
+            scale =  1.0 / kwargs["example_timesteps"]
+            local_t_scale = 1.0 / (kwargs["example_timesteps"]*kwargs["dt"])
+            model.append_sim_code(f"{avg_var_name} += exp(-(t * {local_t_scale})) * {scale} * {self.output_var_name};")
 
         # Add average variable with same type as output
         # variable and initialise to zero
