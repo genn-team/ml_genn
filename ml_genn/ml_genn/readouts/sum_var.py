@@ -15,7 +15,7 @@ class SumVar(Readout):
         self.window_start = window_start
         self.window_end = window_end
 
-        def add_readout_logic(self, model: NeuronModel, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -38,7 +38,7 @@ class SumVar(Readout):
         self.output_var_type = output_var[1]
 
         # Add code to update sum variable
-         if self.window_start is not None or self.window_end is not None:
+        if self.window_start is not None or self.window_end is not None:
             window_start = self.window_start or 0
             window_end = self.window_end or kwargs["example_timesteps"]*kwargs["dt"]
             model.append_sim_code(
