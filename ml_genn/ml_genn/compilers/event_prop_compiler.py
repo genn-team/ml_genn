@@ -9,6 +9,7 @@ from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .deep_r import RewiringRecord
 from .ground_truths import GroundTruth
 from .. import Connection, InputLayer, Layer, Population, Network
 from ..callbacks import (Callback, CustomUpdateOnBatchBegin,
@@ -34,6 +35,7 @@ from pygenn import (create_egp_ref, create_psm_var_ref,
 from pygenn._genn import WUVarReference
 from .compiler import (create_reset_custom_update, get_delay_type,
                        get_conn_max_delay)
+from .deep_r import add_deep_r
 from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
 from ..utils.value import is_value_constant
@@ -1096,6 +1098,7 @@ class EventPropCompiler(Compiler):
         checkpoint_connection_vars = []
         checkpoint_population_vars = []
         need_zero_gradient_update_group = False
+        deep_r_record_rewirings_ccus = []
         i = 0
         for k, vars in compile_state.optimisers.items():
             # If key is a connection
@@ -1104,10 +1107,26 @@ class EventPropCompiler(Compiler):
                 genn_pop = connection_populations[k]
                 gradient_vars = []
                 if "weight" in vars:
+                    # If connection is in list of those to use Deep-R on
+                    gradient_var_ref = create_wu_var_ref(genn_pop, "weightGradient")
+                    weight_var_ref = create_wu_var_ref(genn_pop, "weight")
+                    if c in self.deep_r_conns:
+                        # Add infrastructure
+                        deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
+                                                  self.deep_r_l1_strength, 
+                                                  gradient_var_ref, 
+                                                  weight_var_ref)
+                    
+                        # If we should record rewirings from
+                        # this connection, add to list with key
+                        if c in self.deep_r_record_rewirings:
+                            deep_r_record_rewirings_ccus.append(
+                                (deep_r_2_ccu, self.deep_r_record_rewirings[c]))
+
                     # Create weight optimiser custom update
                     cu_weight = self._create_optimiser_custom_update(
-                        f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
-                        create_wu_var_ref(genn_pop, "weightGradient"), 
+                        f"Weight{i}", weight_var_ref,
+                        create_wu_var_ref(genn_pop, gradient_var_ref), 
                         vars["weight"], genn_model)
             
                     # Add custom update to list of optimisers
@@ -1213,15 +1232,24 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
+
+        # If Deep-R and L1 regularisation are required, add callback
+        if deep_r_required and self.deep_r_l1_strength > 0.0:
+            base_train_callbacks.append(
+                CustomUpdateOnBatchEnd("DeepRL1", lambda batch: batch > 0))
+
         if len(optimisers) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
-                    CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
+                    CustomUpdateOnBatchEnd("GradientBatchReduce",
+                                           lambda batch: batch > 0))
             base_train_callbacks.append(
-                CustomUpdateOnBatchEndNotFirst("GradientLearn"))
+                CustomUpdateOnBatchEnd("GradientLearn",
+                                       lambda batch: batch > 0))
             if need_zero_gradient_update_group:
                 base_train_callbacks.append(
-                    CustomUpdateOnFirstBatchEnd("ZeroGradient"))
+                    CustomUpdateOnBatchEnd("ZeroGradient",
+                                           lambda batch: batch == 0))
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
@@ -1229,10 +1257,13 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(UpdateTrial(neuron_populations[p]))
 
         # Add callbacks to zero out post on all connections
+        last_timestep = self.example_timesteps - 1
         base_train_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+            CustomUpdateOnTimestepBegin("ZeroOutPost",
+                                        lambda t: t == last_timestep))
         base_validate_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+            CustomUpdateOnTimestepBegin("ZeroOutPost",
+                                        lambda t: t == last_timestep))
 
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
@@ -1263,6 +1294,17 @@ class EventPropCompiler(Compiler):
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+
+        # If Deep-R is required, trigger Deep-R callbacks at end of batch
+        if deep_r_required:
+            base_train_callbacks.append(CustomUpdateOnEpochBegin("DeepRInit",
+                                                                 lambda e: e == 0))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
+
+        # Add callbacks to record number of rewirings
+        for c, k in deep_r_record_rewirings_ccus:
+            base_train_callbacks.append(RewiringRecord(c, k))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
