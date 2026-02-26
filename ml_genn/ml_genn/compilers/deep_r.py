@@ -4,7 +4,6 @@ from pygenn import VarAccessMode
 from ..callbacks import Callback
 from ..utils.model import CustomConnectivityUpdateModel, CustomUpdateModel
 
-from copy import deepcopy
 from pygenn import create_egp_ref, create_pre_var_ref
 
 # **THINK** could this be written in a less "branchy" manner?
