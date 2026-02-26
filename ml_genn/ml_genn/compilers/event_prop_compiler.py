@@ -5,7 +5,7 @@ import sympy
 from string import Template
 from typing import Mapping, Union, Tuple
 from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
-                    VarAccess, VarAccessMode)
+                    SynapseMatrixWeight, VarAccess, VarAccessMode)
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
@@ -1046,7 +1046,14 @@ class EventPropCompiler(Compiler):
                 Template(sympy.ccode(weight_grad_update)).substitute(
                     {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
                      for p in synapse_model.jumps.keys()})
+
+            # Determine whether kernel updates are required
+            use_kernel = (connect_snippet.matrix_type 
+                          & SynapseMatrixWeight.KERNEL)                     
+
             genn_model.append_pre_event_syn_code(
+                f"atomic_add_weightGradient({weight_grad_update_code});"
+                if use_kernel else
                 f"weightGradient += {weight_grad_update_code};")
             
             # If any synapse parameters are referenced in gradient 
@@ -1064,7 +1071,10 @@ class EventPropCompiler(Compiler):
 
                 # Add delay calculation
                 logger.debug(f"\tDelay gradient update: {dx_dt_diff_sum}")
+
                 genn_model.append_pre_event_syn_code(
+                    f"atomic_add_delayGradient({dx_dt_diff_sum_code});"
+                    if use_kernel else
                     f"delayGradient += {dx_dt_diff_sum_code};")
 
         #---------------------------------------------------------------------
