@@ -157,18 +157,16 @@ class RewiringRecord(Callback):
         self.num_failed_rewirings = deep_r_2_ccu.extra_global_params["NumFailedRewirings"]
         self.key = key
 
-    def set_params(self, data, **kwargs):
-        # Create empty list to hold recorded data
-        data[self.key] = []
-        self._data = data[self.key]
+    def create_state(self, compiled_network, **kwargs):
+        return []
 
-    def on_batch_end(self, batch, metrics):
+    def on_batch_end(self, state, batch, metrics):
         # Read number of rewirings out of view and add to list
-        self._data.append((self.num_rewirings.view[0],
-                           self.num_failed_rewirings.view[0]))
+        state.append((self.num_rewirings.view[0],
+                      self.num_failed_rewirings.view[0]))
     
-    def get_data(self):
-        return self.key, self._data
+    def get_data(self, state):
+        return self.key, state
 
 
 def add_deep_r(synapse_group, genn_model, compiler, l1_strength, 

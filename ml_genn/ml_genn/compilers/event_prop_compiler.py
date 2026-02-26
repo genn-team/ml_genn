@@ -3,7 +3,7 @@ import numpy as np
 import sympy
 
 from string import Template
-from typing import Mapping, Union, Tuple
+from typing import Mapping, Sequence, Set, Union, Tuple
 from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
                     VarAccess, VarAccessMode)
 
@@ -13,7 +13,9 @@ from .deep_r import RewiringRecord
 from .ground_truths import GroundTruth
 from .. import Connection, InputLayer, Layer, Population, Network
 from ..callbacks import (Callback, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochBegin,
+                         CustomUpdateOnTimestepBegin, 
+                         CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
 from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
@@ -38,6 +40,7 @@ from .compiler import (create_reset_custom_update, get_delay_type,
 from .deep_r import add_deep_r
 from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
+from ..utils.network import get_underlying_conn
 from ..utils.value import is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
@@ -294,8 +297,8 @@ def _add_required_wum_psm_parameters(model: AutoSynapseModel,
                              WeightUpdateModel.has_psm_var_ref)
 
 class CompileState:
-    def __init__(self, network: Network, losses, optimisers, 
-                 supported_matrix_type, backend_name):
+    def __init__(self, network: Network, losses, optimisers, deep_r_conns,
+                 deep_r_record_rewiring, supported_matrix_type, backend_name):
         self.backend_name = backend_name
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
@@ -307,7 +310,11 @@ class CompileState:
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
         self.optimisers = {}
-
+        
+        self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
+        self.deep_r_record_rewiring = {get_underlying_conn(c): k
+                                       for c, k in deep_r_record_rewiring.items()}
+        
         # Build list of output populations
         readouts = [p for p in network.populations
                     if p.neuron.readout is not None]
@@ -530,6 +537,7 @@ class EventPropCompiler(Compiler):
                                     spike number, strength for overshoot)
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
+        grad_limit:                 TODO
         max_spikes:                 What is the maximum number of spikes each
                                     neuron (input and hidden) can emit each
                                     trial? This is used to allocate memory 
@@ -541,8 +549,9 @@ class EventPropCompiler(Compiler):
         per_timestep_loss:          Should we use the per-timestep or
                                     per-trial loss functions described above?
         dt:                         Simulation timestep [ms]
-        ttfs_alpha                  TODO
-        softmax_temperature         TODO
+        ttfs_alpha:                 TODO
+        softmax_temperature:        TODO
+        deep_r_l1_strength:         TODO
         batch_size:                 What batch size should be used for
                                     training? In our experience, EventProp works
                                     best with modest batch sizes (32-128)
@@ -565,14 +574,13 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses,
-                 reg_lambda: Union[float, Tuple[float, float]] = 0.0, reg_nu_upper: float = 0.0,
-                 grad_limit: float = 100.0,
-                 max_spikes: int = 500, 
-                 strict_buffer_checking: bool = False, 
+                 reg_lambda: Union[float, Tuple[float, float]] = 0.0,
+                 reg_nu_upper: float = 0.0, grad_limit: float = 100.0,
+                 max_spikes: int = 500, strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
-                 batch_size: int = 1, rng_seed: int = 0,
-                 kernel_profiling: bool = False,
+                 deep_r_l1_strength: float = 0.01, batch_size: int = 1, 
+                 rng_seed: int = 0, kernel_profiling: bool = False,
                  communicator: Communicator = None,
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
@@ -625,6 +633,7 @@ class EventPropCompiler(Compiler):
         self.per_timestep_loss = per_timestep_loss
         self.ttfs_alpha = ttfs_alpha
         self.softmax_temperature = softmax_temperature
+        self.deep_r_l1_strength = deep_r_l1_strength
         
 
     def pre_compile(self, network: Network, 
@@ -633,14 +642,28 @@ class EventPropCompiler(Compiler):
         # to training all weights using the adam optimiser with default params
         optimisers = kwargs.get("optimisers", 
                                 {"all_connections": {"weight": "adam"}})
-
+    
         # Check dictionary has been provided
         if not isinstance(optimisers, Mapping):
-            raise RuntimeError("optimisers should be "
+            raise RuntimeError("'optimisers' should be "
                                "specified as a dictionary")
 
+        # Get sequence of connections to apply Deep-R to and 
+        # check provided value is indeed a sequence
+        deep_r_conns = kwargs.get("deep_r_conns", [])
+        if not isinstance(deep_r_conns, (Set, Sequence)):
+            raise RuntimeError("'deep_r_conns' should be "
+                               "specified as a sequence")
+    
+        # Get dictionary of connections to names to record their deep-r
+        # rewiring stats to and check provided value is indeed a mapping
+        deep_r_record_rewiring = kwargs.get("deep_r_record_rewiring", {})
+        if not isinstance(deep_r_record_rewiring, Mapping):
+            raise RuntimeError("'deep_r_record_rewiring' should be "
+                               "specified as a dictionary")
 
         return CompileState(network, self.losses, optimisers,
+                            deep_r_conns, deep_r_record_rewiring,
                             self.supported_matrix_type, 
                             genn_model.backend_name)
 
@@ -1063,7 +1086,7 @@ class EventPropCompiler(Compiler):
                     # If connection is in list of those to use Deep-R on
                     gradient_var_ref = create_wu_var_ref(genn_pop, "weightGradient")
                     weight_var_ref = create_wu_var_ref(genn_pop, "weight")
-                    if c in self.deep_r_conns:
+                    if k in compile_state.deep_r_conns:
                         # Add infrastructure
                         deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
                                                   self.deep_r_l1_strength, 
@@ -1072,14 +1095,14 @@ class EventPropCompiler(Compiler):
                     
                         # If we should record rewirings from
                         # this connection, add to list with key
-                        if c in self.deep_r_record_rewirings:
+                        if k in compile_state.deep_r_record_rewiring:
                             deep_r_record_rewirings_ccus.append(
-                                (deep_r_2_ccu, self.deep_r_record_rewirings[c]))
+                                (deep_r_2_ccu, 
+                                 compile_state.deep_r_record_rewiring[k]))
 
                     # Create weight optimiser custom update
                     cu_weight = self._create_optimiser_custom_update(
-                        f"Weight{i}", weight_var_ref,
-                        create_wu_var_ref(genn_pop, gradient_var_ref), 
+                        f"Weight{i}", weight_var_ref, gradient_var_ref,
                         vars["weight"], genn_model)
             
                     # Add custom update to list of optimisers
@@ -1187,6 +1210,7 @@ class EventPropCompiler(Compiler):
         base_validate_callbacks = []
 
         # If Deep-R and L1 regularisation are required, add callback
+        deep_r_required = (len(compile_state.deep_r_conns) > 0)
         if deep_r_required and self.deep_r_l1_strength > 0.0:
             base_train_callbacks.append(
                 CustomUpdateOnBatchEnd("DeepRL1", lambda batch: batch > 0))
