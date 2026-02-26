@@ -411,7 +411,7 @@ class Compiler:
          ccu_post_var_vals, ccu_var_refs, ccu_pre_var_refs, ccu_post_var_refs, 
          ccu_egp_refs) = model.process()
 
-        # Create custom conenctivity update model
+        # Create custom connectivity update model
         genn_ccum = create_custom_connectivity_update_model(
             "CustomConnectivityUpdate", **ccu_model)
 
