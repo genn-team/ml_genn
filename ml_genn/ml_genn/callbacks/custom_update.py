@@ -79,4 +79,4 @@ class CustomUpdateOnTimestepEnd(CustomUpdate):
     def on_timestep_end(self, state, timestep):
         if self._custom_update(state, timestep):
             logger.debug(f"Running custom update {self.name} "
-                         f"at start of timestep {timestep}")
+                         f"at end of timestep {timestep}")
