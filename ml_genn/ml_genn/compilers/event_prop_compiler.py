@@ -482,54 +482,6 @@ class UpdateTrial(Callback):
         # Set dynamic parameter to batch ID
         self.genn_pop.set_dynamic_param_value("Trial", batch)
 
-
-class CustomUpdateOnLastTimestep(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the start of the last timestep in each example"""
-    def __init__(self, name: str, example_timesteps: int):
-        self.name = name
-        self.example_timesteps = example_timesteps
-    
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-
-    def on_timestep_begin(self, state, timestep: int):
-        if timestep == (self.example_timesteps - 1):
-            logger.debug(f"Running custom update {self.name} "
-                         f"at start of timestep {timestep}")
-            state.genn_model.custom_update(self.name)
-
-
-class CustomUpdateOnBatchEndNotFirst(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the end of every batch after the first."""
-    def __init__(self, name: str):
-        self.name = name
-
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-        
-    def on_batch_end(self, state, batch, metric_state):
-        if batch > 0:
-            logger.debug(f"Running custom update {self.name} "
-                         f"at end of batch {batch}")
-            state.genn_model.custom_update(self.name)
-
-class CustomUpdateOnFirstBatchEnd(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the end of first batch."""
-    def __init__(self, name: str):
-        self.name = name
-
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-        
-    def on_batch_end(self, state, batch, metric_state):
-        if batch == 0:
-            logger.debug(f"Running custom update {self.name} "
-                         f"at end of batch {batch}")
-            state.genn_model.custom_update(self.name)
-
 @dataclass
 class LossRecorderState:
     compiled_network: CompiledTrainingNetwork
@@ -571,6 +523,7 @@ class LossRecorderCallbackMSE(LossRecorderCallbackBase):
         batch_size = state.compiled_network.genn_model.batch_size
         return np.sum(np.sqrt(loss_sum)) / batch_size
         
+
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
 
@@ -1335,8 +1288,10 @@ class EventPropCompiler(Compiler):
         
         # Add custom uopdate for adjoint limit calculation if required
         if len(compile_state.adjoint_limit_pops_vars) > 0:
-            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("AbsSumReduceBatch"))
-            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("ReduceAssign"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("AbsSumReduceBatch",
+                                                               lambda batch: batch > 0))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("ReduceAssign",
+                                                               lambda batch: batch > 0))
 
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
