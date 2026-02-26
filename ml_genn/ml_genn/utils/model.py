@@ -265,7 +265,7 @@ class CustomConnectivityUpdateModel(Model):
         self.egp_refs = egp_refs
 
     def process(self):
-        return (super(CustomConnectivityUpdateModel, self).process() 
+        return (super(CustomConnectivityUpdateModel, self)._process() 
                 + (self.pre_var_vals,) + (self.post_var_vals,)
                 + (self.var_refs,) + (self.pre_var_refs,) 
                 + (self.post_var_refs,) + (self.egp_refs,))
