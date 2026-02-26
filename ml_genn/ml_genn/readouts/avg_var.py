@@ -41,7 +41,7 @@ class AvgVar(Readout):
         if self.window_start is not None or self.window_end is not None:
             window_start = self.window_start or 0
             window_end = self.window_end or kwargs["example_timesteps"]*kwargs["dt"]
-            scale = kwargs["dt"] / (window_end_step - window_start_step)
+            scale = kwargs["dt"] / (window_end - window_start)
             model.append_sim_code(
                 f"if (t >= {window_start} && t < {window_end}) {avg_var_name} += {scale} * {self.output_var_name};")
         else:

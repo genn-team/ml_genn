@@ -1939,6 +1939,7 @@ class EventPropCompiler(Compiler):
                         ro = pop.neuron.readout
                         window_start = ro.window_start or 0
                         window_end = ro.window_end or self.example_timesteps*self.dt
+                        T = self.dt * self.example_timesteps
                         genn_model.prepend_sim_code(
                             f"""
                             scalar drive = 0.0;
