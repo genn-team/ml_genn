@@ -78,11 +78,10 @@ def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
     # Return end spike indices and spike times
     return PreprocessedSpikes(end_spikes, times)
 
-# **TODO** maybe this could be a static from_tonic method 
-def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
+def preprocess_tonic_spikes_separate(events: np.ndarray, ordering: Sequence[str],
                             shape: Tuple, time_scale=1.0 / 1000.0,
                             dt: Optional[float] = None,
-                            histogram_thresh : Optional[int] = None, polarity: Optional[str] = "combine") -> PreprocessedSpikes:
+                            histogram_thresh : Optional[int] = None) -> list:
     """Preprocess a Tonic format spike train into PreprocessedSpikes format
 
     Args:
@@ -94,13 +93,41 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
         dt:                 Timestep to discretise events to
         histogram_thresh:   Minimum number of source events required to
                             trigger spike in downsampled dt
-        polarity:           Split polarities in to separate populations
     """
+    if shape[2] == 1:
+        raise RuntimeError("Dataset with single polarity cannot be separated")
+    preprocessed_spikes = []
+    for p in np.unique(events["p"]):
+        preprocessed_spikes.append(preprocess_tonic_spikes(events[events["p"] == p], ordering, shape, time_scale, dt, histogram_thresh, True))
+    return preprocessed_spikes
+    
+
+
+# **TODO** maybe this could be a static from_tonic method 
+def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
+                            shape: Tuple, time_scale=1.0 / 1000.0,
+                            dt: Optional[float] = None,
+                            histogram_thresh : Optional[int] = None, merge: Optional[bool] = False) -> PreprocessedSpikes:
+    """Preprocess a Tonic format spike train into PreprocessedSpikes format
+
+    Args:
+        events:             Structured array containing events
+        ordering:           Names of fields in events array
+        shape:              Shape of sensor events came from
+        time_scale:         Scale to apply to event times, typically to 
+                            convert from microseconds to milliseconds
+        dt:                 Timestep to discretise events to
+        histogram_thresh:   Minimum number of source events required to
+                            trigger spike in downsampled dt
+        merge:              Merge neurons over polarities
+    """
+    if merge:
+        from tonic.transforms import MergePolarities
+        transform = MergePolarities()
+        events = transform(events)
+
     # Calculate cumulative sum of each neuron's spike count
-    if polarity not in ("merge", "split"):
-        num_neurons = np.prod(shape) 
-    else: 
-        num_neurons = np.prod(shape[:-1])
+    num_neurons = np.prod(shape) 
 
     # Check dataset datatype includes time and polarity
     if "t" not in ordering or "p" not in ordering:
@@ -108,7 +135,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                            "polarity (p) in ordering are supported")
 
     # If sensor has single polarity
-    if shape[2] == 1 or polarity == "merge" or polarity=="split":
+    if shape[2] == 1:
         # If sensor is 2D, flatten x and y into event IDs
         if ("x" in ordering) and ("y" in ordering):
             spike_event_ids = events["x"] + (events["y"] * shape[0])
@@ -117,74 +144,38 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
             spike_event_ids = events["x"]
         else:
             raise RuntimeError("Only 1D and 2D sensors supported")
-        if polarity == "split":
-            spike_event_ids_dic = {}
-            spike_event_ts_dic = {}
-            for p in np.unique(events["p"]):
-                mask = events["p"] == p
-                spike_event_ids_dic[p] = spike_event_ids[mask]
-                spike_event_ts_dic[p] = events["t"][mask]
     # Otherwise
     else:
-        if polarity == "combine":
-            # If sensor is 2D, flatten x, y and p into event IDs
-            if ("x" in ordering) and ("y" in ordering):
-                spike_event_ids = (events["p"] +
-                                (events["x"] * shape[2]) + 
-                                (events["y"] * shape[0] * shape[2]))
-            # Otherwise, if it's 1D, flatten x and p into event IDs
-            elif "x" in ordering:
-                spike_event_ids = events["p"] + (events["x"] * shape[2])
-            else:
-                raise RuntimeError("Only 1D and 2D sensors supported")
+        # If sensor is 2D, flatten x, y and p into event IDs
+        if ("x" in ordering) and ("y" in ordering):
+            spike_event_ids = (events["p"] +
+                            (events["x"] * shape[2]) + 
+                            (events["y"] * shape[0] * shape[2]))
+        # Otherwise, if it's 1D, flatten x and p into event IDs
+        elif "x" in ordering:
+            spike_event_ids = events["p"] + (events["x"] * shape[2])
         else:
-            raise RuntimeError("Invalid value for polarity. Choices are combine, split or merge.")
-
+            raise RuntimeError("Only 1D and 2D sensors supported")
     
-    
+    scaled_t = events["t"] * time_scale
     if histogram_thresh is None:
-        if polarity == "split":
-            prepocessed_spikes = {}
-            for p in np.unique(events["p"]):
-                scaled_t = spike_event_ts_dic[p] * time_scale
-                prepocessed_spikes[p] = preprocess_spikes(scaled_t, spike_event_ids_dic[p],
-                                    num_neurons)
-            return prepocessed_spikes
-        else:
-            scaled_t = events["t"] * time_scale
-            return preprocess_spikes(scaled_t, spike_event_ids,
-                                    num_neurons)
+        return preprocess_spikes(scaled_t, spike_event_ids,
+                                 num_neurons)
     else:
         # Build ranges for neuron ids and timesteps
         assert dt is not None
         neuron_range = np.arange(num_neurons + 1)
-        if polarity == "split":
-            prepocessed_spikes = {}
-            for p in np.unique(events["p"]):
-                # Compute histogram
-                scaled_t = spike_event_ts_dic[p] * time_scale
-                timestep_range = np.arange(0.0, np.amax(scaled_t) + dt, dt)
-                spike_event_hist = np.histogram2d(spike_event_ids_dic[p], scaled_t,
-                                                (neuron_range, timestep_range))[0]
+        timestep_range = np.arange(0.0, np.amax(scaled_t) + dt, dt)
 
-                # Find indices of bins where there are enough events
-                thresh_id, thresh_t = np.where(spike_event_hist >= histogram_thresh)
+        # Compute histogram
+        spike_event_hist = np.histogram2d(spike_event_ids, scaled_t,
+                                          (neuron_range, timestep_range))[0]
 
-                # Preprocess
-                prepocessed_spikes[p] = preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
-            return prepocessed_spikes
-        else:
-            # Compute histogram
-            scaled_t = events["t"] * time_scale
-            timestep_range = np.arange(0.0, np.amax(scaled_t) + dt, dt)
-            spike_event_hist = np.histogram2d(spike_event_ids, scaled_t,
-                                            (neuron_range, timestep_range))[0]
+        # Find indices of bins where there are enough events
+        thresh_id, thresh_t = np.where(spike_event_hist >= histogram_thresh)
 
-            # Find indices of bins where there are enough events
-            thresh_id, thresh_t = np.where(spike_event_hist >= histogram_thresh)
-
-            # Preprocess
-            return preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
+        # Preprocess
+        return preprocess_spikes(thresh_t * dt, thresh_id, num_neurons)
 
 def generate_yin_yang_dataset(size: int, scale: float, offset: float=0.0,
                               bias: bool = True, r_small: float = 0.1,
