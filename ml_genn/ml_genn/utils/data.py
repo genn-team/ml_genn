@@ -98,7 +98,9 @@ def preprocess_tonic_spikes_separate(events: np.ndarray, ordering: Sequence[str]
         raise RuntimeError("Dataset with single polarity cannot be separated")
     preprocessed_spikes = []
     for p in np.unique(events["p"]):
-        preprocessed_spikes.append(preprocess_tonic_spikes(events[events["p"] == p], ordering, shape, time_scale, dt, histogram_thresh, True))
+        filtered = events[events["p"] == p].copy()
+        filtered["p"] = np.zeros_like(filtered["p"])
+        preprocessed_spikes.append(preprocess_tonic_spikes(filtered, ordering, shape, time_scale, dt, histogram_thresh))
     return preprocessed_spikes
     
 
@@ -107,7 +109,7 @@ def preprocess_tonic_spikes_separate(events: np.ndarray, ordering: Sequence[str]
 def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                             shape: Tuple, time_scale=1.0 / 1000.0,
                             dt: Optional[float] = None,
-                            histogram_thresh : Optional[int] = None, merge: Optional[bool] = False) -> PreprocessedSpikes:
+                            histogram_thresh : Optional[int] = None) -> PreprocessedSpikes:
     """Preprocess a Tonic format spike train into PreprocessedSpikes format
 
     Args:
@@ -119,13 +121,7 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
         dt:                 Timestep to discretise events to
         histogram_thresh:   Minimum number of source events required to
                             trigger spike in downsampled dt
-        merge:              Merge neurons over polarities
     """
-    if merge:
-        from tonic.transforms import MergePolarities
-        transform = MergePolarities()
-        events = transform(events)
-
     # Calculate cumulative sum of each neuron's spike count
     num_neurons = np.prod(shape) 
 
