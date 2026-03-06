@@ -97,10 +97,9 @@ def preprocess_tonic_spikes_separate(events: np.ndarray, ordering: Sequence[str]
     if shape[2] == 1:
         raise RuntimeError("Dataset with single polarity cannot be separated")
     preprocessed_spikes = []
-    for p in np.unique(events["p"]):
-        filtered = events[events["p"] == p].copy()
-        filtered["p"] = np.zeros_like(filtered["p"])
-        preprocessed_spikes.append(preprocess_tonic_spikes(filtered, ordering, shape, time_scale, dt, histogram_thresh))
+    for p in range(shape[2]):
+        filtered = events[events["p"] == p]
+        preprocessed_spikes.append(preprocess_tonic_spikes(filtered, ordering, (shape[0], shape[1], 1), time_scale, dt, histogram_thresh))
     return preprocessed_spikes
     
 
