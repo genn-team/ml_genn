@@ -1,12 +1,12 @@
 import numpy as np
 
-from .readout import Readout
+from .readout import TimeWindowReadout
 from ..utils.model import NeuronModel
 
 from copy import deepcopy
 
 
-class FirstSpikeTime(Readout):
+class FirstSpikeTime(TimeWindowReadout):
     """Read out time of first spike emitted by population.
     Spike times are negated so standard metrics and loss functions can be employed."""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
@@ -17,9 +17,7 @@ class FirstSpikeTime(Readout):
 
         # Add code to record time of first spike
         model.append_reset_code(
-        """
-        TFirstSpike = fmax(-t, TFirstSpike);
-        """)
+            self.windowed_readout_code(f"TFirstSpike = fmax(-t, TFirstSpike);", **kwargs))
 
         # Add time of first spike variable and initialise to float min
         # **YUCK** REALLY should be timepoint but then you can't softmax

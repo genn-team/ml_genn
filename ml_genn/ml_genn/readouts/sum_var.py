@@ -1,20 +1,13 @@
 import numpy as np
 
-from .readout import Readout
+from .readout import TimeWindowReadout
 from ..utils.model import NeuronModel
 
 from copy import deepcopy
 
 
-class SumVar(Readout):
+class SumVar(TimeWindowReadout):
     """Read out per-neuron sum of neuron model's output variable"""
-    def __init__(self, window_start=None, window_end=None):
-        """Allow to define a window in which to average
-        the output var. If no window is defined, default to the original
-        averaging across the whole trial."""
-        self.window_start = window_start
-        self.window_end = window_end
-
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
@@ -38,14 +31,8 @@ class SumVar(Readout):
         self.output_var_type = output_var[1]
 
         # Add code to update sum variable
-        if self.window_start is not None or self.window_end is not None:
-            window_start = self.window_start or 0
-            window_end = self.window_end or kwargs["example_timesteps"]*kwargs["dt"]
-            model.append_sim_code(
-                f"if (t >= {window_start} && t < {window_end}) {sum_var_name} += {self.output_var_name};")
-        else:
-            model.append_sim_code(
-                f"{sum_var_name} += {self.output_var_name};")
+        model.append_sim_code(
+            self.windowed_readout_code(f"{sum_var_name} += {self.output_var_name};", **kwargs))
 
         # Add sum variable with same type as output
         # variable and initialise to zero

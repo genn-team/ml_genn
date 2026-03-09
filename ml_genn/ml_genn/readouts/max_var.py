@@ -1,12 +1,12 @@
 import numpy as np
 
-from .readout import Readout
+from .readout import TimeWindowReadout
 from ..utils.model import NeuronModel
 
 from copy import deepcopy
 
 
-class MaxVar(Readout):
+class MaxVar(TimeWindowReadout):
     """Read out per-neuron maximum value of neuron model's output variable"""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
@@ -44,20 +44,22 @@ class MaxVar(Readout):
             
             # Add code to update max variable and time 
             model.append_sim_code(
-                f"""
-                if ({self.output_var_name} > {max_var_name}) {{
-                    {max_var_name}= {self.output_var_name};
-                    {max_time_var_name} = t;
-                }}
-                """)
+                self.windowed_readout_code(
+                    f"""
+                    if ({self.output_var_name} > {max_var_name}) {{
+                        {max_var_name}= {self.output_var_name};
+                        {max_time_var_name} = t;
+                    }}
+                    """, **kwargs))
         # Otherwise, just add code to update max variable
         else:
             model.append_sim_code(
-                f"""
-                if ({self.output_var_name} > {max_var_name}) {{
-                    {max_var_name}= {self.output_var_name};
-                }}
-                """)
+                self.windowed_readout_code(
+                    f"""
+                    if ({self.output_var_name} > {max_var_name}) {{
+                        {max_var_name}= {self.output_var_name};
+                    }}
+                    """, **kwargs))
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         max_var = genn_pop.vars[self.output_var_name + "Max"]
