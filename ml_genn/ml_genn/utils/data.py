@@ -79,9 +79,9 @@ def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
     return PreprocessedSpikes(end_spikes, times)
 
 def preprocess_tonic_spikes_separate(events: np.ndarray, ordering: Sequence[str],
-                            shape: Tuple, time_scale=1.0 / 1000.0,
-                            dt: Optional[float] = None,
-                            histogram_thresh : Optional[int] = None) -> list:
+                                     shape: Tuple, time_scale=1.0 / 1000.0,
+                                     dt: Optional[float] = None,
+                                     histogram_thresh : Optional[int] = None) -> list:
     """Preprocess a Tonic format spike train into PreprocessedSpikes format
 
     Args:
