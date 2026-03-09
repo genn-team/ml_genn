@@ -144,6 +144,8 @@ def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
         # If sensor is 2D, flatten x, y and p into event IDs
         if ("x" in ordering) and ("y" in ordering):
             spike_event_ids = (events["p"] +
+                               (events["x"] * shape[2]) + 
+                               (events["y"] * shape[0] * shape[2]))
         # Otherwise, if it's 1D, flatten x and p into event IDs
         elif "x" in ordering:
             spike_event_ids = events["p"] + (events["x"] * shape[2])
