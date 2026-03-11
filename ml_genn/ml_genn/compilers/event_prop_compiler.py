@@ -475,24 +475,6 @@ class UpdateTrial(Callback):
         # Set dynamic parameter to batch ID
         self.genn_pop.set_dynamic_param_value("Trial", batch)
 
-
-class CustomUpdateOnLastTimestep(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the start of the last timestep in each example"""
-    def __init__(self, name: str, example_timesteps: int):
-        self.name = name
-        self.example_timesteps = example_timesteps
-    
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-
-    def on_timestep_begin(self, state, timestep: int):
-        if timestep == (self.example_timesteps - 1):
-            logger.debug(f"Running custom update {self.name} "
-                         f"at start of timestep {timestep}")
-            state.genn_model.custom_update(self.name)
-
-
 class CustomUpdateOnBatchEndNotFirst(Callback):
     """Callback that triggers a GeNN custom update 
     at the end of every batch after the first."""
@@ -1179,12 +1161,17 @@ class EventPropCompiler(Compiler):
             genn_pop = neuron_populations[p]
             self._add_softmax_buffer_custom_updates(genn_model, genn_pop, i)
 
-        # Loop through connections and add custom updates to zero out post
+        # Loop through connections
         for i, genn_syn_pop in enumerate(connection_populations.values()):
+            # Add custom updates to zero out post to reset group
             self.add_out_post_zero_custom_update(genn_model, genn_syn_pop,
-                                                 "ZeroOutPost",
+                                                 "Reset",
                                                  f"CUZeroOutPost{i}")
-        
+            # And another to zero spike counts
+            self.add_spike_count_zero_custom_update(genn_model, genn_syn_pop,
+                                                    "Reset",
+                                                    f"CUZeroSpikeCount{i}")
+
         # Loop through populations which require spike 
         # count reductions add custom update
         for i, p in enumerate(compile_state.spike_count_populations):
@@ -1227,12 +1214,6 @@ class EventPropCompiler(Compiler):
         # on populations which require it
         for p in compile_state.update_trial_pops:
             base_train_callbacks.append(UpdateTrial(neuron_populations[p]))
-
-        # Add callbacks to zero out post on all connections
-        base_train_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
-        base_validate_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
 
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
