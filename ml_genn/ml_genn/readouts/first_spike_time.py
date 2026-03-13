@@ -16,6 +16,7 @@ class FirstSpikeTime(TimeWindowReadout):
                                "be used with spiking models")
 
         # Add code to record time of first spike
+        # **NOTE** time is recorded with respect to t == 0 (trial start)
         model.append_reset_code(
             self.windowed_readout_code(f"TFirstSpike = fmax(-t, TFirstSpike);", **kwargs))
 

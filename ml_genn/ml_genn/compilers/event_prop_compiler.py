@@ -2123,11 +2123,14 @@ class EventPropCompiler(Compiler):
                     # On backward pass transition, update LambdaV if this is the first spike
                     # **THOMAS** why are we dividing by what looks like softmax temperature?
                     # **TODO** build transition_code from adjoint_jumps here
+                    ro = pop.neuron.readout
+                    window_start, window_end = ro.window_start_end(
+                        example_timesteps=self.example_timesteps, dt=self.dt)
                     transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             if (id == YTrueBack) {{
-                                const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
+                                const scalar fst = {1.01 * window_end} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
                             }}
                             else {{
@@ -2172,8 +2175,8 @@ class EventPropCompiler(Compiler):
                     # **NOTE** Though FirstSpikeTime supports windowed readout, the derivative of the
                     # loss below can go ahead without explicit windowing as this is taken
                     # care of in the readout logic that constrains where TFirstSpike is taken
-                    # window.
-                    # **TODO** Should TFirstSpike be relative to window_start?
+                    # within a window.
+                    # **THINK** Should TFirstSpike etc be relative to window_start?
                     # On backward pass transition, update LambdaV if this is the first spike
                     # **NOTE** Strange term in id == YTrueBack case comes from re-arranging
                     # -(TFirstSpikeBack[n] - TFirstSpikeTrueBack - delta),
@@ -2233,9 +2236,12 @@ class EventPropCompiler(Compiler):
                     # isn't just about to and is correct output, update 
                     # TFirstSpike and insert event into ring-buffer
                     # **THINK** fmax totally uneccessary?
+                    ro = pop.neuron.readout
+                    window_start, window_end = ro.window_start_end(
+                        example_timesteps=self.example_timesteps, dt=self.dt)
                     genn_model.append_sim_code(
                         f"""
-                        if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
+                        if(fabs(t - {window_end - self.dt}) < 1e-3*dt && TFirstSpike < {-window_end} && ({model.model['threshold']}) < 0 && id == YTrue) {{
                             TFirstSpike = fmax(-t, TFirstSpike);
                             {reset_code}
                         }}
