@@ -3,6 +3,7 @@ import numpy as np
 
 from string import Template
 from typing import Iterator, Sequence
+from numbers import Number
 from pygenn import (CustomUpdateVarAccess, VarAccess, VarAccessMode,
                     SynapseMatrixType, SynapseMatrixWeight)
 
@@ -487,10 +488,16 @@ class EventPropCompiler(Compiler):
                                     to output populations or a single loss
                                     function to apply to all outputs
         optimiser:                  Optimiser to use when applying weights
-        reg_lambda_upper:           Regularisation strength, should typically
-                                    be the same as ``reg_lambda_lower``.
-        reg_lambda_lower:           Regularisation strength, should typically
-                                    be the same as ``reg_lambda_upper``.
+        reg_lambda_upper:           Regularisation strength. Can be specified as 
+                                    a single float (applied to all populations)
+                                    or as a dictionary mapping populations to values 
+                                    (to set different strengths per population).
+                                    Should typically be the same as ``reg_lambda_lower``.
+        reg_lambda_lower:           Regularisation strength. Can be specified as 
+                                    a single float (applied to all populations)
+                                    or as a dictionary mapping populations to values 
+                                    (to set different strengths per population).
+                                    Should typically be the same as ``reg_lambda_upper``.
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
         max_spikes:                 What is the maximum number of spikes each
@@ -532,7 +539,7 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
-                 reg_lambda_upper: float = 0.0, reg_lambda_lower: float = 0.0,
+                 reg_lambda_upper: dict = {}, reg_lambda_lower: dict = {},
                  reg_nu_upper: float = 0.0, max_spikes: int = 500,
                  strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
@@ -558,7 +565,13 @@ class EventPropCompiler(Compiler):
         self.example_timesteps = example_timesteps
         self.losses = losses
         self.reg_lambda_upper = reg_lambda_upper
+        if isinstance(self.reg_lambda_upper, dict):
+            self.reg_lambda_upper = {get_underlying_pop(p): r 
+                            for p, r in self.reg_lambda_upper.items()}
         self.reg_lambda_lower = reg_lambda_lower
+        if isinstance(self.reg_lambda_lower, dict):
+            self.reg_lambda_lower = {get_underlying_pop(p): r 
+                            for p, r in self.reg_lambda_lower.items()}
         self.reg_nu_upper = reg_nu_upper
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
@@ -1131,7 +1144,7 @@ class EventPropCompiler(Compiler):
 
                     # If regularisation is enabled
                     # **THINK** is this LIF-specific?
-                    if self.regulariser_enabled:
+                    if self.regulariser_enabled(pop):
                         # Add state variables to hold spike count
                         # during forward and backward pass. 
                         # **NOTE** SpikeCountBackSum is shared across
@@ -1151,11 +1164,11 @@ class EventPropCompiler(Compiler):
                         # into account that we're operating on batch sums of spike counts
                         model_copy.add_param(
                             "RegLambdaUpper", "scalar",
-                            self.reg_lambda_upper / (self.full_batch_size
+                            self.get_lambda(self.reg_lambda_upper, pop) / (self.full_batch_size
                                                      * self.full_batch_size))
                         model_copy.add_param(
                             "RegLambdaLower", "scalar",
-                            self.reg_lambda_lower / (self.full_batch_size
+                            self.get_lambda(self.reg_lambda_lower, pop) / (self.full_batch_size
                                                      * self.full_batch_size))
 
                         # If batch size is 1, add reset variables
@@ -1546,10 +1559,18 @@ class EventPropCompiler(Compiler):
             compile_state.checkpoint_connection_vars,
             compile_state.checkpoint_population_vars, True)
 
-    @property
-    def regulariser_enabled(self):
-        return (self.reg_lambda_lower != 0.0 
-                or self.reg_lambda_upper != 0.0)
+    def get_lambda(self, reg_lambda, pop):
+        if isinstance(reg_lambda, Number):
+            return reg_lambda
+        elif pop in reg_lambda:
+            return reg_lambda[pop]
+        return 0.0
+    
+    def regulariser_enabled(self, pop: Population):
+
+        upper = self.get_lambda(self.reg_lambda_upper, pop)
+        lower = self.get_lambda(self.reg_lambda_lower, pop)
+        return (upper != 0.0) or (lower != 0.0)
 
     def _add_softmax_buffer_custom_updates(self, genn_model, genn_pop, 
                                            input_var_name: str):
