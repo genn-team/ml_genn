@@ -1,12 +1,12 @@
 import numpy as np
 
-from .readout import Readout
+from .readout import TimeWindowReadout
 from ..utils.model import NeuronModel
 
 from copy import deepcopy
 
 
-class SumVar(Readout):
+class SumVar(TimeWindowReadout):
     """Read out per-neuron sum of neuron model's output variable"""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
@@ -31,7 +31,8 @@ class SumVar(Readout):
         self.output_var_type = output_var[1]
 
         # Add code to update sum variable
-        model.append_sim_code(f"{sum_var_name} += {self.output_var_name};")
+        model.append_sim_code(
+            self.windowed_readout_code(f"{sum_var_name} += {self.output_var_name};", **kwargs))
 
         # Add sum variable with same type as output
         # variable and initialise to zero

@@ -1535,7 +1535,7 @@ class EventPropCompiler(Compiler):
                     # scaling factor is made so that jumps lead to an area of size 1
                     # to be added to the integral of the "invisible trace variable"
                     # underlying the regularisation loss
-                    drive += sympy.Symbol("drive_reg")/(sympy.Symbol("t")+self.dt)
+                    drive += sympy.Symbol("drive_reg")
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
                 jump = a_exp
@@ -1889,15 +1889,21 @@ class EventPropCompiler(Compiler):
                 if sce_loss:
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
+                        ro = pop.neuron.readout
+                        window_start, window_end = ro.window_start_end(
+                            example_timesteps=self.example_timesteps, dt=self.dt)
+                        code = """
+                            tsRingReadOffset--;
+                            const scalar softmax = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+                            const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
+                            drive = g / (num_batch * {window_end-window_start});
+                        """
                         genn_model.prepend_sim_code(
                             f"""
                             scalar drive = 0.0;
                             const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
-                                tsRingReadOffset--;
-                                const scalar softmax = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                                const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                {ro.back_windowed_readout_code(code, example_timesteps=self.example_timesteps, dt=self.dt)}
                             }}
 
                             {dynamics_code}
@@ -1946,18 +1952,24 @@ class EventPropCompiler(Compiler):
 
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
+                        ro = pop.neuron.readout
+                        window_start, window_end = ro.window_start_end(
+                            example_timesteps=self.example_timesteps, dt=self.dt)
+                        code = f"""
+                            const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                            drive = g / (num_batch * {window_end-window_start});
+                        """
                         genn_model.prepend_sim_code(
                             f"""
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                {ro.back_windowed_readout_code(code, example_timesteps=self.example_timesteps, dt=self.dt)}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
                             {write_pointer_code}
                             """)
-                    
+
                         # Add custom updates to calculate 
                         # softmax from VSum or VAvg
                         suffix = ("Sum" if isinstance(pop.neuron.readout, SumVar)
@@ -1966,14 +1978,21 @@ class EventPropCompiler(Compiler):
                             (pop, out_var_name + suffix, "Softmax"))
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
-                        local_t_scale = 1.0 / (self.dt * self.example_timesteps)
+                        ro = pop.neuron.readout
+                        window_start, window_end = ro.window_start_end(
+                            example_timesteps=self.example_timesteps, dt=self.dt)
+                        local_t_scale = 1.0 / (window_end - window_start)
+                        T = self.dt * self.example_timesteps
+                        code = f"""
+                            const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
+                            drive = (g * exp(-({T}-t-{window_start}) * {local_t_scale})) / (num_batch * {window_end - window_start});
+                        """
                         genn_model.prepend_sim_code(
                             f"""
                             // Backward pass
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = (g * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {self.dt * self.example_timesteps});
+                                {ro.back_windowed_readout_code(code, example_timesteps=self.example_timesteps, dt=self.dt)}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -1990,6 +2009,11 @@ class EventPropCompiler(Compiler):
                         genn_model.add_var(model.output_var_name + "MaxTimeBack", "scalar", 0.0,
                                            VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
+                        # **NOTE** Though MaxVar supports windowed readout, the derivative of the
+                        # loss below can go ahead without explicit windowing as this is taken
+                        # care of in the readout logic that constrains the max location to the
+                        # window.
+                        # **TODO** Should normalisation be by window size instead of trial time T?
                         genn_model.prepend_sim_code(
                             f"""
                             const scalar backT = {self.example_timesteps * self.dt} - t - dt;
@@ -2101,14 +2125,22 @@ class EventPropCompiler(Compiler):
                     genn_model.add_var("Softmax", "scalar", 0.0,
                                        VarAccess.READ_ONLY_DUPLICATE, reset=False)
 
+                    # **NOTE** Though FirstSpikeTime supports windowed readout, the derivative of the
+                    # loss below can go ahead without explicit windowing as this is taken
+                    # care of in the readout logic that constrains where TFirstSpike is taken
+                    # window.
+                    # **TODO** Should TFirstSpike be relative to window_start?
                     # On backward pass transition, update LambdaV if this is the first spike
                     # **THOMAS** why are we dividing by what looks like softmax temperature?
                     # **TODO** build transition_code from adjoint_jumps here
+                    ro = pop.neuron.readout
+                    window_start, window_end = ro.window_start_end(
+                        example_timesteps=self.example_timesteps, dt=self.dt)
                     transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             if (id == YTrueBack) {{
-                                const scalar fst = {1.01 * example_time} + TFirstSpikeBack;
+                                const scalar fst = {1.01 * window_end} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
                             }}
                             else {{
@@ -2122,6 +2154,11 @@ class EventPropCompiler(Compiler):
                     compile_state.batch_softmax_populations.append(
                         (pop, "TFirstSpike", "Softmax"))
                 elif per_neuron_mse_loss:
+                    # **NOTE** Though FirstSpikeTime supports windowed readout, the derivative of the
+                    # loss below can go ahead without explicit windowing as this is taken
+                    # care of in the readout logic that constrains where TFirstSpike is taken
+                    # window.
+                    # **TODO** Should TFirstSpike be relative to window_start?
                     transition_code = f"""
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
@@ -2145,6 +2182,11 @@ class EventPropCompiler(Compiler):
                     genn_model.add_var("TFirstSpikeTrueBack", "scalar", 0.0, 
                                        VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
 
+                    # **NOTE** Though FirstSpikeTime supports windowed readout, the derivative of the
+                    # loss below can go ahead without explicit windowing as this is taken
+                    # care of in the readout logic that constrains where TFirstSpike is taken
+                    # within a window.
+                    # **THINK** Should TFirstSpike etc be relative to window_start?
                     # On backward pass transition, update LambdaV if this is the first spike
                     # **NOTE** Strange term in id == YTrueBack case comes from re-arranging
                     # -(TFirstSpikeBack[n] - TFirstSpikeTrueBack - delta),
@@ -2204,9 +2246,12 @@ class EventPropCompiler(Compiler):
                     # isn't just about to and is correct output, update 
                     # TFirstSpike and insert event into ring-buffer
                     # **THINK** fmax totally uneccessary?
+                    ro = pop.neuron.readout
+                    window_start, window_end = ro.window_start_end(
+                        example_timesteps=self.example_timesteps, dt=self.dt)
                     genn_model.append_sim_code(
                         f"""
-                        if(fabs(t - {example_time - self.dt}) < 1e-3*dt && TFirstSpike < {-example_time} && ({model.model['threshold']}) < 0 && id == YTrue) {{
+                        if(fabs(t - {window_end - self.dt}) < 1e-3*dt && TFirstSpike < {-window_end} && ({model.model['threshold']}) < 0 && id == YTrue) {{
                             TFirstSpike = fmax(-t, TFirstSpike);
                             {reset_code}
                         }}
