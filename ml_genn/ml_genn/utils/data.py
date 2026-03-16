@@ -78,6 +78,32 @@ def preprocess_spikes(times: np.ndarray, ids: np.ndarray,
     # Return end spike indices and spike times
     return PreprocessedSpikes(end_spikes, times)
 
+def preprocess_tonic_spikes_separate(events: np.ndarray, ordering: Sequence[str],
+                                     shape: Tuple, time_scale=1.0 / 1000.0,
+                                     dt: Optional[float] = None,
+                                     histogram_thresh : Optional[int] = None) -> list:
+    """Preprocess a Tonic format spike train into PreprocessedSpikes format
+
+    Args:
+        events:             Structured array containing events
+        ordering:           Names of fields in events array
+        shape:              Shape of sensor events came from
+        time_scale:         Scale to apply to event times, typically to 
+                            convert from microseconds to milliseconds
+        dt:                 Timestep to discretise events to
+        histogram_thresh:   Minimum number of source events required to
+                            trigger spike in downsampled dt
+    """
+    if shape[2] == 1:
+        raise RuntimeError("Dataset with single polarity cannot be separated")
+    preprocessed_spikes = []
+    for p in range(shape[2]):
+        filtered = events[events["p"] == p]
+        preprocessed_spikes.append(preprocess_tonic_spikes(filtered, ordering, (shape[0], shape[1], 1), time_scale, dt, histogram_thresh))
+    return preprocessed_spikes
+    
+
+
 # **TODO** maybe this could be a static from_tonic method 
 def preprocess_tonic_spikes(events: np.ndarray, ordering: Sequence[str],
                             shape: Tuple, time_scale=1.0 / 1000.0,
