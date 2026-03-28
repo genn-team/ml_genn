@@ -20,7 +20,7 @@ from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
 from ..neurons import Input
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
-                        EndVar, MaxVar, SumVar, Var)
+                        EndVar, MaxVar, SumVar, Var, TimeWindowReadout)
 from ..utils.auto_model import AutoModel, AutoNeuronModel, AutoSynapseModel
 from ..utils.model import (CustomUpdateModel, Model, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
@@ -1522,9 +1522,13 @@ class EventPropCompiler(Compiler):
                 drive = sympy.Symbol("drive_p" if output else "RevISyn")
                 # add l^- - l^+ jump for neurons with regularisation
                 if regularise:
-                    # scaling factor is made so that jumps lead to an area of size 1
-                    # to be added to the integral of the "invisible trace variable"
-                    # underlying the regularisation loss
+                    # the regularisation term is added to the drive from the loss function
+                    # **NOTE** there is no strict mathematical derivation from a loss-based
+                    # regularisation term to arrive at this drive; the general intuition
+                    # is that the derivative of a spike-number-based loss, (N_spike-N_target)^2,
+                    # is added with equal weighting into the adjoint jumps at each spike
+                    # (but modulated by the derivative of the spike condition b[asym] as any other
+                    # loss drive)
                     drive += sympy.Symbol("drive_reg")
                 jump = a_exp + b[a_sym] * (ex2 + drive)
             else:
@@ -1846,6 +1850,11 @@ class EventPropCompiler(Compiler):
         additional_reset_vars = ground_truth.backward_duplicate_var_reset
         reset_event_ring = False
         reset_v_ring = dyn_ts_reset_needed
+
+        # If model has a windowed readout, load window_start and window_end
+        if isinstance(pop.neuron.readout, TimeWindowReadout):
+            window_start, window_end = pop.neuron.readout.window_start_end(
+                self.example_timesteps, self.dt)
 
         # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         pop_loss = compile_state.losses[pop]

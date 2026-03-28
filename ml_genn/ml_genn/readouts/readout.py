@@ -68,7 +68,7 @@ class TimeWindowReadout(Readout):
 
     def back_windowed_readout_code(self, code: str, example_timesteps, dt):
         if self.window_start is not None or self.window_end is not None:
-            window_start, window_end = self.window_start_end(**kwargs)
+            window_start, window_end = self.window_start_end(example_timesteps,dt)
             T = dt * example_timesteps
             return f"""
                 if (t <= {T-window_start} && t > {T-window_end}) {{
