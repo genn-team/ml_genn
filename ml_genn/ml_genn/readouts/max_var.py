@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class MaxVar(TimeWindowReadout):
     """Read out per-neuron maximum value of neuron model's output variable"""
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, example_timesteps, dt, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -49,8 +49,8 @@ class MaxVar(TimeWindowReadout):
                     if ({self.output_var_name} > {max_var_name}) {{
                         {max_var_name}= {self.output_var_name};
                         {max_time_var_name} = t;
-                    }}
-                    """, **kwargs))
+                    }}""", 
+                    example_timesteps, dt))
         # Otherwise, just add code to update max variable
         else:
             model.append_sim_code(
@@ -58,8 +58,8 @@ class MaxVar(TimeWindowReadout):
                     f"""
                     if ({self.output_var_name} > {max_var_name}) {{
                         {max_var_name}= {self.output_var_name};
-                    }}
-                    """, **kwargs))
+                    }}""", 
+                    example_timesteps, dt))
 
     def get_readout(self, genn_pop, batch_size: int, shape) -> np.ndarray:
         max_var = genn_pop.vars[self.output_var_name + "Max"]

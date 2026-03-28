@@ -50,14 +50,14 @@ class TimeWindowReadout(Readout):
         self.window_start = window_start
         self.window_end = window_end
 
-    def window_start_end(self, **kwargs):
+    def window_start_end(self, example_timesteps, dt, **kwargs):
         window_start = self.window_start or 0
-        window_end = self.window_end or kwargs["example_timesteps"]*kwargs["dt"]
+        window_end = self.window_end or (example_timesteps * dt)
         return window_start, window_end
     
-    def windowed_readout_code(self, code: str, **kwargs):
+    def windowed_readout_code(self, code: str, example_timesteps, dt):
         if self.window_start is not None or self.window_end is not None:
-            window_start, window_end = self.window_start_end(**kwargs)
+            window_start, window_end = self.window_start_end(example_timesteps, dt)
             return f"""
                 if (t >= {window_start} && t < {window_end}) {{
                     {code}
@@ -66,10 +66,10 @@ class TimeWindowReadout(Readout):
         else:
             return code
 
-    def back_windowed_readout_code(self, code: str, **kwargs):
+    def back_windowed_readout_code(self, code: str, example_timesteps, dt):
         if self.window_start is not None or self.window_end is not None:
             window_start, window_end = self.window_start_end(**kwargs)
-            T = kwargs["dt"] * kwargs["example_timesteps"]
+            T = dt * example_timesteps
             return f"""
                 if (t <= {T-window_start} && t > {T-window_end}) {{
                     {code}

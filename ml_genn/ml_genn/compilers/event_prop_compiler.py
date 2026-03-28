@@ -1880,8 +1880,6 @@ class EventPropCompiler(Compiler):
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         ro = pop.neuron.readout
-                        window_start, window_end = ro.window_start_end(
-                            example_timesteps=self.example_timesteps, dt=self.dt)
                         code = """
                             tsRingReadOffset--;
                             const scalar softmax = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
@@ -1893,7 +1891,7 @@ class EventPropCompiler(Compiler):
                             scalar drive = 0.0;
                             const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                             if (Trial > 0) {{
-                                {ro.back_windowed_readout_code(code, example_timesteps=self.example_timesteps, dt=self.dt)}
+                                {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                             }}
 
                             {dynamics_code}
@@ -1943,8 +1941,6 @@ class EventPropCompiler(Compiler):
                     # If readout is AvgVar or SumVar
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         ro = pop.neuron.readout
-                        window_start, window_end = ro.window_start_end(
-                            example_timesteps=self.example_timesteps, dt=self.dt)
                         code = f"""
                             const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
                             drive = g / (num_batch * {window_end-window_start});
@@ -1953,7 +1949,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                {ro.back_windowed_readout_code(code, example_timesteps=self.example_timesteps, dt=self.dt)}
+                                {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -1969,8 +1965,6 @@ class EventPropCompiler(Compiler):
                     # Otherwise, if genn_model is AvgVarExpWeight
                     elif isinstance(pop.neuron.readout, AvgVarExpWeight):
                         ro = pop.neuron.readout
-                        window_start, window_end = ro.window_start_end(
-                            example_timesteps=self.example_timesteps, dt=self.dt)
                         local_t_scale = 1.0 / (window_end - window_start)
                         T = self.dt * self.example_timesteps
                         code = f"""
@@ -1982,7 +1976,7 @@ class EventPropCompiler(Compiler):
                             // Backward pass
                             scalar drive = 0.0;
                             if (Trial > 0) {{
-                                {ro.back_windowed_readout_code(code, example_timesteps=self.example_timesteps, dt=self.dt)}
+                                {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                             }}
                             {read_pointer_code}
                             {dynamics_code}

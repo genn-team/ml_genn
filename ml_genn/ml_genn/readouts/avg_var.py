@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class AvgVar(TimeWindowReadout):
     """Read out per-neuron average of neuron model's output variable"""
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, example_timesteps, dt, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -31,10 +31,12 @@ class AvgVar(TimeWindowReadout):
         self.output_var_type = output_var[1]
 
         # Add code to update average variable
-        window_start, window_end = self.window_start_end(**kwargs)
-        scale = kwargs["dt"] / (window_end - window_start)
+        window_start, window_end = self.window_start_end(example_timesteps, dt)
+        scale = dt / (window_end - window_start)
         model.append_sim_code(
-            self.windowed_readout_code(f"{avg_var_name} += {scale} * {self.output_var_name};", **kwargs))
+            self.windowed_readout_code(
+                f"{avg_var_name} += {scale} * {self.output_var_name};",
+                example_timesteps, dt))
         # Add average variable with same type as output
         # variable and initialise to zero
         model.add_var(avg_var_name, self.output_var_type, 0)

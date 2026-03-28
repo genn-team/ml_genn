@@ -9,7 +9,7 @@ from copy import deepcopy
 class FirstSpikeTime(TimeWindowReadout):
     """Read out time of first spike emitted by population.
     Spike times are negated so standard metrics and loss functions can be employed."""
-    def add_readout_logic(self, model: NeuronModel, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, example_timesteps, dt, **kwargs):
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
             raise RuntimeError("FirstSpikeTime readout can only "
@@ -18,7 +18,8 @@ class FirstSpikeTime(TimeWindowReadout):
         # Add code to record time of first spike
         # **NOTE** time is recorded with respect to t == 0 (trial start)
         model.append_reset_code(
-            self.windowed_readout_code(f"TFirstSpike = fmax(-t, TFirstSpike);", **kwargs))
+            self.windowed_readout_code(f"TFirstSpike = fmax(-t, TFirstSpike);", 
+                                       example_timesteps, dt))
 
         # Add time of first spike variable and initialise to float min
         # **YUCK** REALLY should be timepoint but then you can't softmax
