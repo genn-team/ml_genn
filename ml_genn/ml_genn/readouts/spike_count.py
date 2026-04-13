@@ -8,7 +8,7 @@ from copy import deepcopy
 
 class SpikeCount(TimeWindowReadout):
     """Read out number of spikes emitted by population"""
-    def add_readout_logic(self, model: NeuronModel, example_timesteps, dt, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         # If model isn't spiking, give error
         if "threshold_condition_code" not in model.model:
             raise RuntimeError("SpikeCount readout can only "
@@ -16,7 +16,8 @@ class SpikeCount(TimeWindowReadout):
 
         # Add code to increment spike count
         model.append_reset_code(
-            self.windowed_readout_code("Scount++;", example_timesteps, dt))
+            self.windowed_readout_code(
+                "Scount++;", kwargs["example_timesteps"], kwargs["dt"]))
 
         # Add integer spike count variable and initialise to zero
         model.add_var("Scount", "unsigned int", 0)

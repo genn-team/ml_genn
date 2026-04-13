@@ -50,7 +50,7 @@ class TimeWindowReadout(Readout):
         self.window_start = window_start
         self.window_end = window_end
 
-    def window_start_end(self, example_timesteps, dt, **kwargs):
+    def window_start_end(self, example_timesteps, dt):
         window_start = self.window_start or 0
         window_end = self.window_end or (example_timesteps * dt)
         return window_start, window_end

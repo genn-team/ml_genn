@@ -10,7 +10,7 @@ class AvgVarExpWeight(TimeWindowReadout):
     """Read out per-neuron average of neuron model's output variable
     with exponential weighting as described by [Nowotny2024]_."""
 
-    def add_readout_logic(self, model: NeuronModel, example_timesteps, dt, **kwargs):
+    def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
 
         if "vars" not in model.model:
@@ -33,13 +33,15 @@ class AvgVarExpWeight(TimeWindowReadout):
         self.output_var_type = output_var[1]
 
         # Add code to update average variable
-        window_start, window_end = self.window_start_end(example_timesteps, dt)
-        scale = dt / (window_end - window_start)
+        window_start, window_end = self.window_start_end(
+            kwargs["example_timesteps"], kwargs["dt"])
+        scale = kwargs["dt"] / (window_end - window_start)
         local_t_scale = 1.0 / (window_end - window_start)
         model.append_sim_code(
             self.windowed_readout_code(
                 f"{avg_var_name} += exp(-((t-{window_start}) * {local_t_scale})) * {scale} * {self.output_var_name};",
-                example_timesteps, dt))
+                kwargs["example_timesteps"], kwargs["dt"]))
+
         # Add average variable with same type as output
         # variable and initialise to zero
         model.add_var(avg_var_name, self.output_var_type, 0)
