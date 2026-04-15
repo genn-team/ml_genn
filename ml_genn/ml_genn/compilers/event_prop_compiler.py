@@ -365,10 +365,10 @@ class CompileState:
                 
                 # If key is InputLayer, de-sugar to population
                 if isinstance(k, InputLayer):
-                    self.optimisers[k.population()].update(vars)
+                    self._add_update_optimiser_vars(k.population(), vars)
                 # Otherwise, use key directly
                 else:
-                    self.optimisers[k].update(vars)
+                    self._add_update_optimiser_vars(k, vars)
             # Otherwise, if it's a layer, variable might be related
             # to connection OR population contained within layer
             elif isinstance(k, Layer):
@@ -384,9 +384,9 @@ class CompileState:
                 # If any of either type of variable exist, add to
                 # dictionary with appropriately de-sugared key
                 if len(con_vars) > 0:
-                    self.optimisers[k.connection()].update(con_vars)
+                    self._add_update_optimiser_vars(k.connection(), con_vars)
                 if len(pop_vars) > 0:
-                    self.optimisers[k.population()].update(pop_vars)
+                    self._add_update_optimiser_vars(k.population(), pop_vars)
     
             # Otherwise, if key isn't one of the shortcut strings
             # which have already been processed, give error
@@ -478,6 +478,12 @@ class CompileState:
     def is_reset_custom_update_required(self):
         return (len(self._neuron_reset_vars) > 0
                 or len(self._synapse_reset_vars) > 0)
+
+    def _add_update_optimiser_vars(self, key, vars):
+        if key in self.optimisers:
+            self.optimisers[key].update(vars)
+        else:
+            self.optimisers[key] = vars
 
 
 class UpdateTrial(Callback):
