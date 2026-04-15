@@ -40,6 +40,13 @@ class Readout(ABC):
         """
         return []
 
+    @property
+    def per_timestep(self) -> bool:
+        """Does this readout need to be read every
+        timestep or just at the end of each example?
+        """
+        return False
+
 
 class TimeWindowReadout(Readout):
     """Base class of readouts that allow being constrained to a time window"""
