@@ -19,6 +19,7 @@ from ..callbacks import (Callback, CustomUpdateOnBatchBegin,
                          CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
+from ..connectivity_optimisers import ConnectivityOptimiser, DeepR
 from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
                       RelativeMeanSquareError, SparseCategoricalCrossentropy)
 from ..neurons import Input
@@ -48,6 +49,7 @@ from ..utils.value import is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
 from .ground_truths import default_ground_truths
+from ..connectivity_optimisers import default_connectivity_optimisers
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -299,10 +301,16 @@ def _add_required_wum_psm_parameters(model: AutoSynapseModel,
                              WeightUpdateModel.add_psm_var_ref,
                              WeightUpdateModel.has_psm_var_ref)
 
+def _get_var_connectivity_optimiser(n, o):
+    if n == "connectivity":
+        return get_object(o, ConnectivityOptimiser, "ConnectivityOptimiser",
+                          default_connectivity_optimisers)
+    else:
+        return get_object(o, Optimiser, "Optimiser", default_optimisers)
 
 class CompileState:
-    def __init__(self, network: Network, losses, optimisers, deep_r_conns,
-                 deep_r_record_rewiring, supported_matrix_type, backend_name):
+    def __init__(self, network: Network, losses, optimisers, 
+                 supported_matrix_type, backend_name):
         self.backend_name = backend_name
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
@@ -315,9 +323,6 @@ class CompileState:
         self.adjoint_limit_pops_vars = []
         self.optimisers = {}
         self.loss_recorder_populations = []
-        self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
-        self.deep_r_record_rewiring = {get_underlying_conn(c): k
-                                       for c, k in deep_r_record_rewiring.items()}
 
         # Build list of output populations
         readouts = [p for p in network.populations
@@ -338,53 +343,50 @@ class CompileState:
             # Loop through all connections
             vars = optimisers["all_connections"]
             for conn in network.connections:
-                # If connectivity is trainable, create 
-                # optimisers for specified variables
+                # If connectivity is trainable
                 connect_snippet = conn.connectivity.get_snippet(
                     conn, supported_matrix_type)
                 if connect_snippet.trainable:
-                    self.optimisers[conn] = {n: get_object(o, Optimiser, 
-                                                           "Optimiser",
-                                                           default_optimisers)
-                                             for n, o in vars.items()}
+                    # create optimisers for specified variables
+                    self.optimisers[conn] = {
+                        n: _get_var_connectivity_optimiser(n, o)
+                        for n, o in vars.items()}
 
         # Loop through optimisers to build pre-processed dictionary
         # **NOTE** these will override any optimiser configured with shortcuts
+        conn_special_vars = ("weight", "delay", "connectivity")
         for k, vars in optimisers.items():
             # If key is a Connection, Population or InputLayer,
             # what variables relate to is unambiguous
             if isinstance(k, (Connection, Population, InputLayer)):
                 # Create optimisers
-                vars = {n: get_object(o, Optimiser, "Optimiser",
-                                      default_optimisers)
+                vars = {n: _get_var_connectivity_optimiser(n, o)
                         for n, o in vars.items()}
                 
                 # If key is InputLayer, de-sugar to population
                 if isinstance(k, InputLayer):
-                    self.optimisers[k.population()] = vars
+                    self.optimisers[k.population()].update(vars)
                 # Otherwise, use key directly
                 else:
-                    self.optimisers[k] = vars
+                    self.optimisers[k].update(vars)
             # Otherwise, if it's a layer, variable might be related
             # to connection OR population contained within layer
             elif isinstance(k, Layer):
                 # Split variable dictionary into connection and
                 # population variables and create optimisers
-                con_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
+                con_vars = {n: _get_var_connectivity_optimiser(n, o)
                             for n, o in vars.items()
-                            if n == "weight" or n == "delay"}
-                pop_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
+                            if n in conn_special_vars}
+                pop_vars = {n: _get_var_connectivity_optimiser(n, o)
                             for n, o in vars.items()
-                            if n != "weight" and n != "delay"}
+                            if n not in conn_special_vars}
 
                 # If any of either type of variable exist, add to
                 # dictionary with appropriately de-sugared key
                 if len(con_vars) > 0:
-                    self.optimisers[k.connection()] = con_vars
+                    self.optimisers[k.connection()].update(con_vars)
                 if len(pop_vars) > 0:
-                    self.optimisers[k.population()] = pop_vars
+                    self.optimisers[k.population()].update(pop_vars)
     
             # Otherwise, if key isn't one of the shortcut strings
             # which have already been processed, give error
@@ -596,7 +598,6 @@ class EventPropCompiler(Compiler):
         dt:                         Simulation timestep [ms]
         ttfs_alpha:                 TODO
         softmax_temperature:        TODO
-        deep_r_l1_strength:         TODO
         batch_size:                 What batch size should be used for
                                     training? In our experience, EventProp works
                                     best with modest batch sizes (32-128)
@@ -624,10 +625,8 @@ class EventPropCompiler(Compiler):
                  max_spikes: int = 500, strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
-                 deep_r_l1_strength: float = 0.01, batch_size: int = 1, 
-                 rng_seed: int = 0, kernel_profiling: bool = False,
-                 communicator: Communicator = None,
-                 **genn_kwargs):
+                 batch_size: int = 1, rng_seed: int = 0, kernel_profiling: bool = False, 
+                 communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
                                   SynapseMatrixType.DENSE,
@@ -678,7 +677,6 @@ class EventPropCompiler(Compiler):
         self.per_timestep_loss = per_timestep_loss
         self.ttfs_alpha = ttfs_alpha
         self.softmax_temperature = softmax_temperature
-        self.deep_r_l1_strength = deep_r_l1_strength
         
 
     def pre_compile(self, network: Network, 
@@ -693,22 +691,7 @@ class EventPropCompiler(Compiler):
             raise RuntimeError("'optimisers' should be "
                                "specified as a dictionary")
 
-        # Get sequence of connections to apply Deep-R to and 
-        # check provided value is indeed a sequence
-        deep_r_conns = kwargs.get("deep_r_conns", [])
-        if not isinstance(deep_r_conns, (Set, Sequence)):
-            raise RuntimeError("'deep_r_conns' should be "
-                               "specified as a sequence")
-    
-        # Get dictionary of connections to names to record their deep-r
-        # rewiring stats to and check provided value is indeed a mapping
-        deep_r_record_rewiring = kwargs.get("deep_r_record_rewiring", {})
-        if not isinstance(deep_r_record_rewiring, Mapping):
-            raise RuntimeError("'deep_r_record_rewiring' should be "
-                               "specified as a dictionary")
-
         return CompileState(network, self.losses, optimisers,
-                            deep_r_conns, deep_r_record_rewiring,
                             self.supported_matrix_type, 
                             genn_model.backend_name)
 
@@ -1129,6 +1112,8 @@ class EventPropCompiler(Compiler):
         checkpoint_connection_vars = []
         checkpoint_population_vars = []
         need_zero_gradient_update_group = False
+        deep_r_required = False
+        deep_r_l1_required = False
         deep_r_record_rewirings_ccus = []
         i = 0
         for k, vars in compile_state.optimisers.items():
@@ -1137,23 +1122,28 @@ class EventPropCompiler(Compiler):
                 # If weight optimisation is required
                 genn_pop = connection_populations[k]
                 gradient_vars = []
+                connect_optim = vars.get("connectivity")
                 if "weight" in vars:
                     # If connection is in list of those to use Deep-R on
                     gradient_var_ref = create_wu_var_ref(genn_pop, "weightGradient")
                     weight_var_ref = create_wu_var_ref(genn_pop, "weight")
-                    if k in compile_state.deep_r_conns:
+                    if isinstance(connect_optim, DeepR):
+                        # Set flags
+                        deep_r_required = True
+                        deep_r_l1_required = (connect_optim.l1_strength > 0.0)
+
                         # Add infrastructure
                         deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
-                                                  self.deep_r_l1_strength, 
+                                                  connect_optim.l1_strength,
                                                   gradient_var_ref, 
                                                   weight_var_ref)
                     
                         # If we should record rewirings from
                         # this connection, add to list with key
-                        if k in compile_state.deep_r_record_rewiring:
+                        if connect_optim.rewiring_record_key is not None:
                             deep_r_record_rewirings_ccus.append(
                                 (deep_r_2_ccu, 
-                                 compile_state.deep_r_record_rewiring[k]))
+                                 connect_optim.rewiring_record_key))
 
                     # Create weight optimiser custom update
                     cu_weight = self._create_optimiser_custom_update(
@@ -1265,8 +1255,7 @@ class EventPropCompiler(Compiler):
         base_validate_callbacks = []
 
         # If Deep-R and L1 regularisation are required, add callback
-        deep_r_required = (len(compile_state.deep_r_conns) > 0)
-        if deep_r_required and self.deep_r_l1_strength > 0.0:
+        if deep_r_l1_required > 0.0:
             base_train_callbacks.append(
                 CustomUpdateOnBatchEnd("DeepRL1", lambda batch: batch > 0))
 

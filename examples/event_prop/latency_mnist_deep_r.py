@@ -7,6 +7,7 @@ from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
+from ml_genn.connectivity_optimisers import DeepR
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
@@ -51,12 +52,14 @@ max_example_timesteps = int(np.ceil(EXAMPLE_TIME / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 batch_size=BATCH_SIZE, dt=DT, deep_r_l1_strength=1E-8,
+                                 batch_size=BATCH_SIZE, dt=DT,
                                  kernel_profiling=KERNEL_PROFILING)
-    compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(1e-2)}},
-                                    deep_r_conns=[hidden], 
-                                    deep_r_record_rewiring=({} if not PLOT_REWIRING 
-                                                            else {hidden: "in_hid_rewiring"}))
+    compiled_net = compiler.compile(
+        network, optimisers={"all_connections": {"weight": Adam(1e-2)},
+                             hidden: {"connectivity": DeepR(l1_strength=1E-8,
+                                                            rewiring_record_key=("in_hid_rewiring" 
+                                                                                 if PLOT_REWIRING 
+                                                                                 else None))}})
 
     with compiled_net:
         visualise_examples = [0, 32, 64, 96]
