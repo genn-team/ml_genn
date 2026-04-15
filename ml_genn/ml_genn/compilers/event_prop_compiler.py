@@ -2080,7 +2080,7 @@ class EventPropCompiler(Compiler):
                                 drive = ((1.0 - Softmax) * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {window_end - window_start});
                             }}
                             else {{
-                                drive = -(-Softmax * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {window_end - window_start});
+                                drive = -Softmax * exp(-(1.0 - (t * {local_t_scale}))) / (num_batch * {window_end - window_start});
                             }}
                         """
                         genn_model.prepend_sim_code(
