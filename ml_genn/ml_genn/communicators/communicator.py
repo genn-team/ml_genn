@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 
-from abc import abstractmethod, abstractproperty
+from abc import abstractmethod
 
 class Communicator(ABC):
     """Base class for all communicators"""
@@ -31,7 +31,8 @@ class Communicator(ABC):
         """
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def rank(self):
         """Gets index of this rank
 
@@ -40,7 +41,8 @@ class Communicator(ABC):
         """
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def num_ranks(self):
         """Gets total number of ranks
 

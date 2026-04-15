@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Any, Optional
 
-from abc import abstractproperty
+from abc import abstractmethod
 
 
 class Loss(ABC):
@@ -9,7 +9,8 @@ class Loss(ABC):
     def __init__(self, record_key: Optional[Any] = None):
         self._record_key = record_key
     
-    @abstractproperty
+    @property
+    @abstractmethod
     def ground_truth(self) -> str:
         """Gets ground truth class required by this loss function
 
