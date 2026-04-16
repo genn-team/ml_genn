@@ -1992,7 +1992,6 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         ro = pop.neuron.readout
                         code = """
-                            tsRingReadOffset--;
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
 
                             if(id == YTrueBack) {{
@@ -2007,6 +2006,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             scalar drive = 0.0;
                             const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                            tsRingReadOffset--;
                             if (Trial > 0) {{
                                 {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                             }}
@@ -2025,21 +2025,27 @@ class EventPropCompiler(Compiler):
                             f"{type(pop.neuron.readout).__name__} readouts")
                 elif mse_loss:
                     assert isinstance(pop.neuron.readout, Var)
+                    ro = pop.neuron.readout
+                    code = f"""
+                        const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+                        {gen_record_code.substitute(n='error * error')}
+                        drive = error / (num_batch * {window_end-window_start});
+                    """
                     genn_model.prepend_sim_code(
                         f"""
                         scalar drive = 0.0;
                         const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                        tsRingReadOffset--;
                         if (Trial > 0) {{
-                            tsRingReadOffset--;
-                            const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            {gen_record_code.substitute(n='loss * loss')}
-                            drive = loss / (num_batch * {self.dt * self.example_timesteps});
+                            {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                         }}
                         
                         {dynamics_code}
                         """)
 
                     # Add code to fill errors into RingBuffer
+                    # **THINK** do we want to make a smaller RingBuffer and only fill within the readout
+                    # window (would also need matching indexing above)
                     genn_model.append_sim_code(
                         f"""
                         const unsigned int timestep = (int)round(t / dt);

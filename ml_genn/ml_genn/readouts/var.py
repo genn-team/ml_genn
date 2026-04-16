@@ -1,10 +1,10 @@
 import numpy as np
 
-from .readout import Readout
+from .readout import TimeWindowReadout
 from ..utils.model import NeuronModel
 
 
-class Var(Readout):
+class Var(TimeWindowReadout):
     """Read out instantaneous value of neuron model's output variable"""
     def add_readout_logic(self, model: NeuronModel, **kwargs):
         self.output_var_name = model.output_var_name
@@ -29,5 +29,6 @@ class Var(Readout):
         genn_pop.vars[self.output_var_name].pull_from_device()
 
         # Return contents, reshaped as desired
+        # **THINK** do we want to not return the readout outside the window?
         return np.reshape(genn_pop.vars[self.output_var_name].view,
                           (batch_size,) + shape)

@@ -7,6 +7,7 @@ from ml_genn.callbacks import (OptimiserParamSchedule, SpikeRecorder,
 from ml_genn.compilers import EventPropCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
+from ml_genn.readouts import Var
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.synapses import Exponential
 from ml_genn.optimisers import Adam
@@ -79,13 +80,14 @@ with network:
                                   NUM_INPUT, record_spikes=True)
     hidden = Population(LeakyIntegrateFire(v_thresh=0.61, tau_mem=TAU_MEM),
                         NUM_HIDDEN, record_spikes=True)
-    output = Population(LeakyIntegrate(tau_mem=TAU_MEM, readout="var"),
+    ro = Var(window_start=50, window_end=1000)
+    output = Population(LeakyIntegrate(tau_mem=TAU_MEM, readout=ro),
                         NUM_OUTPUT)
     
     # Connections
-    Connection(input, hidden, Dense(Normal(sd=2.5 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
-    Connection(hidden, hidden, Dense(Normal(sd=1.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
-    Connection(hidden, output, Dense(Normal(sd=2.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    Connection(input, hidden, Dense(Normal(mean=0.5 / np.sqrt(NUM_INPUT), sd=1.0 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
+    #Connection(hidden, hidden, Dense(Normal(sd=0.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
                              reg_lambda=1e-8, reg_nu_upper=10, max_spikes=1500)
@@ -121,7 +123,7 @@ with compiled_net:
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
             error.append(y - y_star[0][:,c])
-            mse = np.sum(error[-1] * error[-1]) / len(error[-1])
+            mse = np.sum(error[-1][50:1000] * error[-1][50:1000]) / len(error[-1][50:1000])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
             axes[c,i].plot(y)
             axes[c,i].plot(y_star[i][:,c], linestyle="--")
