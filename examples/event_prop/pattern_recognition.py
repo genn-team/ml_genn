@@ -7,8 +7,8 @@ from ml_genn.callbacks import (OptimiserParamSchedule, SpikeRecorder,
 from ml_genn.compilers import EventPropCompiler
 from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
-from ml_genn.readouts import Var
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.readouts import Var
 from ml_genn.synapses import Exponential
 from ml_genn.optimisers import Adam
 

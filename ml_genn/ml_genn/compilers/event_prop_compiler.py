@@ -2044,8 +2044,8 @@ class EventPropCompiler(Compiler):
                         """)
 
                     # Add code to fill errors into RingBuffer
-                    # **THINK** do we want to make a smaller RingBuffer and only fill within the readout
-                    # window (would also need matching indexing above)
+                    # **THINK** do we want to make a smaller RingBuffer and only fill within 
+                    # the readout window (would also need matching indexing above)
                     genn_model.append_sim_code(
                         f"""
                         const unsigned int timestep = (int)round(t / dt);
