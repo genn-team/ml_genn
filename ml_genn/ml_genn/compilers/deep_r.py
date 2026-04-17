@@ -15,9 +15,9 @@ deep_r_l1_model = {
     const uint32_t inhibitoryWord = Inhibitory[(NumRowWords * id_pre) + (id_post / 32)];
     
     // **NOTE** regularization is applied to GRADIENTS which are
-    // SUBTRACTED from weight by optimizer so we want to subtract
-    // from excitatory gradients to push weights towards zero and
-    // add to inhibitory gradients to push weights towards zero
+    // SUBTRACTED from weights by optimizer. Therefore, to push  
+    // weights towards zero we want to ADD to excitatory gradients
+    // and SUBTRACT from inhibitory gradients
     if(inhibitoryWord & (1 << (id_post % 32))) {
         Variable -= C;
     }
