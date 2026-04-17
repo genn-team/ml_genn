@@ -2,19 +2,24 @@ import logging
 import numpy as np
 import sympy
 
+from abc import ABC
 from string import Template
-from typing import Mapping, Union, Tuple
+from typing import Mapping, Sequence, Set, Union, Tuple
 from pygenn import (CustomUpdateVarAccess, SynapseMatrixType,
                     SynapseMatrixWeight, VarAccess, VarAccessMode)
 
 from .compiler import Compiler
 from .compiled_training_network import CompiledTrainingNetwork
+from .deep_r import RewiringRecord
 from .ground_truths import GroundTruth
 from .. import Connection, InputLayer, Layer, Population, Network
 from ..callbacks import (Callback, CustomUpdateOnBatchBegin,
-                         CustomUpdateOnBatchEnd, CustomUpdateOnTimestepEnd)
+                         CustomUpdateOnBatchEnd, CustomUpdateOnEpochBegin,
+                         CustomUpdateOnTimestepBegin, 
+                         CustomUpdateOnTimestepEnd)
 from ..communicators import Communicator
 from ..connection import Connection
+from ..connectivity_optimisers import ConnectivityOptimiser, DeepR
 from ..losses import (Loss, MeanSquareError, PerNeuronMeanSquareError,
                       RelativeMeanSquareError, SparseCategoricalCrossentropy)
 from ..neurons import Input
@@ -26,7 +31,9 @@ from ..utils.model import (CustomUpdateModel, Model, NeuronModel,
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
 
+from abc import abstractmethod
 from copy import deepcopy
+from dataclasses import dataclass, field
 from itertools import chain
 from warnings import warn
 from pygenn import (create_egp_ref, create_psm_var_ref,
@@ -34,12 +41,15 @@ from pygenn import (create_egp_ref, create_psm_var_ref,
 from pygenn._genn import WUVarReference
 from .compiler import (create_reset_custom_update, get_delay_type,
                        get_conn_max_delay)
+from .deep_r import add_deep_r
 from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
+from ..utils.network import get_underlying_conn
 from ..utils.value import is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
 from .ground_truths import default_ground_truths
+from ..connectivity_optimisers import default_connectivity_optimisers
 from ..optimisers import default_optimisers
 from ..losses import default_losses
 
@@ -291,6 +301,13 @@ def _add_required_wum_psm_parameters(model: AutoSynapseModel,
                              WeightUpdateModel.add_psm_var_ref,
                              WeightUpdateModel.has_psm_var_ref)
 
+def _get_var_connectivity_optimiser(n, o):
+    if n == "connectivity":
+        return get_object(o, ConnectivityOptimiser, "ConnectivityOptimiser",
+                          default_connectivity_optimisers)
+    else:
+        return get_object(o, Optimiser, "Optimiser", default_optimisers)
+
 class CompileState:
     def __init__(self, network: Network, losses, optimisers, 
                  supported_matrix_type, backend_name):
@@ -305,6 +322,7 @@ class CompileState:
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
         self.optimisers = {}
+        self.loss_recorder_populations = []
 
         # Build list of output populations
         readouts = [p for p in network.populations
@@ -325,53 +343,50 @@ class CompileState:
             # Loop through all connections
             vars = optimisers["all_connections"]
             for conn in network.connections:
-                # If connectivity is trainable, create 
-                # optimisers for specified variables
+                # If connectivity is trainable
                 connect_snippet = conn.connectivity.get_snippet(
                     conn, supported_matrix_type)
                 if connect_snippet.trainable:
-                    self.optimisers[conn] = {n: get_object(o, Optimiser, 
-                                                           "Optimiser",
-                                                           default_optimisers)
-                                             for n, o in vars.items()}
+                    # create optimisers for specified variables
+                    self.optimisers[conn] = {
+                        n: _get_var_connectivity_optimiser(n, o)
+                        for n, o in vars.items()}
 
         # Loop through optimisers to build pre-processed dictionary
         # **NOTE** these will override any optimiser configured with shortcuts
+        conn_special_vars = ("weight", "delay", "connectivity")
         for k, vars in optimisers.items():
             # If key is a Connection, Population or InputLayer,
             # what variables relate to is unambiguous
             if isinstance(k, (Connection, Population, InputLayer)):
                 # Create optimisers
-                vars = {n: get_object(o, Optimiser, "Optimiser",
-                                      default_optimisers)
+                vars = {n: _get_var_connectivity_optimiser(n, o)
                         for n, o in vars.items()}
                 
                 # If key is InputLayer, de-sugar to population
                 if isinstance(k, InputLayer):
-                    self.optimisers[k.population()] = vars
+                    self._add_update_optimiser_vars(k.population(), vars)
                 # Otherwise, use key directly
                 else:
-                    self.optimisers[k] = vars
+                    self._add_update_optimiser_vars(k, vars)
             # Otherwise, if it's a layer, variable might be related
             # to connection OR population contained within layer
             elif isinstance(k, Layer):
                 # Split variable dictionary into connection and
                 # population variables and create optimisers
-                con_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
+                con_vars = {n: _get_var_connectivity_optimiser(n, o)
                             for n, o in vars.items()
-                            if n == "weight" or n == "delay"}
-                pop_vars = {n: get_object(o, Optimiser, "Optimiser",
-                                          default_optimisers)
+                            if n in conn_special_vars}
+                pop_vars = {n: _get_var_connectivity_optimiser(n, o)
                             for n, o in vars.items()
-                            if n != "weight" and n != "delay"}
+                            if n not in conn_special_vars}
 
                 # If any of either type of variable exist, add to
                 # dictionary with appropriately de-sugared key
                 if len(con_vars) > 0:
-                    self.optimisers[k.connection()] = con_vars
+                    self._add_update_optimiser_vars(k.connection(), con_vars)
                 if len(pop_vars) > 0:
-                    self.optimisers[k.population()] = pop_vars
+                    self._add_update_optimiser_vars(k.population(), pop_vars)
     
             # Otherwise, if key isn't one of the shortcut strings
             # which have already been processed, give error
@@ -464,6 +479,12 @@ class CompileState:
         return (len(self._neuron_reset_vars) > 0
                 or len(self._synapse_reset_vars) > 0)
 
+    def _add_update_optimiser_vars(self, key, vars):
+        if key in self.optimisers:
+            self.optimisers[key].update(vars)
+        else:
+            self.optimisers[key] = vars
+
 
 class UpdateTrial(Callback):
     def __init__(self, genn_pop):
@@ -475,53 +496,47 @@ class UpdateTrial(Callback):
         # Set dynamic parameter to batch ID
         self.genn_pop.set_dynamic_param_value("Trial", batch)
 
+@dataclass
+class LossRecorderState:
+    compiled_network: CompiledTrainingNetwork
+    losses: list = field(default_factory=list)
 
-class CustomUpdateOnLastTimestep(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the start of the last timestep in each example"""
-    def __init__(self, name: str, example_timesteps: int):
-        self.name = name
-        self.example_timesteps = example_timesteps
-    
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-
-    def on_timestep_begin(self, state, timestep: int):
-        if timestep == (self.example_timesteps - 1):
-            logger.debug(f"Running custom update {self.name} "
-                         f"at start of timestep {timestep}")
-            state.genn_model.custom_update(self.name)
-
-
-class CustomUpdateOnBatchEndNotFirst(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the end of every batch after the first."""
-    def __init__(self, name: str):
-        self.name = name
+class LossRecorderCallbackBase(Callback):
+    def __init__(self, pop: Population, key: str):
+        self.pop = pop
+        self.key = key
 
     def create_state(self, compiled_network, **kwargs):
-        return compiled_network
-        
+        return LossRecorderState(compiled_network)
+
     def on_batch_end(self, state, batch, metric_state):
+        # If this isn't the first batch (where there is no backward pass)
         if batch > 0:
-            logger.debug(f"Running custom update {self.name} "
-                         f"at end of batch {batch}")
-            state.genn_model.custom_update(self.name)
+            # Pull variable loss is calculated from from device
+            genn_pop = state.compiled_network.neuron_populations[self.pop]
+            genn_pop.vars["LossSum"].pull_from_device()
 
-class CustomUpdateOnFirstBatchEnd(Callback):
-    """Callback that triggers a GeNN custom update 
-    at the end of first batch."""
-    def __init__(self, name: str):
-        self.name = name
+            # Calculate loss and add to list
+            state.losses.append(
+                self.calculate_loss(state,  genn_pop.vars["LossSum"].view))
 
-    def create_state(self, compiled_network, **kwargs):
-        return compiled_network
+    def get_data(self, state):
+        return self.key, state.losses
+
+    @abstractmethod
+    def calculate_loss(self, state, loss_sum):
+        pass
+
+class LossRecorderCallbackSCE(LossRecorderCallbackBase):
+    def calculate_loss(self, state, loss_sum):
+        batch_size = state.compiled_network.genn_model.batch_size
+        return np.sum(loss_sum) / batch_size
+
+class LossRecorderCallbackMSE(LossRecorderCallbackBase):
+    def calculate_loss(self, state, loss_sum):
+        batch_size = state.compiled_network.genn_model.batch_size
+        return np.sum(np.sqrt(loss_sum)) / batch_size
         
-    def on_batch_end(self, state, batch, metric_state):
-        if batch == 0:
-            logger.debug(f"Running custom update {self.name} "
-                         f"at end of batch {batch}")
-            state.genn_model.custom_update(self.name)
 
 class EventPropCompiler(Compiler):
     """Compiler for training models using EventProp [Wunderlich2021]_.
@@ -575,6 +590,7 @@ class EventPropCompiler(Compiler):
                                     spike number, strength for overshoot)
         reg_nu_upper:               Target number of hidden neuron
                                     spikes used for regularisation
+        grad_limit:                 TODO
         max_spikes:                 What is the maximum number of spikes each
                                     neuron (input and hidden) can emit each
                                     trial? This is used to allocate memory 
@@ -586,8 +602,8 @@ class EventPropCompiler(Compiler):
         per_timestep_loss:          Should we use the per-timestep or
                                     per-trial loss functions described above?
         dt:                         Simulation timestep [ms]
-        ttfs_alpha                  TODO
-        softmax_temperature         TODO
+        ttfs_alpha:                 TODO
+        softmax_temperature:        TODO
         batch_size:                 What batch size should be used for
                                     training? In our experience, EventProp works
                                     best with modest batch sizes (32-128)
@@ -610,16 +626,13 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses,
-                 reg_lambda: Union[float, Tuple[float, float]] = 0.0, reg_nu_upper: float = 0.0,
-                 grad_limit: float = 100.0,
-                 max_spikes: int = 500, 
-                 strict_buffer_checking: bool = False, 
+                 reg_lambda: Union[float, Tuple[float, float]] = 0.0,
+                 reg_nu_upper: float = 0.0, grad_limit: float = 100.0,
+                 max_spikes: int = 500, strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
-                 batch_size: int = 1, rng_seed: int = 0,
-                 kernel_profiling: bool = False,
-                 communicator: Communicator = None,
-                 **genn_kwargs):
+                 batch_size: int = 1, rng_seed: int = 0, kernel_profiling: bool = False, 
+                 communicator: Communicator = None, **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.TOEPLITZ,
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
                                   SynapseMatrixType.DENSE,
@@ -678,12 +691,11 @@ class EventPropCompiler(Compiler):
         # to training all weights using the adam optimiser with default params
         optimisers = kwargs.get("optimisers", 
                                 {"all_connections": {"weight": "adam"}})
-
+    
         # Check dictionary has been provided
         if not isinstance(optimisers, Mapping):
-            raise RuntimeError("optimisers should be "
+            raise RuntimeError("'optimisers' should be "
                                "specified as a dictionary")
-
 
         return CompileState(network, self.losses, optimisers,
                             self.supported_matrix_type, 
@@ -1106,6 +1118,9 @@ class EventPropCompiler(Compiler):
         checkpoint_connection_vars = []
         checkpoint_population_vars = []
         need_zero_gradient_update_group = False
+        deep_r_required = False
+        deep_r_l1_required = False
+        deep_r_record_rewirings_ccus = []
         i = 0
         for k, vars in compile_state.optimisers.items():
             # If key is a connection
@@ -1113,11 +1128,32 @@ class EventPropCompiler(Compiler):
                 # If weight optimisation is required
                 genn_pop = connection_populations[k]
                 gradient_vars = []
+                connect_optim = vars.get("connectivity")
                 if "weight" in vars:
+                    # If connection is in list of those to use Deep-R on
+                    gradient_var_ref = create_wu_var_ref(genn_pop, "weightGradient")
+                    weight_var_ref = create_wu_var_ref(genn_pop, "weight")
+                    if isinstance(connect_optim, DeepR):
+                        # Set flags
+                        deep_r_required = True
+                        deep_r_l1_required = (connect_optim.l1_strength > 0.0)
+
+                        # Add infrastructure
+                        deep_r_2_ccu = add_deep_r(genn_pop, genn_model, self,
+                                                  connect_optim.l1_strength,
+                                                  gradient_var_ref, 
+                                                  weight_var_ref)
+                    
+                        # If we should record rewirings from
+                        # this connection, add to list with key
+                        if connect_optim.rewiring_record_key is not None:
+                            deep_r_record_rewirings_ccus.append(
+                                (deep_r_2_ccu, 
+                                 connect_optim.rewiring_record_key))
+
                     # Create weight optimiser custom update
                     cu_weight = self._create_optimiser_custom_update(
-                        f"Weight{i}", create_wu_var_ref(genn_pop, "weight"),
-                        create_wu_var_ref(genn_pop, "weightGradient"), 
+                        f"Weight{i}", weight_var_ref, gradient_var_ref,
                         vars["weight"], genn_model)
             
                     # Add custom update to list of optimisers
@@ -1223,15 +1259,24 @@ class EventPropCompiler(Compiler):
         # Build list of base callbacks
         base_train_callbacks = []
         base_validate_callbacks = []
+
+        # If Deep-R and L1 regularisation are required, add callback
+        if deep_r_l1_required > 0.0:
+            base_train_callbacks.append(
+                CustomUpdateOnBatchEnd("DeepRL1", lambda batch: batch > 0))
+
         if len(optimisers) > 0:
             if self.full_batch_size > 1:
                 base_train_callbacks.append(
-                    CustomUpdateOnBatchEndNotFirst("GradientBatchReduce"))
+                    CustomUpdateOnBatchEnd("GradientBatchReduce",
+                                           lambda batch: batch > 0))
             base_train_callbacks.append(
-                CustomUpdateOnBatchEndNotFirst("GradientLearn"))
+                CustomUpdateOnBatchEnd("GradientLearn",
+                                       lambda batch: batch > 0))
             if need_zero_gradient_update_group:
                 base_train_callbacks.append(
-                    CustomUpdateOnFirstBatchEnd("ZeroGradient"))
+                    CustomUpdateOnBatchEnd("ZeroGradient",
+                                           lambda batch: batch == 0))
 
         # Add callbacks to set Trial extra global parameter 
         # on populations which require it
@@ -1239,10 +1284,13 @@ class EventPropCompiler(Compiler):
             base_train_callbacks.append(UpdateTrial(neuron_populations[p]))
 
         # Add callbacks to zero out post on all connections
+        last_timestep = self.example_timesteps - 1
         base_train_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+            CustomUpdateOnTimestepBegin("ZeroOutPost",
+                                        lambda t: t == last_timestep))
         base_validate_callbacks.append(
-            CustomUpdateOnLastTimestep("ZeroOutPost", self.example_timesteps))
+            CustomUpdateOnTimestepBegin("ZeroOutPost",
+                                        lambda t: t == last_timestep))
 
         # If softmax calculation is required at end of batch, add callbacks
         if len(compile_state.batch_softmax_populations) > 0:
@@ -1258,8 +1306,10 @@ class EventPropCompiler(Compiler):
         
         # Add custom uopdate for adjoint limit calculation if required
         if len(compile_state.adjoint_limit_pops_vars) > 0:
-            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("AbsSumReduceBatch"))
-            base_train_callbacks.append(CustomUpdateOnBatchEndNotFirst("ReduceAssign"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("AbsSumReduceBatch",
+                                                               lambda batch: batch > 0))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("ReduceAssign",
+                                                               lambda batch: batch > 0))
 
         # If spike count reduction is required at end of batch, add callback
         if len(compile_state.spike_count_populations) > 0 and self.full_batch_size > 1:
@@ -1269,10 +1319,28 @@ class EventPropCompiler(Compiler):
         if len(compile_state.ttfs_reduce_populations) > 0:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("TTFSReduce"))
 
+        # Add callbacks for loss recording
+        for pop, key, sce_loss in compile_state.loss_recorder_populations:
+            L = (LossRecorderCallbackSCE if sce_loss
+                  else LossRecorderCallbackMSE)
+            base_train_callbacks.append(L(pop, key))
+            base_validate_callbacks.append(L(pop, key))
+
         # Add reset custom updates
         if compile_state.is_reset_custom_update_required:
             base_train_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
             base_validate_callbacks.append(CustomUpdateOnBatchBegin("Reset"))
+
+        # If Deep-R is required, trigger Deep-R callbacks at end of batch
+        if deep_r_required:
+            base_train_callbacks.append(CustomUpdateOnEpochBegin("DeepRInit",
+                                                                 lambda e: e == 0))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR1"))
+            base_train_callbacks.append(CustomUpdateOnBatchEnd("DeepR2"))
+
+        # Add callbacks to record number of rewirings
+        for c, k in deep_r_record_rewirings_ccus:
+            base_train_callbacks.append(RewiringRecord(c, k))
 
         return CompiledTrainingNetwork(
             genn_model, neuron_populations, connection_populations,
@@ -1866,12 +1934,36 @@ class EventPropCompiler(Compiler):
             window_start, window_end = pop.neuron.readout.window_start_end(
                 self.example_timesteps, self.dt)
 
-        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
+        # Classify loss
         pop_loss = compile_state.losses[pop]
         sce_loss = isinstance(pop_loss, SparseCategoricalCrossentropy)
         mse_loss = isinstance(pop_loss, MeanSquareError)
         per_neuron_mse_loss = isinstance(pop_loss, PerNeuronMeanSquareError)
         rmse_loss = isinstance(pop_loss, RelativeMeanSquareError)
+        
+        # If we should record loss
+        if pop_loss.record_key is not None:
+            # Add variable to record into
+            genn_model.add_var("LossSum", "scalar", 0.0)
+
+            # Define templates for loss recording code
+            gen_record_code = Template("LossSum += ($n);")
+            gen_first_timestep_record_code = Template(
+                """
+                if(t == 0.0) {
+                    LossSum = ($n);
+                }
+                """)
+            
+            # Add population to list 
+            compile_state.loss_recorder_populations.append(
+                (pop, pop_loss.record_key, sce_loss))
+        # Otherwise provide empty templates
+        else:
+            gen_record_code = Template("")
+            gen_first_timestep_record_code = Template("")
+            
+        # If model is non-spiking - MSE and SCE losses of "voltage V" apply
         if "threshold" not in model.model or model.model["threshold"] is None:
             # Check adjoint system is also jump-less
             assert len(saved_vars_spike) == 0
@@ -1885,7 +1977,7 @@ class EventPropCompiler(Compiler):
                 if not dyn_ts_reset_needed:
                     genn_model.add_var("tsRingWriteOffset", "int", 0, reset=False)
                     genn_model.add_var("tsRingReadOffset", "int", 0, reset=False)
-
+ 
                 # Add EGP for softmax V (SCE) or regression difference (MSE) ring variable
                 ring_size = self.batch_size * np.prod(pop.shape) * 2 * self.example_timesteps
                 genn_model.add_egp("RingOutputLossTerm", "scalar*", 
@@ -1901,9 +1993,15 @@ class EventPropCompiler(Compiler):
                         ro = pop.neuron.readout
                         code = """
                             tsRingReadOffset--;
-                            const scalar softmax = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            const scalar g = (id == YTrueBack) ? (1.0 - softmax) : -softmax;
-                            drive = g / (num_batch * {window_end-window_start});
+                            const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+
+                            if(id == YTrueBack) {{
+                                {gen_record_code.substitute(n='-log(loss)')}
+                                drive = (1.0 - loss) / (num_batch * {window_end-window_start});
+                            }}
+                            else {{
+                                drive = -loss / (num_batch * {window_end-window_start});
+                            }}
                         """
                         genn_model.prepend_sim_code(
                             f"""
@@ -1933,8 +2031,9 @@ class EventPropCompiler(Compiler):
                         const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
                         if (Trial > 0) {{
                             tsRingReadOffset--;
-                            const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            drive = error / (num_batch * {self.dt * self.example_timesteps});
+                            const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+                            {gen_record_code.substitute(n='loss * loss')}
+                            drive = loss / (num_batch * {self.dt * self.example_timesteps});
                         }}
                         
                         {dynamics_code}
@@ -1944,8 +2043,7 @@ class EventPropCompiler(Compiler):
                     genn_model.append_sim_code(
                         f"""
                         const unsigned int timestep = (int)round(t / dt);
-                        const unsigned int index = (batch * {self.example_timesteps} * num_neurons)
-                        + (timestep * num_neurons) + id;
+                        const unsigned int index = (batch * {self.example_timesteps} * num_neurons) + (timestep * num_neurons) + id;
                         RingOutputLossTerm[tsRingOffset + tsRingWriteOffset] = YTrue[index] - {out_var_name};
                         tsRingWriteOffset++;
                         """) 
@@ -1961,8 +2059,13 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         ro = pop.neuron.readout
                         code = f"""
-                            const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = g / (num_batch * {window_end-window_start});
+                           if(id == YTrueBack) {{
+                               {gen_first_timestep_record_code.substitute(n='-log(Softmax)')}
+                               drive = (1.0 - Softmax) / (num_batch * {window_end-window_start});
+                            }}
+                            else {{
+                                drive = -Softmax / (num_batch * {window_end-window_start});
+                            }}
                         """
                         genn_model.prepend_sim_code(
                             f"""
@@ -1987,8 +2090,13 @@ class EventPropCompiler(Compiler):
                         local_t_scale = 1.0 / (window_end - window_start)
                         T = self.dt * self.example_timesteps
                         code = f"""
-                            const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                            drive = (g * exp(-({T}-t-{window_start}) * {local_t_scale})) / (num_batch * {window_end - window_start});
+                            if(id == YTrueBack) {{
+                                {gen_first_timestep_record_code.substitute(n='-log(Softmax)')}
+                                drive = ((1.0 - Softmax) * exp(-(1.0 - (t * {local_t_scale})))) / (num_batch * {window_end - window_start});
+                            }}
+                            else {{
+                                drive = -Softmax * exp(-(1.0 - (t * {local_t_scale}))) / (num_batch * {window_end - window_start});
+                            }}
                         """
                         genn_model.prepend_sim_code(
                             f"""
@@ -2022,8 +2130,13 @@ class EventPropCompiler(Compiler):
                             const scalar backT = {self.example_timesteps * self.dt} - t - dt;
                             scalar drive = 0.0;
                             if (Trial > 0 && fabs(backT - {out_var_name}MaxTimeBack) < 1e-3*dt) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {gen_record_code.substitute(n='-log(Softmax)')}
+                                    drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -Softmax / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -2145,6 +2258,7 @@ class EventPropCompiler(Compiler):
                             if (id == YTrueBack) {{
                                 const scalar fst = {1.01 * window_end} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
+                                {gen_record_code.substitute(n='-log(Softmax)')}
                             }}
                             else {{
                                 drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
@@ -2166,6 +2280,7 @@ class EventPropCompiler(Compiler):
                         scalar drive_p = 0.0;
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             drive_p = (-TFirstSpikeBack-YTrueBack);
+                            {gen_record_code.substitute(n='drive_p * drive_p')}
                         }}
                         {transition_code}
                         """
@@ -2200,6 +2315,7 @@ class EventPropCompiler(Compiler):
                         if (fabs(backT + TFirstSpikeBack) < 1e-3*dt) {{
                             if(id == YTrueBack) {{
                                 drive_p = (TFirstSpikeSumBack - (num_neurons * TFirstSpikeTrueBack) + ((num_neurons - 1) * Delta));
+                                {gen_record_code.substitute(n='drive_p * drive_p')}
                             }}
                             else {{
                                 drive_p = ((-TFirstSpikeBack + TFirstSpikeTrueBack) - Delta);

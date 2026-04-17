@@ -14,8 +14,9 @@ from ..utils.module import get_module_classes
 
 default_callbacks = get_module_classes(globals(), Callback)
 
-__all__ = ["Callback", "Checkpoint", "ConnVarRecorder", 
+__all__ = ["BatchProgressBar", "Callback", "Checkpoint", "ConnVarRecorder",
            "CustomUpdateOnBatchBegin", "CustomUpdateOnBatchEnd", 
-           "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd", 
-           "OptimiserParamSchedule", "BatchProgressBar", "SpikeRecorder",
-           "VarRecorder", "default_callbacks"]
+           "CustomUpdateOnEpochBegin", "CustomUpdateOnEpochEnd",
+           "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd",
+           "OptimiserParamSchedule", "SpikeRecorder", "VarRecorder",
+           "default_callbacks"]
