@@ -11,7 +11,7 @@ class SparseCategoricalCrossentropy(Loss):
 
     .. math::
 
-        {\\cal L} = -\\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\log \\left( \\frac{\\exp\\left(x_{l(m)}^m(t)\\right)}{\\sum_{k=1}^{N_{\\text{class}}} \\exp\\left(x_{k}^m(t) \\right)} \\right)
+        {\\cal L} = -\\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\int_0^T \\log \\left( \\frac{\\exp\\left(x_{l(m)}^m(t)\\right)}{\\sum_{k=1}^{N_{\\text{class}}} \\exp\\left(x_{k}^m(t) \\right)} \\right) dt
 
     where :math:`x` is the readout variable. This is a *per-timestep loss function*.
 
@@ -28,6 +28,15 @@ class SparseCategoricalCrossentropy(Loss):
     for :class:`ml_genn.readouts.AvgVar`: f(x)= x/T
 
     for :class:`ml_genn.readouts.AvgVarExpWeight`: f(x)= exp(-t/T)*x/T
+
+    If combined with :class:`ml_genn.readouts.EndVar`, and per_timestep_loss=False:
+
+    .. math::
+
+        {\\mathcal L_{\\text{end}}} = - \\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\log \\left( \\frac{\\exp\\left(x_{l(m)}^m(T)\\right)}{\\sum_{k=1}^{N_{\\text{out}}} \\exp\\left(x_{k}^m(T)\\right)} \\right)
+
+    where :math:`x_k^m(T)` is the readout variable at time :math:`T`.
+
 
     If combined with a :class:`ml_genn.readouts.FirstSpikeTime` readout:
 
