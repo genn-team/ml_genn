@@ -2269,7 +2269,7 @@ class EventPropCompiler(Compiler):
                             if (id == YTrueBack) {{
                                 const scalar fst = {1.01 * window_end} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
-                                {gen_record_code.substitute(n='-log(Softmax)')}
+                                {gen_record_code.substitute(n=f'-log(Softmax) - ({self.ttfs_alpha} / fst)')}
                             }}
                             else {{
                                 drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
