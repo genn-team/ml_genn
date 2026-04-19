@@ -2164,8 +2164,13 @@ class EventPropCompiler(Compiler):
                             f"""
                             scalar drive = 0.0;
                             if (Trial > 0 && t < 1e-3*dt) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {gen_record_code.substitute(n='-log(Softmax)')}
+                                    drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -Softmax / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
