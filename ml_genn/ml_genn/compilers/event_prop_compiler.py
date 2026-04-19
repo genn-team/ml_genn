@@ -535,7 +535,7 @@ class LossRecorderCallbackSCE(LossRecorderCallbackBase):
 class LossRecorderCallbackMSE(LossRecorderCallbackBase):
     def calculate_loss(self, state, loss_sum):
         batch_size = state.compiled_network.genn_model.batch_size
-        return np.sum(np.sqrt(loss_sum)) / batch_size
+        return np.sum(loss_sum) / (2.0 * batch_size)
         
 
 class EventPropCompiler(Compiler):
