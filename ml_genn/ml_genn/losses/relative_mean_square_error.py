@@ -15,7 +15,7 @@ class RelativeMeanSquareError(Loss):
 
         {\\cal L} = \\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\frac{1}{2} \\sum_{i \\neq l(m)} \\left( t_{m,i} - t_{m,l(m)} - \\Delta\\right)^2 
 
-    where :math:`\Delta` is a free parameter that indicates the desired temporal distance
+    where :math:`\\Delta` is a free parameter that indicates the desired temporal distance
     between the spike time of the correct output neuron :math:`t_{m,l(m)}` and the 
     spikes of the other output neurons. 
     This loss is typically used in a classification context. 

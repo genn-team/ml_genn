@@ -21,7 +21,7 @@ class SparseCategoricalCrossentropy(Loss):
 
         {\\mathcal L_{\\text{sum}}} = - \\frac{1}{N_{\\text{batch}}} \\sum_{m=1}^{N_{\\text{batch}}} \\log \\left( \\frac{\\exp\\left(\\int_0^T f(x_{l(m)}^m(t)) dt\\right)}{\\sum_{k=1}^{N_{\\text{out}}} \\exp\\left(\\int_0^T f(x_{k}^m(t)) dt\\right)} \\right)
 
-    where :math:`x` is the readout variable and :math:`f(\cdot)` is 
+    where :math:`x` is the readout variable and :math:`f(\\cdot)` is 
    
     for :class:`ml_genn.readouts.SumVar`: f(x)= x
 
