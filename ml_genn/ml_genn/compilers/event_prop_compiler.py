@@ -535,7 +535,7 @@ class LossRecorderCallbackSCE(LossRecorderCallbackBase):
 class LossRecorderCallbackMSE(LossRecorderCallbackBase):
     def calculate_loss(self, state, loss_sum):
         batch_size = state.compiled_network.genn_model.batch_size
-        return np.sum(np.sqrt(loss_sum)) / batch_size
+        return np.sum(loss_sum) / (2.0 * batch_size)
         
 
 class EventPropCompiler(Compiler):
@@ -1992,7 +1992,6 @@ class EventPropCompiler(Compiler):
                     if isinstance(pop.neuron.readout, (AvgVar, SumVar)):
                         ro = pop.neuron.readout
                         code = """
-                            tsRingReadOffset--;
                             const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
 
                             if(id == YTrueBack) {{
@@ -2007,6 +2006,7 @@ class EventPropCompiler(Compiler):
                             f"""
                             scalar drive = 0.0;
                             const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                            tsRingReadOffset--;
                             if (Trial > 0) {{
                                 {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                             }}
@@ -2025,21 +2025,27 @@ class EventPropCompiler(Compiler):
                             f"{type(pop.neuron.readout).__name__} readouts")
                 elif mse_loss:
                     assert isinstance(pop.neuron.readout, Var)
+                    ro = pop.neuron.readout
+                    code = f"""
+                        const scalar error = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
+                        {gen_record_code.substitute(n='error * error')}
+                        drive = error / (num_batch * {window_end-window_start});
+                    """
                     genn_model.prepend_sim_code(
                         f"""
                         scalar drive = 0.0;
                         const int tsRingOffset = (batch * num_neurons * {2 * self.example_timesteps}) + (id * {2 * self.example_timesteps});
+                        tsRingReadOffset--;
                         if (Trial > 0) {{
-                            tsRingReadOffset--;
-                            const scalar loss = RingOutputLossTerm[tsRingOffset + tsRingReadOffset];
-                            {gen_record_code.substitute(n='loss * loss')}
-                            drive = loss / (num_batch * {self.dt * self.example_timesteps});
+                            {ro.back_windowed_readout_code(code, self.example_timesteps, self.dt)}
                         }}
                         
                         {dynamics_code}
                         """)
 
                     # Add code to fill errors into RingBuffer
+                    # **THINK** do we want to make a smaller RingBuffer and only fill within 
+                    # the readout window (would also need matching indexing above)
                     genn_model.append_sim_code(
                         f"""
                         const unsigned int timestep = (int)round(t / dt);
@@ -2158,8 +2164,13 @@ class EventPropCompiler(Compiler):
                             f"""
                             scalar drive = 0.0;
                             if (Trial > 0 && t < 1e-3*dt) {{
-                                const scalar g = (id == YTrueBack) ? (1.0 - Softmax) : -Softmax;
-                                drive = g / (num_batch * {self.dt * self.example_timesteps});
+                                if(id == YTrueBack) {{
+                                    {gen_record_code.substitute(n='-log(Softmax)')}
+                                    drive = (1.0 - Softmax) / (num_batch * {self.dt * self.example_timesteps});
+                                }}
+                                else {{
+                                    drive = -Softmax / (num_batch * {self.dt * self.example_timesteps});
+                                }}
                             }}
                             {read_pointer_code}
                             {dynamics_code}
@@ -2258,7 +2269,7 @@ class EventPropCompiler(Compiler):
                             if (id == YTrueBack) {{
                                 const scalar fst = {1.01 * window_end} + TFirstSpikeBack;
                                 drive_p = (((1.0 - Softmax) / {self.softmax_temperature}) + ({self.ttfs_alpha} / (fst * fst))) / {self.batch_size};
-                                {gen_record_code.substitute(n='-log(Softmax)')}
+                                {gen_record_code.substitute(n=f'-log(Softmax) - ({self.ttfs_alpha} / fst)')}
                             }}
                             else {{
                                 drive_p = - Softmax / ({self.softmax_temperature * self.batch_size});
