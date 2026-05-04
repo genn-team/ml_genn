@@ -1770,7 +1770,7 @@ class EventPropCompiler(Compiler):
                 # **NOTE** this is multiplied by batch_size so it
                 # can be compared directly to SpikeCountBackBatch
                 genn_model.add_param("RegNuUpperBatch", "int",
-                                     regulariser.target * self.full_batch_size)
+                                     reg.target * self.full_batch_size)
                 # If batch size is 1, add reset variables to copy SpikeCount
                 # into SpikeCountBackBatch and zero SpikeCount
                 if self.full_batch_size == 1:
