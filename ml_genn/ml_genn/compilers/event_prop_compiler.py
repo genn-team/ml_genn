@@ -53,6 +53,7 @@ from .ground_truths import default_ground_truths
 from ..connectivity_optimisers import default_connectivity_optimisers
 from ..optimisers import default_optimisers
 from ..losses import default_losses
+from ..regularisers import default_regularisers
 
 logger = logging.getLogger(__name__)
 
@@ -1702,7 +1703,7 @@ class EventPropCompiler(Compiler):
                                            reg is not None)
 
             # Check regulariser is compatible with eventprop
-            if not isinstance(reg, SpikeCount):
+            if reg is not None and not isinstance(reg, SpikeCount):
                  raise NotImplementedError(
                     f"EventProp compiler doesn't support "
                     f"{type(reg).__name__} regularisers")
