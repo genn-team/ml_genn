@@ -688,7 +688,6 @@ class EventPropCompiler(Compiler):
 
         self.example_timesteps = example_timesteps
         self.losses = losses
-        self.reg_nu_upper = reg_nu_upper
         self.grad_limit = grad_limit
         self.max_spikes = max_spikes
         self.strict_buffer_checking = strict_buffer_checking
@@ -1779,7 +1778,7 @@ class EventPropCompiler(Compiler):
 
                 # Calculate regularisation drive
                 # We divide by batch size by formulation of the loss function and then again to take into consideration that
-                # SpikeCountBackBatch is collected across a batch; but then we multiply by reg_nu_upper times batch size
+                # SpikeCountBackBatch is collected across a batch; but then we multiply by target times batch size
                 # to normalise the effect of dividing by SpikeCountBackBatch.
                 # The division by SpikeCountBackBatch is motivated by the observation that the drive_reg is applied
                 # number of spike times, which biases regularisation towards suppressing too many spikes over enhancing to few
