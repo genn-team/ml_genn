@@ -26,6 +26,7 @@ from ..neurons import Input
 from ..optimisers import Optimiser
 from ..readouts import (AvgVar, AvgVarExpWeight, FirstSpikeTime,
                         EndVar, MaxVar, SumVar, Var, TimeWindowReadout)
+from ..regularisers import Regulariser, SpikeCount
 from ..utils.auto_model import AutoModel, AutoNeuronModel, AutoSynapseModel
 from ..utils.model import (CustomUpdateModel, Model, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
@@ -44,7 +45,7 @@ from .compiler import (create_reset_custom_update, get_delay_type,
 from .deep_r import add_deep_r
 from ..utils.auto_tools import solve_ode
 from ..utils.module import get_object, get_object_mapping
-from ..utils.network import get_underlying_conn
+from ..utils.network import get_underlying_conn, get_underlying_pop
 from ..utils.value import is_value_constant
 
 from .compiler import softmax_1_model, softmax_2_model
@@ -310,7 +311,7 @@ def _get_var_connectivity_optimiser(n, o):
 
 class CompileState:
     def __init__(self, network: Network, losses, optimisers, 
-                 supported_matrix_type, backend_name):
+                 regularisers, supported_matrix_type, backend_name):
         self.backend_name = backend_name
         self._neuron_reset_vars = []
         self._synapse_reset_vars = []
@@ -322,6 +323,7 @@ class CompileState:
         self.update_trial_pops = []
         self.adjoint_limit_pops_vars = []
         self.optimisers = {}
+        self.regularisers = {}
         self.loss_recorder_populations = []
 
         # Build list of output populations
@@ -395,6 +397,35 @@ class CompileState:
                                    f"dictionary. Valid keys are Connection, "
                                    f"Population, InputLayer or Layer objects "
                                    f"Or strings such as 'all_connections'")
+
+        # If default regularisation settings for all populations
+        # has been provided, loop through all populations and 
+        # create regularisation objects
+        if "all_populations" in regularisers:
+            reg = regularisers["all_populations"]
+            for pop in network.populations:
+                self.regularisers[pop] = get_object(reg, Regulariser,
+                                                    "Regulariser",
+                                                    default_regularisers)
+        
+        # Loop through keys and configurations
+        for key, reg in regularisers.items():
+            # If key is a population or layer
+            if isinstance(key, (Population, Layer)):
+                # Lower key to Population
+                pop = get_underlying_pop(key)
+                self.regularisers[pop] = get_object(reg, Regulariser,
+                                                    "Regulariser",
+                                                    default_regularisers)
+
+            # Otherwise, if key isn't one of the shortcut strings
+            # which have already been processed, give error
+            elif k != "all_populations":
+                raise RuntimeError(f"Invalid key '{k}' used in "
+                                   f"'regularisers' dictionary. "
+                                   f"Valid keys are Population or Layer "
+                                   f"objects or strings such as 'all_populations'")
+
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
                               reset_event_ring, reset_v_ring):
@@ -585,11 +616,6 @@ class EventPropCompiler(Compiler):
         losses:                     Either a dictionary mapping loss functions
                                     to output populations or a single loss
                                     function to apply to all outputs
-        reg_lambda:                 Regularisation strength, single value or tuple,
-                                    if tuple, (strength for undershoot of hidden
-                                    spike number, strength for overshoot)
-        reg_nu_upper:               Target number of hidden neuron
-                                    spikes used for regularisation
         grad_limit:                 TODO
         max_spikes:                 What is the maximum number of spikes each
                                     neuron (input and hidden) can emit each
@@ -626,9 +652,8 @@ class EventPropCompiler(Compiler):
     """
 
     def __init__(self, example_timesteps: int, losses,
-                 reg_lambda: Union[float, Tuple[float, float]] = 0.0,
-                 reg_nu_upper: float = 0.0, grad_limit: float = 100.0,
-                 max_spikes: int = 500, strict_buffer_checking: bool = False,
+                 grad_limit: float = 100.0, max_spikes: int = 500, 
+                 strict_buffer_checking: bool = False,
                  per_timestep_loss: bool = False, dt: float = 1.0,
                  ttfs_alpha: float = 0.01, softmax_temperature: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0, kernel_profiling: bool = False, 
@@ -648,28 +673,15 @@ class EventPropCompiler(Compiler):
                                "{\"weight\": \"adam\"} to optimise all "
                                "weights with the adam optimiser")
 
-        # If regularisation strength is specified as a single float, use for both upper and lower
-        if isinstance(reg_lambda, float):
-            self.reg_lambda_lower = reg_lambda
-            self.reg_lambda_upper = reg_lambda
-        # Otherwise, unpack
-        else:
-            self.reg_lambda_lower, self.reg_lambda_upper = reg_lambda
-
         # Handle legacy regularisation strength definitions
-        reg_warning = False
-        if "reg_lambda_lower" in genn_kwargs:
-            self.reg_lambda_lower = genn_kwargs.pop("reg_lambda_lower")
-            reg_warning = True
-        if "reg_lambda_upper" in genn_kwargs:
-            self.reg_lambda_upper = genn_kwargs.pop("reg_lambda_upper")
-            reg_warning = True
-        if reg_warning:
-             warn("Seperate 'reg_lambda_upper' and 'reg_lambda_lower' "
-                  "arguments for EventPropCompiler are no longer "
-                  "supported, please use 'reg_lambda' and use a "
-                  "tuple if separate values for undershoot "
-                  "and overshoot are required.", FutureWarning)
+        if "reg_lambda_lower" in genn_kwargs or "reg_lambda_upper" in genn_kwargs:
+             raise RuntimeError("The 'reg_lambda_lower' and 'reg_lambda_upper' "
+                                "parameters have been removed from the "
+                                "EventPropCompiler constructor. Regularisers "
+                                "are now specified by passing a 'regularisers' "
+                                "keyword argument to the ``compile`` method "
+                                "e.g. regularisers={\"all_connections\": "
+                                "SpikeCount(strength=0.01, target=1)}")
 
         super().__init__(supported_matrix_types, dt, batch_size, rng_seed,
                          kernel_profiling, communicator, **genn_kwargs)
@@ -691,14 +703,18 @@ class EventPropCompiler(Compiler):
         # to training all weights using the adam optimiser with default params
         optimisers = kwargs.get("optimisers", 
                                 {"all_connections": {"weight": "adam"}})
-    
+        
+        # Get base dictionary of regularisers. 
+        # If none is provided, default to no regularisation
+        regularisers = kwargs.get("regularisers", {})
+                                       
         # Check dictionary has been provided
         if not isinstance(optimisers, Mapping):
             raise RuntimeError("'optimisers' should be "
                                "specified as a dictionary")
 
         return CompileState(network, self.losses, optimisers,
-                            self.supported_matrix_type, 
+                            regularisers, self.supported_matrix_type,
                             genn_model.backend_name)
 
     def apply_delay(self, genn_pop, conn: Connection,
@@ -1681,9 +1697,16 @@ class EventPropCompiler(Compiler):
             
             # Build adjoint system from model
             learn_params = compile_state.optimisers.get(pop, {})
-            regularise = (self.reg_lambda_lower != 0.0) or (self.reg_lambda_upper != 0.0)
+            reg = compile_state.regularisers.get(pop, None)
             dl_dt, adjoint_jumps, grad_terms, saved_vars_timestep, saved_vars_spike =\
-                self._build_adjoint_system(model, learn_params, False, regularise)
+                self._build_adjoint_system(model, learn_params, False, 
+                                           reg is not None)
+
+            # Check regulariser is compatible with eventprop
+            if not isinstance(reg, SpikeCount):
+                 raise NotImplementedError(
+                    f"EventProp compiler doesn't support "
+                    f"{type(reg).__name__} regularisers")
 
             additional_reset_vars = []
             # Add variables for parameter gradients
@@ -1729,8 +1752,7 @@ class EventPropCompiler(Compiler):
                 genn_model.add_var(lambda_sym.name, "scalar", 0.0)
 
             # If regularisation is enabled
-            # **THINK** is this LIF-specific?
-            if regularise and model.threshold != 0:
+            if reg is not None and model.threshold != 0:
                 logger.debug("\tBuilding regulariser")
                 # Add state variables to hold spike count
                 # during forward and backward pass. 
@@ -1748,7 +1770,7 @@ class EventPropCompiler(Compiler):
                 # **NOTE** this is multiplied by batch_size so it
                 # can be compared directly to SpikeCountBackBatch
                 genn_model.add_param("RegNuUpperBatch", "int",
-                                     self.reg_nu_upper * self.full_batch_size)
+                                     regulariser.target * self.full_batch_size)
                 # If batch size is 1, add reset variables to copy SpikeCount
                 # into SpikeCountBackBatch and zero SpikeCount
                 if self.full_batch_size == 1:
@@ -1765,10 +1787,10 @@ class EventPropCompiler(Compiler):
                 scalar drive_reg;
                 const scalar spikeDev = (SpikeCountBackBatch - RegNuUpperBatch);
                 if (spikeDev > 0.0) {{
-                    drive_reg = -{self.reg_lambda_upper/self.full_batch_size/self.full_batch_size} * spikeDev;
+                    drive_reg = -{reg.strength_upper/self.full_batch_size/self.full_batch_size} * spikeDev;
                 }}
                 else {{
-                    drive_reg = -{self.reg_lambda_lower/self.full_batch_size/self.full_batch_size} * spikeDev;
+                    drive_reg = -{reg.strength_lower/self.full_batch_size/self.full_batch_size} * spikeDev;
                 }}
                 """
 
