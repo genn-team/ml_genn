@@ -1,3 +1,4 @@
+from numbers import Number
 from typing import Tuple, Union
 from .regulariser import Regulariser
 
@@ -15,7 +16,7 @@ class SpikeCount(Regulariser):
         
         # If strength is specified as a single 
         # float, use for both upper and lower
-        if isinstance(strength, float):
+        if isinstance(strength, Number):
             self.strength_lower = strength
             self.strength_upper = strength
         # Otherwise, unpack
