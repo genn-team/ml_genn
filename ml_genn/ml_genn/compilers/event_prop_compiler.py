@@ -422,7 +422,7 @@ class CompileState:
             # Otherwise, if key isn't one of the shortcut strings
             # which have already been processed, give error
             elif key != "all_populations":
-                raise RuntimeError(f"Invalid key '{k}' used in "
+                raise RuntimeError(f"Invalid key '{key}' used in "
                                    f"'regularisers' dictionary. "
                                    f"Valid keys are Population or Layer "
                                    f"objects or strings such as 'all_populations'")
