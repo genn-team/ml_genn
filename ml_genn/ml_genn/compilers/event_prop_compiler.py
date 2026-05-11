@@ -708,9 +708,12 @@ class EventPropCompiler(Compiler):
         # If none is provided, default to no regularisation
         regularisers = kwargs.get("regularisers", {})
                                        
-        # Check dictionary has been provided
+        # Check dictionaries have been provided
         if not isinstance(optimisers, Mapping):
             raise RuntimeError("'optimisers' should be "
+                               "specified as a dictionary")
+        if not isinstance(regularisers, Mapping):
+            raise RuntimeError("'regularisers' should be "
                                "specified as a dictionary")
 
         return CompileState(network, self.losses, optimisers,
