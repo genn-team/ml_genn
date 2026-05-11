@@ -663,8 +663,9 @@ class EventPropCompiler(Compiler):
                                   SynapseMatrixType.PROCEDURAL_KERNELG,
                                   SynapseMatrixType.DENSE,
                                   SynapseMatrixType.SPARSE]
-        
-        if "optimiser" in genn_kwargs or "delay_optimiser" in genn_kwargs:
+
+        # Handle legacy optimiser definitions
+        if any(l in genn_kwargs for l in ("optimiser", "delay_optimiser")):
             raise RuntimeError("The 'optimiser' and 'delay_optimiser' "
                                "parameters have been removed from the "
                                "EventPropCompiler constructor. Optimisers "
@@ -675,13 +676,15 @@ class EventPropCompiler(Compiler):
                                "weights with the adam optimiser")
 
         # Handle legacy regularisation strength definitions
-        if "reg_lambda_lower" in genn_kwargs or "reg_lambda_upper" in genn_kwargs:
-             raise RuntimeError("The 'reg_lambda_lower' and 'reg_lambda_upper' "
-                                "parameters have been removed from the "
-                                "EventPropCompiler constructor. Regularisers "
-                                "are now specified by passing a 'regularisers' "
-                                "keyword argument to the ``compile`` method "
-                                "e.g. regularisers={\"all_connections\": "
+        if any(l in genn_kwargs 
+               for l in ("reg_lambda_lower", "reg_lambda_upper", "reg_nu_upper")):
+             raise RuntimeError("The 'reg_lambda_lower', 'reg_lambda_upper' "
+                                "and 'reg_nu_upper' parameters have been "
+                                "removed from the EventPropCompiler "
+                                "constructor. Regularisers are now specified "
+                                "by passing a 'regularisers' keyword argument"
+                                " to the ``compile`` method e.g. "
+                                "regularisers={\"all_connections\": "
                                 "SpikeCount(strength=0.01, target=1)}")
 
         super().__init__(supported_matrix_types, dt, batch_size, rng_seed,
