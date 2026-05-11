@@ -9,6 +9,7 @@ from ml_genn.connectivity import Dense,FixedProbability
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.optimisers import Adam
+from ml_genn.regularisers import SpikeCount
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 from tonic import DiskCachedDataset
@@ -108,9 +109,10 @@ max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 if TRAIN:
     compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                                  losses="sparse_categorical_crossentropy",
-                                 reg_lambda=4e-09, reg_nu_upper=14, max_spikes=1500, 
-                                 batch_size=BATCH_SIZE, kernel_profiling=KERNEL_PROFILING)
-    compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": "adam"}})
+                                 max_spikes=1500, batch_size=BATCH_SIZE, 
+                                 kernel_profiling=KERNEL_PROFILING)
+    compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": "adam"}},
+                                    regularisers={"all_populations": SpikeCount(4e-09, 14)})
 
     with compiled_net:
         # Loop through epochs
