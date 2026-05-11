@@ -684,7 +684,7 @@ class EventPropCompiler(Compiler):
                                 "constructor. Regularisers are now specified "
                                 "by passing a 'regularisers' keyword argument"
                                 " to the ``compile`` method e.g. "
-                                "regularisers={\"all_connections\": "
+                                "regularisers={\"all_populations\": "
                                 "SpikeCount(strength=0.01, target=1)}")
 
         super().__init__(supported_matrix_types, dt, batch_size, rng_seed,
