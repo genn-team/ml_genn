@@ -12,13 +12,17 @@ class SpikeCount(Regulariser):
         target:     Target number of spikes"""
     def __init__(self, strength: Union[float, Tuple[float, float]],
                  target: float):
-        self.target = target
+        self.target = float(target)
         
-        # If strength is specified as a single 
-        # float, use for both upper and lower
-        if isinstance(strength, Number):
+        # Try and unpack tuple of strengths
+        try:
+            self.strength_lower, self.strength_upper = strength
+        # If it's not unpackable, use strength for lower and upper
+        # **NOTE** ValueErrors relating to wrong number of values still propagate
+        except TypeError:
             self.strength_lower = strength
             self.strength_upper = strength
-        # Otherwise, unpack
-        else:
-            self.strength_lower, self.strength_upper = strength
+        
+        # Ensure strengths are convertable to float
+        self.strength_lower = float(self.strength_lower)
+        self.strength_upper = float(self.strength_upper)
