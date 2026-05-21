@@ -278,6 +278,11 @@ class EPropCompiler(Compiler):
         f_target:                   Target hidden neuron firing rate used for
                                     regularisation [Hz]
         train_output_bias:          Should output neuron biases be trained?
+        error_start_timestep:       Timestep from which the error signal is applied
+                                    to output neurons. Default 0 applies the error
+                                    from the start of the trial. Set to e.g. 2100
+                                    for the evidence accumulation task to restrict
+                                    learning to the recall window only [timesteps]
         dt:                         Simulation timestep [ms]
         batch_size:                 What batch size should be used for
                                     training? In our experience, e-prop works
@@ -302,6 +307,7 @@ class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
+                 error_start_timestep: int = 0,
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
@@ -325,6 +331,7 @@ class EPropCompiler(Compiler):
         self.c_reg = c_reg
         self.f_target = f_target
         self.train_output_bias = train_output_bias
+        self.error_start_timestep = error_start_timestep
         self.reset_time_between_batches = reset_time_between_batches
         self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
         self.deep_r_l1_strength = deep_r_l1_strength
@@ -387,7 +394,12 @@ class EPropCompiler(Compiler):
             # Add sim-code to calculate error
             model_copy.append_sim_code(
                 f"""
-                E = {model_copy.output_var_name} - yTrue;
+                if(t >= {self.error_start_timestep * self.dt}) {{
+                    E = {model_copy.output_var_name} - yTrue;
+                }}
+                else {{
+                    E = 0.0;
+                }}
                 """)
 
             # If we should train output biases
