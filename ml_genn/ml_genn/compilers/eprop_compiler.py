@@ -315,6 +315,7 @@ class EPropCompiler(Compiler):
                  deep_r_conns: Sequence = [],
                  deep_r_l1_strength: float = 0.01,
                  deep_r_record_rewirings = {},
+                 weight_clamp: dict = None,
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
                                   SynapseMatrixType.DENSE]
@@ -337,7 +338,8 @@ class EPropCompiler(Compiler):
         self.deep_r_l1_strength = deep_r_l1_strength
         self.deep_r_record_rewirings = {get_underlying_conn(c): k
                                         for c, k in deep_r_record_rewirings.items()}
-
+        self._weight_clamp = {get_underlying_conn(c): bounds
+                              for c, bounds in (weight_clamp or {}).items()}
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
         # Build list of output populations
@@ -573,7 +575,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", weight_var_ref, delta_g_var_ref,
-                    genn_model, True))
+                    genn_model, True, c))
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -647,7 +649,9 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model, wu):
+                                        gradient_ref, genn_model, wu, conn=None):
+        clamp = (self._weight_clamp.get(get_underlying_conn(conn))
+                 if conn is not None else None)
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -666,13 +670,13 @@ class EPropCompiler(Compiler):
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
             optimiser_model = self._optimiser.get_model(reduced_gradient,
-                                                        var_ref, False, None)
+                                                        var_ref, False, clamp)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
             optimiser_model = self._optimiser.get_model(gradient_ref, var_ref,
-                                                        True, None)
+                                                        True, clamp)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
