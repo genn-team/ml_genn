@@ -31,6 +31,7 @@ from ..utils.auto_model import AutoModel, AutoNeuronModel, AutoSynapseModel
 from ..utils.model import (CustomUpdateModel, Model, NeuronModel, 
                            SynapseModel, WeightUpdateModel)
 from ..utils.snippet import ConnectivitySnippet
+from ..neurons.latency_input import LatencyInput
 
 from abc import abstractmethod
 from copy import deepcopy
@@ -100,9 +101,9 @@ logger = logging.getLogger(__name__)
 weight_update_model = {
     "params": [("weight", "scalar")], 
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
-    "pre_spike_syn_code": """
-    addToPost(weight);
-    """,
+    "pre_spike_syn_code": Template("""
+    addToPost(${polarity}weight);
+    """),
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """}
@@ -112,10 +113,10 @@ learnable_delay_weight_update_model = {
                ("MaxDelay", "int")],
     "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
                              
-    "pre_spike_syn_code": """
+    "pre_spike_syn_code": Template("""
     const int delayInt = max(0, min(MaxDelay, (int)round(delay)));
-    addToPostDelay(weight, delayInt);
-    """,
+    addToPostDelay(${polarity}weight, delayInt);
+    """),
     "pre_event_threshold_condition_code": """
     BackSpike_pre
     """}
@@ -210,9 +211,9 @@ def _get_delay_weight_update_model(delay_type):
     return {"params": [("delay", delay_type), ("weight", "scalar")],
             "pre_neuron_var_refs": [("BackSpike_pre", "uint8_t")],
                              
-            "pre_spike_syn_code": """
-            addToPostDelay(weight, delay);
-            """,
+            "pre_spike_syn_code": Template("""
+            addToPostDelay(${polarity}weight, delay);
+            """),
             "pre_event_threshold_condition_code": """
             BackSpike_pre
             """}
@@ -883,6 +884,15 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\tSynapse inject_plusm: {inject_plus_m_expr}")
         logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
         
+        # Get source neuron model
+        src_pop = conn.source()
+        polarity = ""
+        pre_neuron_var_refs={"BackSpike_pre": "BackSpike"}
+        if isinstance(src_pop.neuron, LatencyInput):
+            if src_pop.neuron.signed:
+                polarity = "SpikePolarity_pre * "
+                pre_neuron_var_refs["SpikePolarity_pre"]= "SpikePolarity"
+
         # Get target neuron model
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
@@ -915,12 +925,17 @@ class EventPropCompiler(Compiler):
                                    f"Connection {conn.name} with delay learning")
 
             # Create weight update model
+            wup= deepcopy(learnable_delay_weight_update_model)
+            wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
+            if isinstance(src_pop.neuron,LatencyInput):
+                if src_pop.neuron.signed:
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity","unit8_t"))
             genn_model = WeightUpdateModel(
-                model=deepcopy(learnable_delay_weight_update_model),
+                model= wup,
                 param_vals= {"weight": connect_snippet.weight,
                              "delay": connect_snippet.delay,
                              "MaxDelay": conn.max_delay_steps},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+                pre_neuron_var_refs=pre_neuron_var_refs)
         # Otherwise, if connection has static delays
         elif has_delay:
             # Get delay type to use for this connection
@@ -928,18 +943,27 @@ class EventPropCompiler(Compiler):
                 conn, connect_snippet.delay))
 
             # Create weight update model with delay
+            wup = _get_delay_weight_update_model(delay_type)
+            wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
+            if isinstance(src_pop.neuron,LatencyInput):
+                if src_pop.neuron.signed:
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity","unit8"))
             genn_model = WeightUpdateModel(
-                model=_get_delay_weight_update_model(delay_type),
+                model= wup,
                 param_vals= {"weight": connect_snippet.weight,
                              "delay": connect_snippet.delay},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
+                pre_neuron_var_refs=pre_neuron_var_refs)
         # Otherwise, just create basic weight update model
         else:
+            wup = deepcopy(weight_update_model)
+            wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
+            if isinstance(src_pop.neuron,LatencyInput):
+                if src_pop.neuron.signed:
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity","unit8"))
             genn_model = WeightUpdateModel(
-                model=deepcopy(weight_update_model),
+                model= wup,
                 param_vals= {"weight": connect_snippet.weight},
-                pre_neuron_var_refs={"BackSpike_pre": "BackSpike"})
-
+                pre_neuron_var_refs=pre_neuron_var_refs)
         #---------------------------------------------------------------------
         # Step 2: derive dx_dt_diff_sum 
         #---------------------------------------------------------------------
@@ -1081,6 +1105,9 @@ class EventPropCompiler(Compiler):
                     {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
                      for p in synapse_model.jumps.keys()})
 
+            if isinstance(src_pop.neuron, LatencyInput):
+                if src_pop.neuron.signed:
+                    weight_grad_update_code = "SpikePolarity_pre *" + weight_grad_update_code
             # Determine whether kernel updates are required
             use_kernel = (connect_snippet.matrix_type 
                           & SynapseMatrixWeight.KERNEL)                     
@@ -1152,6 +1179,10 @@ class EventPropCompiler(Compiler):
                 gradient_vars = []
                 connect_optim = vars.get("connectivity")
                 if "weight" in vars:
+                    print(genn_pop)
+                    print(dir(genn_pop))
+                    print(vars)
+                    print(genn_pop.vars)
                     # If connection is in list of those to use Deep-R on
                     gradient_var_ref = create_wu_var_ref(genn_pop, "weightGradient")
                     weight_var_ref = create_wu_var_ref(genn_pop, "weight")
@@ -1693,6 +1724,16 @@ class EventPropCompiler(Compiler):
             write_code_timestep = ""
             write_code = ""
             tsringoffset = ""
+            if isinstance(pop.neuron, LatencyInput):
+                if pop.neuron.signed:
+                    genn_model.add_egp("RingPolarity", "unsigned int*", 
+                                       np.empty(spike_ring_size//32 + 1, dtype=np.uint32))
+                    # bit == 1 is positive spike, bit == 0 is negative
+                    write_code = """
+                    unsigned int i = ringOffset + RingWriteOffset;
+                    if (SpikePolarity == 1) RingPolarity[i/32] |= (1 << (i % 32))
+                    else RingPolarity[i/32] &= ~(1 << (i % 32));
+                    """
         # Otherwise i.e. it's hidden
         else:
             logger.debug(f"Building hidden neuron model for '{pop.name}'")
