@@ -34,5 +34,5 @@ def get_signed_static_pulse_delay_model(delay_type):
                 """,
             "pre_event_syn_code":
                 """
-                addToPostDelay(g, -d);
+                addToPostDelay(-g, d);
                 """}
