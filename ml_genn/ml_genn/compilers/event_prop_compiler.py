@@ -907,7 +907,7 @@ class EventPropCompiler(Compiler):
             wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
             if isinstance(src_pop.neuron,LatencyInput):
                 if src_pop.neuron.signed:
-                    wup["pre_neuron_var_refs"].append(("SpikePolarity","unit8_t"))
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","uint8_t"))
             genn_model = WeightUpdateModel(
                 model= wup,
                 param_vals= {"weight": connect_snippet.weight,
@@ -925,7 +925,7 @@ class EventPropCompiler(Compiler):
             wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
             if isinstance(src_pop.neuron,LatencyInput):
                 if src_pop.neuron.signed:
-                    wup["pre_neuron_var_refs"].append(("SpikePolarity","unit8"))
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","uint8_t"))
             genn_model = WeightUpdateModel(
                 model= wup,
                 param_vals= {"weight": connect_snippet.weight,
@@ -937,7 +937,7 @@ class EventPropCompiler(Compiler):
             wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
             if isinstance(src_pop.neuron,LatencyInput):
                 if src_pop.neuron.signed:
-                    wup["pre_neuron_var_refs"].append(("SpikePolarity","unit8"))
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","uint8_t"))
             genn_model = WeightUpdateModel(
                 model= wup,
                 param_vals= {"weight": connect_snippet.weight},
