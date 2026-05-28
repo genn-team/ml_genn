@@ -175,6 +175,7 @@ neuron_backward_pass = Template(
         // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
         if (RingReadOffset != RingReadEndOffset && (backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) <= 0.1*dt) {
             BackSpike = true;
+            $polarity
         }
     }
     // Forward pass
@@ -892,6 +893,7 @@ class EventPropCompiler(Compiler):
             if src_pop.neuron.signed:
                 polarity = "SpikePolarity_pre * "
                 pre_neuron_var_refs["SpikePolarity_pre"]= "SpikePolarity"
+                pre_neuron_var_refs["BackPolarity_pre"]= "BackPolarity"
 
         # Get target neuron model
         trg_pop = conn.target()
@@ -929,7 +931,8 @@ class EventPropCompiler(Compiler):
             wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
             if isinstance(src_pop.neuron,LatencyInput):
                 if src_pop.neuron.signed:
-                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","uint8_t"))
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","int"))
+                    wup["pre_neuron_var_refs"].append(("BackPolarity_pre","int"))
             genn_model = WeightUpdateModel(
                 model= wup,
                 param_vals= {"weight": connect_snippet.weight,
@@ -947,7 +950,8 @@ class EventPropCompiler(Compiler):
             wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
             if isinstance(src_pop.neuron,LatencyInput):
                 if src_pop.neuron.signed:
-                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","uint8_t"))
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","int"))
+                    wup["pre_neuron_var_refs"].append(("BackPolarity_pre","int"))
             genn_model = WeightUpdateModel(
                 model= wup,
                 param_vals= {"weight": connect_snippet.weight,
@@ -959,7 +963,8 @@ class EventPropCompiler(Compiler):
             wup["pre_spike_syn_code"] = wup["pre_spike_syn_code"].substitute(polarity=polarity)
             if isinstance(src_pop.neuron,LatencyInput):
                 if src_pop.neuron.signed:
-                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","uint8_t"))
+                    wup["pre_neuron_var_refs"].append(("SpikePolarity_pre","int"))
+                    wup["pre_neuron_var_refs"].append(("BackPolarity_pre","int"))
             genn_model = WeightUpdateModel(
                 model= wup,
                 param_vals= {"weight": connect_snippet.weight},
@@ -1105,9 +1110,10 @@ class EventPropCompiler(Compiler):
                     {_get_lmd_name(p): f"{_get_lmd_name(p)}[{int_delay_name}]" 
                      for p in synapse_model.jumps.keys()})
 
+            polarity_buffer_code = ""
             if isinstance(src_pop.neuron, LatencyInput):
                 if src_pop.neuron.signed:
-                    weight_grad_update_code = "SpikePolarity_pre *" + weight_grad_update_code
+                     weight_grad_update_code = "BackPolarity_pre * " + weight_grad_update_code
             # Determine whether kernel updates are required
             use_kernel = (connect_snippet.matrix_type 
                           & SynapseMatrixWeight.KERNEL)                     
@@ -1179,10 +1185,6 @@ class EventPropCompiler(Compiler):
                 gradient_vars = []
                 connect_optim = vars.get("connectivity")
                 if "weight" in vars:
-                    print(genn_pop)
-                    print(dir(genn_pop))
-                    print(vars)
-                    print(genn_pop.vars)
                     # If connection is in list of those to use Deep-R on
                     gradient_var_ref = create_wu_var_ref(genn_pop, "weightGradient")
                     weight_var_ref = create_wu_var_ref(genn_pop, "weight")
@@ -1721,6 +1723,14 @@ class EventPropCompiler(Compiler):
             # No additional dynamics, transition or writing code is required
             dynamics_code = ""
             transition_code = ""
+            polarity_code = ""
+            if isinstance(pop.neuron, LatencyInput):
+                if pop.neuron.signed:
+                    genn_model.add_var("BackPolarity", "int", 1)
+                    polarity_code = """
+                    unsigned int i = ringOffset + RingReadOffset;
+                    BackPolarity = (RingPolarity[i/32] & (1 << (i % 32)))*2-1;
+                    """
             write_code_timestep = ""
             write_code = ""
             tsringoffset = ""
@@ -1731,12 +1741,13 @@ class EventPropCompiler(Compiler):
                     # bit == 1 is positive spike, bit == 0 is negative
                     write_code = """
                     unsigned int i = ringOffset + RingWriteOffset;
-                    if (SpikePolarity == 1) RingPolarity[i/32] |= (1 << (i % 32))
+                    if (SpikePolarity > 0) RingPolarity[i/32] |= (1 << (i % 32));
                     else RingPolarity[i/32] &= ~(1 << (i % 32));
                     """
         # Otherwise i.e. it's hidden
         else:
             logger.debug(f"Building hidden neuron model for '{pop.name}'")
+            polarity_code = ""
             if not isinstance(model, AutoNeuronModel):
                 raise NotImplementedError(
                     "EventProp compiler only supports hidden "
@@ -1897,6 +1908,7 @@ class EventPropCompiler(Compiler):
                 example_time=(self.example_timesteps * self.dt),
                 dynamics=dynamics_code,
                 transition=transition_code,
+                polarity=polarity_code,
                 example_timesteps=self.example_timesteps,
                 write=write_code_timestep,
                 tsringoffset=tsringoffset

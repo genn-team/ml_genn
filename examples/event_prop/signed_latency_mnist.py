@@ -1,9 +1,10 @@
 import logging
 import numpy as np
 import mnist
+import matplotlib.pyplot as plt
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
-from ml_genn.callbacks import Checkpoint
+from ml_genn.callbacks import Checkpoint, SpikeRecorder, VarRecorder
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
@@ -14,9 +15,9 @@ from ml_genn.synapses import Exponential
 
 from time import perf_counter
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
-NUM_INPUT = 784
+NUM_INPUT = 28*28
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
@@ -30,15 +31,17 @@ KERNEL_PROFILING = True
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
 images = mnist.train_images() if TRAIN else mnist.test_images()
-images = np.minimum((images-127)*2,255)
+images = np.asarray(images).astype(float)
+images = np.minimum((images-127.5)*2,255)
+images = images.reshape(-1,NUM_INPUT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
     input = InputLayer(LatencyInput("linear", EXAMPLE_TIME - (2.0 * DT), 2.0 * DT, 1, True),
-                       NUM_INPUT)
-    initial_hidden_weight = Normal(mean=0.078, sd=0.045)
+                       NUM_INPUT,record_spikes= True)
+    initial_hidden_weight = Normal(mean=-0.005, sd=0.1)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
     hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
@@ -60,10 +63,25 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
+        callbacks.append(SpikeRecorder(input, key="s_in"))
+        callbacks.append(VarRecorder(hidden, "v", key="v_hid"))
+                         
         metrics, cb_data  = compiled_net.train({input: images},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
+
+        plt.figure()
+        st = cb_data["s_in"][0]
+        id = cb_data["s_in"][1]
+        plt.scatter(st[0],id[0])
+        fig,ax = plt.subplots(10,10)
+        v = cb_data["v_hid"]
+        for i in range(10):
+            for j in range(10):
+                id = i*10+j
+                ax[i][j].plot(v[0][:,id])
+        plt.show()
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
