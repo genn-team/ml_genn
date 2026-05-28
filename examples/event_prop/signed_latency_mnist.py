@@ -21,7 +21,7 @@ NUM_INPUT = 28*28
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
-NUM_EPOCHS = 10
+NUM_EPOCHS = 100
 EXAMPLE_TIME = 20.0
 DT = 1.0
 SPARSITY = 1.0
@@ -41,7 +41,7 @@ with network:
     # Populations
     input = InputLayer(LatencyInput("linear", EXAMPLE_TIME - (2.0 * DT), 2.0 * DT, 1, True),
                        NUM_INPUT,record_spikes= True)
-    initial_hidden_weight = Normal(mean=-0.005, sd=0.1)
+    initial_hidden_weight = Normal(mean=-0.018, sd=0.035)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
     hidden = Layer(connectivity, LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
