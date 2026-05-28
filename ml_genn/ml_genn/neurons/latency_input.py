@@ -99,6 +99,7 @@ class LatencyInput(Neuron, Input):
             tau_eff = time_range/np.log(self.thresh+1)
             spike_time = tau_eff * np.log(spike_pixels / (spike_pixels - self.thresh)) + self.min_time
         # set spike times for sub-threshold neurons to much beyond max_time
+        # **THINK** is there a better way/ some float_max maybe?
         spike_time[input <= self.thresh] = self.max_time*10.0
         if batch_size == 1:
             # Check input shape either has no batch
