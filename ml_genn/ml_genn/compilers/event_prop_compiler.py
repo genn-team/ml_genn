@@ -833,6 +833,9 @@ class EventPropCompiler(Compiler):
         compile_state.add_synapse_reset_vars(conn, genn_model.reset_vars)
         
         # Return model
+        for x,y in genn_model.model.items():
+            print(f"{x}; {y}")
+
         return genn_model
 
     def build_weight_update_model(self, conn: Connection,
@@ -1159,6 +1162,8 @@ class EventPropCompiler(Compiler):
             # Convert expression to c-code and insert call to addToPre
             genn_model.append_pre_event_syn_code(f"addToPre({dx_dt_diff_sum_code});")
 
+        for x,y in genn_model.model.items():
+            print(f"{x}; {y}")
         return genn_model
 
     def create_compiled_network(self, genn_model, neuron_populations: dict,
@@ -1922,6 +1927,8 @@ class EventPropCompiler(Compiler):
                 strict_check=(neuron_reset_strict_check
                                 if self.strict_buffer_checking
                                 else "")))
+        for x,y in genn_model.model.items():
+            print(f"{x}; {y}")
         return genn_model
         
     def _build_out_neuron_model(self, pop: Population, 
