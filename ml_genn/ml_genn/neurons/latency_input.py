@@ -20,7 +20,7 @@ signed_genn_model = {
              ("Spiked", "uint8_t")],
     "threshold_condition_code":
         """
-        !Spiked && t > SpikeTime
+        (!Spiked) && (t > SpikeTime)
         """,
     "reset_code":
         """
@@ -32,7 +32,7 @@ genn_model = {
     "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE),],
     "threshold_condition_code":
         """
-        !Spiked && t > SpikeTime
+        (!Spiked) && (t > SpikeTime)
         """,
     "reset_code":
         """
@@ -67,7 +67,7 @@ class LatencyInput(Neuron, Input):
 
     def set_input(self, genn_pop, batch_size: int, shape,
                   input):
-        # expecting input in the form of gray levels 0 .. 255 int
+        # expecting input in the form of gray levels -255 to 255 int
         input = np.asarray(input)
 
         # Get view
@@ -91,12 +91,15 @@ class LatencyInput(Neuron, Input):
         input = np.abs(input)
         if self.latency_method == "linear":
             spike_time =  (((255.0 - input) / 255.0) * time_range) + self.min_time
+            fail = np.where(spike_time < self.min_time)[0]
+            if len(fail) > 0:
+                print(fail)
         else:
             # scale so that the values are <= range and add min_time
             tau_eff = time_range/np.log(self.thresh+1)
             spike_time = tau_eff * np.log(spike_pixels / (spike_pixels - self.thresh)) + self.min_time
-        # set spike times for sub-threshold neurons to negative (no spike)
-        spike_time[input <= self.thresh] = -1.0
+        # set spike times for sub-threshold neurons to much beyond max_time
+        spike_time[input <= self.thresh] = self.max_time*10.0
         if batch_size == 1:
             # Check input shape either has no batch
             # dimension or it has a length of 1
