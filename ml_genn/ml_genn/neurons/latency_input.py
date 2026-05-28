@@ -16,10 +16,15 @@ if TYPE_CHECKING:
 
 signed_genn_model = {
     "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE),
-             ("SpikePolarity", "uint8_t", VarAccess.READ_ONLY_DUPLICATE)],
+             ("SpikePolarity", "int", VarAccess.READ_ONLY_DUPLICATE),
+             ("Spiked", "uint8_t")],
     "threshold_condition_code":
         """
-        abs(t - SpikeTime) < 1e-3*DT
+        !Spiked && t > SpikeTime
+        """,
+    "reset_code":
+        """
+        Spiked = true;
         """
 }
 
@@ -27,7 +32,11 @@ genn_model = {
     "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE),],
     "threshold_condition_code":
         """
-        abs(t - SpikeTime) < 1e-3*DT
+        !Spiked && t > SpikeTime
+        """,
+    "reset_code":
+        """
+        Spiked = true;
         """
 }
     
@@ -78,16 +87,16 @@ class LatencyInput(Neuron, Input):
 
         time_range = self.max_time - self.min_time        
         if self.signed:
-            polarity = numpy.sign(input)
+            polarity = np.sign(input)
         input = np.abs(input)
         if self.latency_method == "linear":
-            spike_time =  (((255.0 - input) / 255.0) * time_range) + min_time
+            spike_time =  (((255.0 - input) / 255.0) * time_range) + self.min_time
         else:
             # scale so that the values are <= range and add min_time
-            tau_eff = time_range/np.log(thresh+1)
-            spike_time = tau_eff * np.log(spike_pixels / (spike_pixels - thresh)) + min_time
+            tau_eff = time_range/np.log(self.thresh+1)
+            spike_time = tau_eff * np.log(spike_pixels / (spike_pixels - self.thresh)) + self.min_time
         # set spike times for sub-threshold neurons to negative (no spike)
-        spike_time[input <= thresh] = -1.0
+        spike_time[input <= self.thresh] = -1.0
         if batch_size == 1:
             # Check input shape either has no batch
             # dimension or it has a length of 1
@@ -135,8 +144,8 @@ class LatencyInput(Neuron, Input):
                   dt: float, batch_size: int) -> NeuronModel:
         if self.signed:
             return NeuronModel(signed_genn_model, None, {}, 
-                               {"SpikeTime": -1.0, "SpikePolarity": 1})
+                               {"SpikeTime": -1.0, "SpikePolarity": 1, "Spiked": False})
         else:
             return NeuronModel(genn_model, None, {}, 
-                               {"SpikeTime": -1.0})
+                               {"SpikeTime": -1.0, "Spiked": False})
             
