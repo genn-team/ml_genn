@@ -338,7 +338,7 @@ class EPropCompiler(Compiler):
         self.deep_r_l1_strength = deep_r_l1_strength
         self.deep_r_record_rewirings = {get_underlying_conn(c): k
                                         for c, k in deep_r_record_rewirings.items()}
-        self._weight_clamp = {get_underlying_conn(c): bounds
+        self.weight_clamp = {get_underlying_conn(c): bounds
                               for c, bounds in (weight_clamp or {}).items()}
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
@@ -394,15 +394,19 @@ class EPropCompiler(Compiler):
                                self.batch_size, self.example_timesteps)
 
             # Add sim-code to calculate error
-            model_copy.append_sim_code(
-                f"""
-                if(t >= {self.error_start_timestep * self.dt}) {{
-                    E = {model_copy.output_var_name} - yTrue;
-                }}
-                else {{
-                    E = 0.0;
-                }}
-                """)
+            if self.error_start_timestep != 0:
+                model_copy.append_sim_code(
+                    f"""
+                    if(t >= {self.error_start_timestep * self.dt}) {{
+                        E = {model_copy.output_var_name} - yTrue;
+                    }}
+                    else {{
+                        E = 0.0;
+                    }}
+                    """)
+            else:
+                model_copy.append_sim_code(
+                    f"E = {model_copy.output_var_name} - yTrue;")
 
             # If we should train output biases
             if self.train_output_bias:
@@ -575,7 +579,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", weight_var_ref, delta_g_var_ref,
-                    genn_model, True, c))
+                    genn_model, True, self.weight_clamp.get(get_underlying_conn(c))))
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -649,9 +653,8 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model, wu, conn=None):
-        clamp = (self._weight_clamp.get(get_underlying_conn(conn))
-                 if conn is not None else None)
+                                        gradient_ref, genn_model, wu, clamp=None):
+    
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
