@@ -278,6 +278,11 @@ class EPropCompiler(Compiler):
         f_target:                   Target hidden neuron firing rate used for
                                     regularisation [Hz]
         train_output_bias:          Should output neuron biases be trained?
+        error_start_timestep:       Timestep from which the error signal is applied
+                                    to output neurons. Default 0 applies the error
+                                    from the start of the trial. Set to e.g. 2100
+                                    for the evidence accumulation task to restrict
+                                    learning to the recall window only [timesteps]
         dt:                         Simulation timestep [ms]
         batch_size:                 What batch size should be used for
                                     training? In our experience, e-prop works
@@ -302,6 +307,7 @@ class EPropCompiler(Compiler):
     def __init__(self, example_timesteps: int, losses, optimiser="adam",
                  tau_reg: float = 500.0, c_reg: float = 0.001, 
                  f_target: float = 10.0, train_output_bias: bool = True,
+                 error_start_timestep: int = 0,
                  dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
                  reset_time_between_batches: bool = True,
@@ -309,6 +315,7 @@ class EPropCompiler(Compiler):
                  deep_r_conns: Sequence = [],
                  deep_r_l1_strength: float = 0.01,
                  deep_r_record_rewirings = {},
+                 weight_clamp: dict = None,
                  **genn_kwargs):
         supported_matrix_types = [SynapseMatrixType.SPARSE,
                                   SynapseMatrixType.DENSE]
@@ -325,12 +332,14 @@ class EPropCompiler(Compiler):
         self.c_reg = c_reg
         self.f_target = f_target
         self.train_output_bias = train_output_bias
+        self.error_start_timestep = error_start_timestep
         self.reset_time_between_batches = reset_time_between_batches
         self.deep_r_conns = set(get_underlying_conn(c) for c in deep_r_conns)
         self.deep_r_l1_strength = deep_r_l1_strength
         self.deep_r_record_rewirings = {get_underlying_conn(c): k
                                         for c, k in deep_r_record_rewirings.items()}
-
+        self.weight_clamp = {get_underlying_conn(c): bounds
+                              for c, bounds in (weight_clamp or {}).items()}
     def pre_compile(self, network: Network, 
                     genn_model, **kwargs) -> CompileState:
         # Build list of output populations
@@ -385,10 +394,19 @@ class EPropCompiler(Compiler):
                                self.batch_size, self.example_timesteps)
 
             # Add sim-code to calculate error
-            model_copy.append_sim_code(
-                f"""
-                E = {model_copy.output_var_name} - yTrue;
-                """)
+            if self.error_start_timestep != 0:
+                model_copy.append_sim_code(
+                    f"""
+                    if(t >= {self.error_start_timestep * self.dt}) {{
+                        E = {model_copy.output_var_name} - yTrue;
+                    }}
+                    else {{
+                        E = 0.0;
+                    }}
+                    """)
+            else:
+                model_copy.append_sim_code(
+                    f"E = {model_copy.output_var_name} - yTrue;")
 
             # If we should train output biases
             if self.train_output_bias:
@@ -561,7 +579,7 @@ class EPropCompiler(Compiler):
             optimiser_custom_updates.append(
                 self._create_optimiser_custom_update(
                     f"Weight{i}", weight_var_ref, delta_g_var_ref,
-                    genn_model, True))
+                    genn_model, True, self.weight_clamp.get(get_underlying_conn(c))))
 
         # Add optimisers to population biases that require them
         for i, p in enumerate(compile_state.bias_optimiser_populations):
@@ -635,7 +653,8 @@ class EPropCompiler(Compiler):
             compile_state.checkpoint_population_vars, self.reset_time_between_batches)
 
     def _create_optimiser_custom_update(self, name_suffix, var_ref,
-                                        gradient_ref, genn_model, wu):
+                                        gradient_ref, genn_model, wu, clamp=None):
+    
         # If batch size is greater than 1
         if self.full_batch_size > 1:
             # Create custom update model to reduce DeltaG into a variable 
@@ -654,13 +673,13 @@ class EPropCompiler(Compiler):
             # Create optimiser model without gradient zeroing
             # logic, connected to reduced gradient
             optimiser_model = self._optimiser.get_model(reduced_gradient,
-                                                        var_ref, False, None)
+                                                        var_ref, False, clamp)
         # Otherwise
         else:
             # Create optimiser model with gradient zeroing 
             # logic, connected directly to population
             optimiser_model = self._optimiser.get_model(gradient_ref, var_ref,
-                                                        True, None)
+                                                        True, clamp)
 
         # Add GeNN custom update to model
         return self.add_custom_update(genn_model, optimiser_model,
