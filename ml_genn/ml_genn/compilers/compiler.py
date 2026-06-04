@@ -664,14 +664,12 @@ class Compiler:
                                               self.supported_matrix_type)
 
             # Build weight update model
-            print("build weight update model")
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals,
              wum_pre_neuron_var_refs, wum_post_neuron_var_refs, wum_psm_var_refs) =\
                 self.build_weight_update_model(conn, connect_snippet,
                                                compile_state).process()
-            print("DONE")
             # Create custom weight update model
             genn_wum = create_weight_update_model("WeightUpdateModel", **wum)
 
