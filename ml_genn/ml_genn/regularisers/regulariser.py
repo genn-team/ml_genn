@@ -1,0 +1,2 @@
+class Regulariser:
+    pass

@@ -9,6 +9,7 @@ from ml_genn.connectivity import Dense
 from ml_genn.initializers import Normal
 from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
 from ml_genn.readouts import Var
+from ml_genn.regularisers import SpikeCount
 from ml_genn.synapses import Exponential
 from ml_genn.optimisers import Adam
 
@@ -89,9 +90,9 @@ with network:
     #Connection(hidden, hidden, Dense(Normal(sd=0.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
     Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
-compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
-                             reg_lambda=1e-8, reg_nu_upper=10, max_spikes=1500)
-compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(LR)}})
+compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error", max_spikes=1500)
+compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(LR)}},
+                                regularisers={"all_hidden_populations": SpikeCount(1e-8, 10)})
 
 with compiled_net:
     def alpha_schedule(epoch, alpha):
