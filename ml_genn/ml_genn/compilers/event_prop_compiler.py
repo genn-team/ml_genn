@@ -402,8 +402,8 @@ class CompileState:
         # If default regularisation settings for all populations
         # has been provided, loop through all populations and 
         # create regularisation objects
-        if "all_populations" in regularisers:
-            reg = regularisers["all_populations"]
+        if "all_hidden_populations" in regularisers:
+            reg = regularisers["all_hidden_populations"]
             for pop in network.populations:
                 self.regularisers[pop] = get_object(reg, Regulariser,
                                                     "Regulariser",
@@ -421,11 +421,11 @@ class CompileState:
 
             # Otherwise, if key isn't one of the shortcut strings
             # which have already been processed, give error
-            elif key != "all_populations":
+            elif key != "all_hidden_populations":
                 raise RuntimeError(f"Invalid key '{key}' used in "
                                    f"'regularisers' dictionary. "
                                    f"Valid keys are Population or Layer "
-                                   f"objects or strings such as 'all_populations'")
+                                   f"objects or strings such as 'all_hidden_populations'")
 
 
     def add_neuron_reset_vars(self, pop, reset_vars, 
@@ -684,7 +684,7 @@ class EventPropCompiler(Compiler):
                                 "constructor. Regularisers are now specified "
                                 "by passing a 'regularisers' keyword argument"
                                 " to the ``compile`` method e.g. "
-                                "regularisers={\"all_populations\": "
+                                "regularisers={\"all_hidden_populations\": "
                                 "SpikeCount(strength=0.01, target=1)}")
 
         super().__init__(supported_matrix_types, dt, batch_size, rng_seed,

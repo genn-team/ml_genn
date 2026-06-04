@@ -112,7 +112,7 @@ if TRAIN:
                                  max_spikes=1500, batch_size=BATCH_SIZE, 
                                  kernel_profiling=KERNEL_PROFILING)
     compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": "adam"}},
-                                    regularisers={"all_populations": SpikeCount(4e-09, 14)})
+                                    regularisers={"all_hidden_populations": SpikeCount(4e-09, 14)})
 
     with compiled_net:
         # Loop through epochs

@@ -91,8 +91,8 @@ with network:
     Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error", max_spikes=1500)
-compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(LR)}}
-                                regularisers={"all_populations": SpikeCount(1e-8, 10)})
+compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(LR)}},
+                                regularisers={"all_hidden_populations": SpikeCount(1e-8, 10)})
 
 with compiled_net:
     def alpha_schedule(epoch, alpha):

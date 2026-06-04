@@ -206,7 +206,7 @@ compiler = EventPropCompiler(example_timesteps=max_example_timesteps,
                              losses="sparse_categorical_crossentropy",
                              max_spikes=1500, batch_size=BATCH_SIZE)
 compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(0.001 * 0.01)}},
-                                regularisers={"all_populations": SpikeCount(5e-11, 14)})
+                                regularisers={"all_hidden_populations": SpikeCount(5e-11, 14)})
 best_acc, best_e = 0, 0
 with compiled_net:
     # Loop through epochs
