@@ -1526,7 +1526,7 @@ class EventPropCompiler(Compiler):
         # Create model which sums valid first spike times into TFirstSpikeSumBack
         # and selects first spike time from true output
         reduce_model = CustomUpdateModel(
-            model={"var_refs": [("YTrue", "uint8_t", VarAccessMode.READ_ONLY),
+            model={"var_refs": [("YTrue", "uint16_t", VarAccessMode.READ_ONLY),
                                 ("TFirstSpike", "scalar", VarAccessMode.READ_ONLY),
                                 ("TFirstSpikeSumBack", "scalar", VarAccessMode.REDUCE_SUM),
                                 ("TFirstSpikeTrueBack", "scalar", VarAccessMode.REDUCE_SUM)],
