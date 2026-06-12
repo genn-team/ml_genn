@@ -2,22 +2,22 @@ import numpy as np
 
 from collections import deque, namedtuple
 from pygenn import SynapseMatrixType
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, Optional, Sequence, Union
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from .. import Connection, Population, Network
 from ..communicators import Communicator
-from ..metrics import Metric
+from ..metrics import Metric, MetricsType
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..readouts import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.model import NeuronModel, SynapseModel
                            
-from ..utils.data import get_dataset_size
+from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
-from ..utils.network import get_network_dag, get_underlying_pop
+from ..utils.network import get_network_dag, get_underlying_pop, PopulationType
 from ..utils.value import is_value_constant
 
 from ..metrics import default_metrics
@@ -34,25 +34,28 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
               genn_model, neuron_populations, connection_populations,
               communicator, k)
 
-        self.k = k
+        self.evaluate_timesteps = k
         self.pop_pipeline_depth = pop_pipeline_depth
-
+    
     def evaluate(self, x: dict, y: dict,
-                 metrics="sparse_categorical_accuracy",
+                 metrics: MetricsType = "sparse_categorical_accuracy",
                  callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in numpy format against labels
-
+        """ Evaluate metrics on a numpy dataset
+        
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
+            x:          Dictionary of testing inputs
+            y:          Dictionary of testing labels to compare 
+                        predictions against
             metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during evaluation.
+            callbacks:  List of callbacks to run during inference.
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
         y_size = get_dataset_size(y)
+
+        # Build metrics
+        metrics = get_object_mapping(metrics, y.keys(), Metric, 
+                                     "Metric", default_metrics)
 
         if x_size is None:
             raise RuntimeError("Each input population must be "
@@ -64,119 +67,20 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             raise RuntimeError("Number of inputs and labels must match")
 
         # Batch x and y
-        # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
-        splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
-                     for d in x.values()]
-        y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
-                     for d in y.values()]
-
-        # Zip together and evaluate using iterator
-        return self.evaluate_batch_iter(list(x.keys()), list(y.keys()),
-                                        iter(zip(*(x_batched + y_batched))),
-                                        len(splits), metrics, callbacks)
-
-    def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
-                            num_batches: Optional[int] = None,
-                            metrics="sparse_categorical_accuracy",
-                            callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in iterator format against labels
-        Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
-            metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during evaluation.
-        """
-        # Convert inputs and outputs to tuples
-        inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
-        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
-
-        # Build metrics
-        metrics = get_object_mapping(metrics, outputs, Metric, 
-                                     "Metric", default_metrics)
-
-        # Get the pipeline depth of each output
-        y_pipe_depth = {
-            o: (self.pop_pipeline_depth[get_underlying_pop(o)]
-                if get_underlying_pop(o) in self.pop_pipeline_depth
-                else 0)
-            for o in outputs}
+        batch_size = self.genn_model.batch_size
+        x = batch_dataset(x, batch_size, x_size)
+        y = batch_dataset(y, batch_size, y_size)
 
         # Create callback list and begin testing
-        num_batches = (None if num_batches is None
-                       else num_batches + 1 + max(y_pipe_depth.values()))
-        callback_list = CallbackList(callbacks, compiled_network=self,
-                                     num_batches=num_batches)
+        callback_list = CallbackList(callbacks,
+                                     compiled_network=self,
+                                     num_batches=len(x))
         callback_list.on_test_begin()
 
-        # Build deque to hold y
-        y_pipe_queue = {p: deque(maxlen=d + 1)
-                        for p, d in y_pipe_depth.items()}
-
-        # While there is data remaining or any y values left in queues
-        data_remaining = True
-        batch_i = 0
-        while data_remaining or any(len(q) > 0
-                                    for q in y_pipe_queue.values()):
-            # Attempt to get next batch of data,
-            # clear data remaining flag if none remains
-            try:
-                batch_x, batch_y = next(data)
-            except StopIteration:
-                data_remaining = False
-
-            # Reset time to 0
-            # **YUCK** I don't REALLY like this
-            self.genn_model.timestep = 0
-
-            # If there is any data remaining,
-            if data_remaining:
-                # Set x as input
-                # **YUCK** this isn't quite right as batch_x
-                # could also have outer dimension
-                if len(inputs) == 1:
-                    self.set_input({inputs[0]: batch_x})
-                else:
-                    self.set_input({p: x for p, x in zip(inputs, batch_x)})
-
-                # Add each y to correct queue(s)
-                # **YUCK** this isn't quite right as batch_y
-                # could also have outer dimension
-                if len(outputs) == 1:
-                    y_pipe_queue[outputs[0]].append(batch_y)
-                else:
-                    for p, y in zip(outputs, batch_y):
-                        y_pipe_queue[p].append(y)
-
-            # Start batch
-            callback_list.on_batch_begin(batch_i)
-
-            # Simulate K timesteps
-            for t in range(self.k):
-                self.step_time(callback_list)
-
-            # Loop through outputs
-            for o in outputs:
-                # If there is output to read from this population
-                if batch_i >= y_pipe_depth[o] and len(y_pipe_queue[o]) > 0:
-                    # Pop correct labels from queue
-                    batch_y_true = y_pipe_queue[o].popleft()
-
-                    # Get predictions from model
-                    batch_y_pred = self.get_readout(o)
-
-                    # Update metrics
-                    metrics[o].update(batch_y_true,
-                                      batch_y_pred[:len(batch_y_true)],
-                                      self.communicator)
-
-            # End batch
-            callback_list.on_batch_end(batch_i, metrics)
-
-            # Next batch
-            batch_i += 1
+        # Loop through batches and evaluate
+        for batch_i, (x_batch, y_batch) in enumerate(zip(x, y)):
+            self._evaluate_batch(batch_i, x_batch, y_batch,
+                                 metrics, callback_list)
 
         # End testing
         callback_list.on_test_end(metrics)
@@ -184,6 +88,130 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
+    def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
+                callbacks=[BatchProgressBar()]):
+        """ Generate predictions from a numpy dataset
+  
+        Args:
+            x:          Dictionary of testing inputs
+            outputs:    Output population(s) to extract predictions from
+            callbacks:  List of callbacks to run during inference.
+        """
+        # Determine the number of elements in x
+        x_size = get_dataset_size(x)
+
+        if x_size is None:
+            raise RuntimeError("Each input population must be "
+                               " provided with same number of inputs")
+        # Batch x
+        x = batch_dataset(x, self.genn_model.batch_size, x_size)
+
+        # Convert outputs to sequence
+        outputs = outputs if isinstance(outputs, Sequence) else [outputs]
+
+        # Create callback list and begin testing
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
+                                     num_batches=len(x))
+        callback_list.on_test_begin()
+
+        # Build dictionary mapping from output to
+        # (initially empty) lists to hold predictions
+        y_pred = {o: [] for o in outputs}
+
+        # Loop through batches and evaluate
+        for batch, x_batch in enumerate(x):
+            # Start batch
+            callback_list.on_batch_begin(batch)
+
+            # Get predictions from each output on this batch
+            y_pred_batch = self._predict_batch(batch, x_batch, outputs,
+                                               callback_list)
+
+            # Insert copies into dictionary
+            for o, y in  zip(outputs, y_pred_batch):
+                y_pred[o].append(np.copy(y))
+
+            # End batch
+            callback_list.on_batch_end(batch, {})
+
+        # End testing
+        callback_list.on_test_end({})
+
+        # Concatenate predictions into single numpy array and trim padding
+        for o in outputs:
+            y_pred[o] = np.concatenate(y_pred[o])[:x_size,:]
+
+        # Return predictions and metrics
+        return y_pred, callback_list.get_data()
+
+    def evaluate_batch(self, x: dict, y: dict,
+                       metrics="sparse_categorical_accuracy",
+                       callbacks=[]):
+        # Build metrics
+        metrics = get_object_mapping(metrics, y.keys(), Metric, 
+                                     "Metric", default_metrics)
+
+        # Create callback list and begin testing
+        callback_list = CallbackList(self.base_callbacks + callbacks,
+                                     compiled_network=self,
+                                     num_batches=1)
+        callback_list.on_test_begin()
+
+        # Evaluate batch and return metrics
+        self._evaluate_batch(0, x, y, metrics, callback_list)
+
+        # End testing
+        callback_list.on_test_end(metrics)
+
+        return metrics, callback_list.get_data()
+
+    def _predict_batch(self, batch: int, x: dict, outputs: Sequence,
+                       callback_list: CallbackList):
+        """ Generate predictions from a single batch of inputs
+        Args:
+        batch --    index of current batch
+        x --        dict mapping input Population or InputLayer to
+                    array containing one batch of inputs
+        outputs --  sequence of populations to read predictions from
+        """
+        # Reset time to 0
+        # **YUCK** I don't REALLY like this
+        self.genn_model.timestep = 0
+
+        # Set x as input
+        self.set_input(x)
+
+        # Simulate timesteps
+        for t in range(self.evaluate_timesteps):
+            self.step_time(callback_list)
+
+        # Return predictions from model
+        return self.get_readout(outputs)
+
+    def _evaluate_batch(self, batch: int, x: dict, y: dict, metrics,
+                        callback_list: CallbackList):
+        """ Evaluate a single batch of inputs against labels
+        Args:
+        batch --    index of current batch
+        x --        dict mapping input Population or InputLayer to
+                    array containing one batch of inputs
+        y --        dict mapping output Population or Layer to
+                    array containing one batch of labels
+        """
+        # Start batch
+        callback_list.on_batch_begin(batch)
+
+        # Get predictions from model
+        y_pred = self._predict_batch(batch, x, list(y.keys()), callback_list)
+
+        # Update metrics
+        for (o, y_true), out_y_pred in zip(y.items(), y_pred):
+            metrics[o].update(y_true, out_y_pred[:len(y_true)],
+                              self.communicator)
+
+        # End batch
+        callback_list.on_batch_end(batch, metrics)
 
 # Because we want the converter class to be reusable, we don't want
 # the data to be a member, instead we encapsulate it in a tuple
@@ -213,7 +241,7 @@ class FewSpikeCompiler(Compiler):
                                                batch_size, rng_seed,
                                                kernel_profiling, communicator,
                                                **genn_kwargs)
-        self.k = k
+        self.evaluate_timesteps = k
 
     def pre_compile(self, network: Network, genn_model, 
                     inputs, outputs, **kwargs) -> CompileState:
@@ -241,7 +269,7 @@ class FewSpikeCompiler(Compiler):
                     source_pop = c().source()
                     depth_difference = (pipeline_depth 
                                         - next_pipeline_depth[source_pop])
-                    con_delay[c()] = depth_difference * self.k
+                    con_delay[c()] = depth_difference * self.evaluate_timesteps
 
             # Otherwise (layer is an input layer),
             # set this layer's delay as zero
@@ -297,5 +325,5 @@ class FewSpikeCompiler(Compiler):
                                 compile_state: CompileState) -> CompiledFewSpikeNetwork:
         return CompiledFewSpikeNetwork(genn_model, neuron_populations,
                                        connection_populations,
-                                       self.communicator, self.k,
+                                       self.communicator, self.evaluate_timesteps,
                                        compile_state.pop_pipeline_depth)
