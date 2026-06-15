@@ -244,6 +244,9 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         metrics = get_object_mapping(metrics, outputs, Metric, 
                                      "Metric", default_metrics)
 
+        # List of predicted outputs
+        all_y_pred = []
+
         # Get the pipeline depth of each output
         y_pipe_depth = {
             o: (self.pop_pipeline_depth[get_underlying_pop(o)]
@@ -313,7 +316,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
                     # Get predictions from model
                     batch_y_pred = self.get_readout(o)
-
+                    for y_pred_item in batch_y_pred[:len(batch_y_true)]:
+                        all_y_pred.append(np.copy(y_pred_item))
                     # Update metrics
                     metrics[o].update(batch_y_true,
                                       batch_y_pred[:len(batch_y_true)],
@@ -329,7 +333,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         callback_list.on_test_end(metrics)
 
         # Return metrics
-        return metrics, callback_list.get_data()
+        return np.array(all_y_pred), callback_list.get_data()
 
 
 # Because we want the converter class to be reusable, we don't want
