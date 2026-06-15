@@ -22,23 +22,18 @@ class LeakyIntegrateFireInput(LeakyIntegrateFire, InputBase):
                                     this value.
         v:                          Initial value of membrane voltage
         tau_mem:                    Time constant of membrane voltage [ms]
-        tau_refrac:                 Duration of refractory period [ms]
         relative_reset:             How is ``v`` reset after a spike?
-        integrate_during_refrac:    Should ``v`` continue to integrate inputs
-                                    during refractory period?
         input_frames:               How many frames does each input have?
         input_frame_timesteps:      How many timesteps should each frame of 
                                     input be presented for?
     """
     def __init__(self, v_thresh: InitValue = 1.0, v_reset: InitValue = 0.0,
                  v: InitValue = 0.0, tau_mem: InitValue = 20.0,
-                 tau_refrac: InitValue = None, relative_reset: bool = True,
-                 integrate_during_refrac: bool = True, scale_i: bool = False,
+                 relative_reset: bool = True,
                  input_frames=1, input_frame_timesteps=1):
         super().__init__(
             v_thresh=v_thresh, v_reset=v_reset, v=v, tau_mem=tau_mem, 
-            tau_refrac=tau_refrac, relative_reset=relative_reset, 
-            integrate_during_refrac=integrate_during_refrac, scale_i=scale_i,
+            relative_reset=relative_reset,
             egp_name="Input", input_frames=input_frames,
             input_frame_timesteps=input_frame_timesteps)
 
