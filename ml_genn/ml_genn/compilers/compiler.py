@@ -664,7 +664,6 @@ class Compiler:
                                               self.supported_matrix_type)
 
             # Build weight update model
-            print("build weight update model")
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,
              wum_egp_vals, wum_var_egp_vals,
              wum_pre_var_vals, wum_post_var_vals,
