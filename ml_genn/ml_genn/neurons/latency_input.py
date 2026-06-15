@@ -29,7 +29,8 @@ signed_genn_model = {
 }
 
 genn_model = {
-    "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE),],
+    "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE),
+             ("Spiked", "uint8_t")],
     "threshold_condition_code":
         """
         (!Spiked) && (t > SpikeTime)
@@ -123,7 +124,8 @@ class LatencyInput(Neuron, Input):
                                    f"not match batch size {batch_size}")
             # Reshape input into batches of flattened data
             batched_input = np.reshape(spike_time, (-1, np.prod(shape)))
-            batched_polarity = np.reshape(polarity, (-1, np.prod(shape)))
+            if self.signed:
+                batched_polarity = np.reshape(polarity, (-1, np.prod(shape)))
             # If we have a full batch
             input_batch_size = batched_input.shape[0]
             if input_batch_size == batch_size:

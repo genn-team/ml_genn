@@ -15,6 +15,7 @@ from . import metrics
 from . import neurons
 from . import optimisers
 from . import readouts
+from . import regularisers
 from . import serialisers
 from . import synapses
 from . import utils
@@ -24,4 +25,5 @@ __version__ = metadata.version("ml_genn")
 __all__ = ["Connection", "InputLayer", "Layer", "Network", "Population",
            "SequentialNetwork", "callbacks", "communicators", "compilers",
            "connectivity", "initializers", "losses", "metrics", "neurons",
-           "optimisers", "readouts", "serialisers", "synapses", "utils"]
+           "optimisers", "readouts", "regularisers", "serialisers",
+           "synapses", "utils"]
