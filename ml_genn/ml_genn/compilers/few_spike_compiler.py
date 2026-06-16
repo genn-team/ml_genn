@@ -184,8 +184,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
-    def predict(self, x: dict, y: dict,
-                 metrics="sparse_categorical_accuracy",
+    def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
                  callbacks=[BatchProgressBar()]):
         """ Predict an input in numpy format against labels
 
@@ -199,24 +198,18 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
-        y_size = get_dataset_size(y)
 
         if x_size is None:
             raise RuntimeError("Each input population must be "
                                " provided with same number of inputs")
-        if y_size is None:
-            raise RuntimeError("Each output population must be "
-                               " provided with same number of labels")
-        if x_size != y_size:
-            raise RuntimeError("Number of inputs and labels must match")
 
         # Batch x and y
         # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
         splits = range(0, x_size, self.genn_model.batch_size)
         x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
                      for d in x.values()]
-        y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
-                     for d in y.values()]
+        # Convert outputs to sequence
+        outputs = outputs if isinstance(outputs, Sequence) else [outputs]
 
         # Zip together and evaluate using iterator
         return self.predict_batch_iter(list(x.keys()), list(y.keys()),
@@ -225,7 +218,6 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
 
     def predict_batch_iter(self, inputs, outputs, data: Iterator,
                             num_batches: Optional[int] = None,
-                            metrics="sparse_categorical_accuracy",
                             callbacks=[BatchProgressBar()]):
         """ Predict an input in iterator format against labels
         Args:
@@ -238,11 +230,6 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
-        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
-
-        # Build metrics
-        metrics = get_object_mapping(metrics, outputs, Metric, 
-                                     "Metric", default_metrics)
 
         # List of predicted outputs
         all_y_pred = []
@@ -318,19 +305,15 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     batch_y_pred = self.get_readout(o)
                     for y_pred_item in batch_y_pred[:len(batch_y_true)]:
                         all_y_pred.append(np.copy(y_pred_item))
-                    # Update metrics
-                    metrics[o].update(batch_y_true,
-                                      batch_y_pred[:len(batch_y_true)],
-                                      self.communicator)
 
             # End batch
-            callback_list.on_batch_end(batch_i, metrics)
+            callback_list.on_batch_end(batch_i, {})
 
             # Next batch
             batch_i += 1
 
         # End testing
-        callback_list.on_test_end(metrics)
+        callback_list.on_test_end({})
 
         # Return metrics
         return np.array(all_y_pred), callback_list.get_data()
