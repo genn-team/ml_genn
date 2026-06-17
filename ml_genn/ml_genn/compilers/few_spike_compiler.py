@@ -184,15 +184,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
-    def predict(self, x: dict, y: dict,
+    def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
                  callbacks=[BatchProgressBar()]):
-        """ Predict an input in numpy format against labels
+        """ Generate predictions from a numpy dataset
 
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
+            x:          Dictionary of testing inputs
+            outputs:    Output population(s) to extract predictions from
             callbacks:  List of callbacks to run during evaluation.
         """
         # Determine the number of elements in x and y
@@ -202,16 +200,16 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             raise RuntimeError("Each input population must be "
                                " provided with same number of inputs")
         
-        # Batch x and y
-        # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
+        # Batch x
         splits = range(0, x_size, self.genn_model.batch_size)
         x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
                      for d in x.values()]
+        # Mock y batched for the time being
         y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
-                     for d in y.values()]
+                     for d in [np.zeros(x_size)]]
         
         # Zip together and evaluate using iterator
-        return self.predict_batch_iter(list(x.keys()), list(y.keys()),
+        return self.predict_batch_iter(list(x.keys()), outputs,
                                         iter(zip(*(x_batched + y_batched))),
                                         len(splits), callbacks)
 
@@ -220,11 +218,10 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                             callbacks=[BatchProgressBar()]):
         """ Predict an input in iterator format against labels
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
-            metrics:    Metrics to calculate.
+            inputs:
+            outputs:
+            data:
+            num_batches:
             callbacks:  List of callbacks to run during evaluation.
         """
         # Convert inputs and outputs to tuples
@@ -260,7 +257,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # Attempt to get next batch of data,
             # clear data remaining flag if none remains
             try:
-                batch_x, batch_y = next(data)
+                batch_x, _ = next(data)
             except StopIteration:
                 data_remaining = False
 
@@ -278,13 +275,14 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 else:
                     self.set_input({p: x for p, x in zip(inputs, batch_x)})
 
-                # Add each y to correct queue(s)
-                # **YUCK** this isn't quite right as batch_y
+                # Add each PLACEHOLDER to correct queue(s)
+                # **YUCK** this isn't quite right as PLACEHOLDER (batch_x)
                 # could also have outer dimension
                 if len(outputs) == 1:
-                    y_pipe_queue[outputs[0]].append(batch_y)
+                    y_pipe_queue[outputs[0]].append(np.zeros(len(batch_x)))
                 else:
-                    for p, y in zip(outputs, batch_y):
+                    # Probably broken
+                    for p, y in zip(outputs, np.zeros(len(batch_x))):
                         y_pipe_queue[p].append(y)
 
             # Start batch
