@@ -225,32 +225,32 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
-
+        
         # List of predicted outputs
         all_y_pred = []
-
+        
         # Get the pipeline depth of each output
         y_pipe_depth = {
             o: (self.pop_pipeline_depth[get_underlying_pop(o)]
                 if get_underlying_pop(o) in self.pop_pipeline_depth
                 else 0)
             for o in outputs}
-
+        
         # Create callback list and begin testing
         num_batches = (None if num_batches is None
                        else num_batches + 1 + max(y_pipe_depth.values()))
         callback_list = CallbackList(callbacks, compiled_network=self,
                                      num_batches=num_batches)
         callback_list.on_test_begin()
-
-        # Build deque to hold y
+        
+        # PLACEHOLDER Build deque to hold y
         y_pipe_queue = {p: deque(maxlen=d + 1)
                         for p, d in y_pipe_depth.items()}
-
-        # While there is data remaining or any y values left in queues
+        
+        data = iter(inputs)
         data_remaining = True
         batch_i = 0
-        data = iter(inputs)
+        # While there is data remaining or any y values left in queues
         while data_remaining or any(len(q) > 0
                                     for q in y_pipe_queue.values()):
             # Attempt to get next batch of data,
@@ -259,67 +259,46 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 batch_input_x = next(data)
             except StopIteration:
                 data_remaining = False
-
             # Reset time to 0
             # **YUCK** I don't REALLY like this
             self.genn_model.timestep = 0
-
-            # If there is any data remaining,
+            
             if data_remaining:
-                # Set x as input
-                # **YUCK** this isn't quite right as batch_x
-                # could also have outer dimension
                 self.set_input(batch_input_x)
-                # else:
-                #     self.set_input({p: x for p, x in zip(inputs, batch_x)})
-
-                # Add each PLACEHOLDER to correct queue(s)
-                # **YUCK** this isn't quite right as PLACEHOLDER (batch_x)
-                # could also have outer dimension
+                # PLACEHOLDER to match output sizes with batch_x sizes
                 if len(outputs) == 1:
                     y_pipe_queue[outputs[0]].append(np.zeros(len(list(batch_input_x.values())[0])))
                 else:
                     # Probably broken
                     for p, y in zip(outputs, np.zeros(len(list(batch_input_x.values())[0]))):
                         y_pipe_queue[p].append(y)
-
-            # Start batch
+            
             callback_list.on_batch_begin(batch_i)
-
-            # Simulate K timesteps
+            
             for t in range(self.k):
                 self.step_time(callback_list)
-
-            # Loop through outputs
+            
             for o in outputs:
                 # If there is output to read from this population
                 if batch_i >= y_pipe_depth[o] and len(y_pipe_queue[o]) > 0:
-                    # Pop correct labels from queue
-                    batch_y_true = y_pipe_queue[o].popleft()
-
+                    # PLACEHOLDER queue to synchronize output readout sizes
+                    PLACEHOLDER_y_actual_size = y_pipe_queue[o].popleft()
+                    
                     # Get predictions from model
                     batch_y_pred = self.get_readout(o)
-                    for y_pred_item in batch_y_pred[:len(batch_y_true)]:
+                    for y_pred_item in batch_y_pred[:len(PLACEHOLDER_y_actual_size)]:
                         all_y_pred.append(np.copy(y_pred_item))
-
-            # End batch
+            
             callback_list.on_batch_end(batch_i, {})
-
-            # Next batch
-            batch_i += 1
-
-        # End testing
+            batch_i += 1        
         callback_list.on_test_end({})
-
-        # Return metrics
+        # Return all predictions and callback data
         return np.array(all_y_pred), callback_list.get_data()
-
 
 # Because we want the converter class to be reusable, we don't want
 # the data to be a member, instead we encapsulate it in a tuple
 CompileState = namedtuple("CompileState",
                           ["con_delay", "pop_pipeline_depth"])
-
 
 class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
