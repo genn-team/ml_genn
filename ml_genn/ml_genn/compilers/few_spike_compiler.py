@@ -2,7 +2,7 @@ import numpy as np
 
 from collections import deque, namedtuple
 from pygenn import SynapseMatrixType
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, Optional, Sequence, Union
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -14,10 +14,10 @@ from ..readouts import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.model import NeuronModel, SynapseModel
-                           
-from ..utils.data import get_dataset_size
+
+from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
-from ..utils.network import get_network_dag, get_underlying_pop
+from ..utils.network import PopulationType, get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
 from ..metrics import default_metrics
@@ -66,8 +66,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Batch x and y
         # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
         splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
-                     for d in x.values()]
+        x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
         y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
                      for d in y.values()]
 
@@ -202,25 +201,24 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         
         # Batch x
         splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
-                     for d in x.values()]
+        # x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
+        #              for d in x.values()]
+        x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
         # Mock y batched for the time being
         y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
                      for d in [np.zeros(x_size)]]
         
         # Zip together and evaluate using iterator
-        return self.predict_batch_iter(list(x.keys()), outputs,
-                                        iter(zip(*(x_batched + y_batched))),
+        return self.predict_batch_iter(x_batched, outputs,
                                         len(splits), callbacks)
 
-    def predict_batch_iter(self, inputs, outputs, data: Iterator,
+    def predict_batch_iter(self, inputs, outputs,
                             num_batches: Optional[int] = None,
                             callbacks=[BatchProgressBar()]):
         """ Predict an input in iterator format against labels
         Args:
             inputs:
             outputs:
-            data:
             num_batches:
             callbacks:  List of callbacks to run during evaluation.
         """
@@ -252,12 +250,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # While there is data remaining or any y values left in queues
         data_remaining = True
         batch_i = 0
+        data = iter(inputs)
         while data_remaining or any(len(q) > 0
                                     for q in y_pipe_queue.values()):
             # Attempt to get next batch of data,
             # clear data remaining flag if none remains
             try:
-                batch_x, _ = next(data)
+                batch_input_x = next(data)
             except StopIteration:
                 data_remaining = False
 
@@ -270,19 +269,18 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                 # Set x as input
                 # **YUCK** this isn't quite right as batch_x
                 # could also have outer dimension
-                if len(inputs) == 1:
-                    self.set_input({inputs[0]: batch_x})
-                else:
-                    self.set_input({p: x for p, x in zip(inputs, batch_x)})
+                self.set_input(batch_input_x)
+                # else:
+                #     self.set_input({p: x for p, x in zip(inputs, batch_x)})
 
                 # Add each PLACEHOLDER to correct queue(s)
                 # **YUCK** this isn't quite right as PLACEHOLDER (batch_x)
                 # could also have outer dimension
                 if len(outputs) == 1:
-                    y_pipe_queue[outputs[0]].append(np.zeros(len(batch_x)))
+                    y_pipe_queue[outputs[0]].append(np.zeros(len(list(batch_input_x.values())[0])))
                 else:
                     # Probably broken
-                    for p, y in zip(outputs, np.zeros(len(batch_x))):
+                    for p, y in zip(outputs, np.zeros(len(list(batch_input_x.values())[0]))):
                         y_pipe_queue[p].append(y)
 
             # Start batch
