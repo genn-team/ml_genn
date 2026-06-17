@@ -107,11 +107,11 @@ with compiled_net:
     print(f"FewSpikeCompiler 'evaluate' time = {end_time - start_time} s")
 
     start_time = perf_counter()
-    all_y_pred, cb_data = compiled_net.predict(
-        {net_inputs[0]: validate_x}, {net_outputs[0]: validate_y},
+    y_pred_dict, cb_data = compiled_net.predict(
+        {net_inputs[0]: validate_x}, net_outputs,
         callbacks=callbacks)
     end_time = perf_counter()
-    y_pred_accuracy = np.count_nonzero(np.argmax(all_y_pred, axis=1) == validate_y) / len(validate_y)
+    y_pred_accuracy = np.count_nonzero(np.argmax(y_pred_dict[net_outputs[0]], axis=1) == validate_y) / len(validate_y)
     print(f"Accuracy from manual calc. from predict = {100.0 * y_pred_accuracy}%")
     print(f"FewSpikeCompiler 'predict' time = {end_time - start_time} s")
     

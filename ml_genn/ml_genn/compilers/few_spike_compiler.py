@@ -66,7 +66,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Batch x and y
         # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
         splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
+        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
+                     for d in x.values()]
         y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
                      for d in y.values()]
 
@@ -209,10 +210,10 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                      for d in [np.zeros(x_size)]]
         
         # Zip together and evaluate using iterator
-        return self.predict_batch_iter(x_batched, outputs,
+        return self.predict_batch_iter(x_batched, outputs, x_size,
                                         len(splits), callbacks)
 
-    def predict_batch_iter(self, inputs, outputs,
+    def predict_batch_iter(self, inputs, outputs, x_size,
                             num_batches: Optional[int] = None,
                             callbacks=[BatchProgressBar()]):
         """ Predict an input in iterator format against labels
@@ -226,8 +227,9 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
         
-        # List of predicted outputs
-        all_y_pred = []
+        # Build dictionary mapping from output to
+        # (initially empty) lists to hold predictions
+        y_pred = {o: [] for o in outputs}
         
         # Get the pipeline depth of each output
         y_pipe_depth = {
@@ -263,8 +265,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # **YUCK** I don't REALLY like this
             self.genn_model.timestep = 0
             
+            self.set_input(batch_input_x)
             if data_remaining:
-                self.set_input(batch_input_x)
                 # PLACEHOLDER to match output sizes with batch_x sizes
                 if len(outputs) == 1:
                     y_pipe_queue[outputs[0]].append(np.zeros(len(list(batch_input_x.values())[0])))
@@ -285,15 +287,19 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     PLACEHOLDER_y_actual_size = y_pipe_queue[o].popleft()
                     
                     # Get predictions from model
-                    batch_y_pred = self.get_readout(o)
-                    for y_pred_item in batch_y_pred[:len(PLACEHOLDER_y_actual_size)]:
-                        all_y_pred.append(np.copy(y_pred_item))
+                    y_pred_batch = self.get_readout(o)
+                    # Insert copies into dictionary
+                    y_pred[o].append(np.copy(y_pred_batch))
             
             callback_list.on_batch_end(batch_i, {})
             batch_i += 1        
         callback_list.on_test_end({})
-        # Return all predictions and callback data
-        return np.array(all_y_pred), callback_list.get_data()
+        # Concatenate predictions into single numpy array and trim padding
+        for o in outputs:
+            y_pred[o] = np.concatenate(y_pred[o])[:x_size,:]
+        
+        # Return predictions and metrics
+        return y_pred, callback_list.get_data()
 
 # Because we want the converter class to be reusable, we don't want
 # the data to be a member, instead we encapsulate it in a tuple
