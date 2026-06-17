@@ -202,12 +202,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         
         # Batch x
         splits = range(0, x_size, self.genn_model.batch_size)
-        # x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
-        #              for d in x.values()]
         x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
-        # Mock y batched for the time being
-        y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
-                     for d in [np.zeros(x_size)]]
         
         # Zip together and evaluate using iterator
         return self.predict_batch_iter(x_batched, outputs, x_size,
