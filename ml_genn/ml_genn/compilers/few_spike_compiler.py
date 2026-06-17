@@ -8,7 +8,7 @@ from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from .. import Connection, Population, Network
 from ..communicators import Communicator
-from ..metrics import Metric
+from ..metrics import Metric, MetricsType
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..readouts import Var
 from ..synapses import Delta
@@ -40,15 +40,14 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
     def evaluate(self, x: dict, y: dict,
                  metrics="sparse_categorical_accuracy",
                  callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in numpy format against labels
-
+        """ Evaluate metrics on a numpy dataset
+        
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
+            x:          Dictionary of testing inputs
+            y:          Dictionary of testing labels to compare 
+                        predictions against
             metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during evaluation.
+            callbacks:  List of callbacks to run during inference.
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
@@ -76,18 +75,19 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                         iter(zip(*(x_batched + y_batched))),
                                         len(splits), metrics, callbacks)
 
-    def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
-                            num_batches: Optional[int] = None,
-                            metrics="sparse_categorical_accuracy",
-                            callbacks=[BatchProgressBar()]):
-        """ Evaluate an input in iterator format against labels
+    def evaluate_batch_iter(
+            self, inputs, outputs, data: Iterator, num_batches: int = None,
+            metrics: MetricsType = "sparse_categorical_accuracy",
+            callbacks=[BatchProgressBar()]):
+        """ Evaluate metrics on an iterator that provides batches of a dataset
+        
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
-            metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during evaluation.
+            inputs:         Input population(s)
+            outputs:        Output population(s)
+            data:           Iterator which produces batches of inputs and labels 
+            num_batches:    Number of batches iterator will produce
+            metrics:        Metrics to calculate.
+            callbacks:      List of callbacks to run during inference.
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
