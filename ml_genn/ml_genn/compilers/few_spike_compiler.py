@@ -2,7 +2,7 @@ import numpy as np
 
 from collections import deque, namedtuple
 from pygenn import SynapseMatrixType
-from typing import Iterator, Optional, Sequence, Union
+from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -17,7 +17,7 @@ from ..utils.model import NeuronModel, SynapseModel
                            
 from ..utils.data import get_dataset_size
 from ..utils.module import get_object_mapping
-from ..utils.network import get_network_dag, get_underlying_pop, PopulationType
+from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
 from ..metrics import default_metrics
@@ -184,15 +184,15 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
-    def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
+    def predict(self, x: dict, y: dict,
                  callbacks=[BatchProgressBar()]):
         """ Predict an input in numpy format against labels
 
         Args:
             x:          Dictionary of inputs to inject 
                         into input neuron populations.
-            outputs:    Output population(s) to extract predictions from
-            metrics:    Metrics to calculate.
+            y:          Dictionary of labels to compare to
+                        readout from output neuron population.
             callbacks:  List of callbacks to run during evaluation.
         """
         # Determine the number of elements in x and y
@@ -201,34 +201,35 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         if x_size is None:
             raise RuntimeError("Each input population must be "
                                " provided with same number of inputs")
-
+        
         # Batch x and y
         # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
         splits = range(0, x_size, self.genn_model.batch_size)
         x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
                      for d in x.values()]
-        # Convert outputs to sequence
-        outputs = outputs if isinstance(outputs, Sequence) else [outputs]
-
+        y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
+                     for d in y.values()]
+        
         # Zip together and evaluate using iterator
-        return self.predict_batch_iter(list(x.keys()), outputs,
-                                        iter(x_batched), len(splits), callbacks)
+        return self.predict_batch_iter(list(x.keys()), list(y.keys()),
+                                        iter(zip(*(x_batched + y_batched))),
+                                        len(splits), callbacks)
 
     def predict_batch_iter(self, inputs, outputs, data: Iterator,
                             num_batches: Optional[int] = None,
                             callbacks=[BatchProgressBar()]):
         """ Predict an input in iterator format against labels
         Args:
-            inputs:         List of inputs to inject 
-                            into input neuron populations.
-            outputs:        Output population(s) to extract predictions from
-            data:           Data iterator to fetch and insert into
-                            input neuron populations
-            num_batches:    Number of data batches to process the full iterator
-            callbacks:      List of callbacks to run during evaluation.
+            x:          Dictionary of inputs to inject 
+                        into input neuron populations.
+            y:          Dictionary of labels to compare to
+                        readout from output neuron population.
+            metrics:    Metrics to calculate.
+            callbacks:  List of callbacks to run during evaluation.
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
+        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
 
         # List of predicted outputs
         all_y_pred = []
@@ -259,7 +260,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # Attempt to get next batch of data,
             # clear data remaining flag if none remains
             try:
-                batch_x = next(data)
+                batch_x, batch_y = next(data)
             except StopIteration:
                 data_remaining = False
 
