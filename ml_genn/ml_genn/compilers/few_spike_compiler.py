@@ -2,7 +2,7 @@ import numpy as np
 
 from collections import deque, namedtuple
 from pygenn import SynapseMatrixType
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, Optional, Sequence, Union
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
@@ -17,7 +17,7 @@ from ..utils.model import NeuronModel, SynapseModel
                            
 from ..utils.data import get_dataset_size
 from ..utils.module import get_object_mapping
-from ..utils.network import get_network_dag, get_underlying_pop
+from ..utils.network import get_network_dag, get_underlying_pop, PopulationType
 from ..utils.value import is_value_constant
 
 from ..metrics import default_metrics
@@ -191,8 +191,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         Args:
             x:          Dictionary of inputs to inject 
                         into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
+            outputs:    Output population(s) to extract predictions from
             metrics:    Metrics to calculate.
             callbacks:  List of callbacks to run during evaluation.
         """
@@ -212,21 +211,21 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         outputs = outputs if isinstance(outputs, Sequence) else [outputs]
 
         # Zip together and evaluate using iterator
-        return self.predict_batch_iter(list(x.keys()), list(y.keys()),
-                                        iter(zip(*(x_batched + y_batched))),
-                                        len(splits), metrics, callbacks)
+        return self.predict_batch_iter(list(x.keys()), outputs,
+                                        iter(x_batched), len(splits), callbacks)
 
     def predict_batch_iter(self, inputs, outputs, data: Iterator,
                             num_batches: Optional[int] = None,
                             callbacks=[BatchProgressBar()]):
         """ Predict an input in iterator format against labels
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
-            metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during evaluation.
+            inputs:         List of inputs to inject 
+                            into input neuron populations.
+            outputs:        Output population(s) to extract predictions from
+            data:           Data iterator to fetch and insert into
+                            input neuron populations
+            num_batches:    Number of data batches to process the full iterator
+            callbacks:      List of callbacks to run during evaluation.
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
@@ -260,7 +259,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # Attempt to get next batch of data,
             # clear data remaining flag if none remains
             try:
-                batch_x, batch_y = next(data)
+                batch_x = next(data)
             except StopIteration:
                 data_remaining = False
 
