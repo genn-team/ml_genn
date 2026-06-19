@@ -4,6 +4,7 @@ import numpy as np
 
 from typing import Optional, TYPE_CHECKING
 from .neuron import Neuron
+from ..utils.auto_model import AutoNeuronModel
 from ..utils.model import NeuronModel
 from ..utils.value import InitValue, ValueDescriptor
 
@@ -58,10 +59,10 @@ class AdaptiveLeakyIntegrateFire(Neuron):
     def get_model(self, population: Population,
                   dt: float, batch_size: int) -> NeuronModel:
         # Build basic model
-        v_jump = ("v - (v_thresh - v_reset)" if self.relative_reset
+        v_jump = ("v - (v_thresh + (beta * a) - v_reset)" if self.relative_reset
                   else "v_reset")
         genn_model = {
-            "vars": {"v": ("(-v + i) / tau_mem", v_jump),
+            "vars": {"v": ("(-v + Isyn) / tau_mem", v_jump),
                      "a": ("-a / tau_adapt", "a + 1")},
             "threshold": "v - (v_thresh + (beta * a))"}
 
