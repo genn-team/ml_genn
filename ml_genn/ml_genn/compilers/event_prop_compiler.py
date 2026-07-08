@@ -201,6 +201,7 @@ neuron_backward_pass = Template(
     }
     // YUCK - need to trigger the back_spike the time step before to get the correct backward synaptic input
     if (RingReadOffset != RingReadEndOffset && fabs(backT - RingSpikeTime[ringOffset + RingReadOffset] - dt) < 1e-3*dt) {
+        $imvretrieval
         BackSpike = true;
     }
 
@@ -1027,7 +1028,9 @@ class EventPropCompiler(Compiler):
                         max_spikes=self.max_spikes,
                         example_time=(self.example_timesteps * self.dt),
                         dynamics=dynamics_code,
-                        transition=transition_code))
+                        transition=transition_code,
+                        imvretrieval="",
+                    ))
 
                 # Prepend (as it accesses the pre-reset value of V) 
                 # code to reset to write spike time and I-V to ring buffer
@@ -1083,7 +1086,9 @@ class EventPropCompiler(Compiler):
                         max_spikes=self.max_spikes,
                         example_time=(self.example_timesteps * self.dt),
                         dynamics="",
-                        transition=""))
+                        transition="",
+                        imvretrieval="",
+                    ))
 
                 # Prepend code to reset to write spike time to ring buffer
                 model_copy.prepend_reset_code(
@@ -1126,6 +1131,8 @@ class EventPropCompiler(Compiler):
                     # Add EGP for IMinusV ring variables
                     model_copy.add_egp("RingIMinusV", "scalar*", 
                                        np.empty(ring_size, dtype=np.float32))
+                    # Add state variable to hand ring buffer IMinusV values to wum
+                    model_copy.add_var("ImV", "scalar", 0.0)
 
                     # Add parameter for scaling factor
                     tau_mem = pop.neuron.tau_mem
@@ -1134,7 +1141,12 @@ class EventPropCompiler(Compiler):
 
                     # On backward pass transition, update LambdaV
                     transition_code = """
-                        LambdaV += (1.0 / RingIMinusV[ringOffset + RingReadOffset]) * (Vthresh * LambdaV + RevISyn);
+                        if (ImV > 0.1) {
+                            LambdaV += (1.0 / ImV) * (Vthresh * LambdaV + RevISyn);
+                        }
+                        else {
+                            LambdaV += 10.0 * RevISyn;
+                        }
                         """
 
                     # List of variables aside from those in base 
@@ -1217,7 +1229,9 @@ class EventPropCompiler(Compiler):
                             LambdaI = (A * LambdaV * (Beta - Alpha)) + (LambdaI * Beta);
                             LambdaV *= Alpha;
                             """,
-                            transition=transition_code))
+                            transition=transition_code,
+                            imvretrieval="ImV = RingIMinusV[ringOffset + RingReadOffset];",
+                        ))
 
                     # Prepend (as it accesses the pre-reset value of V) 
                     # code to reset to write spike time and I-V to ring buffer
@@ -1235,6 +1249,8 @@ class EventPropCompiler(Compiler):
                         f"{type(pop.neuron).__name__} neurons")
 
         # Build neuron model and return
+        for x, y in model_copy.model.items():
+            print(f"{x}: {y}")
         return model_copy
 
     def build_synapse_model(self, conn: Connection, model: SynapseModel,
@@ -1353,15 +1369,24 @@ class EventPropCompiler(Compiler):
 
             # If it's LIF, add additional event code to backpropagate gradient
             if isinstance(source_neuron, LeakyIntegrateFire):
+                wum.add_pre_neuron_var_ref("ImV_pre", "scalar", "ImV")
                 if has_learnable_delay:
-                    wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[delay] - LambdaI_post[delay]));")
+                    extra = "[delay]"
                 else:
                     wum.add_post_neuron_var_ref("LambdaV_post", "scalar", "LambdaV")
                     
                     if has_delay:
-                        wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post[d] - LambdaI_post[d]));")
+                        extra = "[d]"
                     else:
-                        wum.append_pre_event_syn_code("addToPre(g * (LambdaV_post - LambdaI_post));")
+                        extra = ""
+                wum.append_pre_event_syn_code(f"""
+                    if (ImV_pre > 0.01) {{
+                        addToPre(g * (LambdaV_post{extra} - LambdaI_post{extra}));
+                    }}
+                    else {{
+                        addToPre(g * LambdaI_post{extra});
+                    }}
+                    """)
 
         # Return weight update model
         return wum
