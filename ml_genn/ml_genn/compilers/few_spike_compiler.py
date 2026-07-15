@@ -240,16 +240,14 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                      num_batches=num_batches)
         callback_list.on_test_begin()
         
-        # PLACEHOLDER Build deque to hold y
-        y_pipe_queue = {p: deque(maxlen=d + 1)
-                        for p, d in y_pipe_depth.items()}
+        # Counter to synchronize outputs with pipeline
+        y_pipe_counter = {p: 0 for p, _ in y_pipe_depth.items()}
         
         data = iter(inputs)
         data_remaining = True
         batch_i = 0
         # While there is data remaining or any y values left in queues
-        while data_remaining or any(len(q) > 0
-                                    for q in y_pipe_queue.values()):
+        while data_remaining or any(q > 0 for q in y_pipe_counter.values()):
             # Attempt to get next batch of data,
             # clear data remaining flag if none remains
             try:
@@ -262,13 +260,13 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             
             self.set_input(batch_input_x)
             if data_remaining:
-                # PLACEHOLDER to match output sizes with batch_x sizes
+                # Counter to match output sizes with batch_x sizes
                 if len(outputs) == 1:
-                    y_pipe_queue[outputs[0]].append(np.zeros(len(list(batch_input_x.values())[0])))
+                    y_pipe_counter[outputs[0]] += 1
                 else:
-                    # Probably broken
-                    for p, y in zip(outputs, np.zeros(len(list(batch_input_x.values())[0]))):
-                        y_pipe_queue[p].append(y)
+                    # Not tested for multiple outputs, review
+                    for p in outputs:
+                        y_pipe_counter[p] += 1
             
             callback_list.on_batch_begin(batch_i)
             
@@ -277,9 +275,9 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             
             for o in outputs:
                 # If there is output to read from this population
-                if batch_i >= y_pipe_depth[o] and len(y_pipe_queue[o]) > 0:
-                    # PLACEHOLDER queue to synchronize output readout sizes
-                    PLACEHOLDER_y_actual_size = y_pipe_queue[o].popleft()
+                if batch_i >= y_pipe_depth[o] and y_pipe_counter[o] > 0:
+                    # Counter to synchronize output readout sizes
+                    y_pipe_counter[o] -= 1
                     
                     # Get predictions from model
                     y_pred_batch = self.get_readout(o)
