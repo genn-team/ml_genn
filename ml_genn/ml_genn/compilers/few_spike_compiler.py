@@ -65,7 +65,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Batch x and y
         # [[in_0_batch_0, in_0_batch_1], [in_1_batch_1, in_1_batch_1]]
         splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
+        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
                      for d in x.values()]
         y_batched = [[d[s:s + self.genn_model.batch_size] for s in splits] 
                      for d in y.values()]
