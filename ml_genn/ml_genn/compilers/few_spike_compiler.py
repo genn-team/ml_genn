@@ -40,14 +40,15 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
     def evaluate(self, x: dict, y: dict,
                  metrics="sparse_categorical_accuracy",
                  callbacks=[BatchProgressBar()]):
-        """ Evaluate metrics on a numpy dataset
-        
+        """ Evaluate an input in numpy format against labels
+
         Args:
-            x:          Dictionary of testing inputs
-            y:          Dictionary of testing labels to compare 
-                        predictions against
+            x:          Dictionary of inputs to inject 
+                        into input neuron populations.
+            y:          Dictionary of labels to compare to
+                        readout from output neuron population.
             metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during inference.
+            callbacks:  List of callbacks to run during evaluation.
         """
         # Determine the number of elements in x and y
         x_size = get_dataset_size(x)
@@ -75,10 +76,10 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                                         iter(zip(*(x_batched + y_batched))),
                                         len(splits), metrics, callbacks)
 
-    def evaluate_batch_iter(
-            self, inputs, outputs, data: Iterator, num_batches: int = None,
-            metrics: MetricsType = "sparse_categorical_accuracy",
-            callbacks=[BatchProgressBar()]):
+    def evaluate_batch_iter(self, inputs, outputs, data: Iterator,
+                            num_batches: Optional[int] = None,
+                            metrics="sparse_categorical_accuracy",
+                            callbacks=[BatchProgressBar()]):
         """ Evaluate metrics on an iterator that provides batches of a dataset
         
         Args:
