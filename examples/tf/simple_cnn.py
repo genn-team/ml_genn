@@ -103,17 +103,8 @@ with compiled_net:
         {net_inputs[0]: validate_x}, {net_outputs[0]: validate_y},
         callbacks=callbacks)
     end_time = perf_counter()
-    print(f"Accuracy from metrics = {100.0 * metrics[net_outputs[0]].result}%")
-    print(f"FewSpikeCompiler 'evaluate' time = {end_time - start_time} s")
-
-    start_time = perf_counter()
-    y_pred_dict, cb_data = compiled_net.predict(
-        {net_inputs[0]: validate_x}, net_outputs,
-        callbacks=callbacks)
-    end_time = perf_counter()
-    y_pred_accuracy = np.count_nonzero(np.argmax(y_pred_dict[net_outputs[0]], axis=1) == validate_y) / len(validate_y)
-    print(f"Accuracy from manual calc. from predict = {100.0 * y_pred_accuracy}%")
-    print(f"FewSpikeCompiler 'predict' time = {end_time - start_time} s")
+    print(f"Accuracy = {100.0 * metrics[net_outputs[0]].result}%")
+    print(f"Time = {end_time - start_time} s")
     
     if args.kernel_profiling:
         reset_time = compiled_net.genn_model.get_custom_update_time("Reset")
