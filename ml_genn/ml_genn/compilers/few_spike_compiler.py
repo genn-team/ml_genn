@@ -2,13 +2,13 @@ import numpy as np
 
 from collections import deque, namedtuple
 from pygenn import SynapseMatrixType
-from typing import Iterator, Optional, Sequence, Union
+from typing import Iterator, Optional, Sequence
 from .compiler import Compiler
 from .compiled_network import CompiledNetwork
 from ..callbacks import BatchProgressBar
 from .. import Connection, Population, Network
 from ..communicators import Communicator
-from ..metrics import Metric, MetricsType
+from ..metrics import Metric
 from ..neurons import FewSpikeRelu, FewSpikeReluInput
 from ..readouts import Var
 from ..synapses import Delta
@@ -17,7 +17,7 @@ from ..utils.model import NeuronModel, SynapseModel
 
 from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
-from ..utils.network import PopulationType, get_network_dag, get_underlying_pop
+from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
 
 from ..metrics import default_metrics
@@ -186,7 +186,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
-    def predict(self, x: dict, outputs: Union[Sequence, PopulationType],
+    def predict(self, x: dict, outputs: Sequence,
                  callbacks=[BatchProgressBar()]):
         """ Generate predictions from a numpy dataset
 
