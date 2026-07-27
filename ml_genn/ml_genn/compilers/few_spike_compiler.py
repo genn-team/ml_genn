@@ -203,85 +203,15 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         
         # Batch x
         splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
-        data_iter = iter(x_batched)
+        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
+                        for d in x.values()]
+        # Just to generate an equivalent iterator similar to TF
+        y_batched = [[0 for s in splits] for _ in x.values()] 
         
         # Zip together and evaluate using iterator
-        num_batches = len(splits)
-        inputs = list(x.keys())
-        inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
-        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
-        
-        # Build dictionary mapping from output to
-        # (initially empty) lists to hold predictions
-        y_pred = {o: [] for o in outputs}
-        
-        # Get the pipeline depth of each output
-        y_pipe_depth = {
-            o: (self.pop_pipeline_depth[get_underlying_pop(o)]
-                if get_underlying_pop(o) in self.pop_pipeline_depth
-                else 0)
-            for o in outputs}
-        
-        # Create callback list and begin testing
-        num_batches = (None if num_batches is None
-                       else num_batches + 1 + max(y_pipe_depth.values()))
-        callback_list = CallbackList(callbacks, compiled_network=self,
-                                     num_batches=num_batches)
-        callback_list.on_test_begin()
-        
-        # Counter to synchronize outputs with pipeline
-        y_pipe_counter = {p: 0 for p, _ in y_pipe_depth.items()}
-        
-        data_remaining = True
-        batch_i = 0
-        # While there is data remaining or any y values left in queues
-        while data_remaining or any(q > 0 for q in y_pipe_counter.values()):
-            # Attempt to get next batch of data,
-            # clear data remaining flag if none remains
-            try:
-                input_batch = next(data_iter)
-            except StopIteration:
-                data_remaining = False
-            # Reset time to 0
-            # **YUCK** I don't REALLY like this
-            self.genn_model.timestep = 0
-            
-            self.set_input(input_batch)
-            if data_remaining:
-                # Counter to match output readout with network pipeline latency
-                if len(outputs) == 1:
-                    y_pipe_counter[outputs[0]] += 1
-                else:
-                    # Not tested for multiple outputs, review
-                    for p in outputs:
-                        y_pipe_counter[p] += 1
-            
-            callback_list.on_batch_begin(batch_i)
-            
-            for t in range(self.k):
-                self.step_time(callback_list)
-            
-            for o in outputs:
-                # If there is output to read from this population
-                if batch_i >= y_pipe_depth[o] and y_pipe_counter[o] > 0:
-                    # Counter to synchronize output readout sizes
-                    y_pipe_counter[o] -= 1
-                    
-                    # Get predictions from model
-                    y_pred_batch = self.get_readout(o)
-                    # Insert copies into dictionary
-                    y_pred[o].append(np.copy(y_pred_batch))
-            
-            callback_list.on_batch_end(batch_i, {})
-            batch_i += 1        
-        callback_list.on_test_end({})
-        # Concatenate predictions into single numpy array and trim padding
-        for o in outputs:
-            y_pred[o] = np.concatenate(y_pred[o])[:x_size,:]
-        
-        # Return predictions and metrics
-        return y_pred, callback_list.get_data()
+        return self.predict_batch_iter(list(x.keys()), outputs,
+                                        iter(zip(*(x_batched + y_batched))),
+                                        len(splits), callbacks)
 
     def predict_batch_iter(self, inputs, outputs, data: Iterator,
                         num_batches: Optional[int] = None,
