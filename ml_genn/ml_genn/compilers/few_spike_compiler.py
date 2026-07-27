@@ -205,12 +205,10 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         splits = range(0, x_size, self.genn_model.batch_size)
         x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
                         for d in x.values()]
-        # Just to generate an equivalent iterator similar to TF
-        y_batched = [[0 for s in splits] for _ in x.values()] 
         
         # Zip together and evaluate using iterator
         return self.predict_batch_iter(list(x.keys()), outputs,
-                                        iter(zip(*(x_batched + y_batched))),
+                                        iter(zip(*x_batched)),
                                         len(splits), callbacks)
 
     def predict_batch_iter(self, inputs, outputs, data: Iterator,
@@ -222,7 +220,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                          input data into.
             outputs:     List of output neuron populations to readout
                          and compare with labels.
-            data:        Tensorflow tterator which produces batches of inputs and outputs.
+            data:        Iterator which produces batches of only input data.
             num_batches: Number of batches iterator will produce.
             callbacks:   List of callbacks to run during evaluation.
         """
@@ -259,7 +257,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             # Attempt to get next batch of data,
             # clear data remaining flag if none remains
             try:
-                input_batch, _ = next(data)
+                input_batch = next(data)
             except StopIteration:
                 data_remaining = False
             # Reset time to 0
