@@ -191,7 +191,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         """ Generate predictions from a numpy dataset
 
         Args:
-            x:          Dictionary of pair(s) of input neuron population(s) and input_data
+            x:          Dictionary of pair(s) of input neuron population(s) and input data
             outputs:    List of output population(s) to extract predictions from
             callbacks:  List of callbacks to run during evaluation.
         """
@@ -203,12 +203,11 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         
         # Batch x
         splits = range(0, x_size, self.genn_model.batch_size)
-        x_batched = [[d[s:s + self.genn_model.batch_size] for s in splits]
-                        for d in x.values()]
+        x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
         
         # Zip together and evaluate using iterator
         return self.predict_batch_iter(list(x.keys()), outputs,
-                                        iter(zip(*x_batched)),
+                                        iter(x_batched),
                                         len(splits), callbacks)
 
     def predict_batch_iter(self, inputs, outputs, data: Iterator,
@@ -220,7 +219,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                          input data into.
             outputs:     List of output neuron populations to readout
                          and compare with labels.
-            data:        Iterator which produces batches of only input data.
+            data:        Iterator which produces batches of input data.
             num_batches: Number of batches iterator will produce.
             callbacks:   List of callbacks to run during evaluation.
         """
@@ -229,7 +228,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
         
         # Build dictionary mapping from output to
-        # (initially empty) lists to hold predictions
+        # empty lists to hold predictions
         y_pred = {o: [] for o in outputs}
         
         # Get the pipeline depth of each output
@@ -265,17 +264,26 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             self.genn_model.timestep = 0
             
             if data_remaining:
-                # Set x as input
-                # **YUCK** this isn't quite right as input_batch
-                # could also have outer dimension
-                if len(inputs) == 1:
-                    self.set_input({inputs[0]: input_batch})
+                # Set input from batch
+                # If input_batch is already organized as dict, set as is
+                if isinstance(input_batch, dict):
+                    self.set_input(input_batch)
+                    # full_input_size is used to crop output
+                    # It won't work if inputs from different populations
+                    # have different sizes
+                    full_input_size += len(input_batch[inputs[0]]) 
                 else:
-                    self.set_input({p: x for p, x in zip(inputs, input_batch)})
-                
-                # full_input_size is used to crop output
-                # It won't work if inputs have different sizes
-                full_input_size += len(input_batch) 
+                    # Else, manually organize and set inputs
+                    # **YUCK** this isn't quite right as input_batch
+                    # could also have outer dimension
+                    if len(inputs) == 1:
+                        self.set_input({inputs[0]: input_batch})
+                    else:
+                        self.set_input({p: x for p, x in zip(inputs, input_batch)})
+                    # full_input_size is used to crop output
+                    # It won't work if inputs from different populations
+                    # have different sizes
+                    full_input_size += len(input_batch) 
                 # Counter to match output readout with network pipeline latency
                 if len(outputs) == 1:
                     y_pipe_counter[outputs[0]] += 1
