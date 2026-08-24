@@ -14,8 +14,8 @@ from ..readouts import Var
 from ..synapses import Delta
 from ..utils.callback_list import CallbackList
 from ..utils.model import NeuronModel, SynapseModel
-                           
-from ..utils.data import get_dataset_size
+
+from ..utils.data import batch_dataset, get_dataset_size
 from ..utils.module import get_object_mapping
 from ..utils.network import get_network_dag, get_underlying_pop
 from ..utils.value import is_value_constant
@@ -82,12 +82,14 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                             callbacks=[BatchProgressBar()]):
         """ Evaluate an input in iterator format against labels
         Args:
-            x:          Dictionary of inputs to inject 
-                        into input neuron populations.
-            y:          Dictionary of labels to compare to
-                        readout from output neuron population.
-            metrics:    Metrics to calculate.
-            callbacks:  List of callbacks to run during evaluation.
+            inputs:      List of input populations to inject 
+                         input data into.
+            outputs:     List of output neuron populations to readout
+                         and compare with labels.
+            data:        Iterator which produces batches of inputs and labels 
+            num_batches: Number of batches iterator will produce
+            metrics:     Metrics to calculate.
+            callbacks:   List of callbacks to run during evaluation.
         """
         # Convert inputs and outputs to tuples
         inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
@@ -184,12 +186,141 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         # Return metrics
         return metrics, callback_list.get_data()
 
+    def predict(self, x: dict, outputs: Sequence,
+                 callbacks=[BatchProgressBar()]):
+        """ Generate predictions from a numpy dataset
+
+        Args:
+            x:          Dictionary of pair(s) of input neuron population(s) and input data
+            outputs:    List of output population(s) to extract predictions from
+            callbacks:  List of callbacks to run during evaluation.
+        """
+        # Determine the number of elements in x and y
+        x_size = get_dataset_size(x)
+        if x_size is None:
+            raise RuntimeError("Each input population must be "
+                               " provided with same number of inputs")
+        
+        # Batch x
+        splits = range(0, x_size, self.genn_model.batch_size)
+        x_batched = batch_dataset(x, self.genn_model.batch_size, x_size)
+        
+        # Zip together and evaluate using iterator
+        return self.predict_batch_iter(list(x.keys()), outputs,
+                                        iter(x_batched),
+                                        len(splits), callbacks)
+
+    def predict_batch_iter(self, inputs, outputs, data: Iterator,
+                        num_batches: Optional[int] = None,
+                        callbacks=[BatchProgressBar()]):
+        """ Generate predictions from an input in tensorflow iterator format
+        Args:
+            inputs:      List of input populations to inject 
+                         input data into.
+            outputs:     List of output neuron populations to readout
+                         and compare with labels.
+            data:        Iterator which produces batches of input data.
+            num_batches: Number of batches iterator will produce.
+            callbacks:   List of callbacks to run during evaluation.
+        """
+        # Convert inputs and outputs to tuples
+        inputs = inputs if isinstance(inputs, Sequence) else (inputs,)
+        outputs = outputs if isinstance(outputs, Sequence) else (outputs,)
+        
+        # Build dictionary mapping from output to
+        # empty lists to hold predictions
+        y_pred = {o: [] for o in outputs}
+        
+        # Get the pipeline depth of each output
+        y_pipe_depth = {
+            o: (self.pop_pipeline_depth[get_underlying_pop(o)]
+                if get_underlying_pop(o) in self.pop_pipeline_depth
+                else 0)
+            for o in outputs}
+        
+        # Create callback list and begin testing
+        num_batches = (None if num_batches is None
+                       else num_batches + 1 + max(y_pipe_depth.values()))
+        callback_list = CallbackList(callbacks, compiled_network=self,
+                                     num_batches=num_batches)
+        callback_list.on_test_begin()
+        
+        # Counter to synchronize outputs with pipeline
+        y_pipe_counter = {p: 0 for p, _ in y_pipe_depth.items()}
+        
+        data_remaining = True
+        batch_i = 0
+        full_input_size = 0
+        # While there is data remaining or any y values left in queues
+        while data_remaining or any(q > 0 for q in y_pipe_counter.values()):
+            # Attempt to get next batch of data,
+            # clear data remaining flag if none remains
+            try:
+                input_batch = next(data)
+            except StopIteration:
+                data_remaining = False
+            # Reset time to 0
+            # **YUCK** I don't REALLY like this
+            self.genn_model.timestep = 0
+            
+            if data_remaining:
+                # Set input from batch
+                # If input_batch is already organized as dict, set as is
+                if isinstance(input_batch, dict):
+                    self.set_input(input_batch)
+                    # full_input_size is used to crop output
+                    # It won't work if inputs from different populations
+                    # have different sizes
+                    full_input_size += len(input_batch[inputs[0]]) 
+                else:
+                    # Else, manually organize and set inputs
+                    # **YUCK** this isn't quite right as input_batch
+                    # could also have outer dimension
+                    if len(inputs) == 1:
+                        self.set_input({inputs[0]: input_batch})
+                    else:
+                        self.set_input({p: x for p, x in zip(inputs, input_batch)})
+                    # full_input_size is used to crop output
+                    # It won't work if inputs from different populations
+                    # have different sizes
+                    full_input_size += len(input_batch) 
+                # Counter to match output readout with network pipeline latency
+                if len(outputs) == 1:
+                    y_pipe_counter[outputs[0]] += 1
+                else:
+                    for p in outputs:
+                        y_pipe_counter[p] += 1
+            
+            callback_list.on_batch_begin(batch_i)
+            
+            for t in range(self.k):
+                self.step_time(callback_list)
+            
+            for o in outputs:
+                # If there is output to read from this population
+                if batch_i >= y_pipe_depth[o] and y_pipe_counter[o] > 0:
+                    # Counter to synchronize output readout sizes
+                    y_pipe_counter[o] -= 1
+                    
+                    # Get predictions from model
+                    y_pred_batch = self.get_readout(o)
+                    # Insert copies into dictionary
+                    y_pred[o].append(np.copy(y_pred_batch))
+            
+            callback_list.on_batch_end(batch_i, {})
+            batch_i += 1        
+        callback_list.on_test_end({})
+        # Concatenate predictions into single numpy array and trim padding
+        for o in outputs:
+            y_pred[o] = np.concatenate(y_pred[o])[:full_input_size,:]
+        
+        # Return predictions and metrics
+        return y_pred, callback_list.get_data()
 
 # Because we want the converter class to be reusable, we don't want
 # the data to be a member, instead we encapsulate it in a tuple
 CompileState = namedtuple("CompileState",
                           ["con_delay", "pop_pipeline_depth"])
-
 
 class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
