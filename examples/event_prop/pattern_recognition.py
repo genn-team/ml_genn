@@ -22,7 +22,7 @@ NUM_OUTPUT = 3
 
 NUM_FREQ_COMP = 3
 
-IN_GROUP_SIZE = 4
+IN_GROUP_SIZE = 1
 IN_ACTIVE_ISI = 10
 IN_ACTIVE_INTERVAL = 200
 
@@ -32,7 +32,7 @@ NUM_EPOCHS = 10
 TAU_MEM = 20.0
 TAU_SYN = 5.0
 
-LR = 0.004
+LR = 0.01
 
 TRIAL_STEPS = 1000
 
@@ -56,14 +56,13 @@ for i in range(NUM_OUTPUT):
 
 # Determine which group each input neuron is in
 in_group = np.arange(NUM_INPUT, dtype=int) // IN_GROUP_SIZE
-
 # Fill matrix rows with base spike times
 num_spikes_per_neuron = IN_ACTIVE_INTERVAL // IN_ACTIVE_ISI
 in_spike_times = np.empty((NUM_INPUT, num_spikes_per_neuron), dtype=np.float32)
 in_spike_times[:] = np.arange(0, IN_ACTIVE_INTERVAL, IN_ACTIVE_ISI)
 
 # Shift each spike time by group start
-in_spike_times += np.reshape(in_group * IN_ACTIVE_INTERVAL, (NUM_INPUT, 1))
+in_spike_times += np.reshape(in_group * (TRIAL_STEPS/(NUM_INPUT // IN_GROUP_SIZE)), (NUM_INPUT, 1))
 
 # Create matching array of IDs
 in_spike_ids = np.repeat(np.arange(NUM_INPUT), num_spikes_per_neuron)
@@ -83,16 +82,15 @@ with network:
                         NUM_HIDDEN, record_spikes=True)
     ro = Var(window_start=50, window_end=1000)
     output = Population(LeakyIntegrate(tau_mem=TAU_MEM, readout=ro),
-                        NUM_OUTPUT)
-    
+                        NUM_OUTPUT)    
     # Connections
-    Connection(input, hidden, Dense(Normal(mean=0.5 / np.sqrt(NUM_INPUT), sd=1.0 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
-    #Connection(hidden, hidden, Dense(Normal(sd=0.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
-    Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    in_hid = Connection(input, hidden, Dense(Normal(mean=0.9 / np.sqrt(NUM_INPUT), sd=0.5 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
+    #hid_hid = Connection(hidden, hidden, Dense(Normal(sd=0.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
+    hid_out = Connection(hidden, output, Dense(Normal(sd=1.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
 compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error", max_spikes=1500)
-compiled_net = compiler.compile(network, optimisers={"all_connections": {"weight": Adam(LR)}},
-                                regularisers={"all_hidden_populations": SpikeCount(1e-8, 10)})
+compiled_net = compiler.compile(network, optimisers={in_hid: {"weight": Adam(LR*10)},hid_out: {"weight": Adam(LR)}},
+                                regularisers={"all_hidden_populations": SpikeCount((1e-8, 1e-8), 5)})
 
 with compiled_net:
     def alpha_schedule(epoch, alpha):
@@ -123,7 +121,7 @@ with compiled_net:
         fac = 100
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
-            error.append(y - y_star[0][:,c])
+            error.append(y[50:] - y_star[0][50:,c])
             mse = np.sum(error[-1][50:1000] * error[-1][50:1000]) / len(error[-1][50:1000])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
             axes[c,i].plot(y)
