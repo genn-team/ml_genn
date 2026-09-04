@@ -355,10 +355,10 @@ class InferenceCompiler(Compiler):
                                         model which can be  accessed via the
                                         ``genn_model`` property of 
                                         the compiled model.
-        prefer_in_memory_connect:       Should in-memory connectivity
-                                        strategies such as TOEPLITZ be used
-                                        rather than converting all
-                                        connectivity into matrices.
+        optimise_connectivity_speed:    Some forms of connectivity can be
+                                        implemented in multiple ways. This
+                                        flag will prioritise speed over GPU
+                                        memory usage
         reset_time_between_batches:     Should time be reset to zero at the 
                                         start of each example or allowed to
                                         run continously? 
@@ -377,18 +377,21 @@ class InferenceCompiler(Compiler):
     def __init__(self, evaluate_timesteps: int, dt: float = 1.0,
                  batch_size: int = 1, rng_seed: int = 0,
                  kernel_profiling: bool = False,
-                 prefer_in_memory_connect=True, 
+                 optimise_connectivity_speed=False, 
                  reset_time_between_batches=True,
                  reset_vars_between_batches=True,
                  reset_in_syn_between_batches=False,
                  communicator: Communicator = None,
                  **genn_kwargs):
 
-        # Determine matrix type order of preference based on flag
-        if prefer_in_memory_connect:
-            supported_matrix_type = [SynapseMatrixType.SPARSE,
+        # Determine matrix type order of preference based on flag. 'Toeplitz' 
+        # implementations are nearly always fastest *and* use the least memory
+        # but, while sparse and dense are often faster than 'procedural', they
+        # use (often significantly) more memory  [Turner2022]_
+        if optimise_connectivity_speed:
+            supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
+                                     SynapseMatrixType.SPARSE,
                                      SynapseMatrixType.DENSE,
-                                     SynapseMatrixType.TOEPLITZ,
                                      SynapseMatrixType.PROCEDURAL_KERNELG,
                                      SynapseMatrixType.PROCEDURAL]
         else:

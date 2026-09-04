@@ -8,4 +8,5 @@ Bibliography
 .. [Kriener2021] Kriener, L., Göltz, J., & Petrovici, M. A. (2021). The Yin-Yang dataset. 2–7.
 .. [Nowotny2024] Nowotny, T., Turner, J. P., & Knight, J. C. (2022). Loss shaping enhances exact gradient learning with EventProp in Spiking Neural Networks (arXiv:2212.01232). arXiv. http://arxiv.org/abs/2212.01232
 .. [Stockl2021] Stöckl, C., & Maass, W. (2021). Optimized spiking neurons can classify images with high accuracy through temporal coding with two spikes. Nature Machine Intelligence, 3(3), 230–238. https://doi.org/10.1038/s42256-021-00311-4
+.. [Turner2022] Turner, J. P., Knight, J. C., Subramanian, A., & Nowotny, T. (2022). mlGeNN: accelerating SNN inference using GPU-enabled neural networks. Neuromorphic Computing and Engineering, 2(2), 024002. https://doi.org/10.1088/2634-4386/ac5ac5
 .. [Wunderlich2021] Wunderlich, T. C., & Pehle, C. (2021). Event-based backpropagation can compute exact gradients for spiking neural networks. Scientific Reports, 11(1), 12829. https://doi.org/10.1038/s41598-021-91786-z

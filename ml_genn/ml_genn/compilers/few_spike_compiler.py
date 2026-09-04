@@ -196,21 +196,25 @@ CompileState = namedtuple("CompileState",
 class FewSpikeCompiler(Compiler):
     def __init__(self, k: int = 10, dt: float = 1.0, batch_size: int = 1,
                  rng_seed: int = 0, kernel_profiling: bool = False,
-                 prefer_in_memory_connect: bool = True,
+                 optimise_connectivity_speed: bool = False,
                  communicator: Communicator = None, **genn_kwargs):
-        # Determine matrix type order of preference based on flag
-        if prefer_in_memory_connect:
-            supported_matrix_type = [SynapseMatrixType.SPARSE,
-                                     SynapseMatrixType.DENSE,
-                                     SynapseMatrixType.TOEPLITZ,
-                                     SynapseMatrixType.PROCEDURAL_KERNELG,
-                                     SynapseMatrixType.PROCEDURAL]
+        # Determine matrix type order of preference based on flag. 'Toeplitz' 
+        # implementations are nearly always fastest *and* use the least memory
+        # but, while sparse and dense are often faster than 'procedural', they
+        # use (often significantly) more memory  [Turner2022]_
+        if optimise_connectivity_speed:
+            supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
+                                        SynapseMatrixType.SPARSE,
+                                        SynapseMatrixType.DENSE,
+                                        SynapseMatrixType.PROCEDURAL_KERNELG,
+                                        SynapseMatrixType.PROCEDURAL]
         else:
             supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
-                                     SynapseMatrixType.PROCEDURAL_KERNELG,
-                                     SynapseMatrixType.PROCEDURAL,
-                                     SynapseMatrixType.SPARSE,
-                                     SynapseMatrixType.DENSE]
+                                        SynapseMatrixType.PROCEDURAL_KERNELG,
+                                        SynapseMatrixType.PROCEDURAL,
+                                        SynapseMatrixType.SPARSE,
+                                        SynapseMatrixType.DENSE]
+
         super().__init__(supported_matrix_type, dt, batch_size, rng_seed,
                          kernel_profiling, communicator, **genn_kwargs)
         self.k = k

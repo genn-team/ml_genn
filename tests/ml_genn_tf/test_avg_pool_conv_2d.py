@@ -4,7 +4,7 @@ import pytest
 from .converter import Converter
 
 @pytest.mark.parametrize(
-    "in_size, in_chan, out_chan, pool_size, pool_strides, conv_size, conv_strides, conv_padding, prefer_in_memory_connect", 
+    "in_size, in_chan, out_chan, pool_size, pool_strides, conv_size, conv_strides, conv_padding, optimise_connectivity_speed", 
     [(20, 1, 1, 2, 2, 3, 1, "valid", True),
      (20, 1, 1, 2, 2, 3, 1, "valid", False),
      (20, 2, 2, 2, 2, 3, 1, "valid", True),
@@ -23,7 +23,7 @@ from .converter import Converter
      (20, 1, 1, 3, 4, 4, 1, "same", False)])
 def test_avg_pool_conv_2d(in_size, in_chan, out_chan, pool_size, pool_strides,
                           conv_size, conv_strides, conv_padding, 
-                          prefer_in_memory_connect, request):
+                          optimise_connectivity_speed, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -50,7 +50,7 @@ def test_avg_pool_conv_2d(in_size, in_chan, out_chan, pool_size, pool_strides,
     converter = Converter()
     net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
     
-    compiler = converter.create_compiler(prefer_in_memory_connect=prefer_in_memory_connect)
+    compiler = converter.create_compiler(optimise_connectivity_speed=optimise_connectivity_speed)
     compiled_net = compiler.compile(net, request.keywords.node.name, 
                                     inputs=net_inputs, 
                                     outputs=net_outputs)
