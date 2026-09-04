@@ -80,7 +80,7 @@ if len(args.plot_sample_spikes) > 0:
             tf_layer_pops[l].record_spikes = True
     
 # Create suitable compiler for model
-compiler = converter.create_compiler(prefer_in_memory_connect=args.prefer_in_memory_connect,
+compiler = converter.create_compiler(optimise_connectivity_speed=args.optimise_connectivity_speed,
                                      dt=args.dt, batch_size=args.batch_size, rng_seed=args.rng_seed, 
                                      kernel_profiling=args.kernel_profiling)
 compiled_net = compiler.compile(net, inputs=net_inputs, outputs=net_outputs)

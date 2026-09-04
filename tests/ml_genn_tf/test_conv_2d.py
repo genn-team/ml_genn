@@ -4,7 +4,7 @@ import pytest
 from .converter import Converter
 
 @pytest.mark.parametrize(
-    "in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, prefer_in_memory_connect", 
+    "in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, optimise_connectivity_speed", 
     [(12, 1, 1, 3, 1, "valid", True),
      (12, 1, 1, 3, 1, "valid", False),
      (12, 1, 1, 3, 1, "same", True),
@@ -21,7 +21,7 @@ from .converter import Converter
      (12, 1, 1, 3, 2, "same", False)])
 
 def test_conv_2d(in_size, in_chan, out_chan, conv_size, conv_strides,
-                 conv_padding, prefer_in_memory_connect, request):
+                 conv_padding, optimise_connectivity_speed, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -46,7 +46,7 @@ def test_conv_2d(in_size, in_chan, out_chan, conv_size, conv_strides,
     converter = Converter()
     net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
     
-    compiler = converter.create_compiler(prefer_in_memory_connect=prefer_in_memory_connect)
+    compiler = converter.create_compiler(optimise_connectivity_speed=optimise_connectivity_speed)
     compiled_net = compiler.compile(net, request.keywords.node.name, 
                                     inputs=net_inputs, 
                                     outputs=net_outputs)
