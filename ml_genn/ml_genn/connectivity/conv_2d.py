@@ -52,13 +52,19 @@ class Conv2D(Connectivity):
         self.flatten = flatten
         self.conv_strides = get_param_2d("conv_strides", conv_strides,
                                          default=(1, 1))
-        self.conv_padding = PadMode(conv_padding)
+        self.conv_padding = (conv_padding if isinstance(conv_padding, int) 
+                             else PadMode(conv_padding))
 
     def connect(self, source: Population, target: Population):
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = source.shape
-        if self.conv_padding == PadMode.VALID:
+        if isinstance(self.conv_padding, int):
+            assert (conv_ih == 32) and (conv_iw == 32) and (conv_kh == 5) and (conv_kw == 5) and (conv_sh == 2) and (conv_sw == 2)
+            self.output_shape = (
+                15, 15,
+                self.filters)
+        elif self.conv_padding == PadMode.VALID:
             self.output_shape = (
                 ceil((conv_ih - conv_kh + 1) / conv_sh),
                 ceil((conv_iw - conv_kw + 1) / conv_sw),
@@ -83,7 +89,10 @@ class Conv2D(Connectivity):
         conv_sh, conv_sw = self.conv_strides
         conv_ih, conv_iw, conv_ic = connection.source().shape
         conv_oh, conv_ow, conv_oc = self.output_shape
-        if self.conv_padding == PadMode.VALID:
+        if isinstance(self.conv_padding, int):
+            conv_padh = self.conv_padding
+            conv_padw = self.conv_padding
+        elif self.conv_padding == PadMode.VALID:
             conv_padh = 0
             conv_padw = 0
         elif self.conv_padding == PadMode.SAME:
