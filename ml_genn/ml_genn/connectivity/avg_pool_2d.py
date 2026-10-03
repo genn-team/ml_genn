@@ -67,16 +67,19 @@ class AvgPool2D(Connectivity):
                         If only one integer is specified, the same stride 
                         will be used for both dimensions.
         delay:          Homogeneous connection delays
+        sum:            Sum Rather than taking average
     """
     def __init__(self, pool_size: Param2D, flatten: bool = False,
                  pool_strides: Optional[Param2D] = None, 
-                 delay: InitValue = 0):
+                 delay: InitValue = 0, sum: bool = False):
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.flatten = flatten
         self.pool_strides = get_param_2d("pool_strides", pool_strides,
                                          default=self.pool_size)
 
-        super().__init__(1.0 / (self.pool_size[0] * self.pool_size[1]), delay)
+        weight = (1.0 if sum 
+                  else 1.0 / (self.pool_size[0] * self.pool_size[1]))
+        super().__init__(weight, delay)
 
         if (self.pool_strides[0] < self.pool_size[0]
                 or self.pool_strides[1] < self.pool_size[1]):

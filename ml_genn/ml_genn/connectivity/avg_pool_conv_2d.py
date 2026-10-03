@@ -109,7 +109,7 @@ class AvgPoolConv2D(Connectivity):
                         or up/down of the input. When padding="same" and 
                         strides=1, the output has the same size as the input.
         delay:          Homogeneous connection delays
-        sum:            Rather than taking average, just sum
+        sum:            Sum rather than taking average
     """
     def __init__(self, weight: InitValue, filters: int, pool_size: Param2D,
                  conv_size: Param2D, flatten: bool = False, 
