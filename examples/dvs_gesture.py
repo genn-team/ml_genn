@@ -2,10 +2,12 @@ import numpy as np
 import torch
 
 from ml_genn import InputLayer, Layer, SequentialNetwork
-from ml_genn.compilers import InferenceCompiler
-from ml_genn.neurons import LeakyIntegrateFire, SpikeInput
-from ml_genn.connectivity import AvgPoolConv2D, AvgPoolDense2D, Conv2D, Dense
 from ml_genn.callbacks import VarRecorder
+from ml_genn.compilers import InferenceCompiler
+from ml_genn.connectivity import AvgPoolConv2D, AvgPoolDense2D, Conv2D, Dense
+from ml_genn.neurons import LeakyIntegrateFire, Neuron, SpikeInput
+from ml_genn.utils.model import NeuronModel
+from ml_genn.utils.snippet import ConstantValueDescriptor
 from time import perf_counter
 from tonic.datasets import DVSGesture
 from tonic.transforms import Compose, CropTime, Denoise, Downsample
@@ -15,14 +17,47 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
 
 BATCH_SIZE = 128
 
+class SNNTorchLIF(Neuron):
+    beta =  ConstantValueDescriptor()
+    v_thresh =  ConstantValueDescriptor()
+    
+    def __init__(self, beta, v_thresh = 1.0, readout=None):
+        super().__init__(readout)
+        self.beta = float(beta)
+        self.v_thresh = float(v_thresh)
+    
+    def get_model(self, population, dt: float, batch_size: int) -> NeuronModel:
+        v_scale = 1.0 / (1.0 - self.beta)  # scaling factor from tau_mem+r circuit
+        model = genn_model = {
+            "params": [("Beta", "int"), ("VThresh", "scalar")],
+            "vars": [("V", "scalar")],
+
+            "sim_code":
+                """
+                V = (Beta * V) + Isyn;
+                """,
+            "threshold_condition_code":
+                """
+                V >= VThresh
+                """,
+            "reset_code":
+                """
+                V -= VThresh;
+                """}
+        return NeuronModel(model, "V",
+                           {"Beta": self.beta, "VThresh": self.v_thresh * v_scale},
+                           {"V": 0.0})
+
+
+    
 def reshape_conv_weight(weight):
-    # PyTorch uses (out_channels, in_channels​, kernel_height, kernel_width)
+    # PyTorch uses (out_channels, in_channels, kernel_height, kernel_width)
     # mlGeNN uses (kernel_height, kernel_width, in_channels, out_channels)
     
-    return np.moveaxis(weight.cpu().numpy(), (0, 1, 2, 3), (3, 2, 0, 1))
+    return np.moveaxis(weight.numpy(), (0, 1, 2, 3), (3, 2, 0, 1))
 
 def reshape_dense_weight(weight):
-    return np.transpose(weight.cpu().numpy())
+    return np.transpose(weight.numpy())
 
 # Load DVS gesture, cropping time and downsampling
 dataset = DVSGesture(save_to="./data", train=False, 
@@ -53,38 +88,39 @@ latest_spike_time = calc_latest_spike_time(spikes)
 print(f"Max spikes {max_spikes}, latest spike time {latest_spike_time}, Num input {num_input}, Num output {num_output}")
 
 # Load pytorch checkpoint
-checkpoint = torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth")
+checkpoint = torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth",
+                        map_location=torch.device("cpu"), weights_only=True)
 
 # Create sequential model
 network = SequentialNetwork()
 with network:
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * max_spikes), sensor_size)
     hidden1 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["0.weight"]), filters=16, conv_size=5, conv_strides=2, conv_padding=1),
-                    LeakyIntegrateFire(tau_mem=14.0))
+                    SNNTorchLIF(beta=checkpoint["1.beta"], v_thresh=checkpoint["1.threshold"]))
     hidden2 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["2.weight"]), filters=16, conv_size=3, conv_padding="same"),
-                    LeakyIntegrateFire(tau_mem=14.0))
+                    SNNTorchLIF(beta=checkpoint["3.beta"], v_thresh=checkpoint["3.threshold"]))
     hidden3 = Layer(AvgPoolConv2D(weight=reshape_conv_weight(checkpoint["5.weight"]), filters=8, conv_size=3, pool_size=2, conv_padding="same"),
-                    LeakyIntegrateFire(tau_mem=14.0))
+                    SNNTorchLIF(beta=checkpoint["6.beta"], v_thresh=checkpoint["6.threshold"]))
     hidden4 = Layer(AvgPoolDense2D(weight=reshape_dense_weight(checkpoint["9.weight"]), pool_size=2),
-                    LeakyIntegrateFire(tau_mem=14.0), 256)
+                    SNNTorchLIF(beta=checkpoint["10.beta"], v_thresh=checkpoint["10.threshold"]), 256)
     output = Layer(Dense(weight=reshape_dense_weight(checkpoint["11.weight"])), 
-                   LeakyIntegrateFire(tau_mem=14.0, readout="spike_count"))
+                   SNNTorchLIF(beta=checkpoint["12.beta"], v_thresh=checkpoint["12.threshold"], readout="spike_count"))
 
 compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
                              evaluate_timesteps=1000)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
-    compiled_net.connection_populations[hidden1.connection()].pull_connectivity_from_device()
-    compiled_net.connection_populations[hidden2.connection()].pull_connectivity_from_device()
-    compiled_net.connection_populations[hidden3.connection()].pull_connectivity_from_device()
+    #compiled_net.connection_populations[hidden1.connection()].pull_connectivity_from_device()
+    #compiled_net.connection_populations[hidden2.connection()].pull_connectivity_from_device()
+    #compiled_net.connection_populations[hidden3.connection()].pull_connectivity_from_device()
     
-    np.save("hidden1.npy", np.vstack((compiled_net.connection_populations[hidden1.connection()].get_sparse_pre_inds(),
-                                      compiled_net.connection_populations[hidden1.connection()].get_sparse_post_inds())))
-    np.save("hidden2.npy", np.vstack((compiled_net.connection_populations[hidden2.connection()].get_sparse_pre_inds(),
-                                      compiled_net.connection_populations[hidden2.connection()].get_sparse_post_inds())))
-    np.save("hidden3.npy", np.vstack((compiled_net.connection_populations[hidden3.connection()].get_sparse_pre_inds(),
-                                      compiled_net.connection_populations[hidden3.connection()].get_sparse_post_inds())))
+    #np.save("hidden1.npy", np.vstack((compiled_net.connection_populations[hidden1.connection()].get_sparse_pre_inds(),
+    #                                  compiled_net.connection_populations[hidden1.connection()].get_sparse_post_inds())))
+    #np.save("hidden2.npy", np.vstack((compiled_net.connection_populations[hidden2.connection()].get_sparse_pre_inds(),
+    #                                  compiled_net.connection_populations[hidden2.connection()].get_sparse_post_inds())))
+    #np.save("hidden3.npy", np.vstack((compiled_net.connection_populations[hidden3.connection()].get_sparse_pre_inds(),
+    #                                  compiled_net.connection_populations[hidden3.connection()].get_sparse_post_inds())))
     
     # Evaluate model on numpy dataset
     start_time = perf_counter()
