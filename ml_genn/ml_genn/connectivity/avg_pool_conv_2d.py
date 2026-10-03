@@ -109,17 +109,20 @@ class AvgPoolConv2D(Connectivity):
                         or up/down of the input. When padding="same" and 
                         strides=1, the output has the same size as the input.
         delay:          Homogeneous connection delays
+        sum:            Rather than taking average, just sum
     """
     def __init__(self, weight: InitValue, filters: int, pool_size: Param2D,
                  conv_size: Param2D, flatten: bool = False, 
                  pool_strides: Optional[Param2D] = None, 
                  conv_strides: Optional[Param2D] = None,
-                 conv_padding: str = "valid", delay: InitValue = 0):
+                 conv_padding: str = "valid", delay: InitValue = 0,
+                 sum: bool = False):
         super().__init__(weight, delay)
         self.filters = filters
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.conv_size = get_param_2d("conv_size", conv_size)
         self.flatten = flatten
+        self.sum = sum
         self.pool_strides = get_param_2d("pool_strides", pool_strides,
                                          default=self.pool_size)
         self.conv_strides = get_param_2d("conv_strides", conv_strides,
@@ -181,7 +184,8 @@ class AvgPoolConv2D(Connectivity):
             conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        scaled_weight = self.weight.flatten() / (pool_kh * pool_kw)
+        scaled_weight = (self.weight if self.sum 
+                         else self.weight.flatten() / (pool_kh * pool_kw))
 
         # Build list of available matrix types, 
         # adding Toeplitz of constraints are met
@@ -227,7 +231,7 @@ class AvgPoolConv2D(Connectivity):
                     snippet=conn_init,
                     matrix_type=SynapseMatrixType.PROCEDURAL_KERNELG,
                     weight=scaled_weight,
-                                           delay=self.delay)
+                    delay=self.delay)
             else:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
