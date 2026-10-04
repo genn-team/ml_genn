@@ -57,7 +57,21 @@ def reshape_conv_weight(weight):
     return np.moveaxis(weight.numpy(), (0, 1, 2, 3), (3, 2, 0, 1))
 
 def reshape_dense_weight(weight):
+    # PyTorch uses (out_channels, in_channels)
+    # mlGeNN uses (in_channels, out_channels)
     return np.transpose(weight.numpy())
+
+def reshape_post_pool_weight(weight, in_channels, in_size):
+    # PyTorch uses (out_channels, in_channels, in_height, in_width)
+    # mlGeNN uses (in_height, in_width, in_channels, out_channels)
+    # Unflatten weight
+    weight = np.reshape(weight.numpy(), (weight.shape[0], in_channels, in_size, in_size))
+
+    # Re-order axes into GeNN/TF
+    weight = np.moveaxis(weight, (0, 1, 2, 3), (3, 2, 0, 1))
+
+    # Reflatten into linear weight
+    return np.reshape(weight, (-1, weight.shape[-1]))
 
 # Load DVS gesture, cropping time and downsampling
 dataset = DVSGesture(save_to="./data", train=False, 
@@ -101,7 +115,7 @@ with network:
                     SNNTorchLIF(beta=checkpoint["3.beta"], v_thresh=checkpoint["3.threshold"]))
     hidden3 = Layer(AvgPoolConv2D(weight=reshape_conv_weight(checkpoint["5.weight"]), filters=8, conv_size=3, pool_size=2, conv_padding="same", sum=True),
                     SNNTorchLIF(beta=checkpoint["6.beta"], v_thresh=checkpoint["6.threshold"]))
-    hidden4 = Layer(AvgPoolDense2D(weight=reshape_dense_weight(checkpoint["9.weight"]), pool_size=2, sum=True),
+    hidden4 = Layer(AvgPoolDense2D(weight=reshape_post_pool_weight(checkpoint["9.weight"], 8, 3), pool_size=2, sum=True),
                     SNNTorchLIF(beta=checkpoint["10.beta"], v_thresh=checkpoint["10.threshold"]), 256)
     output = Layer(Dense(weight=reshape_dense_weight(checkpoint["11.weight"])), 
                    SNNTorchLIF(beta=checkpoint["12.beta"], v_thresh=checkpoint["12.threshold"], readout="spike_count"))
