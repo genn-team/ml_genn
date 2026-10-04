@@ -27,7 +27,14 @@ class SNNTorchLIF(Neuron):
         self.v_thresh = float(v_thresh)
 
     def get_model(self, population, dt: float, batch_size: int) -> NeuronModel:
-        v_scale = 1.0 / (1.0 - self.beta)  # scaling factor from tau_mem+r circuit
+        # Extract tau mem and R parameters that WOULD be exported to NIR
+        tau_mem = dt / (1.0 - self.beta)
+        r = tau_mem / dt
+        
+        r_factor = (dt / tau_mem) * (tau_mem / dt)
+ 
+        v_scale = 1.0 / r_factor  # scaling factor from tau_mem+r circuit
+        print(v_scale)
         model = genn_model = {
             "params": [("Beta", "scalar"), ("VThresh", "scalar")],
             "vars": [("V", "scalar")],
@@ -88,9 +95,9 @@ num_output = len(dataset.classes)
 # Preprocess dataset
 spikes = []
 labels = []
-#for events, label in dataset:
-for i in range(10):
-    events, label = dataset[i]
+for events, label in dataset:
+#for i in range(10):
+#    events, label = dataset[i]
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
                                           sensor_size, dt=1.0,
                                           histogram_thresh=1))
@@ -125,7 +132,8 @@ with network:
                    SNNTorchLIF(beta=checkpoint["12.beta"], v_thresh=checkpoint["12.threshold"], readout="spike_count"))
 
 compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
-                             evaluate_timesteps=1000)
+                             evaluate_timesteps=1000,
+                             reset_in_syn_between_batches=True)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
