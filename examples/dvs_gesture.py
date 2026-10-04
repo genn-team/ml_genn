@@ -20,16 +20,16 @@ BATCH_SIZE = 128
 class SNNTorchLIF(Neuron):
     beta =  ConstantValueDescriptor()
     v_thresh =  ConstantValueDescriptor()
-    
+
     def __init__(self, beta, v_thresh = 1.0, readout=None):
         super().__init__(readout)
         self.beta = float(beta)
         self.v_thresh = float(v_thresh)
-    
+
     def get_model(self, population, dt: float, batch_size: int) -> NeuronModel:
         v_scale = 1.0 / (1.0 - self.beta)  # scaling factor from tau_mem+r circuit
         model = genn_model = {
-            "params": [("Beta", "int"), ("VThresh", "scalar")],
+            "params": [("Beta", "scalar"), ("VThresh", "scalar")],
             "vars": [("V", "scalar")],
 
             "sim_code":
