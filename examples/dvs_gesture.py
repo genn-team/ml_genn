@@ -45,7 +45,7 @@ class SNNTorchLIF(Neuron):
                 V -= VThresh;
                 """}
         return NeuronModel(model, "V",
-                           {"Beta": self.beta, "VThresh": self.v_thresh * v_scale},
+                           {"Beta": self.beta, "VThresh": self.v_thresh},# * v_scale},
                            {"V": 0.0})
 
 
@@ -109,13 +109,17 @@ checkpoint = torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth",
 network = SequentialNetwork()
 with network:
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * max_spikes), sensor_size)
-    hidden1 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["0.weight"]), filters=16, conv_size=5, conv_strides=2, conv_padding=1),
+    hidden1 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["0.weight"]), 
+                           filters=16, conv_size=5, conv_strides=2, conv_padding=1),
                     SNNTorchLIF(beta=checkpoint["1.beta"], v_thresh=checkpoint["1.threshold"]))
-    hidden2 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["2.weight"]), filters=16, conv_size=3, conv_padding="same"),
+    hidden2 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["2.weight"]), 
+                           filters=16, conv_size=3, conv_padding="same"),
                     SNNTorchLIF(beta=checkpoint["3.beta"], v_thresh=checkpoint["3.threshold"]))
-    hidden3 = Layer(AvgPoolConv2D(weight=reshape_conv_weight(checkpoint["5.weight"]), filters=8, conv_size=3, pool_size=2, conv_padding="same", sum=True),
+    hidden3 = Layer(AvgPoolConv2D(weight=reshape_conv_weight(checkpoint["5.weight"]), 
+                                  filters=8, conv_size=3, pool_size=2, conv_padding="same", sum=True),
                     SNNTorchLIF(beta=checkpoint["6.beta"], v_thresh=checkpoint["6.threshold"]))
-    hidden4 = Layer(AvgPoolDense2D(weight=reshape_post_pool_weight(checkpoint["9.weight"], 8, 3), pool_size=2, sum=True),
+    hidden4 = Layer(AvgPoolDense2D(weight=reshape_post_pool_weight(checkpoint["9.weight"], 8, 3), 
+                                   pool_size=2, sum=True),
                     SNNTorchLIF(beta=checkpoint["10.beta"], v_thresh=checkpoint["10.threshold"]), 256)
     output = Layer(Dense(weight=reshape_dense_weight(checkpoint["11.weight"])), 
                    SNNTorchLIF(beta=checkpoint["12.beta"], v_thresh=checkpoint["12.threshold"], readout="spike_count"))
