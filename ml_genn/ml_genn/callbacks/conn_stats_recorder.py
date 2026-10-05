@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+import logging
+import numpy as np
+
+from pygenn import SynapseMatrixConnectivity, VarAccessDim
+from .callback import Callback
+from ..utils.filter import ExampleFilter, ExampleFilterType, NeuronFilterType
+
+from dataclasses import dataclass, field
+from itertools import chain
+from pygenn import get_var_access_dim
+from ..utils.filter import get_neuron_filter_mask
+from ..utils.network import get_underlying_conn
+from ..connection import Connection
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..compilers import CompiledNetwork
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class State:
+    compiled_network: CompiledNetwork
+    batched: bool
+    batch_mask: int
+    data: list = field(default_factory=list)
+    batch_count: int = None
+
+class ConnStatsRecorder(Callback):
+    """Callback used for recording connection statistics during
+    simulation. This is meant for analysing Variables such as weight, Gradient, delay,
+    and delayGradient, that are mostly of interest at the end of a trial and 
+    typically in an aggregated form as mean and std. This is much more lightweight 
+    than a conn_var_recorder.
+    By convention, ``weight`` is always the weight and ``d`` is the per-synapse
+    delay if it is used. Other variables are compiler-specific e.g. 
+    ``weightGradient`` accumulates gradients when using
+    :class:`ml_genn.compilers.EventPropCompiler`.
+    
+    Args:
+        conn:               Synapse population to record from
+        genn_var:           Internal name of variable to record
+        key:                Key to assign recording data produced by this
+                            callback in dictionary returned by
+                            evaluation/training methods of compiled network
+        example_filter:     Filter used to select which examples to record
+                            from (see :ref:`section-callbacks-recording`
+                            for more information).
+        src_neuron_filter:  Filter used to select which synapses to record
+                            from (see :ref:`section-callbacks-recording` 
+                            for more information).
+        trg_neuron_filter:  Filter used to select which synapses to record
+                            from (see :ref:`section-callbacks-recording` 
+                            for more information).
+        
+    """
+    def __init__(self, conn: Connection, genn_var: str,
+                 key=None, example_filter: ExampleFilterType = None,
+                 src_neuron_filter: NeuronFilterType = None,
+                 trg_neuron_filter: NeuronFilterType = None):
+        # Get underlying connection
+        self.conn = get_underlying_conn(conn)
+        self.var = genn_var
+        
+        # Stash key
+        self.key = key
+
+        # Create example filter
+        self._example_filter = ExampleFilter(example_filter)
+
+        # Create neuron filter masks for source and target populations
+        self._src_neuron_mask = get_neuron_filter_mask(
+            src_neuron_filter, self.conn.source().shape)
+        self._trg_neuron_mask = get_neuron_filter_mask(
+            trg_neuron_filter, self.conn.target().shape)
+
+    def create_state(self, compiled_network, **kwargs):
+        # Get GeNN synapse group from compiled model
+        pop = compiled_network.connection_populations[self.conn]
+
+        # Get weight update model variables
+        wum_vars = pop.wu_initialiser.snippet.get_vars()
+
+        try:
+            # Find variable
+            var = next(v for v in wum_vars if v.name == self.var)
+        except StopIteration:
+            raise RuntimeError(f"Model does not have variable "
+                               f"{self.var} to record")
+
+        # Determine if var is batched
+        batched = (get_var_access_dim(var.access) & VarAccessDim.BATCH)
+            
+        # Create state dataclass
+        return State(compiled_network, batched,
+                     np.ones(compiled_network.genn_model.batch_size,
+                             dtype=bool))
+
+    def on_batch_end(self, state, batch: int, metrics):
+        # Get mask for examples in this batch and count
+        state.batch_mask = self._example_filter.get_batch_mask(
+            batch, state.compiled_network.genn_model.batch_size)
+        state.batch_count = np.sum(state.batch_mask)
+
+        # If there's anything to record in this
+        # batch, add list to hold it to data
+        if state.batch_count > 0:
+            cn = state.compiled_network
+            # Copy variable from device
+            pop = cn.connection_populations[self.conn]
+            pop.vars[self.var].pull_from_device()
+
+            # Get view, sliced by batch mask if simulation is batched
+            var_view = pop.vars[self.var].view
+
+            # If simulation and variable is batched
+            num_src = np.prod(self.conn.source().shape)
+            num_trg = np.prod(self.conn.target().shape)
+            if cn.genn_model.batch_size > 1 and state.batched:
+                # Slice view by batch mask and reshape to num_src * num_trg
+                data_view = np.reshape(var_view[state.batch_mask],
+                                       (state.batch_count, -1))                
+            else:
+                # If SIMULATION is batched but variable isn't,
+                # broadcast batch count copies of variable
+                if cn.genn_model.batch_size > 1:
+                    data_view = np.broadcast_to(
+                        var_view, (state.batch_count,) + var_view.shape)
+            mn = np.min(data_view, axis=1)
+            mx = np.max(data_view, axis=1)
+            avg = np.mean(data_view, axis=1)
+            sd = np.std(data_view, axis=1)
+            # Add copy to newest list
+            state.data.append([ mn, mx, avg, sd ])
+        
+    def get_data(self, state):
+        # Stack 1D or 2D numpy arrays containing value
+        # for each timestep in each batch to get
+        # (time, batch, neuron) or (time, neuron) arrays
+        data = np.asarray(state.data)
+
+        # If model batched
+        if state.compiled_network.genn_model.batch_size > 1:
+            # Split each stacked array along the batch axis and
+            # chain together resulting in a list, containing a
+            # (mean, std) for each example
+            data = list(chain.from_iterable(np.split(d, d.shape[1], axis=1)
+                                            for d in data))
+
+            # Finally, remove the batch axis from each matrix
+            # (which will now always be size 1) and return
+            data = [np.squeeze(d, axis=1) for d in data]
+
+        return self.key, data

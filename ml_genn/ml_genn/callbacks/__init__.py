@@ -10,11 +10,14 @@ from .progress_bar import BatchProgressBar
 from .spike_recorder import SpikeRecorder
 from .var_recorder import VarRecorder
 from .conn_var_recorder import ConnVarRecorder
+from .conn_stats_recorder import ConnStatsRecorder
+from .conn_grad_recorder import ConnGradRecorder
 from ..utils.module import get_module_classes
 
 default_callbacks = get_module_classes(globals(), Callback)
 
 __all__ = ["BatchProgressBar", "Callback", "Checkpoint", "ConnVarRecorder",
+           "ConnStatsRecorder","ConnGradRecorder",
            "CustomUpdateOnBatchBegin", "CustomUpdateOnBatchEnd", 
            "CustomUpdateOnEpochBegin", "CustomUpdateOnEpochEnd",
            "CustomUpdateOnTimestepBegin", "CustomUpdateOnTimestepEnd",
