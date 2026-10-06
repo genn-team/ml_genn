@@ -35,17 +35,18 @@ class SNNTorchLIF(Neuron):
  
         v_scale = 1.0 / r_factor  # scaling factor from tau_mem+r circuit
         print(v_scale)
-        model = genn_model = {
+        model = {
             "params": [("Beta", "scalar"), ("VThresh", "scalar")],
             "vars": [("V", "scalar")],
 
             "sim_code":
                 """
+                const bool spike = (V >= VThresh);
                 V = (Beta * V) + Isyn;
                 """,
             "threshold_condition_code":
                 """
-                V >= VThresh
+                spike
                 """,
             "reset_code":
                 """
