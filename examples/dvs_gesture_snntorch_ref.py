@@ -12,15 +12,13 @@ from snntorch import utils
 
 # Other imports
 import torch
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import time
-import statistics
-import itertools
 from collections import defaultdict
+from functools import partial
 
 # Device setup
 device = torch.device("cpu")#torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -71,20 +69,16 @@ net = nn.Sequential(
     nn.Linear(256, num_classes, bias=False),
     snn.Leaky(beta=beta, init_hidden=True, output=True)
 ).to(device)
-#print([n for n, _ in net.named_children()])
-
-def get_output(output):
-    if isinstance(output, torch.Tensor):
-        return (output.detach().cpu(),)
-    else:
-        return (o.detach().cpu() for o in output)
 
 if record:
+    def save_activations(activations, name, module, inp, out):
+        activations[name].append(out.detach().cpu())
+    
     activations_dict = defaultdict(list)
     for name, mod in list(net.named_modules())[1:-1]:
         print(f"registering forward hook for {name}")
         mod.register_forward_hook(
-            lambda m, i, o: activations_dict[name].append(get_output(o)))
+            partial(save_activations, activations_dict, name))
 
 
 
@@ -123,8 +117,10 @@ print(test(net, test_loader, device))
 
 if record:
     for name, outputs in activations_dict.items():
-        print(name)
-        for step_output in outputs:
-            for o in step_output:
-                print(f"\t{o.shape}")
-    
+        print(name, len(outputs))
+        for o in outputs[:10]:
+            print(f"\t{o.shape}")
+        #for step_output in outputs:
+        #    for o in step_output:
+        #        print(f"\t{o.shape}")
+print("Donezo")
