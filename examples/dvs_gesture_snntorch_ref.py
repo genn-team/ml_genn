@@ -82,6 +82,7 @@ def get_output(output):
 if record:
     activations_dict = defaultdict(list)
     for name, mod in list(net.named_modules())[1:-1]:
+        print(f"registering forward hook for {name}")
         mod.register_forward_hook(
             lambda m, i, o: activations_dict[name].append(get_output(o)))
 
