@@ -20,6 +20,7 @@ import os
 import time
 import statistics
 import itertools
+from collections import defaultdict
 
 # Device setup
 device = torch.device("cpu")#torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -53,6 +54,7 @@ test_loader = DataLoader(
 num_classes = 11
 slope = 9.70
 beta = 0.93  # Decay rate parameter
+record = True
 
 net = nn.Sequential(
     nn.Conv2d(2, 16, kernel_size=5, stride=2, padding=1, bias=False),
@@ -69,6 +71,23 @@ net = nn.Sequential(
     nn.Linear(256, num_classes, bias=False),
     snn.Leaky(beta=beta, init_hidden=True, output=True)
 ).to(device)
+#print([n for n, _ in net.named_children()])
+
+def get_output(output):
+    if isinstance(output, torch.Tensor):
+        return (output.detach().cpu(),)
+    else:
+        return (o.detach().cpu() for o in output)
+
+if record:
+    activations_dict = defaultdict(list)
+    for name, mod in list(net.named_modules())[1:-1]:
+        mod.register_forward_hook(
+            lambda m, i, o: activations_dict[name].append(get_output(o)))
+
+
+
+#net.
 
 # Forward pass function
 def forward(net, data):
@@ -88,14 +107,23 @@ def test(net, test_loader, device):
     correct, total = 0, 0
     with torch.no_grad():
         net.eval()
-        for test_data, test_targets in test_loader:
-            test_data, test_targets = test_data.to(device), test_targets.to(device)
-            spk_rec = forward(net, test_data)
-            correct += SF.accuracy_rate(spk_rec, test_targets) * spk_rec.size(1)
-            total += spk_rec.size(1)
+        #for test_data, test_targets in test_loader:
+        test_data, test_targets = next(iter(test_loader))
+        test_data, test_targets = test_data.to(device), test_targets.to(device)
+        spk_rec = forward(net, test_data)
+        correct += SF.accuracy_rate(spk_rec, test_targets) * spk_rec.size(1)
+        total += spk_rec.size(1)
     return (correct / total) * 100
 
 net.load_state_dict(torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth", 
                                map_location=device, weights_only=True))
 
 print(test(net, test_loader, device))
+
+if record:
+    for name, outputs in activations_dict.items():
+        print(name)
+        for step_output in outputs:
+            for o in step_output:
+                print(f"\t{o.shape}")
+    
