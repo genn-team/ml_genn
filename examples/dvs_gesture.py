@@ -84,8 +84,7 @@ def reshape_post_pool_weight(weight, in_channels, in_size):
 # Load DVS gesture, cropping time and downsampling
 dataset = DVSGesture(save_to="./data", train=False, 
                      transform=Compose([Denoise(filter_time=10000),
-                                        Downsample(spatial_factor=0.25),
-                                        CropTime(max=1000 * 1000)]))
+                                        Downsample(spatial_factor=0.25)]))
 sensor_size = (32, 32, 2)
 
 # Get number of input and output neurons from dataset 
