@@ -72,10 +72,11 @@ net = nn.Sequential(
 
 if record:
     def save_activations(activations, name, module, inp, out):
+        out = out[0] if isinstance(out, tuple) else out
         activations[name].append(out.detach().cpu())
     
     activations_dict = defaultdict(list)
-    for name, mod in list(net.named_modules())[1:-1]:
+    for name, mod in list(net.named_modules())[1:]:
         print(f"registering forward hook for {name}")
         mod.register_forward_hook(
             partial(save_activations, activations_dict, name))
@@ -103,12 +104,14 @@ def test(net, test_loader, device):
     correct, total = 0, 0
     with torch.no_grad():
         net.eval()
-        #for test_data, test_targets in test_loader:
-        test_data, test_targets = next(iter(test_loader))
-        test_data, test_targets = test_data.to(device), test_targets.to(device)
-        spk_rec = forward(net, test_data)
-        correct += SF.accuracy_rate(spk_rec, test_targets) * spk_rec.size(1)
-        total += spk_rec.size(1)
+        for test_data, test_targets in test_loader:
+        #if True:
+            #test_data, test_targets = next(iter(test_loader))
+            test_data = torch.clamp(test_data, 0, 1)
+            test_data, test_targets = test_data.to(device), test_targets.to(device)
+            spk_rec = forward(net, test_data)
+            correct += SF.accuracy_rate(spk_rec, test_targets) * spk_rec.size(1)
+            total += spk_rec.size(1)
     return (correct / total) * 100
 
 net.load_state_dict(torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth", 
