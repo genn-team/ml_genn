@@ -21,7 +21,7 @@ from collections import defaultdict
 from functools import partial
 
 # Device setup
-device = torch.device("cpu")#torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 # ===============================
 # Dataset Loading
@@ -88,6 +88,7 @@ if record:
 def forward(net, data):
     spk_rec = []
     utils.reset(net)  # Reset hidden states
+    print(data.size(0))
     for step in range(data.size(0)):
         spk_out, _ = net(data[step])
         spk_rec.append(spk_out)
@@ -118,9 +119,5 @@ print(test(net, test_loader, device))
 if record:
     for name, outputs in activations_dict.items():
         print(name, len(outputs))
-        for o in outputs[:10]:
-            print(f"\t{o.shape}")
-        #for step_output in outputs:
-        #    for o in step_output:
-        #        print(f"\t{o.shape}")
+        np.save(f"layer_{name}_out.npy", torch.stack(outputs, 1))
 print("Donezo")
