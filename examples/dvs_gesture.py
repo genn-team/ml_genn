@@ -87,12 +87,9 @@ num_output = len(dataset.classes)
 # Preprocess dataset
 spikes = []
 labels = []
-#for events, label in dataset:
-for i in range(10):
-    events, label = dataset[i]
+for events, label in dataset:
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
-                                          sensor_size, dt=DT,
-                                          histogram_thresh=1))
+                                          sensor_size))#, dt=DT,histogram_thresh=1))
     labels.append(label)
 
 # Determine max spikes and latest spike time
