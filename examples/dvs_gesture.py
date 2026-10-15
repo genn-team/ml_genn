@@ -17,6 +17,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
 
 BATCH_SIZE = 128
 RECORD = False
+DT = 1.0
 
 class SNNTorchLIF(Neuron):
     beta =  ConstantValueDescriptor()
@@ -53,7 +54,6 @@ class SNNTorchLIF(Neuron):
 def reshape_conv_weight(weight):
     # PyTorch uses (out_channels, in_channels, kernel_height, kernel_width)
     # mlGeNN uses (kernel_height, kernel_width, in_channels, out_channels)
-    
     return np.moveaxis(weight.numpy(), (0, 1, 2, 3), (3, 2, 0, 1))
 
 def reshape_dense_weight(weight):
@@ -87,11 +87,11 @@ num_output = len(dataset.classes)
 # Preprocess dataset
 spikes = []
 labels = []
-for events, label in dataset:
-#for i in range(1):
-    #events, label = dataset[i]
+#for events, label in dataset:
+for i in range(10):
+    events, label = dataset[i]
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
-                                          sensor_size, dt=1.0,
+                                          sensor_size, dt=DT,
                                           histogram_thresh=1))
     labels.append(label)
 
@@ -104,32 +104,35 @@ print(f"Max spikes {max_spikes}, latest spike time {latest_spike_time}, Num inpu
 checkpoint = torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth",
                         map_location=torch.device("cpu"), weights_only=True)
 
+beta = 0.93**(DT / 1.0)
+
 # Create sequential model
 network = SequentialNetwork()
 with network:
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * max_spikes), sensor_size)
     hidden1 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["0.weight"]), 
                            filters=16, conv_size=5, conv_strides=2, conv_padding=1),
-                    SNNTorchLIF(beta=checkpoint["1.beta"], v_thresh=checkpoint["1.threshold"]),
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["1.threshold"]),
                     record_spikes=RECORD)
     hidden2 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["2.weight"]), 
                            filters=16, conv_size=3, conv_padding="same"),
-                    SNNTorchLIF(beta=checkpoint["3.beta"], v_thresh=checkpoint["3.threshold"]),
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["3.threshold"]),
                     record_spikes=RECORD)
     hidden3 = Layer(AvgPoolConv2D(weight=reshape_conv_weight(checkpoint["5.weight"]), 
                                   filters=8, conv_size=3, pool_size=2, conv_padding="same", sum=True),
-                    SNNTorchLIF(beta=checkpoint["6.beta"], v_thresh=checkpoint["6.threshold"]),
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["6.threshold"]),
                     record_spikes=RECORD)
     hidden4 = Layer(AvgPoolDense2D(weight=reshape_post_pool_weight(checkpoint["9.weight"], 8, 3), 
                                    pool_size=2, sum=True),
-                    SNNTorchLIF(beta=checkpoint["10.beta"], v_thresh=checkpoint["10.threshold"]), 
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["10.threshold"]), 
                     256, record_spikes=RECORD)
     output = Layer(Dense(weight=reshape_dense_weight(checkpoint["11.weight"])), 
-                   SNNTorchLIF(beta=checkpoint["12.beta"], v_thresh=checkpoint["12.threshold"], readout="spike_count"),
+                   SNNTorchLIF(beta=beta, v_thresh=checkpoint["12.threshold"], readout="spike_count"),
                    record_spikes=RECORD)
 
-max_example_timesteps = int(np.ceil(latest_spike_time / 1.0))
-compiler = InferenceCompiler(dt=1.0, batch_size=BATCH_SIZE,
+max_example_timesteps = int(np.ceil(latest_spike_time / DT))
+print(max_example_timesteps)
+compiler = InferenceCompiler(dt=DT, batch_size=BATCH_SIZE,
                              evaluate_timesteps=max_example_timesteps,
                              reset_in_syn_between_batches=True)
 compiled_net = compiler.compile(network)
