@@ -16,38 +16,44 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 BATCH_SIZE = 128
-RECORD = False
-DT = 1.0
+RECORD = True
+DT = 0.1
+TAU_REF = 0.99-DT
 
 class SNNTorchLIF(Neuron):
     beta =  ConstantValueDescriptor()
     v_thresh =  ConstantValueDescriptor()
 
-    def __init__(self, beta, v_thresh = 1.0, readout=None):
+    def __init__(self, beta, v_thresh = 1.0, tau_ref= 0.0, readout=None):
         super().__init__(readout)
         self.beta = float(beta)
         self.v_thresh = float(v_thresh)
+        self.tau_ref = float(tau_ref)
 
     def get_model(self, population, dt: float, batch_size: int) -> NeuronModel:
         model = {
-            "params": [("Beta", "scalar"), ("VThresh", "scalar")],
-            "vars": [("V", "scalar")],
+            "params": [("Beta", "scalar"), ("VThresh", "scalar"), ("TauRef", "scalar")],
+            "vars": [("V", "scalar"), ("TRef", "scalar")],
 
             "sim_code":
                 """
+                if (TRef > 0.0) {
+                    TRef -= dt;
+                }
                 V = (Beta * V) + Isyn;
                 """,
             "threshold_condition_code":
                 """
-                V >= VThresh
+                ((V >= VThresh) && (TRef <= 0.0))
                 """,
             "reset_code":
                 """
                 V -= VThresh;
+                TRef = TauRef;
                 """}
         return NeuronModel(model, "V",
-                           {"Beta": self.beta, "VThresh": self.v_thresh},
-                           {"V": 0.0})
+                           {"Beta": self.beta, "VThresh": self.v_thresh, "TauRef": self.tau_ref},
+                           {"V": 0.0, "TRef": 0.0})
 
 
     
@@ -89,7 +95,7 @@ spikes = []
 labels = []
 for events, label in dataset:
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
-                                          sensor_size))#, dt=DT,histogram_thresh=1))
+                                          sensor_size)) #, dt=DT,histogram_thresh=1))
     labels.append(label)
 
 # Determine max spikes and latest spike time
@@ -109,22 +115,22 @@ with network:
     input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * max_spikes), sensor_size)
     hidden1 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["0.weight"]), 
                            filters=16, conv_size=5, conv_strides=2, conv_padding=1),
-                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["1.threshold"]),
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["1.threshold"], tau_ref=TAU_REF),
                     record_spikes=RECORD)
     hidden2 = Layer(Conv2D(weight=reshape_conv_weight(checkpoint["2.weight"]), 
                            filters=16, conv_size=3, conv_padding="same"),
-                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["3.threshold"]),
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["3.threshold"], tau_ref=TAU_REF),
                     record_spikes=RECORD)
     hidden3 = Layer(AvgPoolConv2D(weight=reshape_conv_weight(checkpoint["5.weight"]), 
                                   filters=8, conv_size=3, pool_size=2, conv_padding="same", sum=True),
-                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["6.threshold"]),
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["6.threshold"], tau_ref=TAU_REF),
                     record_spikes=RECORD)
     hidden4 = Layer(AvgPoolDense2D(weight=reshape_post_pool_weight(checkpoint["9.weight"], 8, 3), 
                                    pool_size=2, sum=True),
-                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["10.threshold"]), 
+                    SNNTorchLIF(beta=beta, v_thresh=checkpoint["10.threshold"], tau_ref=TAU_REF), 
                     256, record_spikes=RECORD)
     output = Layer(Dense(weight=reshape_dense_weight(checkpoint["11.weight"])), 
-                   SNNTorchLIF(beta=beta, v_thresh=checkpoint["12.threshold"], readout="spike_count"),
+                   SNNTorchLIF(beta=beta, v_thresh=checkpoint["12.threshold"], tau_ref=TAU_REF, readout="spike_count"),
                    record_spikes=RECORD)
 
 max_example_timesteps = int(np.ceil(latest_spike_time / DT))
