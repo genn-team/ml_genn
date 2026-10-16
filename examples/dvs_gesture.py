@@ -18,33 +18,33 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
 BATCH_SIZE = 128
 RECORD = True
 DT = 0.1
-TAU_REF = 0.99-DT
+TAU_REF = 9
 
 class SNNTorchLIF(Neuron):
     beta =  ConstantValueDescriptor()
     v_thresh =  ConstantValueDescriptor()
 
-    def __init__(self, beta, v_thresh = 1.0, tau_ref= 0.0, readout=None):
+    def __init__(self, beta, v_thresh=1.0, tau_ref=0, readout=None):
         super().__init__(readout)
         self.beta = float(beta)
         self.v_thresh = float(v_thresh)
-        self.tau_ref = float(tau_ref)
+        self.tau_ref = int(tau_ref)
 
     def get_model(self, population, dt: float, batch_size: int) -> NeuronModel:
         model = {
-            "params": [("Beta", "scalar"), ("VThresh", "scalar"), ("TauRef", "scalar")],
-            "vars": [("V", "scalar"), ("TRef", "scalar")],
+            "params": [("Beta", "scalar"), ("VThresh", "scalar"), ("TauRef", "int")],
+            "vars": [("V", "scalar"), ("TRef", "int")],
 
             "sim_code":
                 """
-                if (TRef > 0.0) {
-                    TRef -= dt;
+                if (TRef > 0) {
+                    TRef --;
                 }
                 V = (Beta * V) + Isyn;
                 """,
             "threshold_condition_code":
                 """
-                ((V >= VThresh) && (TRef <= 0.0))
+                ((V >= VThresh) && (TRef < 0))
                 """,
             "reset_code":
                 """
