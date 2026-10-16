@@ -15,7 +15,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 BATCH_SIZE = 128
-RECORD = True
+RECORD = False
 DT = 0.1
 TAU_REF = 9
 
@@ -43,7 +43,7 @@ class SNNTorchLIF(Neuron):
                 """,
             "threshold_condition_code":
                 """
-                ((V >= VThresh) && (TRef < 0))
+                ((V >= VThresh) && (TRef <= 0))
                 """,
             "reset_code":
                 """
@@ -69,7 +69,9 @@ num_output = len(dataset.classes)
 # Preprocess dataset
 spikes = []
 labels = []
-for events, label in dataset:
+#for events, label in dataset:
+for i in range(10):
+    events, label = dataset[i]
     spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
                                           sensor_size)) #, dt=DT,histogram_thresh=1))
     labels.append(label)
@@ -85,8 +87,8 @@ beta = 0.93**(DT / 1.0)
 hidden1_conn = np.load("hidden1.npy")
 hidden2_conn = np.load("hidden2.npy")
 hidden3_conn = np.load("hidden3.npy")
-hidden4_conn = np.load("hidden4.npy")
-output_conn = np.load("output.npy")
+hidden4_conn = np.reshape(np.load("hidden4.npy"), (7 * 7 * 8, 256))
+output_conn = np.reshape(np.load("output.npy"), (256, 11))
 
 # Create sequential model
 network = SequentialNetwork()
@@ -115,8 +117,7 @@ hidden2.connection().pre_ind = hidden2_conn[0]
 hidden2.connection().post_ind = hidden2_conn[1]
 hidden3.connection().pre_ind = hidden3_conn[0]
 hidden3.connection().post_ind = hidden3_conn[1]
-hidden4.connection().pre_ind = hidden4_conn[0]
-hidden4.connection().post_ind = hidden4_conn[1]
+
 
 max_example_timesteps = int(np.ceil(latest_spike_time / DT))
 print(max_example_timesteps)

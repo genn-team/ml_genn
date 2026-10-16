@@ -16,7 +16,7 @@ from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
 BATCH_SIZE = 128
-RECORD = True
+RECORD = False
 DT = 0.1
 TAU_REF = 9
 
@@ -44,7 +44,7 @@ class SNNTorchLIF(Neuron):
                 """,
             "threshold_condition_code":
                 """
-                ((V >= VThresh) && (TRef < 0))
+                ((V >= VThresh) && (TRef <= 0))
                 """,
             "reset_code":
                 """
