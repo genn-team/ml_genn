@@ -1145,7 +1145,8 @@ class EventPropCompiler(Compiler):
                             LambdaV += (1.0 / ImV) * (Vthresh * LambdaV + RevISyn);
                         }
                         else {
-                            LambdaV += 10.0 * RevISyn;
+                            LambdaV += 1e4 * RevISyn;
+                            printf("triggered %g\\n",RevISyn);
                         }
                         """
 
@@ -1380,10 +1381,11 @@ class EventPropCompiler(Compiler):
                     else:
                         extra = ""
                 wum.append_pre_event_syn_code(f"""
-                    if (ImV_pre > 0.01) {{
+                    if (ImV_pre > 0.1) {{
                         addToPre(g * (LambdaV_post{extra} - LambdaI_post{extra}));
                     }}
                     else {{
+                        printf("sending g= %g, lbdI = %g\\n",g, LambdaI_post{extra});  
                         addToPre(g * LambdaI_post{extra});
                     }}
                     """)

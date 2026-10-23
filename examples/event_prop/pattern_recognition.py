@@ -17,7 +17,7 @@ from ml_genn.utils.data import preprocess_spikes
 from ml_genn.compilers.event_prop_compiler import default_params
 
 NUM_INPUT = 20
-NUM_HIDDEN = 256
+NUM_HIDDEN = 1024
 NUM_OUTPUT = 3
 
 NUM_FREQ_COMP = 3
@@ -27,29 +27,32 @@ IN_ACTIVE_ISI = 10
 IN_ACTIVE_INTERVAL = 200
 
 NUM_TRIALS = 100
-NUM_EPOCHS = 20
+NUM_EPOCHS = 40
 
-TAU_MEM = 20.0
+TAU_MEM = 30.0
 TAU_SYN = 5.0
 
 LR = 0.004
 
-TRIAL_STEPS = 1000
+TRIAL_TIME = 1000
+DT = 0.1
+
+trial_steps = int(TRIAL_TIME/DT)
 
 # Pick random phases and outputs for the three frequency components 
 # components used to generate patterns for each output neuron
-output_phase = np.random.random((NUM_OUTPUT, NUM_FREQ_COMP)) * 2.0 * np.pi
-output_ampl = 0.5 + (np.random.random((NUM_OUTPUT, NUM_FREQ_COMP)) * (2.0 - 0.5))
+output_phase = 0.1*np.random.random((NUM_OUTPUT, NUM_FREQ_COMP)) * 2.0 * np.pi
+output_ampl = 0.1*(0.5 + (np.random.random((NUM_OUTPUT, NUM_FREQ_COMP)) * (2.0 - 0.5)))
 
 # Convert frequencies of each component into row vector
 freq = [2.0, 3.0, 5.0]
-freq_radians = np.multiply(freq, 1.0 * np.pi / 1000.0)
+freq_radians = np.multiply(freq, 1.0 * np.pi / trial_steps)
 
 # Calculate sinusoid of each frequency for 
-sinusoids = np.sin(np.outer(np.arange(TRIAL_STEPS), freq_radians))
+sinusoids = np.sin(np.outer(np.arange(trial_steps), freq_radians))
 
 # Calculate Y* target
-y_star = np.zeros((TRIAL_STEPS, NUM_OUTPUT))
+y_star = np.zeros((trial_steps, NUM_OUTPUT))
 for i in range(NUM_OUTPUT):
     for c in range(NUM_FREQ_COMP):
         y_star[:, i] += output_ampl[i, c] * sinusoids[:, c] + output_phase[i, c]
@@ -86,13 +89,13 @@ with network:
                         NUM_OUTPUT)
     
     # Connections
-    Connection(input, hidden, Dense(Normal(sd=2.5 / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
+    Connection(input, hidden, Dense(Normal(mean= 0.1, sd=1. / np.sqrt(NUM_INPUT))), Exponential(TAU_SYN))
     Connection(hidden, hidden, Dense(Normal(sd=1.5 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
     Connection(hidden, output, Dense(Normal(sd=2.0 / np.sqrt(NUM_HIDDEN))), Exponential(TAU_SYN))
 
-compiler = EventPropCompiler(example_timesteps=1000, losses="mean_square_error",
+compiler = EventPropCompiler(example_timesteps=trial_steps, losses="mean_square_error",
                          optimiser=Adam(LR), reg_lambda_upper=1e-8, reg_lambda_lower=1e-8, 
-                                 reg_nu_upper=10, max_spikes=1500)
+                                 reg_nu_upper=10, max_spikes=1500, dt=DT)
 compiled_net = compiler.compile(network)
 
 with compiled_net:
@@ -108,7 +111,8 @@ with compiled_net:
                  VarRecorder(output, "v", key="output_v"),
                  SpikeRecorder(input, key="input_spikes"),
                  SpikeRecorder(hidden, key="hidden_spikes"),
-                 OptimiserParamSchedule("alpha", alpha_schedule)]
+                 #OptimiserParamSchedule("alpha", alpha_schedule)
+    ]
     metrics, cb_data  = compiled_net.train({input: in_spikes},
                                            {output: y_star},
                                            num_epochs=NUM_EPOCHS,
@@ -119,16 +123,17 @@ with compiled_net:
     #
     fig, axes = plt.subplots(NUM_FREQ_COMP + 2, NUM_EPOCHS, sharex="col", sharey="row")
     
+    t = np.arange(trial_steps)*DT
     for i in range(NUM_EPOCHS):
         error = []
-        fac = 100
+        fac = NUM_TRIALS
         for c in range(NUM_FREQ_COMP):
             y = cb_data["output_v"][i*fac][:,c]
             error.append(y - y_star[0][:,c])
             mse = np.sum(error[-1] * error[-1]) / len(error[-1])
             axes[c,i].set_title(f"Y{c} (MSE={mse:.2f})")
-            axes[c,i].plot(y)
-            axes[c,i].plot(y_star[i][:,c], linestyle="--")
+            axes[c,i].plot(t,y)
+            axes[c,i].plot(t,y_star[i][:,c], linestyle="--")
         axes[NUM_FREQ_COMP,i].scatter(cb_data["input_spikes"][0][i],
                                       cb_data["input_spikes"][1][i], s=1)
         axes[NUM_FREQ_COMP + 1,i].scatter(cb_data["hidden_spikes"][0][i],
@@ -137,7 +142,6 @@ with compiled_net:
         error = np.hstack(error)
         total_mse = np.sum(error * error) / len(error)
         print(f"{i}: Total MSE: {total_mse}")
-    axes[0,0].set_ylabel("Input spikes")
-    axes[0,1].set_ylabel("Y")
-    axes[0,2].set_ylabel("E")
+    axes[NUM_FREQ_COMP,0].set_ylabel("Input spikes")
+    axes[NUM_FREQ_COMP+1,1].set_ylabel("Hidden spikes")
     plt.show()
