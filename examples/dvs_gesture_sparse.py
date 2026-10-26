@@ -12,9 +12,9 @@ from tonic.datasets import DVSGesture
 from tonic.transforms import Compose, CropTime, Denoise, Downsample
 
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
-                                preprocess_tonic_spikes)
+                                preprocess_spikes)
 
-BATCH_SIZE = 128
+BATCH_SIZE = 16
 RECORD = False
 DT = 0.1
 TAU_REF = 9
@@ -93,9 +93,14 @@ num_output = len(dataset.classes)
 # Preprocess dataset
 spikes = []
 labels = []
-for events, label in dataset:
-    spikes.append(preprocess_tonic_spikes(events, dataset.ordering,
-                                          sensor_size)) #, dt=DT,histogram_thresh=1))
+for i in range(5):
+    events, label = dataset[i]
+    
+    spike_event_ids = (events["p"] +
+                       (events["y"] * sensor_size[2]) + 
+                       (events["x"] * sensor_size[1] * sensor_size[2]))
+    spikes.append(preprocess_spikes(events["t"] / 1000.0, spike_event_ids,
+                                    np.prod(sensor_size)))
     labels.append(label)
 
 # Determine max spikes and latest spike time
@@ -106,11 +111,14 @@ print(f"Max spikes {max_spikes}, latest spike time {latest_spike_time}, Num inpu
 beta = 0.93**(DT / 1.0)
 
 # Load weights
-hidden1_conn = np.load("hidden1.npy")
-hidden2_conn = np.load("hidden2.npy")
-hidden3_conn = np.load("hidden3.npy")
-hidden4_conn = np.load("hidden4.npy")
-output_conn = np.reshape(np.load("output.npy"), (256, 11))
+hidden1_conn = np.load("hidden1_qat.npy")
+hidden2_conn = np.load("hidden2_qat.npy")
+hidden3_conn = np.load("hidden3_qat.npy")
+hidden4_conn = np.load("hidden4_qat.npy")
+output_conn = np.reshape(np.load("output_qat.npy"), (256, 11))
+
+# Input neurons need to be arranged in width, height, channel order
+hidden1_conn[0] = remap_width_height_channel(hidden1_conn[0].astype(int), 32, 32, 2)
 
 # Hidden 1 neurons need to be arranged in width, height, channel order
 hidden1_conn[1] = remap_width_height_channel(hidden1_conn[1].astype(int), 15, 15, 16)

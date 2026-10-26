@@ -15,7 +15,8 @@ from tonic.transforms import Compose, CropTime, Denoise, Downsample
 from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
                                 preprocess_tonic_spikes)
 
-BATCH_SIZE = 128
+BATCH_SIZE = 16
+EXPORT = False
 RECORD = False
 DT = 0.1
 TAU_REF = 9
@@ -104,7 +105,7 @@ latest_spike_time = calc_latest_spike_time(spikes)
 print(f"Max spikes {max_spikes}, latest spike time {latest_spike_time}, Num input {num_input}, Num output {num_output}")
 
 # Load pytorch checkpoint
-checkpoint = torch.load("PTQ_time_window-1ms-snntorch_dvsgesture_model.pth",
+checkpoint = torch.load("QAT_time_window-1ms-snntorch_dvsgesture_model.pth",
                         map_location=torch.device("cpu"), weights_only=True)
 
 beta = 0.93**(DT / 1.0)
@@ -141,17 +142,28 @@ compiler = InferenceCompiler(dt=DT, batch_size=BATCH_SIZE,
 compiled_net = compiler.compile(network)
 
 with compiled_net:
-    #compiled_net.connection_populations[hidden1.connection()].pull_connectivity_from_device()
-    #compiled_net.connection_populations[hidden2.connection()].pull_connectivity_from_device()
-    #compiled_net.connection_populations[hidden3.connection()].pull_connectivity_from_device()
+    if EXPORT:
+        compiled_net.connection_populations[hidden1.connection()].pull_connectivity_from_device()
+        compiled_net.connection_populations[hidden2.connection()].pull_connectivity_from_device()
+        compiled_net.connection_populations[hidden3.connection()].pull_connectivity_from_device()
+        compiled_net.connection_populations[hidden1.connection()].vars["g"].pull_from_device()
+        compiled_net.connection_populations[hidden2.connection()].vars["g"].pull_from_device()
+        compiled_net.connection_populations[hidden3.connection()].vars["g"].pull_from_device()
+        compiled_net.connection_populations[hidden4.connection()].vars["g"].pull_from_device()
+        compiled_net.connection_populations[output.connection()].vars["g"].pull_from_device()
+        
+        np.save("hidden1_qat.npy", np.vstack((compiled_net.connection_populations[hidden1.connection()].get_sparse_pre_inds(),
+                                              compiled_net.connection_populations[hidden1.connection()].get_sparse_post_inds(),
+                                              compiled_net.connection_populations[hidden1.connection()].vars["g"].values)))
+        np.save("hidden2_qat.npy", np.vstack((compiled_net.connection_populations[hidden2.connection()].get_sparse_pre_inds(),
+                                              compiled_net.connection_populations[hidden2.connection()].get_sparse_post_inds(),
+                                              compiled_net.connection_populations[hidden2.connection()].vars["g"].values)))
+        np.save("hidden3_qat.npy", np.vstack((compiled_net.connection_populations[hidden3.connection()].get_sparse_pre_inds(),
+                                              compiled_net.connection_populations[hidden3.connection()].get_sparse_post_inds(),
+                                              compiled_net.connection_populations[hidden3.connection()].vars["g"].values)))
+        np.save("hidden4_qat.npy", compiled_net.connection_populations[hidden4.connection()].vars["g"].values)
+        np.save("output_qat.npy", compiled_net.connection_populations[output.connection()].vars["g"].values)
     
-    #np.save("hidden1.npy", np.vstack((compiled_net.connection_populations[hidden1.connection()].get_sparse_pre_inds(),
-    #                                  compiled_net.connection_populations[hidden1.connection()].get_sparse_post_inds())))
-    #np.save("hidden2.npy", np.vstack((compiled_net.connection_populations[hidden2.connection()].get_sparse_pre_inds(),
-    #                                  compiled_net.connection_populations[hidden2.connection()].get_sparse_post_inds())))
-    #np.save("hidden3.npy", np.vstack((compiled_net.connection_populations[hidden3.connection()].get_sparse_pre_inds(),
-    #                                  compiled_net.connection_populations[hidden3.connection()].get_sparse_post_inds())))
-
     if RECORD:
         callbacks = [BatchProgressBar(),
                      SpikeRecorder(hidden1, key="hidden1_spikes"),
