@@ -387,15 +387,19 @@ class InferenceCompiler(Compiler):
         # Determine matrix type order of preference based on flag. 'Toeplitz' 
         # implementations are nearly always fastest *and* use the least memory
         # but, while sparse and dense are often faster than 'procedural', they
-        # use (often significantly) more memory  [Turner2022]_
+        # use (often significantly) more memory  [Turner2022]_. When it's 
+        # usable (i.e. not training), DENSE_PROCEDURALG is fast and uses 
+        # no more memory than other approaches
         if optimise_connectivity_speed:
-            supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
+            supported_matrix_type = [SynapseMatrixType.DENSE_PROCEDURALG,
+                                     SynapseMatrixType.TOEPLITZ,
                                      SynapseMatrixType.SPARSE,
                                      SynapseMatrixType.DENSE,
                                      SynapseMatrixType.PROCEDURAL_KERNELG,
                                      SynapseMatrixType.PROCEDURAL]
         else:
-            supported_matrix_type = [SynapseMatrixType.TOEPLITZ,
+            supported_matrix_type = [SynapseMatrixType.DENSE_PROCEDURALG,
+                                     SynapseMatrixType.TOEPLITZ,
                                      SynapseMatrixType.PROCEDURAL_KERNELG,
                                      SynapseMatrixType.PROCEDURAL,
                                      SynapseMatrixType.SPARSE,
