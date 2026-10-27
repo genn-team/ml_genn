@@ -119,7 +119,7 @@ class AvgPoolDense2D(Connectivity):
                 raise RuntimeError("pool output size doesn't "
                                    "match weights")
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
@@ -136,10 +136,17 @@ class AvgPoolDense2D(Connectivity):
             "dense_units": int(np.prod(connection.target().shape))},
             {"weights": weight})
 
+        # Build list of available matrix types
+        available_matrix_types = []
+
+        # Add dense options if not trainable
+        if not trainable:
+            available_matrix_types.append(SynapseMatrixType.DENSE)
+            available_matrix_types.append(SynapseMatrixType.DENSE_PROCEDURALG)
+
         # Get best supported matrix type
         best_matrix_type = supported_matrix_type.get_best(
-            [SynapseMatrixType.DENSE,
-             SynapseMatrixType.DENSE_PROCEDURALG])
+            available_matrix_types)
 
         if best_matrix_type is None:
             raise NotImplementedError("Compiler does not support "

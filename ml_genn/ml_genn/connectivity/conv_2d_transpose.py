@@ -116,7 +116,7 @@ class Conv2DTranspose(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should match shape of Conv2DTranspose kernel")
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -136,10 +136,16 @@ class Conv2DTranspose(Connectivity):
             "conv_ih": conv_ih, "conv_iw": conv_iw, "conv_ic": conv_ic,
             "conv_oh": conv_oh, "conv_ow": conv_ow, "conv_oc": conv_oc})
 
+        # Build list of available matrix types
+        available_matrix_types = [SynapseMatrixType.PROCEDURAL_KERNELG]
+
+        # Add sparse if not trainable
+        if not trainable:
+            available_matrix_types.append(SynapseMatrixType.SPARSE)
+
         # Get best supported connectivity choice
         best_matrix_type = supported_matrix_type.get_best(
-            [SynapseMatrixType.SPARSE,
-             SynapseMatrixType.PROCEDURAL_KERNELG])
+            available_matrix_types)
         if best_matrix_type is None:
             raise NotImplementedError("Compiler does not support "
                                       "Conv2DTranspose connectivity")
