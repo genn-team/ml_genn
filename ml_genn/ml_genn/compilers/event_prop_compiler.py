@@ -735,6 +735,10 @@ class EventPropCompiler(Compiler):
                                       f"{conn.name} exceeds 65535")
         genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
+    def is_conn_trainable(self, conn: Connection, compile_state):
+        # If something is being optimised
+        return (conn in compile_state.optimisers)
+    
     def build_neuron_model(self, pop: Population,
                            model: Union[AutoNeuronModel, SynapseModel],
                            compile_state: CompileState) -> NeuronModel:
