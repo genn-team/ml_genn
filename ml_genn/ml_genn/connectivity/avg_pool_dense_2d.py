@@ -15,12 +15,13 @@ if TYPE_CHECKING:
     from .. import Connection, Population
     from ..compilers.compiler import SupportedMatrixType
 
-from pygenn import create_var_init_snippet
+from pygenn import (create_toeplitz_connect_init_snippet, 
+                    create_var_init_snippet, init_toeplitz_connectivity)
 from ..utils.connectivity import get_param_2d
 from ..utils.value import is_value_array
 
 
-genn_snippet = create_var_init_snippet(
+genn_var_init_snippet = create_var_init_snippet(
     "avepool2d_dense",
 
     params=[
@@ -56,6 +57,42 @@ genn_snippet = create_var_init_snippet(
             }
         }
         """)
+
+
+genn_toeplitz_init_snippet = create_toeplitz_connect_init_snippet(
+    "avepool2d_dense",
+
+    params=[
+        ("pool_kh", "int"), ("pool_kw", "int"),
+        ("pool_sh", "int"), ("pool_sw", "int"),
+        ("pool_ih", "int"), ("pool_iw", "int"), ("pool_ic", "int"),
+        ("dense_ih", "int"), ("dense_iw", "int"), ("dense_ic", "int"),
+        ("dense_units", "int")],
+    diagonal_build_code=
+        """
+        for_each_synapse {
+            // Convert presynaptic neuron ID to row, column and channel in pool input
+            const int poolInRow = (id_pre / pool_ic) / pool_iw;
+            const int poolInCol = (id_pre / pool_ic) % pool_iw;
+            const int poolInChan = id_pre % pool_ic;
+    
+            // Calculate corresponding pool output
+            const int poolOutRow = poolInRow / pool_sh;
+            const int poolStrideRow = poolOutRow * pool_sh;
+            const int poolOutCol = poolInCol / pool_sw;
+            const int poolStrideCol = poolOutCol * pool_sw;
+
+            if ((poolInRow < (poolStrideRow + pool_kh)) && (poolInCol < (poolStrideCol + pool_kw))) {
+                if ((poolOutRow < dense_ih) && (poolOutCol < dense_iw)) {
+                    const int dense_in_unit = poolOutRow * (dense_iw * dense_ic) + poolOutCol * (dense_ic) + poolInChan;
+                    addSynapse(id_diag, dense_in_unit, id_diag);
+                }
+            }
+        }
+        """,
+    calc_max_row_len_func=lambda num_pre, num_post, pars: int(pars["dense_units"]),
+    calc_kernel_size_func=lambda pars: [pars["dense_ih"] * pars["dense_iw"] * pars["dense_ic"],
+                                        pars["dense_units"]])
 
 
 class AvgPoolDense2D(Connectivity):
@@ -124,16 +161,8 @@ class AvgPoolDense2D(Connectivity):
         pool_ih, pool_iw, pool_ic = connection.source().shape
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
 
-        wu_var_val = Wrapper(genn_snippet, {
-            "pool_kh": pool_kh, "pool_kw": pool_kw,
-            "pool_sh": pool_sh, "pool_sw": pool_sw,
-            "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
-            "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
-            "dense_units": int(np.prod(connection.target().shape))},
-            {"weights": self.weight.flatten() / (pool_kh * pool_kw)})
-
         # Build list of available matrix types
-        available_matrix_types = []
+        available_matrix_types = [SynapseMatrixType.TOEPLITZ]
 
         # Add dense options if not trainable
         if not trainable:
@@ -144,10 +173,32 @@ class AvgPoolDense2D(Connectivity):
         best_matrix_type = supported_matrix_type.get_best(
             available_matrix_types)
 
+        scaled_weight = self.weight.flatten() / (pool_kh * pool_kw)
+
         if best_matrix_type is None:
             raise NotImplementedError("Compiler does not support "
                                       "AvgPoolDense2D connectivity")
+        elif best_matrix_type == SynapseMatrixType.TOEPLITZ:
+            conn_init = init_toeplitz_connectivity(genn_toeplitz_init_snippet, {
+                "pool_kh": pool_kh, "pool_kw": pool_kw,
+                "pool_sh": pool_sh, "pool_sw": pool_sw,
+                "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
+                "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
+                "dense_units": int(np.prod(connection.target().shape))})
+
+            return ConnectivitySnippet(
+                snippet=conn_init,
+                matrix_type=SynapseMatrixType.TOEPLITZ,
+                weight=scaled_weight, delay=self.delay)
         else:
+            wu_var_val = Wrapper(genn_var_init_snippet, {
+                "pool_kh": pool_kh, "pool_kw": pool_kw,
+                "pool_sh": pool_sh, "pool_sw": pool_sw,
+                "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
+                "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
+                "dense_units": int(np.prod(connection.target().shape))},
+                {"weights": scaled_weight})
+            
             return ConnectivitySnippet(
                 snippet=None, matrix_type=best_matrix_type,
                 weight=wu_var_val, delay=self.delay)
