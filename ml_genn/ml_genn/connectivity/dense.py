@@ -48,7 +48,7 @@ class Dense(Connectivity):
                 raise RuntimeError("source population shape "
                                    "doesn't match weights")
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         # Get best supported connectivity choice
         best_matrix_type = supported_matrix_type.get_best(

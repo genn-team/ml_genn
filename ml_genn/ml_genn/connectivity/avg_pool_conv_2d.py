@@ -165,7 +165,7 @@ class AvgPoolConv2D(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of AvgPoolConv2D kernel")
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
@@ -183,10 +183,14 @@ class AvgPoolConv2D(Connectivity):
 
         scaled_weight = self.weight.flatten() / (pool_kh * pool_kw)
 
-        # Build list of available matrix types, 
-        # adding Toeplitz of constraints are met
-        available_matrix_types = [SynapseMatrixType.SPARSE,
-                                  SynapseMatrixType.PROCEDURAL_KERNELG]
+        # Build list of available matrix types
+        available_matrix_types = [SynapseMatrixType.PROCEDURAL_KERNELG]
+
+        # Add sparse if not trainable
+        if not trainable:
+            available_matrix_types.append(SynapseMatrixType.SPARSE)
+
+        # Add Toeplitz if constraints are met
         if (conv_sh == 1 and conv_sw == 1
             and (self.conv_padding is not PadMode.SAME
                  or ((self.conv_size[0] % 2) != 0

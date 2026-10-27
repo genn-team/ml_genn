@@ -236,6 +236,17 @@ class Compiler:
                                           f"{conn.name} exceeds 65535")
             genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
+    def is_conn_trainable(self, conn: Connection, compile_state):
+        """Determine whether a connection is trainable.
+        This will restrict choice of connectivity data-structures
+        
+        Args:
+            conn:           Connection connectivity is associated with
+            compile_state:  Compiler-specific state created by
+                            :meth:`.pre_compile`.
+        """
+        return False
+
     def build_neuron_model(self, pop: Population, 
                            model: Union[AutoNeuronModel, NeuronModel],
                            compile_state) -> NeuronModel:
@@ -660,8 +671,9 @@ class Compiler:
             
             # Get connectivity init snippet
             connect_snippet =\
-                conn.connectivity.get_snippet(conn,
-                                              self.supported_matrix_type)
+                conn.connectivity.get_snippet(
+                    conn, self.is_conn_trainable(conn, compile_state),
+                    self.supported_matrix_type)
 
             # Build weight update model
             (wum, wum_param_vals, wum_dynamic_param_names, wum_var_vals,

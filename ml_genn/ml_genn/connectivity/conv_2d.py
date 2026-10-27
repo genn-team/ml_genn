@@ -77,7 +77,7 @@ class Conv2D(Connectivity):
             raise RuntimeError("If weights are specified as arrays, they "
                                "should  match shape of Conv2D kernel")
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         conv_kh, conv_kw = self.conv_size
         conv_sh, conv_sw = self.conv_strides
@@ -90,10 +90,14 @@ class Conv2D(Connectivity):
             conv_padh = get_conv_same_padding(conv_ih, conv_kh, conv_sh)
             conv_padw = get_conv_same_padding(conv_iw, conv_kw, conv_sw)
 
-        # Build list of available matrix types, 
-        # adding Toeplitz of constraints are met
-        available_matrix_types = [SynapseMatrixType.SPARSE,
-                                  SynapseMatrixType.PROCEDURAL_KERNELG]
+        # Build list of available matrix types
+        available_matrix_types = [SynapseMatrixType.PROCEDURAL_KERNELG]
+
+        # Add sparse if not trainable
+        if not trainable:
+            available_matrix_types.append(SynapseMatrixType.SPARSE)
+
+        # Add Toeplitz if constraints are met
         if conv_sh == 1 and conv_sw == 1:
             available_matrix_types.append(SynapseMatrixType.TOEPLITZ)
 
