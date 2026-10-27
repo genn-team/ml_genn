@@ -347,8 +347,9 @@ class CompileState:
             vars = optimisers["all_connections"]
             for conn in network.connections:
                 # If connectivity is trainable
+                # **NOTE** we pass trainable=True here as that is what we hope to do!
                 connect_snippet = conn.connectivity.get_snippet(
-                    conn, supported_matrix_type)
+                    conn, True, supported_matrix_type)
                 if connect_snippet.trainable:
                     # create optimisers for specified variables
                     self.optimisers[conn] = {
