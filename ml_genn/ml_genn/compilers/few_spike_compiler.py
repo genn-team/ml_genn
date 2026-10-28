@@ -272,7 +272,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     # use `set_input` to associate accordingly
                     self.set_input(input_batch)
                     # Add "batch size" to counter from dict input
-                    valid_output_size += len(input_batch[inputs[0]]) 
+                    valid_output_size += len(input_batch[inputs[0]])
                 else:
                     # Else, suppose it's data in tensorflow format,
                     # then manually organize input relationships and set inputs
@@ -283,7 +283,7 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
                     else:
                         self.set_input({p: x for p, x in zip(inputs, input_batch)})
                     # Add "batch size" to counter from tensorflow iter input
-                    valid_output_size += len(input_batch) 
+                    valid_output_size += len(input_batch)
                 # Counter to match output readout with network pipeline latency
                 if len(outputs) == 1:
                     y_pipe_counter[outputs[0]] += 1
