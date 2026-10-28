@@ -250,7 +250,8 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
         
         data_remaining = True
         batch_i = 0
-        full_input_size = 0
+        # Counter to trim output to match number of valid SNN predictions
+        valid_output_size = 0
         # While there is data remaining or any y values left in queues
         while data_remaining or any(q > 0 for q in y_pipe_counter.values()):
             # Attempt to get next batch of data,
@@ -265,25 +266,24 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             
             if data_remaining:
                 # Set input from batch
-                # If input_batch is already organized as dict, set as is
                 if isinstance(input_batch, dict):
+                    # If input_batch is already organized as dict
+                    # of {input_pop1: i_data1, input_pop2: i_data2, ...},
+                    # use `set_input` to associate accordingly
                     self.set_input(input_batch)
-                    # full_input_size is used to crop output
-                    # It won't work if inputs from different populations
-                    # have different sizes
-                    full_input_size += len(input_batch[inputs[0]]) 
+                    # Add "batch size" to counter from dict input
+                    valid_output_size += len(input_batch[inputs[0]]) 
                 else:
-                    # Else, manually organize and set inputs
+                    # Else, suppose it's data in tensorflow format,
+                    # then manually organize input relationships and set inputs
                     # **YUCK** this isn't quite right as input_batch
                     # could also have outer dimension
                     if len(inputs) == 1:
                         self.set_input({inputs[0]: input_batch})
                     else:
                         self.set_input({p: x for p, x in zip(inputs, input_batch)})
-                    # full_input_size is used to crop output
-                    # It won't work if inputs from different populations
-                    # have different sizes
-                    full_input_size += len(input_batch) 
+                    # Add "batch size" to counter from tensorflow iter input
+                    valid_output_size += len(input_batch) 
                 # Counter to match output readout with network pipeline latency
                 if len(outputs) == 1:
                     y_pipe_counter[outputs[0]] += 1
@@ -310,9 +310,10 @@ class CompiledFewSpikeNetwork(CompiledNetwork):
             callback_list.on_batch_end(batch_i, {})
             batch_i += 1        
         callback_list.on_test_end({})
-        # Concatenate predictions into single numpy array and trim padding
+        # Concatenate predictions into single numpy array and trim
+        # outputs outside of expected number
         for o in outputs:
-            y_pred[o] = np.concatenate(y_pred[o])[:full_input_size,:]
+            y_pred[o] = np.concatenate(y_pred[o])[:valid_output_size,:]
         
         # Return predictions and metrics
         return y_pred, callback_list.get_data()
