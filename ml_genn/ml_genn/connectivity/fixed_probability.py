@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from .sparse_base import SparseBase
-from ..utils.snippet import ConstantValueDescriptor
+from ..utils.snippet import ConnectivitySnippet, ConstantValueDescriptor
 from ..utils.value import InitValue
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class FixedProbability(SparseBase):
     def connect(self, source: Population, target: Population):
         pass
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         # No autapse model should be used if self-connections are disallowed
         # and we're connecting the same population to itself

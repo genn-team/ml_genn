@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from .sparse_base import SparseBase
+from ..utils.snippet import ConnectivitySnippet
 from ..utils.value import InitValue
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ class OneToOne(SparseBase):
         elif output_shape != target.shape:
             raise RuntimeError("Target population shape mismatch")
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         return super()._get_snippet(supported_matrix_type,
                                     init_sparse_connectivity("OneToOne"))

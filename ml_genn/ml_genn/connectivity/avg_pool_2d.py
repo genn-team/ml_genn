@@ -99,7 +99,7 @@ class AvgPool2D(Connectivity):
         # Update target shape
         update_target_shape(target, self.output_shape, self.flatten)
 
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         pool_kh, pool_kw = self.pool_size
         pool_sh, pool_sw = self.pool_strides
@@ -115,6 +115,7 @@ class AvgPool2D(Connectivity):
         # Get best supported matrix type
         # **NOTE** no need to use globalg as constant weights 
         # will be turned into parameters which is equivalent
+        # **NOTE** ignore trainable, AvgPool2D can't be trained
         best_matrix_type = supported_matrix_type.get_best(
             [SynapseMatrixType.SPARSE, SynapseMatrixType.PROCEDURAL])
 
