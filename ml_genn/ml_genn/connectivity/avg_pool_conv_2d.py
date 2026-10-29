@@ -230,8 +230,7 @@ class AvgPoolConv2D(Connectivity):
                 return ConnectivitySnippet(
                     snippet=conn_init,
                     matrix_type=SynapseMatrixType.PROCEDURAL_KERNELG,
-                    weight=scaled_weight,
-                                           delay=self.delay)
+                    weight=scaled_weight, delay=self.delay)
             else:
                 # If weights/delays are arrays, use kernel initializer
                 # to initialize, otherwise use as is
