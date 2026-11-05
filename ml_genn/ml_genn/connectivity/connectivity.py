@@ -49,13 +49,15 @@ class Connectivity(ABC):
         pass
 
     @abstractmethod
-    def get_snippet(self, connection: Connection,
+    def get_snippet(self, connection: Connection, trainable: bool,
                     supported_matrix_type: SupportedMatrixType) -> ConnectivitySnippet:
         """Gets PyGeNN implementation of connectivity initializer
 
         Args:
             connection:             Connection this connectivity
                                     is to be applied to
+            trainable:              Does the resultant connectivity
+                                    need to be trainable?
             supported_matrix_type:  GeNN synaptic matrix datatypes 
                                     supported by current compiler
         """

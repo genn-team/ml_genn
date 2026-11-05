@@ -7,30 +7,32 @@ from ml_genn import InputLayer, Layer, SequentialNetwork
 from ml_genn.compilers import InferenceCompiler
 from ml_genn.neurons import IntegrateFire, BinarySpikeInput
 from ml_genn.connectivity import Conv2DTranspose
+from ml_genn.compilers.compiler import SupportedMatrixType
+from pygenn import SynapseMatrixType
 
 @pytest.mark.parametrize(
-    "in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, prefer_in_memory_connect", 
-    [(12, 1, 1, 3, 1, "valid", True),
-     (12, 1, 1, 3, 1, "valid", False),
-     (12, 1, 1, 3, 1, "same", True),
-     (12, 1, 1, 3, 1, "same", False),
-     (12, 2, 1, 3, 1, "valid", True),
-     (12, 2, 1, 3, 1, "valid", False),
-     (12, 1, 2, 3, 1, "valid", True),
-     (12, 1, 2, 3, 1, "valid", False),
-     (12, 2, 2, 3, 1, "valid", True),
-     (12, 2, 2, 3, 1, "valid", False),
-     (12, 1, 1, 4, 1, "valid", True),
-     (12, 1, 1, 4, 1, "valid", False),
-     (12, 1, 1, 4, 1, "same", True),
-     (12, 1, 1, 4, 1, "same", False),
-     (12, 1, 1, 3, 2, "valid", True),
-     (12, 1, 1, 3, 2, "valid", False),
-     (12, 1, 1, 3, 2, "same", True),
-     (12, 1, 1, 3, 2, "same", False)])
+    "in_size, in_chan, out_chan, conv_size, conv_strides, conv_padding, synapse_matrix_type", 
+    [(12, 1, 1, 3, 1, "valid", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 1, 3, 1, "valid", SynapseMatrixType.SPARSE),
+     (12, 1, 1, 3, 1, "same", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 1, 3, 1, "same", SynapseMatrixType.SPARSE),
+     (12, 2, 1, 3, 1, "valid", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 2, 1, 3, 1, "valid", SynapseMatrixType.SPARSE),
+     (12, 1, 2, 3, 1, "valid", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 2, 3, 1, "valid", SynapseMatrixType.SPARSE),
+     (12, 2, 2, 3, 1, "valid", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 2, 2, 3, 1, "valid", SynapseMatrixType.SPARSE),
+     (12, 1, 1, 4, 1, "valid", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 1, 4, 1, "valid", SynapseMatrixType.SPARSE),
+     (12, 1, 1, 4, 1, "same", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 1, 4, 1, "same", SynapseMatrixType.SPARSE),
+     (12, 1, 1, 3, 2, "valid", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 1, 3, 2, "valid", SynapseMatrixType.SPARSE),
+     (12, 1, 1, 3, 2, "same", SynapseMatrixType.PROCEDURAL_KERNELG),
+     (12, 1, 1, 3, 2, "same", SynapseMatrixType.SPARSE)])
 def test_conv_2d_transpose(in_size, in_chan, out_chan, conv_size, 
                            conv_strides, conv_padding, 
-                           prefer_in_memory_connect, request):
+                           synapse_matrix_type, request):
     # Don't use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -60,6 +62,7 @@ def test_conv_2d_transpose(in_size, in_chan, out_chan, conv_size,
                        IntegrateFire(v_thresh=np.float64(np.finfo(np.float32).max), readout="end_var"))
 
     compiler = InferenceCompiler(evaluate_timesteps=2)
+    compiler.supported_matrix_type = SupportedMatrixType([synapse_matrix_type])
     compiled_net = compiler.compile(network, request.keywords.node.name)
 
     with compiled_net:

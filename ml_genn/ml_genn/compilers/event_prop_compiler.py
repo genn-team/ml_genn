@@ -347,8 +347,9 @@ class CompileState:
             vars = optimisers["all_connections"]
             for conn in network.connections:
                 # If connectivity is trainable
+                # **NOTE** we pass trainable=True here as that is what we hope to do!
                 connect_snippet = conn.connectivity.get_snippet(
-                    conn, supported_matrix_type)
+                    conn, True, supported_matrix_type)
                 if connect_snippet.trainable:
                     # create optimisers for specified variables
                     self.optimisers[conn] = {
@@ -735,6 +736,10 @@ class EventPropCompiler(Compiler):
                                       f"{conn.name} exceeds 65535")
         genn_pop.max_dendritic_delay_timesteps = max_delay_steps
 
+    def is_conn_trainable(self, conn: Connection, compile_state):
+        # If something is being optimised
+        return (conn in compile_state.optimisers)
+    
     def build_neuron_model(self, pop: Population,
                            model: Union[AutoNeuronModel, SynapseModel],
                            compile_state: CompileState) -> NeuronModel:
