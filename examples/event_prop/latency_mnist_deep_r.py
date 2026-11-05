@@ -62,7 +62,7 @@ if TRAIN:
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         metrics, cb_data  = compiled_net.train({input: np.reshape(mnist.train_images(), (-1, 28 * 28))},
-                                               {output: mnsit.train_labels()},
+                                               {output: mnist.train_labels()},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
