@@ -73,15 +73,17 @@ class AvgPoolDense2D(Connectivity):
                         to ``pool_size``. If only one integer is specified,
                         the same stride will be used for both dimensions.
         delay:          Homogeneous connection delays
+        sum:            Sum Rather than taking average
     """
     def __init__(self, weight: InitValue, pool_size, pool_strides=None,
-                 delay: InitValue = 0):
+                 delay: InitValue = 0, sum: bool = False):
         super().__init__(weight, delay)
 
         self.pool_size = get_param_2d("pool_size", pool_size)
         self.pool_strides = get_param_2d("pool_strides", pool_strides,
                                          default=self.pool_size)
         self.pool_output_shape = None
+        self.sum = sum
 
         if (self.pool_strides[0] < self.pool_size[0]
                 or self.pool_strides[1] < self.pool_size[1]):
@@ -123,14 +125,16 @@ class AvgPoolDense2D(Connectivity):
         pool_sh, pool_sw = self.pool_strides
         pool_ih, pool_iw, pool_ic = connection.source().shape
         dense_ih, dense_iw, dense_ic = self.pool_output_shape
-
+        
+        weight = (self.weight if self.sum 
+                  else self.weight.flatten() / (pool_kh * pool_kw))
         wu_var_val = Wrapper(genn_snippet, {
             "pool_kh": pool_kh, "pool_kw": pool_kw,
             "pool_sh": pool_sh, "pool_sw": pool_sw,
             "pool_ih": pool_ih, "pool_iw": pool_iw, "pool_ic": pool_ic,
             "dense_ih": dense_ih, "dense_iw": dense_iw, "dense_ic": dense_ic,
             "dense_units": int(np.prod(connection.target().shape))},
-            {"weights": self.weight.flatten() / (pool_kh * pool_kw)})
+            {"weights": weight})
 
         # Get best supported matrix type
         best_matrix_type = supported_matrix_type.get_best(
