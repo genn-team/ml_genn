@@ -9,13 +9,12 @@ from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.connectivity_optimisers import DeepR
 from ml_genn.initializers import Normal
-from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, LatencyInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
 from time import perf_counter
-from ml_genn.utils.data import linear_latency_encode_data
 
 NUM_INPUT = 784
 NUM_HIDDEN = 128
@@ -30,17 +29,13 @@ KERNEL_PROFILING = False
 PLOT_REWIRING = True
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
-labels = mnist.train_labels() if TRAIN else mnist.test_labels()
-spikes = linear_latency_encode_data(
-    mnist.train_images() if TRAIN else mnist.test_images(),
-    EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
-    input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
-                                  NUM_INPUT)
+    input = InputLayer(LatencyInput("linear", EXAMPLE_TIME - (2.0 * DT), 2.0 * DT),
+                       NUM_INPUT)
     hidden = Layer(FixedProbability(SPARSITY, Normal(mean=0.0, sd=0.8)), 
                    LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
                    NUM_HIDDEN, Exponential(5.0))
@@ -66,8 +61,8 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-        metrics, cb_data  = compiled_net.train({input: spikes},
-                                               {output: labels},
+        metrics, cb_data  = compiled_net.train({input: np.reshape(mnist.train_images(), (-1, 28 * 28))},
+                                               {output: mnsit.train_labels()},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
@@ -105,8 +100,8 @@ else:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        metrics, _  = compiled_net.evaluate({input: spikes},
-                                            {output: labels})
+        metrics, _  = compiled_net.evaluate({input: np.reshape(mnist.test_images(), (-1, 28 * 28))},
+                                            {output: mnist.test_labels()})
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")

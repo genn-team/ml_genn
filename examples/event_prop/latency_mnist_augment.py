@@ -6,13 +6,12 @@ from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
-from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, LatencyInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
 from time import perf_counter
-from ml_genn.utils.data import linear_latency_encode_data
 
 
 NUM_INPUT = 784
@@ -27,15 +26,12 @@ SPARSITY = 1.0
 TRAIN = True
 KERNEL_PROFILING = True
 
-labels = mnist.train_labels() if TRAIN else mnist.test_labels()
-images = mnist.train_images() if TRAIN else mnist.test_images()
-
 serialiser = Numpy("latency_mnist_augment_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
-    input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
-                                  NUM_INPUT)
+    input = InputLayer(LatencyInput("linear", EXAMPLE_TIME - (2.0 * DT), 2.0 * DT),
+                       NUM_INPUT)
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
@@ -62,7 +58,7 @@ if TRAIN:
                                               size=(images.shape[0], 2))).astype(int)
 
             # Loop through images
-            aug_images = np.empty_like(images)
+            aug_images = np.empty_like(mnist.train_images())
             for i in range(images.shape[0]):
                 # Roll by shift amount`
                 aug_images[i] = np.roll(images[i], shift[i], axis=(0, 1))
@@ -73,10 +69,8 @@ if TRAIN:
                 aug_images[i][slices[0], :] = 0
                 aug_images[i][:, slices[1]] = 0
 
-            spikes = linear_latency_encode_data(aug_images, EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
-            
-            metrics, _  = compiled_net.train({input: spikes},
-                                             {output: labels},
+            metrics, _  = compiled_net.train({input: np.reshape(aug_images, (-1, 28 * 28))},
+                                             {output: mnist.train_labels()},
                                              start_epoch=e, num_epochs=1,
                                              shuffle=True, callbacks=callbacks)
         compiled_net.save_connectivity((NUM_EPOCHS - 1,), serialiser)
@@ -94,8 +88,6 @@ if TRAIN:
             print(f"Softmax2 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax2')}")
             print(f"Softmax3 time = {compiled_net.genn_model.get_custom_update_time('BatchSoftmax3')}")
 else:
-    spikes = linear_latency_encode_data(images, EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
-    
     # Load network state from final checkpoint
     network.load((NUM_EPOCHS - 1,), serialiser)
 
@@ -107,8 +99,8 @@ else:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        metrics, _  = compiled_net.evaluate({input: spikes},
-                                            {output: labels})
+        metrics, _  = compiled_net.evaluate({input: np.reshape(mnist.test_images(), (-1, 28 * 28))},
+                                            {output: mnist.test_labels()})
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
