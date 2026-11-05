@@ -8,12 +8,6 @@ A key design goal of mlGeNN is that once a network topology has been defined usi
 GeNN models for training using a training algorithm compiler class. Currently the 
 following compilers for training networks are provided:
 
-e-prop
-------
-
-.. autoclass:: ml_genn.compilers.EPropCompiler
-    :noindex:
-
 EventProp
 ---------
 .. autoclass:: ml_genn.compilers.EventPropCompiler
