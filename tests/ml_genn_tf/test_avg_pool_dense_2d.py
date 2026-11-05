@@ -3,19 +3,25 @@ import tensorflow as tf
 import ml_genn as mlg
 import pytest
 from .converter import Converter
+from ml_genn.compilers.compiler import SupportedMatrixType
+from pygenn import SynapseMatrixType
 
 @pytest.mark.parametrize(
-    "in_size, in_chan, out_size, pool_size, pool_strides, optimise_connectivity_speed", 
-    [(20, 1, 10, 2, 2, True),
-     (20, 1, 10, 2, 2, False),
-     (20, 2, 10, 2, 2, True),
-     (20, 2, 10, 2, 2, False),
-     (20, 1, 10, 3, 3, True),
-     (20, 1, 10, 3, 3, False),
-     (20, 1, 10, 2, 3, True),
-     (20, 1, 10, 2, 3, False)])
+    "in_size, in_chan, out_size, pool_size, pool_strides, synapse_matrix_type", 
+    [(20, 1, 10, 2, 2, SynapseMatrixType.TOEPLITZ),
+     (20, 1, 10, 2, 2, SynapseMatrixType.DENSE),
+     (20, 1, 10, 2, 2, SynapseMatrixType.DENSE_PROCEDURALG),
+     (20, 2, 10, 2, 2, SynapseMatrixType.TOEPLITZ),
+     (20, 2, 10, 2, 2, SynapseMatrixType.DENSE),
+     (20, 2, 10, 2, 2, SynapseMatrixType.DENSE_PROCEDURALG),
+     (20, 1, 10, 3, 3, SynapseMatrixType.TOEPLITZ),
+     (20, 1, 10, 3, 3, SynapseMatrixType.DENSE),
+     (20, 1, 10, 3, 3, SynapseMatrixType.DENSE_PROCEDURALG),
+     (20, 1, 10, 2, 3, SynapseMatrixType.TOEPLITZ),
+     (20, 1, 10, 2, 3, SynapseMatrixType.DENSE),
+     (20, 1, 10, 2, 3, SynapseMatrixType.DENSE_PROCEDURALG)])
 def test_avg_pool_dense_2d(in_size, in_chan, out_size, pool_size,
-                           pool_strides, optimise_connectivity_speed, request):
+                           pool_strides, synapse_matrix_type, request):
     # Don"t use all GPU memory for TF!
     for gpu in tf.config.experimental.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -43,7 +49,8 @@ def test_avg_pool_dense_2d(in_size, in_chan, out_size, pool_size,
     converter = Converter()
     net, net_inputs, net_outputs, tf_layer_pops = converter.convert(tf_model)
     
-    compiler = converter.create_compiler(optimise_connectivity_speed=optimise_connectivity_speed)
+    compiler = converter.create_compiler()
+    compiler.supported_matrix_type = SupportedMatrixType([synapse_matrix_type])
     compiled_net = compiler.compile(net, request.keywords.node.name, 
                                     inputs=net_inputs, 
                                     outputs=net_outputs)
