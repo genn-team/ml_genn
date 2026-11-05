@@ -166,8 +166,9 @@ class AvgPoolDense2D(Connectivity):
         # Build list of available matrix types
         available_matrix_types = [SynapseMatrixType.TOEPLITZ]
 
-        # Add dense options if not trainable
-        if not trainable:
+        # Add dense options if not trainable and there is not an array of weights
+        # **TODO** create another var init snippet for the delays - identical just integery
+        if not trainable and not is_value_array(self.delay):
             available_matrix_types.append(SynapseMatrixType.DENSE)
             available_matrix_types.append(SynapseMatrixType.DENSE_PROCEDURALG)
 
