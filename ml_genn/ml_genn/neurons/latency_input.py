@@ -15,18 +15,11 @@ if TYPE_CHECKING:
     from .. import Population
 
 genn_model = {
-    "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE),
-             ("Spiked", "uint8_t")],
+    "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE)],
     "threshold_condition_code":
         """
-        (!Spiked) && (t > SpikeTime)
-        """,
-    "reset_code":
-        """
-        Spiked = true;
-        """
-}
-    
+        fabs(t - SpikeTime) < dt
+        """}
 
 class LatencyInput(Neuron, Input):
     """An input neuron which emits one spike per trial according to a latency
@@ -115,9 +108,8 @@ class LatencyInput(Neuron, Input):
                     ((0, batch_size - input_batch_size), (0, 0)))
             # Push variable to device
         spike_time_var.push_to_device()
-            
+
     def get_model(self, population: Population,
                   dt: float, batch_size: int) -> NeuronModel:
-        return NeuronModel(genn_model, None, {}, 
-                           {"SpikeTime": -1.0, "Spiked": False})
-            
+        return NeuronModel(genn_model, None, {}, {"SpikeTime": -1.0})
+
