@@ -52,20 +52,21 @@ if TRAIN:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
+        images = mnist.train_images()
         for e in range(NUM_EPOCHS):
             # Calculate amount to shift
-            shift = np.round(np.random.normal(scale=AUGMENT_SHIFT_SD, 
-                                              size=(images.shape[0], 2))).astype(int)
+            shifts = np.round(np.random.normal(scale=AUGMENT_SHIFT_SD, 
+                                               size=(images.shape[0], 2))).astype(int)
 
             # Loop through images
-            aug_images = np.empty_like(mnist.train_images())
-            for i in range(images.shape[0]):
+            aug_images = np.empty_like(images)
+            for i, (image, shift) in enumerate(zip(images, shifts)):
                 # Roll by shift amount`
-                aug_images[i] = np.roll(images[i], shift[i], axis=(0, 1))
+                aug_images[i] = np.roll(image, shift, axis=(0, 1))
 
                 # Zero rolled region
                 slices = tuple(np.s_[s:] if s < 0 else np.s_[:s]
-                               for s in shift[i])
+                               for s in shift)
                 aug_images[i][slices[0], :] = 0
                 aug_images[i][:, slices[1]] = 0
 
