@@ -73,8 +73,7 @@ class LatencyInput(Neuron, Input):
             spike_time = tau_eff * np.log(input / (input - self.thresh)) + self.min_time
 
         # set spike times for sub-threshold neurons to much beyond max_time
-        # **THINK** is there a better way/ some float_max maybe?
-        spike_time[input <= self.thresh] = self.max_time*10.0
+        spike_time[input <= self.thresh] = np.finfo(np.float32).max
         if batch_size == 1:
             # Check input shape either has no batch
             # dimension or it has a length of 1
@@ -104,7 +103,8 @@ class LatencyInput(Neuron, Input):
             else:
                 spike_time_var.view[:] = np.pad(
                     batched_input,
-                    ((0, batch_size - input_batch_size), (0, 0)))
+                    ((0, batch_size - input_batch_size), (0, 0)),
+                    constant_values=np.finfo(np.float32).max)
             # Push variable to device
         spike_time_var.push_to_device()
 
