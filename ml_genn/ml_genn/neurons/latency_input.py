@@ -35,8 +35,7 @@ class LatencyInput(Neuron, Input):
                  latency_method: Union["log","linear"] ="linear",
                  max_time: float = 20.0,
                  min_time: float = 0.0,
-                 thresh: int = 1,
-                 signed: bool = False):
+                 thresh: int = 1):
         super().__init__()
         self.latency_method = latency_method
         self.max_time = max_time
