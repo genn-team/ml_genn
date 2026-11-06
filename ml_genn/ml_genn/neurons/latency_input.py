@@ -70,7 +70,7 @@ class LatencyInput(Neuron, Input):
         else:
             # scale so that the values are <= range and add min_time
             tau_eff = time_range/np.log(self.thresh+1)
-            spike_time = tau_eff * np.log(spike_pixels / (spike_pixels - self.thresh)) + self.min_time
+            spike_time = tau_eff * np.log(input / (input - self.thresh)) + self.min_time
 
         # set spike times for sub-threshold neurons to much beyond max_time
         # **THINK** is there a better way/ some float_max maybe?
