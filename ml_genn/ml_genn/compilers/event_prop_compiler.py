@@ -867,40 +867,54 @@ class EventPropCompiler(Compiler):
                 raise NotImplementedError(
                     "EventProp compiler only supports "
                     "synapses which (only) add input to target variables.")
-        
-        # Build post-jump synapse ODEs by replacing all variables
-        # with jumps in the ODE expressions with jump expressions
-        syn_dx_dt_plus_m = {}
-        for syn_sym, syn_expr in synapse_model.dx_dt.items():
-            syn_expr_plus_m = syn_expr
-            for jump_sym, jump_expr in synapse_model.jumps.items():
-                syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
-            syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
-        
-        # Build post-jump injection expression by replacing 
-        # all variables with jumps with jump expressions
-        inject_plus_m_expr = synapse_model.inject_current
-        for jump_sym, jump_expr in synapse_model.jumps.items():
-            inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
 
-        logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
-        logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
-        logger.debug(f"\tSynapse inject_plusm: {inject_plus_m_expr}")
-        logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
-        
         # Get target neuron model
         trg_pop = conn.target()
         trg_neuron_model = trg_pop.neuron.get_model(trg_pop, self.dt,
                                                     self.batch_size)
         assert isinstance(trg_neuron_model, AutoNeuronModel)
 
-        # Build post-injection neuron ODEs by replacing Isyn
-        # summed input variable with post-jump injection expression
+        logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
+        logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
         isyn_sym = sympy.Symbol("Isyn")
-        trg_dx_dt_plus_m = {
-            trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
-            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
-        
+        if synapse_model.is_delta_synapse:
+            subs = {}
+            # find trg_neuron vars that have Isyn in the ODE
+            trg_dx_dt_plus_m = {}
+            inject_plus_m_expr = synapse_model.inject_current
+            for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
+                trg_dx_dt_plus_m[trg_sym] = trg_expr.subs(isyn_sym, 0)
+                jump = sympy.simplify(trg_expr.subs(isyn_sym, inject_plus_m_expr)-trg_dx_dt_plus_m[trg_sym])
+                if jump != 0:
+                    subs[trg_sym] = trg_sym + jump
+            print(subs)
+            for repl_sym, repl in subs.items():
+                for trg_sym in trg_dx_dt_plus_m:
+                    trg_dx_dt_plus_m[trg_sym] = trg_dx_dt_plus_m[trg_sym].subs(repl_sym, repl)
+        else:
+            # Build post-jump synapse ODEs by replacing all variables
+            # with jumps in the ODE expressions with jump expressions
+            syn_dx_dt_plus_m = {}
+            for syn_sym, syn_expr in synapse_model.dx_dt.items():
+                syn_expr_plus_m = syn_expr
+                for jump_sym, jump_expr in synapse_model.jumps.items():
+                    syn_expr_plus_m = syn_expr_plus_m.subs(jump_sym, jump_expr)
+                syn_dx_dt_plus_m[syn_sym] = syn_expr_plus_m
+            logger.debug(f"\tSynapse dx_dtplusm: {syn_dx_dt_plus_m}")
+
+            # Build post-jump injection expression by replacing
+            # all variables with jumps with jump expressions
+            inject_plus_m_expr = synapse_model.inject_current
+            for jump_sym, jump_expr in synapse_model.jumps.items():
+                inject_plus_m_expr = inject_plus_m_expr.subs(jump_sym, jump_expr)
+            logger.debug(f"\tSynapse inject_plusm: {inject_plus_m_expr}")
+
+            # Build post-injection neuron ODEs by replacing Isyn
+            # summed input variable with post-jump injection expression
+            trg_dx_dt_plus_m = {
+                trg_sym: trg_expr.subs(isyn_sym, inject_plus_m_expr)
+                for trg_sym, trg_expr in trg_neuron_model.dx_dt.items()}
+
         logger.debug(f"\tTarget neuron forward ODEs: {trg_neuron_model.dx_dt}")
         logger.debug(f"\tTarget neuron n_dx_dtplusm: {trg_dx_dt_plus_m}")
         
