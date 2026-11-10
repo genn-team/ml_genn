@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union, TYPE_CHECKING
+from typing import Optional, MutableMapping, Union, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.auto_model import AutoNeuronModel, Variables
 from ..utils.model import NeuronModel
