@@ -106,8 +106,12 @@ class AutoNeuronModel(AutoModel):
                  if v[1] is not None and v[1] != n]
         return "\n".join(jumps)
 
-    def get_additional_inputs(self, var_type: str = "scalar"):
-        return [(n, var_type) for n in self.additional_inputs]
+    def get_additional_input_vars(self, var_type: str = "scalar"):
+        if "additional_input_vars" in self.model:
+            return [(n, var_type) 
+                    for n in self.model["additional_input_vars"]]
+        else:
+            return []
     
     @staticmethod
     def from_val_descriptors(model, output_var_name: str,inst, 
