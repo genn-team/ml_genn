@@ -878,16 +878,25 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
         isyn_sym = sympy.Symbol("Isyn")
         if synapse_model.is_delta_synapse:
+            # For delta synapses we do not have a list of jumps within the synapse model. Instead,
+            # each of the target neuron variables that receive Isyn will have a jump at a pre
+            # spike. The strategy is to identify these jumps and apply them to the right hand
+            # side of the ODEs to form the ODEs after the jumps, stored in trg_dx_dt_plus_m
             subs = {}
-            # find trg_neuron vars that have Isyn in the ODE
+            # find trg_neuron vars that have Isyn in their ODE; they will have a jump by virtue
+            # of the Dirac delta Isyn input
             trg_dx_dt_plus_m = {}
-            inject_plus_m_expr = synapse_model.inject_current
+            inject_plus_m_expr = synapse_model.inject_current     # this is essentially 'weight'
             for trg_sym, trg_expr in trg_neuron_model.dx_dt.items():
+                # prepare trg_dx_dt_plus by removing Isyn from ODEs' right hand side
                 trg_dx_dt_plus_m[trg_sym] = trg_expr.subs(isyn_sym, 0)
+                # identify the jump in each target neuron variable by subtracting the Isyn == 0 ODE
+                # from the ODE where Isyn is replaced by 'weight'
                 jump = sympy.simplify(trg_expr.subs(isyn_sym, inject_plus_m_expr)-trg_dx_dt_plus_m[trg_sym])
-                if jump != 0:
+                if jump != 0:  # if there is a jump (i.e. if Isyn was in the ODE), store into "subs"
                     subs[trg_sym] = trg_sym + jump
-            print(subs)
+            # for each variable with a jump, apply the jump to all ODEs to form the ODEs after
+            # the jump and store in trg_dx_dt_plus_m
             for repl_sym, repl in subs.items():
                 for trg_sym in trg_dx_dt_plus_m:
                     trg_dx_dt_plus_m[trg_sym] = trg_dx_dt_plus_m[trg_sym].subs(repl_sym, repl)
