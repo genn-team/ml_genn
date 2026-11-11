@@ -26,12 +26,14 @@ SPARSITY = 0.1
 TRAIN = True
 KERNEL_PROFILING = True
 
-lif_cond_neuron = UserNeuron(vars={"v": ("(((c_mem / tau_mem) * -v) + (Isyn * -v) + (GI * (i_rev - v)))/ c_mem", "0.0")},
+lif_cond_neuron = UserNeuron(vars={"v": ("(((c_mem / tau_mem) * -v) + (i_e * -v) + (i_i * (i_rev - v)))/ c_mem", "0.0"),
+                                   "i_e": ("(-i_e + Isyn) / tau_syn", None),
+                                   "i_i": ("(-i_i + GI) / tau_syn", None)},
                              threshold="v - 15.0",
                              additional_input_vars=["GI"],
                              output_var_name="v",
-                             param_vals={"c_mem": 1.0, "tau_mem": 20.0, "i_rev": -5.0},
-                             var_vals={"v": 0.0})
+                             param_vals={"c_mem": 1.0, "tau_mem": 20.0, "i_rev": -5.0, "tau_syn": 5.0},
+                             var_vals={"v": 0.0, "i_i": 0.0, "i_e": 0.0})
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
 labels = mnist.train_labels() if TRAIN else mnist.test_labels()
@@ -51,10 +53,9 @@ with network:
                         NUM_OUTPUT)
 
     # Connections
-    input_hidden_exc = Connection(input, hidden, FixedProbability(SPARSITY, Normal(mean=0.0, sd=0.8)),
-                                  Exponential(5.0))
+    input_hidden_exc = Connection(input, hidden, FixedProbability(SPARSITY, Normal(mean=0.0, sd=0.8)))
     input_hidden_inh = Connection(input, hidden, FixedProbability(SPARSITY, Normal(mean=0.0, sd=0.8)),
-                                  Exponential(5.0), target_input_var="GI")
+                                  target_input_var="GI")
 
     Connection(hidden, output, Dense(Normal(mean=0.2, sd=0.37)),
                Exponential(5.0))
