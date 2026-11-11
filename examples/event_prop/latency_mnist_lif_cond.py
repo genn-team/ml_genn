@@ -3,7 +3,7 @@ import numpy as np
 import mnist
 
 from ml_genn import Connection, Population, Network
-from ml_genn.callbacks import Checkpoint
+from ml_genn.callbacks import Checkpoint, SpikeRecorder
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
@@ -19,7 +19,7 @@ NUM_INPUT = 784
 NUM_HIDDEN = 128
 NUM_OUTPUT = 10
 BATCH_SIZE = 32
-NUM_EPOCHS = 20
+NUM_EPOCHS = 10
 EXAMPLE_TIME = 30.0
 DT = 1.0
 SPARSITY = 0.1
@@ -41,14 +41,14 @@ spikes = linear_latency_encode_data(
     mnist.train_images() if TRAIN else mnist.test_images(),
     EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 serialiser = Numpy("latency_mnist_checkpoints")
 network = Network()
 with network:
     # Populations
     input = Population(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
                        NUM_INPUT)
-    hidden = Population(lif_cond_neuron, NUM_HIDDEN)
+    hidden = Population(lif_cond_neuron, NUM_HIDDEN, record_spikes=True)
     output = Population(LeakyIntegrate(tau_mem=20.0, readout="avg_var"),
                         NUM_OUTPUT)
 
@@ -76,7 +76,8 @@ if TRAIN:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
+        callbacks = ["batch_progress_bar", Checkpoint(serialiser),
+                     SpikeRecorder(hidden, key="hidden_spikes", example_filter=[0,32,64])]
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
@@ -86,6 +87,11 @@ if TRAIN:
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
 
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(len(cb_data["hidden_spikes"][0]), sharex=True)
+        for a, times, ids in zip(axes, cb_data["hidden_spikes"][0], cb_data["hidden_spikes"][1]):
+            a.scatter(times, ids, s=1)
+        plt.show()
         if KERNEL_PROFILING:
             print(f"Neuron update time = {compiled_net.genn_model.neuron_update_time}")
             print(f"Presynaptic update time = {compiled_net.genn_model.presynaptic_update_time}")
