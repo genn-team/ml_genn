@@ -108,7 +108,7 @@ class AutoNeuronModel(AutoModel):
 
     def get_additional_input_vars(self, var_type: str = "scalar"):
         if "additional_input_vars" in self.model:
-            return [(n, var_type) 
+            return [(n, var_type, 0.0) 
                     for n in self.model["additional_input_vars"]]
         else:
             return []
