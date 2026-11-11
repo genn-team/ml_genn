@@ -783,7 +783,7 @@ class EventPropCompiler(Compiler):
 
         # Loop through synapse ODEs
         dl_dt = {}
-        isyn_sym = sympy.Symbol("Isyn")
+        isyn_sym = sympy.Symbol(conn.target_input_var)
         for syn_sym in model.dx_dt.keys():
             # Add adjoint variable to synapse model
             genn_model.add_var(_get_lmd_name(syn_sym), "scalar", 0.0)
@@ -876,7 +876,7 @@ class EventPropCompiler(Compiler):
 
         logger.debug(f"\tSynapse forward ODEs: {synapse_model.dx_dt}")
         logger.debug(f"\tSynapse jumps: {synapse_model.jumps}")
-        isyn_sym = sympy.Symbol("Isyn")
+        isyn_sym = sympy.Symbol(conn.target_input_var)
         if synapse_model.is_delta_synapse:
             # For delta synapses we do not have a list of jumps within the synapse model. Instead,
             # each of the target neuron variables that receive Isyn will have a jump at a pre
@@ -1546,6 +1546,11 @@ class EventPropCompiler(Compiler):
         logger.debug(f"\t\tForward ODEs: {model.dx_dt}")
         logger.debug(f"\t\tForward jumps: {model.jumps}")
 
+        # Build list of all input variables to neuronmodel
+        template_vars = list(model.var_vals.keys()) + ["Isyn"]
+        if "additional_input_vars" in model.model:
+            template_vars.extend(model.model["additional_input_vars"])
+
         # generate adjoint ODE
         # assume that neuron variables do not appear in rhs of post-synapse ODEs
         # therefore, we can do these independent of synapse equations
@@ -1557,8 +1562,7 @@ class EventPropCompiler(Compiler):
                     for sym2, expr2 in model.dx_dt.items())
             
             # collect variables they might need to go into a ring buffer:
-            o = _template_symbols(
-                o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
+            o = _template_symbols(o, template_vars, saved_vars_timestep)
             dl_dt[_get_lmd_sym(sym)] = o
 
         logger.debug(f"\t\tAdjoint ODE: {dl_dt}")
@@ -1570,8 +1574,7 @@ class EventPropCompiler(Compiler):
             o = - sum(sympy.diff(expr2, sym) * _get_lmd_sym(sym2)
                     for sym2, expr2 in model.dx_dt.items())
             # collect variables they might need to go into a ring buffer:
-            o = _template_symbols(
-                o, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_timestep)
+            o = _template_symbols(o, template_vars, saved_vars_timestep)
             grad_terms[sym] = o
 
         # Substitute jumps into ODEs to get post-jump dynamics "\dot{x}^+"
@@ -1664,9 +1667,9 @@ class EventPropCompiler(Compiler):
             # If any jumping remains
             if jump != 0:
                 # Template any neuron variable names or Isyn
-                jump = _template_symbols(
-                    jump, chain(model.var_vals.keys(), ["Isyn"]), saved_vars_spike)
-                
+                jump = _template_symbols(jump, template_vars,
+                                         saved_vars_spike)
+
                 # Add to dictionary as jump for adjoint variable
                 adjoint_jumps[_get_lmd_sym(a_sym)] = jump
 
