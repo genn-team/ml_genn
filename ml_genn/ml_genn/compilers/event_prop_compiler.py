@@ -795,7 +795,7 @@ class EventPropCompiler(Compiler):
             o += sum(sympy.diff(trg_expr.subs(isyn_sym, model.inject_current), 
                                 syn_sym) * _get_lmd_sym(trg_sym)
                      for trg_sym, trg_expr in trg_neuron_model.dx_dt.items())
-            
+
             # Check the that lambda ODE does not end up referencing any 
             err = (any(o.has(syn_sym2) for syn_sym2 in model.dx_dt.keys())
                    or any(o.has(trg_sym) 
