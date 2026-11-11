@@ -892,14 +892,15 @@ class EventPropCompiler(Compiler):
                 trg_dx_dt_plus_m[trg_sym] = trg_expr.subs(isyn_sym, 0)
                 # identify the jump in each target neuron variable by subtracting the Isyn == 0 ODE
                 # from the ODE where Isyn is replaced by 'weight'
-                jump = sympy.simplify(trg_expr.subs(isyn_sym, inject_plus_m_expr)-trg_dx_dt_plus_m[trg_sym])
+                jump = sympy.simplify(trg_expr.subs(isyn_sym, inject_plus_m_expr)
+                                      - trg_dx_dt_plus_m[trg_sym])
                 if jump != 0:  # if there is a jump (i.e. if Isyn was in the ODE), store into "subs"
                     subs[trg_sym] = trg_sym + jump
             # for each variable with a jump, apply the jump to all ODEs to form the ODEs after
             # the jump and store in trg_dx_dt_plus_m
             for repl_sym, repl in subs.items():
-                for trg_sym in trg_dx_dt_plus_m:
-                    trg_dx_dt_plus_m[trg_sym] = trg_dx_dt_plus_m[trg_sym].subs(repl_sym, repl)
+                trg_dx_dt_plus_m = {trg_sym: trg_expr.subs(repl_sym, repl) 
+                                    for trg_sym, trg_expr in trg_dx_dt_plus_m.items()}
         else:
             # Build post-jump synapse ODEs by replacing all variables
             # with jumps in the ODE expressions with jump expressions
