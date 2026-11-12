@@ -3,7 +3,7 @@ import numpy as np
 import mnist
 
 from ml_genn import Connection, Population, Network
-from ml_genn.callbacks import Checkpoint, SpikeRecorder
+from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
@@ -26,13 +26,13 @@ SPARSITY = 0.1
 TRAIN = True
 KERNEL_PROFILING = True
 
-lif_cond_neuron = UserNeuron(vars={"v": ("(((c_mem / tau_mem) * -v) + (i_e * -v) + (i_i * (i_rev - v)))/ c_mem", "0.0"),
+lif_cond_neuron = UserNeuron(vars={"v": ("(((c_mem / tau_mem) * -v) + (i_e * (e_rev -v)) + (i_i * (i_rev - v)))/ c_mem", "0.0"),
                                    "i_e": ("(-i_e + Isyn) / tau_syn", None),
                                    "i_i": ("(-i_i + GI) / tau_syn", None)},
                              threshold="v - 15.0",
                              additional_input_vars=["GI"],
                              output_var_name="v",
-                             param_vals={"c_mem": 1.0, "tau_mem": 20.0, "i_rev": -5.0, "tau_syn": 5.0},
+                             param_vals={"c_mem": 1.0, "tau_mem": 20.0, "i_rev": -5.0, "e_rev": 65.0,"tau_syn": 5.0},
                              var_vals={"v": 0.0, "i_i": 0.0, "i_e": 0.0})
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
@@ -76,8 +76,7 @@ if TRAIN:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        callbacks = ["batch_progress_bar", Checkpoint(serialiser),
-                     SpikeRecorder(hidden, key="hidden_spikes", example_filter=[0,32,64])]
+        callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         metrics, cb_data  = compiled_net.train({input: spikes},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
@@ -87,11 +86,6 @@ if TRAIN:
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")
 
-        import matplotlib.pyplot as plt
-        fig, axes = plt.subplots(len(cb_data["hidden_spikes"][0]), sharex=True)
-        for a, times, ids in zip(axes, cb_data["hidden_spikes"][0], cb_data["hidden_spikes"][1]):
-            a.scatter(times, ids, s=1)
-        plt.show()
         if KERNEL_PROFILING:
             print(f"Neuron update time = {compiled_net.genn_model.neuron_update_time}")
             print(f"Presynaptic update time = {compiled_net.genn_model.presynaptic_update_time}")
