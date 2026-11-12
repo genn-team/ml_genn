@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union, TYPE_CHECKING
+from typing import Optional, MutableMapping, Sequence, Union, TYPE_CHECKING
 from .neuron import Neuron
 from ..utils.auto_model import AutoNeuronModel, Variables
 from ..utils.model import NeuronModel
@@ -27,6 +27,7 @@ class UserNeuron(Neuron):
 
     def __init__(self, vars: Variable, output_var_name: str,
                  threshold: Optional[str] = None,
+                 additional_input_vars: Optional[Sequence[str]] = None,
                  param_vals: Optional[MutableMapping[str, InitValue]] = None,
                  var_vals: Optional[MutableMapping[str, InitValue]] = None,
                  solver: str = "exponential_euler",
@@ -37,6 +38,7 @@ class UserNeuron(Neuron):
         self.vars = vars
         self.output_var_name = output_var_name
         self.threshold = threshold
+        self.additional_input_vars = additional_input_vars
         self.param_vals = param_vals or {}
         self.var_vals = var_vals or {}
         self.solver = solver
@@ -45,6 +47,7 @@ class UserNeuron(Neuron):
     def get_model(self, population: Population, dt: float,
                   batch_size: int) -> Union[AutoNeuronModel, NeuronModel]:
         return AutoNeuronModel({"vars": copy(self.vars), 
-                                "threshold": self.threshold},
+                                "threshold": self.threshold,
+                                "additional_input_vars": self.additional_input_vars},
                                self.output_var_name, self.param_vals,
                                self.var_vals, self.solver, self.sub_steps)

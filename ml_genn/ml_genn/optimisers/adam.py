@@ -43,6 +43,8 @@ class Adam(Optimiser):
         beta2:      The exponential decay rate for the 2nd moment estimates.
         epsilon:    A small constant for numerical stability. This is
                     the epsilon in Algorithm 1 of the [Kingma2014]_
+        clamp_var:  If after optimisation, value of variable should be 
+                    clamped, specify minimum and maximum values
     """
     alpha = ConstantValueDescriptor()
     beta1 = ConstantValueDescriptor()
@@ -50,11 +52,13 @@ class Adam(Optimiser):
     epsilon = ConstantValueDescriptor()
 
     def __init__(self, alpha: float = 0.001, beta1 : float = 0.9,
-                 beta2: float = 0.999, epsilon: float = 1e-8):
+                 beta2: float = 0.999, epsilon: float = 1e-8,
+                 clamp_var: Optional[Tuple[float, float]] = None):
         self.alpha = alpha
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
+        self.clamp_var = clamp_var
 
     def create_state(self):
         return State(self.alpha, self.beta1, self.beta2)
@@ -70,6 +74,14 @@ class Adam(Optimiser):
 
     def get_model(self, gradient_ref, var_ref, zero_gradient: bool,
                   clamp_var: Optional[Tuple[float, float]] = None) -> CustomUpdateModel:
+        # If optimiser and compiler have provided clamp values, combine limits
+        if clamp_var is not None and self.clamp_var is not None:
+            clamp_var = (max(clamp_var[0], self.clamp_var[0]),
+                         min(clamp_var[1], self.clamp_var[1]))
+        # Otherwise use whichever may not be None
+        else:
+            clamp_var = clamp_var or self.clamp_var
+
         model = CustomUpdateModel(
             deepcopy(genn_model),
             {"Beta1": self.beta1, "Beta2": self.beta2,

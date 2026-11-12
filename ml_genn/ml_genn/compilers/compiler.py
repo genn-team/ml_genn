@@ -267,6 +267,7 @@ class Compiler:
             genn_model = {
                 "vars": model.get_vars("scalar"),
                 "params": model.get_params("scalar"),
+                "additional_input_vars": model.get_additional_input_vars("scalar"),
                 "sim_code":
                     dynamics_code,
                 "threshold_condition_code":
@@ -714,6 +715,9 @@ class Compiler:
             # Apply delay
             self.apply_delay(genn_pop, conn, connect_snippet.delay,
                              compile_state)
+
+            # Set target input variable
+            genn_pop.post_target_var = conn.target_input_var
 
             # If connectivity snippet has pre and postsynaptic
             # indices, set them in synapse group
