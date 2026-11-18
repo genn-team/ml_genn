@@ -12,13 +12,13 @@ class ExampleLabel(GroundTruth):
     def add_to_neuron(self, backward: bool, model: NeuronModel, 
                       shape, batch_size: int, example_timesteps: int):
         # Add variable, shared across neurons to hold true label for batch
-        model.add_var("YTrue", "uint8_t", 0,
+        model.add_var("YTrue", "uint16_t", 0,
                       VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
 
         # If backward pass is required, add second variable to 
         # hold the true label for the backward pass
         if backward:
-            model.add_var("YTrueBack", "uint8_t", 0, 
+            model.add_var("YTrueBack", "uint16_t", 0, 
                           VarAccess.READ_ONLY_SHARED_NEURON, reset=False)
 
     def push_to_device(self, genn_pop, y_true, shape, batch_size: int,
@@ -44,4 +44,4 @@ class ExampleLabel(GroundTruth):
         """
         Gets resets for any shared neuron variables this ground truth adds
         """
-        return [("YTrueBack", "uint8_t", "YTrue")]
+        return [("YTrueBack", "uint16_t", "YTrue")]

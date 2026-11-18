@@ -6,14 +6,12 @@ from ml_genn.callbacks import Checkpoint
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Conv2D, Dense
 from ml_genn.initializers import Normal
-from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, LatencyInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
 from time import perf_counter
-from ml_genn.utils.data import (calc_latest_spike_time, calc_max_spikes,
-                                linear_latency_encode_data)
 
 NUM_INPUT = 784
 NUM_HIDDEN = 128
@@ -26,17 +24,13 @@ TRAIN = True
 KERNEL_PROFILING = True
 
 mnist.datasets_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
-labels = mnist.train_labels() if TRAIN else mnist.test_labels()
-spikes = linear_latency_encode_data(
-    mnist.train_images() if TRAIN else mnist.test_images(),
-    EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
 
 serialiser = Numpy("latency_mnist_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
-    input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * calc_max_spikes(spikes)),
-                                  (28, 28, 1), name="input")
+    input = InputLayer(LatencyInput("linear", EXAMPLE_TIME - (2.0 * DT), 2.0 * DT),
+                       (28, 28, 1), name="input")
     initial_hidden1_weight = Normal(sd=5.0)
     hidden1 = Layer(Conv2D(initial_hidden1_weight, 32, 4, True),
                     LeakyIntegrateFire(v_thresh=1.0, tau_mem=20.0),
@@ -55,8 +49,8 @@ if TRAIN:
     with compiled_net:
         start_time = perf_counter()
         callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
-        metrics, cb_data  = compiled_net.train({input: spikes},
-                                               {output: labels},
+        metrics, cb_data  = compiled_net.train({input: np.reshape(mnist.train_images(), (-1, 28, 28, 1))},
+                                               {output: mnist.train_labels()},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
         
@@ -85,8 +79,8 @@ else:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        metrics, _  = compiled_net.evaluate({input: spikes},
-                                            {output: labels})
+        metrics, _  = compiled_net.evaluate({input: np.reshape(mnist.test_images(), (-1, 28, 28, 1))},
+                                            {output: mnist.test_labels()})
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
         print(f"Time = {end_time - start_time}s")

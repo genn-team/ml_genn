@@ -15,7 +15,7 @@ from .neuron import Neuron
 from .poisson_input import PoissonInput
 from .spike_input import SpikeInput
 from .user_neuron import UserNeuron
-
+from .latency_input import LatencyInput
 from ..utils.module import get_module_classes
 
 default_neurons = get_module_classes(globals(), Neuron)
@@ -24,4 +24,4 @@ __all__ = ["AdaptiveLeakyIntegrateFire", "BinarySpikeInput", "FewSpikeRelu",
            "FewSpikeReluInput", "Input", "IntegrateFire", "IntegrateFireInput",
            "LeakyIntegrate", "LeakyIntegrateFire", "LeakyIntegrateFireInput", 
            "Neuron", "PoissonInput", "SpikeInput", "UserNeuron",
-           "default_neurons"]
+           "default_neurons","LatencyInput"]

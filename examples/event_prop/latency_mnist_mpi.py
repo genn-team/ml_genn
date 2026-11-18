@@ -7,13 +7,12 @@ from ml_genn.communicators import MPI
 from ml_genn.compilers import EventPropCompiler, InferenceCompiler
 from ml_genn.connectivity import Dense, FixedProbability
 from ml_genn.initializers import Normal
-from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, SpikeInput
+from ml_genn.neurons import LeakyIntegrate, LeakyIntegrateFire, LatencyInput
 from ml_genn.optimisers import Adam
 from ml_genn.serialisers import Numpy
 from ml_genn.synapses import Exponential
 
 from time import perf_counter
-from ml_genn.utils.data import linear_latency_encode_data
 
 from pygenn.genn_wrapper.CUDABackend import DeviceSelect_MANUAL
 
@@ -38,14 +37,12 @@ else:
     labels = mnist.test_labels()
     images = mnist.test_images()
 
-spikes = linear_latency_encode_data(images, EXAMPLE_TIME - (2.0 * DT), 2.0 * DT)
-
 serialiser = Numpy("latency_mnist_mpi_checkpoints")
 network = SequentialNetwork()
 with network:
     # Populations
-    input = InputLayer(SpikeInput(max_spikes=BATCH_SIZE * NUM_INPUT),
-                                  NUM_INPUT)
+    input = InputLayer(LatencyInput("linear", EXAMPLE_TIME - (2.0 * DT), 2.0 * DT),
+                       NUM_INPUT)
     initial_hidden_weight = Normal(mean=0.078, sd=0.045)
     connectivity = (Dense(initial_hidden_weight) if SPARSITY == 1.0 
                     else FixedProbability(SPARSITY, initial_hidden_weight))
@@ -73,7 +70,7 @@ if TRAIN:
             callbacks = ["batch_progress_bar", Checkpoint(serialiser)]
         else:
             callbacks = []
-        metrics, cb_data  = compiled_net.train({input: spikes},
+        metrics, cb_data  = compiled_net.train({input: np.reshape(images, (-1, 28 * 28))},
                                                {output: labels},
                                                num_epochs=NUM_EPOCHS, shuffle=True,
                                                callbacks=callbacks)
@@ -105,7 +102,7 @@ else:
     with compiled_net:
         # Evaluate model on numpy dataset
         start_time = perf_counter()
-        metrics, _  = compiled_net.evaluate({input: spikes},
+        metrics, _  = compiled_net.evaluate({input: np.reshape(images, (-1, 28 * 28))},
                                             {output: labels})
         end_time = perf_counter()
         print(f"Accuracy = {100 * metrics[output].result}%")
