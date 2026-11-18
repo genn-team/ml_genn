@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from collections import namedtuple
+from enum import Enum
 from pygenn import VarAccess
 from typing import Sequence, Union, TYPE_CHECKING
 from .input import Input
@@ -14,30 +15,34 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .. import Population
 
+class LatencyMethod(Enum):
+    LOG = "log"
+    LINEAR = "linear"
+
 genn_model = {
     "vars": [("SpikeTime", "scalar", VarAccess.READ_ONLY_DUPLICATE)],
     "threshold_condition_code":
         """
-        fabs(t - SpikeTime) < dt
+        (t >= SpikeTime) && (t < (SpikeTime + dt))
         """}
 
 class LatencyInput(Neuron, Input):
     """An input neuron which emits one spike per trial according to a latency
-    code. Can be signed spikes or unsigned.
+    code.
     
     Args:
-        latency_method: "log_latency" or "linear_latency"
+        latency_method: "log" or "linear"
         max_time: end of trial
         min_time: first possible spike time
         thresh: threshold for when to emit a spike
     """
     def __init__(self,
-                 latency_method: Union["log","linear"] ="linear",
+                 latency_method: str = "linear",
                  max_time: float = 20.0,
                  min_time: float = 0.0,
                  thresh: int = 1):
         super().__init__()
-        self.latency_method = latency_method
+        self.latency_method = LatencyMethod(latency_method)
         self.max_time = max_time
         self.min_time = min_time
         self.thresh = thresh
@@ -54,15 +59,13 @@ class LatencyInput(Neuron, Input):
         # shape and the bit that should match time and batch
         input_shape_dims = input.shape[-len(shape):]
         input_batch_dims = input.shape[:-len(shape)]
-
-        # Calculate start and end spike indices
         if input_shape_dims != shape:
             raise RuntimeError(f"Input shape {input.shape} does not match "
                                f"population shape {shape}")
 
         time_range = self.max_time - self.min_time
         input = np.abs(input)
-        if self.latency_method == "linear":
+        if self.latency_method == LatencyMethod.LINEAR:
             spike_time =  (((255.0 - input) / 255.0) * time_range) + self.min_time
             fail = np.where(spike_time < self.min_time)[0]
             if len(fail) > 0:
@@ -105,7 +108,8 @@ class LatencyInput(Neuron, Input):
                     batched_input,
                     ((0, batch_size - input_batch_size), (0, 0)),
                     constant_values=np.finfo(np.float32).max)
-            # Push variable to device
+
+        # Push variable to device
         spike_time_var.push_to_device()
 
     def get_model(self, population: Population,
