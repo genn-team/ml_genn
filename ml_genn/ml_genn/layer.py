@@ -76,6 +76,7 @@ class Layer:
                  record_spikes: bool = False,
                  record_spike_events: bool = False,
                  max_delay_steps: Optional[int] = None,
+                 target_input_var: str = "Isyn",
                  name: Optional[str] = None):
         # Create population and store weak reference in class
         population = Population(
@@ -92,6 +93,7 @@ class Layer:
                                     connectivity=connectivity,
                                     synapse=synapse,
                                     max_delay_steps=max_delay_steps,
+                                    target_input_var=target_input_var,
                                     name=name, add_to_model=False)
             self.connection = ref(connection)
         else:

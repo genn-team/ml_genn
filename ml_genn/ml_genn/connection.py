@@ -45,6 +45,7 @@ class Connection:
                  synapse: SynapseInitializer = "delta", 
                  name: Optional[str] = None, 
                  max_delay_steps: Optional[int] = None,
+                 target_input_var: str = "Isyn",
                  add_to_model: bool = True):
         # Store weak references to source and target in class
         self._source = ref(source)
@@ -52,6 +53,7 @@ class Connection:
 
         # Stash max delay steps
         self.max_delay_steps = max_delay_steps
+        self.target_input_var = target_input_var
 
         self.connectivity = get_object(connectivity, Connectivity, 
                                        "Connectivity", default_connectivity)
